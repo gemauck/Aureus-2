@@ -436,6 +436,65 @@ async function handler(req, res) {
           }
         }
 
+        /** Fast pack for dashboard / progress tracker: section JSON + doc collection from tables (no tasks, no full project load). */
+        const trackerSectionsPack =
+          req.query?.trackerSections === '1' ||
+          req.query?.trackerSections === 'true' ||
+          (() => {
+            try {
+              const q = (req.url || '').split('?')[1] || '';
+              const p = new URLSearchParams(q);
+              return p.get('trackerSections') === '1' || p.get('trackerSections') === 'true';
+            } catch (_) {
+              return false;
+            }
+          })();
+
+        if (trackerSectionsPack) {
+          try {
+            const [projectRow, docJson] = await Promise.all([
+              prisma.project.findUnique({
+                where: { id },
+                select: {
+                  id: true,
+                  name: true,
+                  clientName: true,
+                  monthlyDataReviewSections: true,
+                  complianceReviewSections: true
+                }
+              }),
+              documentSectionsToJson(id, { skipComments: true }).catch((e) => {
+                console.warn('⚠️ trackerSections pack: documentSectionsToJson failed:', e?.message || e);
+                return {};
+              })
+            ]);
+            if (!projectRow) return notFound(res);
+
+            const parseJsonField = (raw, emptyVal) => {
+              if (raw == null || raw === '') return emptyVal;
+              try {
+                return typeof raw === 'string' ? JSON.parse(raw) : raw;
+              } catch {
+                return emptyVal;
+              }
+            };
+
+            return ok(res, {
+              project: {
+                id: projectRow.id,
+                name: projectRow.name,
+                clientName: projectRow.clientName,
+                documentSections: docJson && typeof docJson === 'object' ? docJson : {},
+                monthlyDataReviewSections: parseJsonField(projectRow.monthlyDataReviewSections, {}),
+                complianceReviewSections: parseJsonField(projectRow.complianceReviewSections, {})
+              }
+            });
+          } catch (tsErr) {
+            console.error('❌ GET project trackerSections error:', tsErr?.message || tsErr, 'projectId:', id);
+            return serverError(res, tsErr?.message || 'Failed to load tracker sections', tsErr?.message);
+          }
+        }
+
         if (summaryOnly) {
           try {
             // Explicit select so we never request columns that might not exist yet (avoids 500 after schema deploy)

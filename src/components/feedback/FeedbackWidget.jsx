@@ -326,7 +326,7 @@ const FeedbackWidget = () => {
     return (
         <div
             className={`fixed z-50 ${
-                isMobile ? 'left-4 right-4 bottom-4' : 'right-6 bottom-20'
+                isMobile ? 'left-4 bottom-4 right-auto flex justify-start' : 'right-6 bottom-20'
             }`}
         >
             {!open ? (

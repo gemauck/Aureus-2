@@ -1721,7 +1721,11 @@ const MainLayout = () => {
                     setSidebarOpen(false);
                 }
             }}
-            className={`w-full flex items-center ${sidebarOpen ? 'px-5 py-2.5 mx-2 my-1 space-x-3 rounded-xl' : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-xl'} transition-all duration-200 ${
+            className={`w-full flex items-center ${
+                sidebarOpen
+                    ? `${effectiveIsMobile ? 'px-4 py-2.5 mx-0 my-0.5' : 'px-5 py-2.5 mx-2 my-1'} space-x-3 rounded-xl justify-start text-left`
+                    : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-xl'
+            } transition-all duration-200 ${
                 currentPage === item.id 
                     ? isDark
                         ? 'bg-gray-800 text-white shadow-sm ring-1 ring-slate-500/50'
@@ -1776,7 +1780,7 @@ const MainLayout = () => {
                 className={`
                     ${isDark ? 'bg-gray-900 border-r border-gray-800 shadow-xl shadow-black/20' : 'bg-white border-r border-gray-200/80 shadow-[4px_0_24px_-12px_rgba(15,23,42,0.06)]'} 
                     transition-all duration-300 flex flex-col
-                    ${effectiveIsMobile ? 'fixed z-50' : 'relative z-10'}
+                    ${effectiveIsMobile ? 'fixed z-50 text-left items-stretch' : 'relative z-10'}
                     ${effectiveIsMobile ? 'main-layout-sidebar' : ''}
                     ${effectiveIsMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
                 `}
@@ -1798,21 +1802,53 @@ const MainLayout = () => {
                     })
                 }}
             >
-                {/* Logo */}
-                <div className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${isDark ? 'border-b border-gray-800' : 'border-b border-gray-200'}`}>
-                    {sidebarOpen && (
-                        <h1 className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                {/* Logo / mobile drawer header */}
+                {effectiveIsMobile ? (
+                    <div
+                        className={`flex flex-col items-stretch gap-1 px-4 py-3 min-h-14 shrink-0 ${
+                            isDark ? 'border-b border-gray-800' : 'border-b border-gray-200'
+                        }`}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(false)}
+                            className={`self-start ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
+                            aria-label="Close menu"
+                        >
+                            <i className="fas fa-times text-lg" />
+                        </button>
+                        <h1
+                            className={`abcotronics-logo text-left text-base font-semibold tracking-tight truncate w-full ${
+                                isDark ? 'text-gray-100' : 'text-gray-900'
+                            }`}
+                            title={companyName}
+                        >
                             {companyName}
                         </h1>
-                    )}
-                    <button 
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
-                        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                    </div>
+                ) : (
+                    <div
+                        className={`h-16 flex items-center ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'} ${
+                            isDark ? 'border-b border-gray-800' : 'border-b border-gray-200'
+                        }`}
                     >
-                        <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`}></i>
-                    </button>
-                </div>
+                        {sidebarOpen && (
+                            <h1
+                                className={`abcotronics-logo font-semibold text-lg tracking-tight ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                            >
+                                {companyName}
+                            </h1>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
+                            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+                        >
+                            <i className={`fas fa-${sidebarOpen ? 'times' : 'bars'} text-lg`} />
+                        </button>
+                    </div>
+                )}
 
                 {/* Menu Items */}
                 <nav className="flex-1 min-h-0 overflow-y-auto py-3 flex flex-col sidebar-scrollbar">
@@ -1828,24 +1864,44 @@ const MainLayout = () => {
                 </nav>
 
                 {/* User Profile */}
-                <div className={`${isDark ? 'border-t border-slate-700' : 'border-t border-slate-200'} p-3`}>
-                    <div className={`flex items-center ${sidebarOpen ? 'space-x-3 rounded-xl border p-2.5 ' + (isDark ? 'border-gray-700/80 bg-gray-800/40' : 'border-gray-200/90 bg-white/70 shadow-sm') : 'justify-center'}`}>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold text-white text-base shadow-sm bg-gradient-to-br from-blue-500 to-blue-600`}>
+                <div
+                    className={`${isDark ? 'border-t border-slate-700' : 'border-t border-slate-200'} p-3 ${
+                        effectiveIsMobile ? 'text-left' : ''
+                    }`}
+                >
+                    <div
+                        className={`flex items-center ${
+                            sidebarOpen
+                                ? `gap-3 rounded-xl border p-2.5 ${effectiveIsMobile ? 'justify-start' : ''} ` +
+                                  (isDark ? 'border-gray-700/80 bg-gray-800/40' : 'border-gray-200/90 bg-white/70 shadow-sm')
+                                : 'justify-center'
+                        }`}
+                    >
+                        <div
+                            className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-semibold text-white text-base shadow-sm bg-gradient-to-br from-blue-500 to-blue-600`}
+                        >
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
                             <>
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-base font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>{user?.name}</p>
-                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate`}>{formatUserRoleLabel(user?.role)}</p>
+                                <div className="flex-1 min-w-0 text-left">
+                                    <p className={`text-base font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'} truncate`}>
+                                        {user?.name}
+                                    </p>
+                                    <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} truncate`}>
+                                        {formatUserRoleLabel(user?.role)}
+                                    </p>
                                 </div>
-                                <button 
-                                    onClick={logout}
-                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
-                                    title="Logout"
-                                >
-                                    <i className="fas fa-sign-out-alt text-base"></i>
-                                </button>
+                                {!effectiveIsMobile ? (
+                                    <button
+                                        type="button"
+                                        onClick={logout}
+                                        className={`shrink-0 ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 rounded-xl transition-all duration-200`}
+                                        title="Logout"
+                                    >
+                                        <i className="fas fa-sign-out-alt text-base" />
+                                    </button>
+                                ) : null}
                             </>
                         )}
                     </div>
@@ -1858,120 +1914,182 @@ const MainLayout = () => {
                 <header 
                     className={`
                         ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
-                        h-16 flex items-center justify-between px-4 sm:px-6 flex-shrink-0
+                        ${effectiveIsMobile ? 'min-h-12 h-auto py-1 px-2' : 'h-16 px-4 sm:px-6'}
+                        flex items-center ${effectiveIsMobile ? '' : 'justify-between'} flex-shrink-0
                         relative z-40
                         ${effectiveIsMobile ? 'sticky top-0' : ''}
                     `}
                 >
-                    <div className="flex items-center space-x-4 flex-1 min-w-0 gap-3">
-                        {/* Hamburger - compact shell only */}
-                        {effectiveIsMobile && (
-                            <button 
-                                onClick={() => setSidebarOpen(true)}
-                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} p-2 rounded-xl transition-all duration-200`}
-                                aria-label="Open menu"
+                    {(() => {
+                        const themeMenuPanel = showThemeMenu ? (
+                            <div className={`absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
+                                <div className="p-2">
+                                    {isMobile && (
+                                        <>
+                                            <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
+                                                Layout
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const next = !preferDesktopSite;
+                                                    setPreferDesktopSite(next);
+                                                    try {
+                                                        localStorage.setItem('erpPreferDesktopLayout', next ? 'true' : 'false');
+                                                    } catch {
+                                                        /* ignore */
+                                                    }
+                                                    setShowThemeMenu(false);
+                                                }}
+                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
+                                            >
+                                                <i className={`fas fa-${preferDesktopSite ? 'mobile-alt' : 'desktop'} mt-0.5`}></i>
+                                                <span className="leading-snug">
+                                                    {preferDesktopSite
+                                                        ? 'Switch to mobile layout (sidebar overlay, compact UI)'
+                                                        : 'Switch to desktop layout (wide canvas, pan on small screens)'}
+                                                </span>
+                                            </button>
+                                            <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
+                                        </>
+                                    )}
+                                    <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
+                                        Theme
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            toggleTheme();
+                                            setShowThemeMenu(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
+                                    >
+                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'}`}></i>
+                                        <span>Switch to {isDark ? 'Light' : 'Dark'}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            toggleSystemPreference();
+                                            setShowThemeMenu(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
+                                    >
+                                        <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'}`}></i>
+                                        <span>{isFollowingSystem ? 'Following' : 'Follow'} System</span>
+                                    </button>
+                                    {effectiveIsMobile ? (
+                                        <>
+                                            <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowThemeMenu(false);
+                                                    logout();
+                                                }}
+                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-red-300' : 'hover:bg-red-50 text-red-700'} flex items-center space-x-3 transition-colors`}
+                                            >
+                                                <i className="fas fa-sign-out-alt" />
+                                                <span>Log out</span>
+                                            </button>
+                                        </>
+                                    ) : null}
+                                </div>
+                            </div>
+                        ) : null;
+
+                        const mobileHeaderIconBtn = `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/80' : 'text-gray-500 hover:text-gray-700 hover:bg-white/90'} flex !h-10 !min-h-10 !w-10 !min-w-10 shrink-0 items-center justify-center border-0 bg-transparent p-0 transition-colors`;
+
+                        const settingsButton = (
+                            <button
+                                type="button"
+                                onClick={() => navigateToPage('settings')}
+                                className={
+                                    effectiveIsMobile
+                                        ? `${mobileHeaderIconBtn} rounded-none`
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 transition-all duration-200`
+                                }
+                                title="Settings"
                             >
-                                <i className="fas fa-bars text-lg"></i>
+                                <i className="fas fa-cog text-sm"></i>
                             </button>
-                        )}
-                        
-                        {/* Logo - compact shell only */}
-                        {effectiveIsMobile && (
-                            <h1 className={`abcotronics-logo font-semibold text-lg truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                {companyName}
-                            </h1>
-                        )}
-                        
-                        {/* Search - DESKTOP ONLY */}
-                        {!effectiveIsMobile && window.GlobalSearch && (
-                            <window.GlobalSearch isMobile={false} isDark={isDark} />
-                        )}
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                        {/* Notification Center */}
-                        {notificationCenterReady && window.NotificationCenter && (
-                            <window.NotificationCenter />
-                        )}
-                        
-                        {/* Settings Button */}
-                        <button
-                            onClick={() => navigateToPage('settings')}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} p-2.5 rounded-xl transition-all duration-200`}
-                            title="Settings"
-                        >
-                            <i className="fas fa-cog text-sm"></i>
-                        </button>
-                        
-                        {/* Theme Selector */}
-                        <div className="relative theme-selector">
-                            <button 
-                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} p-2.5 rounded-xl transition-all duration-200`}
-                                onClick={() => setShowThemeMenu(!showThemeMenu)}
-                            >
-                                <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
-                            </button>
-                            
-                            {showThemeMenu && (
-                                <div className={`absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
-                                    <div className="p-2">
-                                        {isMobile && (
-                                            <>
-                                                <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
-                                                    Layout
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const next = !preferDesktopSite;
-                                                        setPreferDesktopSite(next);
-                                                        try {
-                                                            localStorage.setItem('erpPreferDesktopLayout', next ? 'true' : 'false');
-                                                        } catch {
-                                                            /* ignore */
-                                                        }
-                                                        setShowThemeMenu(false);
-                                                    }}
-                                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
-                                                >
-                                                    <i className={`fas fa-${preferDesktopSite ? 'mobile-alt' : 'desktop'} mt-0.5`}></i>
-                                                    <span className="leading-snug">
-                                                        {preferDesktopSite
-                                                            ? 'Switch to mobile layout (sidebar overlay, compact UI)'
-                                                            : 'Switch to desktop layout (wide canvas, pan on small screens)'}
-                                                    </span>
-                                                </button>
-                                                <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
-                                            </>
-                                        )}
-                                        <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
-                                            Theme
-                                        </div>
+                        );
+
+                        const themeSelector = (
+                            <div className="relative theme-selector flex h-10 items-center">
+                                <button
+                                    type="button"
+                                    className={
+                                        effectiveIsMobile
+                                            ? `${mobileHeaderIconBtn} rounded-none`
+                                            : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 transition-all duration-200`
+                                    }
+                                    onClick={() => setShowThemeMenu(!showThemeMenu)}
+                                    title="Theme and layout"
+                                >
+                                    <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                                </button>
+                                {themeMenuPanel}
+                            </div>
+                        );
+
+                        const notificationsSlot = notificationCenterReady && window.NotificationCenter ? (
+                            <div className="flex h-10 shrink-0 items-center justify-center [&_button.notification-button]:!h-10 [&_button.notification-button]:!min-h-10 [&_button.notification-button]:!w-10 [&_button.notification-button]:!min-w-10 [&_button.notification-button]:!max-h-10 [&_button.notification-button]:!max-w-10">
+                                <window.NotificationCenter />
+                            </div>
+                        ) : null;
+
+                        if (effectiveIsMobile) {
+                            return (
+                                <div
+                                    className={`flex h-11 w-full min-w-0 flex-nowrap items-center gap-1.5 rounded-xl border px-2 shadow-sm ${
+                                        isDark ? 'border-gray-700/90 bg-gray-800/55' : 'border-gray-200 bg-white'
+                                    }`}
+                                >
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center">
                                         <button
-                                            onClick={() => {
-                                                toggleTheme();
-                                                setShowThemeMenu(false);
-                                            }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
+                                            type="button"
+                                            onClick={() => setSidebarOpen(true)}
+                                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200`}
+                                            aria-label="Open menu"
                                         >
-                                            <i className={`fas fa-${isDark ? 'sun' : 'moon'}`}></i>
-                                            <span>Switch to {isDark ? 'Light' : 'Dark'}</span>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                toggleSystemPreference();
-                                                setShowThemeMenu(false);
-                                            }}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
-                                        >
-                                            <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'}`}></i>
-                                            <span>{isFollowingSystem ? 'Following' : 'Follow'} System</span>
+                                            <i className="fas fa-bars text-lg leading-none"></i>
                                         </button>
                                     </div>
+                                    <h1
+                                        className={`abcotronics-logo min-w-0 flex-1 truncate text-center text-sm font-semibold leading-tight sm:text-base ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                        title={companyName}
+                                    >
+                                        {companyName}
+                                    </h1>
+                                    <div className="flex h-10 shrink-0 flex-nowrap items-center gap-0.5">
+                                        {notificationsSlot}
+                                        <div
+                                            className={`flex h-10 flex-nowrap items-center divide-x overflow-hidden rounded-md border ${
+                                                isDark ? 'divide-gray-600 border-gray-600 bg-gray-900/70' : 'divide-gray-200 border-gray-200 bg-gray-50'
+                                            }`}
+                                        >
+                                            {settingsButton}
+                                            {themeSelector}
+                                        </div>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    </div>
+                            );
+                        }
+
+                        return (
+                            <>
+                                <div className="flex min-w-0 flex-1 items-center gap-3 space-x-4">
+                                    {window.GlobalSearch && (
+                                        <window.GlobalSearch isMobile={false} isDark={isDark} />
+                                    )}
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    {notificationsSlot}
+                                    {settingsButton}
+                                    {themeSelector}
+                                </div>
+                            </>
+                        );
+                    })()}
                 </header>
 
                 {/* Page Content — mobile CRM uses inner scroll only so tabs/search are not in the same scrollport as the list (fixes content bleeding through sticky chrome). */}

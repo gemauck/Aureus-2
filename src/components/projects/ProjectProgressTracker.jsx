@@ -137,13 +137,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         'November',
         'December'
     ];
-    /** Earliest calendar month (leftmost on the grid) among working months for a given year */
-    const getFirstWorkingMonthNameForYear = (year) => {
+    /** Most recent calendar month among working months in the selected grid year (previous calendar month when both fall in that year). */
+    const getLastWorkingMonthNameForYear = (year) => {
         const y = Number(year);
         if (Number.isNaN(y)) return null;
         const entries = workingMonths.filter((e) => Number(e?.year) === y);
         if (!entries.length) return null;
-        const sorted = [...entries].sort((a, b) => a.monthIndex - b.monthIndex);
+        const sorted = [...entries].sort((a, b) => b.monthIndex - a.monthIndex);
         const idx = sorted[0].monthIndex;
         if (typeof idx !== 'number' || idx < 0 || idx >= months.length) return null;
         return months[idx] || null;
@@ -185,7 +185,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const saveProgressDataRef = useRef(null);
     const flushPendingCommentSaveRef = useRef(async () => {});
     const selectedYearRef = useRef(selectedYear);
-    /** Only auto-scroll to the first working month once per mount (not on every projects refresh). */
+    /** Only auto-scroll to the default working month (most recent / last calendar month) once per mount. */
     const workingMonthInitialScrollDoneRef = useRef(false);
 
     useEffect(() => {
@@ -201,12 +201,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         selectedYearRef.current = selectedYear;
     }, [selectedYear]);
 
-    // Scroll horizontally so the first working month column is in view once after the grid is ready — not on every data refresh
+    // Scroll horizontally so the last working month column (previous calendar month) is in view once after the grid is ready
     useEffect(() => {
         if (workingMonthInitialScrollDoneRef.current) return;
         try {
             if (!tableRef?.current) return;
-            const targetMonth = getFirstWorkingMonthNameForYear(selectedYear);
+            const targetMonth = getLastWorkingMonthNameForYear(selectedYear);
             if (!targetMonth) return;
 
             const runScroll = () => {
@@ -223,7 +223,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         workingMonthInitialScrollDoneRef.current = true;
                     }
                 } catch (scrollErr) {
-                    console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to first working month:', scrollErr);
+                    console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to default working month:', scrollErr);
                 }
             };
             window.requestAnimationFrame(() => {
@@ -371,11 +371,17 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
 
         const hydrate = async () => {
             try {
-                const detailResponses = await Promise.allSettled(
-                    needsHydration.map((project) =>
-                        window.DatabaseAPI.getProject(project.id, { forceRefresh: true })
-                    )
-                );
+                const CHUNK = 8;
+                const detailResponses = [];
+                for (let i = 0; i < needsHydration.length; i += CHUNK) {
+                    const slice = needsHydration.slice(i, i + CHUNK);
+                    const part = await Promise.allSettled(
+                        slice.map((project) =>
+                            window.DatabaseAPI.getProject(project.id, { trackerSections: true })
+                        )
+                    );
+                    detailResponses.push(...part);
+                }
 
                 if (cancelled) return;
 

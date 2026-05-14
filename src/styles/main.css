@@ -268,6 +268,17 @@ body.erp-app :where(a, button, input, textarea, select, [tabindex]):focus-visibl
         max-width: none;
         min-width: 1330px;
     }
+
+    /* Dashboard "Project progress" narrow tiles: never use Tailwind `grid` here — mobile-responsive.css forces `.grid` to column flex on small screens and some bundles hide raw <table>. */
+    .dash-lwm-progress-metrics {
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        width: 100%;
+        min-width: 0;
+        column-gap: 6px;
+        row-gap: 4px;
+        text-align: left;
+    }
     
     /* Touch-friendly buttons */
     button, .btn, [role="button"] {

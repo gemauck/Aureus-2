@@ -438,8 +438,13 @@ const DatabaseAPI = {
         const log = window.debug?.log || (() => {});
         log(`📡 Fetching project ${id} from database...`);
         const summaryOnly = options.summary === true || options.summary === 1;
-        const endpoint = summaryOnly ? `/projects/${id}?summary=1` : `/projects/${id}`;
-        return this.makeRequest(endpoint);
+        const trackerSections = options.trackerSections === true || options.trackerSections === 1;
+        const params = new URLSearchParams();
+        if (summaryOnly) params.set('summary', '1');
+        if (trackerSections) params.set('trackerSections', '1');
+        const qs = params.toString();
+        const endpoint = qs ? `/projects/${id}?${qs}` : `/projects/${id}`;
+        return this.makeRequest(endpoint, { forceRefresh: options.forceRefresh === true });
     },
 
     async createProject(projectData) {

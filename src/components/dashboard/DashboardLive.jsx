@@ -461,7 +461,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     };
 
     return (
-        <div className={`${cardBase} border rounded-xl p-5 flex flex-col h-full shadow-sm`}>
+        <div className={`${cardBase} border rounded-xl p-3 sm:p-5 flex flex-col h-full shadow-sm`}>
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
                 <i className="fas fa-tasks text-teal-500 opacity-70"></i>
@@ -568,13 +568,50 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     );
 };
 
+/** Run async work in chunks to avoid flooding the browser connection limit with heavy project GETs. */
+async function promiseAllSettledChunked(items, chunkSize, mapper) {
+    const out = [];
+    const size = Math.max(1, Math.min(chunkSize, 16));
+    for (let i = 0; i < items.length; i += size) {
+        const slice = items.slice(i, i + size);
+        const part = await Promise.allSettled(slice.map((item, j) => mapper(item, i + j)));
+        out.push(...part);
+    }
+    return out;
+}
+
+/** Below this *widget width*, show compact row cards instead of the wide table (not `window.innerWidth`, so narrow dashboard tiles still lay out correctly). */
+const DASHBOARD_PROGRESS_NARROW_MAX_PX = 768;
+const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 8;
+
 /** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
 const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
     const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
-    const workingCandidates = React.useMemo(() => {
+    const progressWidgetRef = React.useRef(null);
+    const [isNarrow, setIsNarrow] = React.useState(true);
+    React.useLayoutEffect(() => {
+        const el = progressWidgetRef.current;
+        if (!el) return;
+        const measure = () => {
+            const w = el.getBoundingClientRect().width;
+            setIsNarrow(w < DASHBOARD_PROGRESS_NARROW_MAX_PX);
+        };
+        measure();
+        if (typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(measure);
+            ro.observe(el);
+            return () => ro.disconnect();
+        }
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, []);
+    const monthPickerCandidates = React.useMemo(() => {
         if (!m) return [];
-        const entries = m.getWorkingMonthEntries();
-        return entries.map((entry) => {
+        const raw =
+            typeof m.getWorkingMonthEntriesRange === 'function'
+                ? m.getWorkingMonthEntriesRange(new Date(), 12)
+                : m.getWorkingMonthEntries();
+        return raw.map((entry) => {
             const monthName = m.TRACKER_MONTH_NAMES?.[entry.monthIndex] || '';
             const shortYear = String(entry.year).slice(-2);
             return {
@@ -586,6 +623,8 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         });
     }, [m]);
 
+    const [pickerOverrideIndex, setPickerOverrideIndex] = React.useState(null);
+
     // List API is slim: no document/compliance/data sections. Hydrate from /projects/:id (same as ProjectProgressTracker).
     const trackerIdsKey = React.useMemo(() => {
         if (!m || !projects || !projects.length) return '';
@@ -595,6 +634,10 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             .sort()
             .join(',');
     }, [m, projects]);
+
+    React.useEffect(() => {
+        setPickerOverrideIndex(null);
+    }, [trackerIdsKey]);
 
     const [sectionDetails, setSectionDetails] = React.useState({});
     const [hydrationLoading, setHydrationLoading] = React.useState(false);
@@ -621,8 +664,10 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
         (async () => {
             try {
-                const results = await Promise.allSettled(
-                    ids.map((id) => window.DatabaseAPI.getProject(id, { forceRefresh: true }))
+                const results = await promiseAllSettledChunked(
+                    ids,
+                    DASHBOARD_PROGRESS_HYDRATE_CHUNK,
+                    (projectId) => window.DatabaseAPI.getProject(projectId, { trackerSections: true })
                 );
                 if (cancelled) return;
                 const next = {};
@@ -667,11 +712,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     }, [m, projects, sectionDetails]);
 
     const bestWorkingMonth = React.useMemo(() => {
-        if (!m || !workingCandidates.length) return null;
-        let fallback = workingCandidates[0];
+        if (!m || !monthPickerCandidates.length) return null;
+        let fallback = monthPickerCandidates[0];
         let best = null;
         let bestScore = -1;
-        workingCandidates.forEach((candidate, idx) => {
+        monthPickerCandidates.forEach((candidate, idx) => {
             const snap = m.buildSnapshotRows(mergedProjects, candidate);
             const score = snap.reduce((acc, row) => {
                 let value = acc;
@@ -690,23 +735,56 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             }
         });
         return bestScore > 0 ? best : fallback;
-    }, [m, mergedProjects, workingCandidates]);
+    }, [m, mergedProjects, monthPickerCandidates]);
+
+    const defaultPickerIndex = React.useMemo(() => {
+        if (!bestWorkingMonth || !monthPickerCandidates.length) return 0;
+        const idx = monthPickerCandidates.findIndex(
+            (c) => c.monthIndex === bestWorkingMonth.monthIndex && c.year === bestWorkingMonth.year
+        );
+        return idx >= 0 ? idx : 0;
+    }, [bestWorkingMonth, monthPickerCandidates]);
+
+    const clampedPickerIndex = React.useMemo(() => {
+        const len = monthPickerCandidates.length;
+        if (!len) return 0;
+        const raw = pickerOverrideIndex != null ? pickerOverrideIndex : defaultPickerIndex;
+        return Math.max(0, Math.min(len - 1, raw));
+    }, [pickerOverrideIndex, defaultPickerIndex, monthPickerCandidates.length]);
+
+    const activeWorkingMonth = monthPickerCandidates[clampedPickerIndex] || bestWorkingMonth;
+
+    const goOlderMonth = React.useCallback(() => {
+        setPickerOverrideIndex((prev) => {
+            const cur = prev == null ? defaultPickerIndex : prev;
+            return Math.min(monthPickerCandidates.length - 1, cur + 1);
+        });
+    }, [defaultPickerIndex, monthPickerCandidates.length]);
+
+    const goNewerMonth = React.useCallback(() => {
+        setPickerOverrideIndex((prev) => {
+            const cur = prev == null ? defaultPickerIndex : prev;
+            const next = Math.max(0, cur - 1);
+            if (prev != null && next === defaultPickerIndex) return null;
+            return next;
+        });
+    }, [defaultPickerIndex]);
 
     const rows = React.useMemo(() => {
-        if (!m || !bestWorkingMonth) return [];
-        return m.buildSnapshotRows(mergedProjects, bestWorkingMonth);
-    }, [m, bestWorkingMonth, mergedProjects]);
+        if (!m || !activeWorkingMonth) return [];
+        return m.buildSnapshotRows(mergedProjects, activeWorkingMonth);
+    }, [m, activeWorkingMonth, mergedProjects]);
 
     const borderSep = isDark ? 'border-gray-800' : 'border-gray-100';
     const tableHead = isDark ? 'text-gray-500' : 'text-gray-500';
     const barBg = isDark ? 'bg-gray-800' : 'bg-gray-200';
 
     const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
-    const fmtRatio = (done, tot) => (tot > 0 ? `${done}/${tot}` : '');
+    const fmtRatio = (completed, total) => `${Number(completed) || 0}/${Number(total) || 0}`;
 
-    if (!m || !bestWorkingMonth) {
+    if (!m || !bestWorkingMonth || !monthPickerCandidates.length) {
         return (
-            <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
+            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
                 <p className={`text-sm ${subText}`}>Progress metrics are loading…</p>
             </div>
@@ -715,89 +793,284 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     const trackHref = m.buildProgressTrackerLink(
         rows[0]?.id,
-        bestWorkingMonth.monthName,
-        bestWorkingMonth.monthIndex,
-        bestWorkingMonth.year,
+        activeWorkingMonth.monthName,
+        activeWorkingMonth.monthIndex,
+        activeWorkingMonth.year,
         'comments'
     );
 
+    const renderRowLinks = (row) => {
+        const docL = m.buildProjectReviewTabLink(
+            row.id,
+            'documentCollection',
+            row.monthName,
+            row.monthIndex,
+            row.year
+        );
+        const compL = m.buildProjectReviewTabLink(
+            row.id,
+            'complianceReview',
+            row.monthName,
+            row.monthIndex,
+            row.year
+        );
+        const dataL = m.buildProjectReviewTabLink(
+            row.id,
+            'monthlyDataReview',
+            row.monthName,
+            row.monthIndex,
+            row.year
+        );
+        const cmtL = m.buildProgressTrackerLink(
+            row.id,
+            row.monthName,
+            row.monthIndex,
+            row.year,
+            'comments'
+        );
+        return { docL, compL, dataL, cmtL };
+    };
+
     return (
-        <div className={`${cardBase} border rounded-xl p-5 shadow-sm flex flex-col min-h-0`}>
-            <div className="flex items-start justify-between gap-2 mb-3">
-                <div>
-                    <div className="flex items-center gap-2 flex-wrap">
+        <div
+            ref={progressWidgetRef}
+            className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col min-h-0 min-w-0 self-start w-full max-w-full`}
+        >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 mb-3 min-w-0 text-left">
+                <div className="min-w-0 flex-1 text-left">
+                    <div className="flex items-center gap-2 flex-wrap text-left">
                         <h3 className={`text-sm font-semibold ${headerText}`}>Project progress</h3>
-                        <span
-                            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                            style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#1d4ed8' }}
+                        <div
+                            className={`inline-flex items-stretch rounded-full border overflow-hidden shrink-0 ${borderSep} ${isDark ? 'bg-gray-800/60' : 'bg-white'}`}
+                            role="group"
+                            aria-label="Change month"
                         >
-                            {bestWorkingMonth.shortLabel}
-                        </span>
-                        <span
-                            className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
-                        >
-                            Working
-                        </span>
+                            <button
+                                type="button"
+                                className={`px-2 py-1 text-[10px] leading-none ${headerText} hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-35 disabled:pointer-events-none`}
+                                onClick={goOlderMonth}
+                                disabled={clampedPickerIndex >= monthPickerCandidates.length - 1}
+                                aria-label="View an older month"
+                            >
+                                <i className="fas fa-chevron-left" aria-hidden="true" />
+                            </button>
+                            <span
+                                className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 flex items-center border-x min-w-[4.75rem] justify-center"
+                                style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#1d4ed8' }}
+                                title={`${activeWorkingMonth.monthName} ${activeWorkingMonth.year}`}
+                            >
+                                {activeWorkingMonth.shortLabel}
+                            </span>
+                            <button
+                                type="button"
+                                className={`px-2 py-1 text-[10px] leading-none ${headerText} hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-35 disabled:pointer-events-none`}
+                                onClick={goNewerMonth}
+                                disabled={clampedPickerIndex <= 0}
+                                aria-label="View a more recent month"
+                            >
+                                <i className="fas fa-chevron-right" aria-hidden="true" />
+                            </button>
+                        </div>
+                        <div className="inline-flex items-center gap-2 flex-wrap shrink-0">
+                            {pickerOverrideIndex == null ? (
+                                <span
+                                    className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                >
+                                    Auto
+                                </span>
+                            ) : (
+                                <span
+                                    className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                >
+                                    Manual
+                                </span>
+                            )}
+                            {pickerOverrideIndex != null ? (
+                                <button
+                                    type="button"
+                                    className="text-[10px] font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 underline-offset-2 hover:underline px-1 py-0.5 min-h-0 min-w-0 w-auto"
+                                    onClick={() => setPickerOverrideIndex(null)}
+                                >
+                                    Reset
+                                </button>
+                            ) : null}
+                        </div>
                     </div>
-                    <p className={`text-xs mt-0.5 ${subText}`}>
-                        {bestWorkingMonth.monthName} {bestWorkingMonth.year} — active working month with available progress data
-                    </p>
                 </div>
                 <a
                     href={trackHref}
-                    className="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 whitespace-nowrap"
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 whitespace-nowrap shrink-0 self-start sm:self-auto inline-flex items-center"
                 >
                     Open tracker
                 </a>
             </div>
 
             {rows.length === 0 ? (
-                <p className={`text-sm ${subText}`}>
+                <p className={`text-sm text-left ${subText}`}>
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
                 </p>
-            ) : hydrationLoading ? (
-                <p className={`text-sm ${subText} border-t ${borderSep} pt-3`}>
-                    <i className="fas fa-circle-notch fa-spin text-primary-500 mr-2" aria-hidden="true" />
-                    Loading project metrics (document, compliance, and data review sections)…
-                </p>
             ) : (
-                <div className={`overflow-x-auto -mx-1 min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3`}>
-                    <table className="w-full text-left text-xs border-collapse">
+                <>
+                    {hydrationLoading ? (
+                        <p className={`text-[11px] text-left ${subText} border-t ${borderSep} pt-2 pb-1 flex flex-row items-center gap-2`}>
+                            <i className="fas fa-circle-notch fa-spin text-primary-500 shrink-0" aria-hidden="true" />
+                            <span>Updating document / compliance / data section detail…</span>
+                        </p>
+                    ) : null}
+                    {isNarrow ? (
+                <div className={`min-h-0 max-h-80 overflow-y-auto space-y-1.5 border-t ${borderSep} pt-3 -mx-0.5 px-0.5`}>
+                    {rows.map((row) => {
+                        const { docL, compL, dataL, cmtL } = renderRowLinks(row);
+                        const hasComment = row.comments && String(row.comments).trim();
+                        return (
+                            <div
+                                key={String(row.id)}
+                                className={`rounded-lg border ${borderSep} px-2 py-1.5 ${isDark ? 'bg-gray-800/40' : 'bg-gray-50/80'}`}
+                            >
+                                <div
+                                    className="dash-lwm-progress-metrics w-full min-w-0 text-left"
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                                        columnGap: '6px',
+                                        rowGap: '4px'
+                                    }}
+                                >
+                                    <div
+                                        className={`min-w-0 text-left pb-2 border-b ${borderSep}`}
+                                        style={{ gridColumn: '1 / -1' }}
+                                    >
+                                        <a
+                                            href={docL}
+                                            className={`font-medium text-xs leading-snug ${headerText} hover:text-primary-600 line-clamp-2 block break-words`}
+                                            title="Open document collection"
+                                        >
+                                            {row.name}
+                                        </a>
+                                        {row.client ? (
+                                            <div className={`text-[10px] ${subText} mt-1.5 break-words`} title={row.client}>
+                                                {row.client}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <div
+                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
+                                        style={{ color: '#2563eb' }}
+                                    >
+                                        Doc
+                                    </div>
+                                    <div
+                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
+                                        style={{ color: '#7c3aed' }}
+                                    >
+                                        Comp
+                                    </div>
+                                    <div
+                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
+                                        style={{ color: '#059669' }}
+                                    >
+                                        Data
+                                    </div>
+                                    <div className={`min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center ${tableHead}`}>
+                                        Cmt
+                                    </div>
+                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
+                                        <a
+                                            href={docL}
+                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
+                                            title={
+                                                row.doc.total > 0
+                                                    ? `Document collection: ${fmtRatio(row.doc.completed, row.doc.total)}`
+                                                    : 'Open document collection'
+                                            }
+                                        >
+                                            {fmtPct(row.doc.percent)}
+                                        </a>
+                                    </div>
+                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
+                                        <a
+                                            href={compL}
+                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
+                                            title={
+                                                row.compliance.total > 0
+                                                    ? `Compliance: ${fmtRatio(row.compliance.completed, row.compliance.total)}`
+                                                    : 'Open compliance review'
+                                            }
+                                        >
+                                            {fmtPct(row.compliance.percent)}
+                                        </a>
+                                    </div>
+                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
+                                        <a
+                                            href={dataL}
+                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
+                                            title={
+                                                row.data.total > 0
+                                                    ? `Monthly data: ${fmtRatio(row.data.completed, row.data.total)}`
+                                                    : 'Open monthly data review'
+                                            }
+                                        >
+                                            {fmtPct(row.data.percent)}
+                                        </a>
+                                    </div>
+                                    <div className="min-w-0 pt-0.5 pb-0.5">
+                                        <a
+                                            href={cmtL}
+                                            className={
+                                                hasComment
+                                                    ? `block min-w-0 text-left text-[9px] font-normal leading-snug ${subText} hover:text-primary-600 dark:hover:text-primary-300`
+                                                    : `block min-w-0 text-center text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`
+                                            }
+                                            title={
+                                                hasComment
+                                                    ? String(row.comments).trim().slice(0, 500)
+                                                    : 'Open progress tracker (comments)'
+                                            }
+                                            aria-label={
+                                                hasComment
+                                                    ? 'Open progress tracker — view or edit comment'
+                                                    : 'Open progress tracker — no comment'
+                                            }
+                                        >
+                                            {hasComment ? (
+                                                <span className="line-clamp-4 break-words whitespace-pre-wrap">
+                                                    {String(row.comments).trim()}
+                                                </span>
+                                            ) : (
+                                                <span className="text-center font-semibold tabular-nums text-gray-400 dark:text-gray-500">—</span>
+                                            )}
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <div className={`overflow-x-auto min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
+                    <table data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
+                        <colgroup>
+                            <col className="w-[36%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[16%]" />
+                        </colgroup>
                         <thead>
                             <tr className={`${tableHead} uppercase tracking-wide`}>
                                 <th className="pr-2 pb-2 font-medium">Project</th>
-                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#2563eb' }}>Docs</th>
-                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#7c3aed' }}>Comp.</th>
-                                <th className="pr-2 pb-2 font-medium text-center w-20" style={{ color: '#059669' }}>Data</th>
-                                <th className="pb-2 font-medium min-w-[7rem]">Comment</th>
+                                <th className="pr-2 pb-2 font-medium text-center" style={{ color: '#2563eb' }}>Docs</th>
+                                <th className="pr-2 pb-2 font-medium text-center" style={{ color: '#7c3aed' }}>Comp.</th>
+                                <th className="pr-2 pb-2 font-medium text-center" style={{ color: '#059669' }}>Data</th>
+                                <th className="pb-2 font-medium">Comment</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((row) => {
-                                const docL = m.buildProjectReviewTabLink(
-                                    row.id,
-                                    'documentCollection',
-                                    row.monthName,
-                                    row.monthIndex,
-                                    row.year
-                                );
-                                const compL = m.buildProjectReviewTabLink(
-                                    row.id,
-                                    'complianceReview',
-                                    row.monthName,
-                                    row.monthIndex,
-                                    row.year
-                                );
-                                const dataL = m.buildProjectReviewTabLink(
-                                    row.id,
-                                    'monthlyDataReview',
-                                    row.monthName,
-                                    row.monthIndex,
-                                    row.year
-                                );
+                                const { docL, compL, dataL, cmtL } = renderRowLinks(row);
                                 return (
                                     <tr key={String(row.id)} className={`border-t ${borderSep} align-top`}>
-                                        <td className="py-2 pr-2">
+                                        <td className="py-2 pr-2 align-top">
                                             <a
                                                 href={docL}
                                                 className={`font-medium ${headerText} hover:text-primary-600 line-clamp-2`}
@@ -805,73 +1078,64 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                                 {row.name}
                                             </a>
                                             {row.client ? (
-                                                <div className={`text-[10px] ${subText} truncate max-w-[10rem]`} title={row.client}>
+                                                <div className={`text-[10px] ${subText} truncate`} title={row.client}>
                                                     {row.client}
                                                 </div>
                                             ) : null}
                                         </td>
-                                        <td className="py-2 pr-2 text-center">
+                                        <td className="py-2 pr-2 text-center align-top">
                                             <a href={docL} className="block" title="Open document collection">
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.doc.percent)}</div>
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
-                                                    <div
-                                                        className="h-full rounded-full transition-all"
-                                                        style={{
-                                                            width: `${row.doc.percent != null ? Math.min(100, row.doc.percent) : 0}%`,
-                                                            background: '#3b82f6'
-                                                        }}
-                                                    />
+                                                <div
+                                                    className="h-full rounded-full transition-all"
+                                                    style={{
+                                                        width: `${row.doc.percent != null ? Math.min(100, row.doc.percent) : 0}%`,
+                                                        background: '#3b82f6'
+                                                    }}
+                                                />
                                                 </div>
-                                                {row.doc.total > 0 ? (
-                                                    <div className={`text-[10px] ${subText} mt-0.5`}>{fmtRatio(row.doc.completed, row.doc.total)}</div>
-                                                ) : null}
                                             </a>
                                         </td>
-                                        <td className="py-2 pr-2 text-center">
+                                        <td className="py-2 pr-2 text-center align-top">
                                             <a href={compL} className="block" title="Open compliance review">
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.compliance.percent)}</div>
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
-                                                    <div
-                                                        className="h-full rounded-full"
-                                                        style={{
-                                                            width: `${row.compliance.percent != null ? Math.min(100, row.compliance.percent) : 0}%`,
-                                                            background: '#8b5cf6'
-                                                        }}
-                                                    />
+                                                <div
+                                                    className="h-full rounded-full"
+                                                    style={{
+                                                        width: `${row.compliance.percent != null ? Math.min(100, row.compliance.percent) : 0}%`,
+                                                        background: '#8b5cf6'
+                                                    }}
+                                                />
                                                 </div>
-                                                {row.compliance.total > 0 ? (
-                                                    <div className={`text-[10px] ${subText} mt-0.5`}>
-                                                        {fmtRatio(row.compliance.completed, row.compliance.total)}
-                                                    </div>
-                                                ) : null}
                                             </a>
                                         </td>
-                                        <td className="py-2 pr-2 text-center">
+                                        <td className="py-2 pr-2 text-center align-top">
                                             <a href={dataL} className="block" title="Open monthly data review">
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.data.percent)}</div>
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
-                                                    <div
-                                                        className="h-full rounded-full"
-                                                        style={{
-                                                            width: `${row.data.percent != null ? Math.min(100, row.data.percent) : 0}%`,
-                                                            background: '#10b981'
-                                                        }}
-                                                    />
+                                                <div
+                                                    className="h-full rounded-full"
+                                                    style={{
+                                                        width: `${row.data.percent != null ? Math.min(100, row.data.percent) : 0}%`,
+                                                        background: '#10b981'
+                                                    }}
+                                                />
                                                 </div>
-                                                {row.data.total > 0 ? (
-                                                    <div className={`text-[10px] ${subText} mt-0.5`}>
-                                                        {fmtRatio(row.data.completed, row.data.total)}
-                                                    </div>
-                                                ) : null}
                                             </a>
                                         </td>
-                                        <td className="py-2 text-[10px]">
+                                        <td className="py-2 text-[10px] align-top min-w-0">
                                             {row.comments && String(row.comments).trim() ? (
-                                                <p className={`line-clamp-3 ${subText} whitespace-pre-wrap`} title={row.comments}>
-                                                    {row.comments}
-                                                </p>
+                                                <a href={cmtL} className="block hover:opacity-90" title="Open progress tracker (comments)">
+                                                    <p className={`line-clamp-3 ${subText} whitespace-pre-wrap break-words`} title={row.comments}>
+                                                        {row.comments}
+                                                    </p>
+                                                </a>
                                             ) : (
-                                                <span className="text-gray-400">—</span>
+                                                <a href={cmtL} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                                    —
+                                                </a>
                                             )}
                                         </td>
                                     </tr>
@@ -880,6 +1144,8 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                         </tbody>
                     </table>
                 </div>
+                    )}
+                </>
             )}
         </div>
     );

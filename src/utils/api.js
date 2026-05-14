@@ -811,7 +811,12 @@ const api = {
 
   async getProject(id, options = {}) {
     const summaryOnly = options.summary === true || options.summary === 1;
-    const path = summaryOnly ? `/projects/${id}?summary=1` : `/projects/${id}`;
+    const trackerSections = options.trackerSections === true || options.trackerSections === 1;
+    const params = new URLSearchParams();
+    if (summaryOnly) params.set('summary', '1');
+    if (trackerSections) params.set('trackerSections', '1');
+    const qs = params.toString();
+    const path = qs ? `/projects/${id}?${qs}` : `/projects/${id}`;
     const res = await request(path);
     return res;
   },

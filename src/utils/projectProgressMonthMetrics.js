@@ -34,8 +34,29 @@ export function getWorkingMonthEntries(now = new Date()) {
 }
 
 /**
+ * Past calendar months for the dashboard picker (newest first). Excludes the current month.
+ * @param {Date} [now]
+ * @param {number} [count] max 24, default 12
+ * @returns {{ monthIndex: number, year: number }[]}
+ */
+export function getWorkingMonthEntriesRange(now = new Date(), count = 12) {
+    const c = Math.min(24, Math.max(1, Number(count) || 12));
+    const currentYear = Number(now.getFullYear()) || new Date().getFullYear();
+    const currentMonth = Number(now.getMonth()) || 0;
+    const out = [];
+    for (let i = 1; i <= c; i += 1) {
+        const d = new Date(currentYear, currentMonth - i, 1);
+        out.push({
+            monthIndex: Number(d.getMonth()),
+            year: Number(d.getFullYear())
+        });
+    }
+    return out;
+}
+
+/**
  * Most recent working month (the month immediately before the current calendar month),
- * matching the first highlighted column in Project Progress Tracker.
+ * i.e. the primary default month for dashboard links and tracker auto-scroll when in-year.
  */
 export function getLastWorkingMonth(now = new Date()) {
     const [first] = getWorkingMonthEntries(now);
@@ -419,6 +440,7 @@ export function buildSnapshotRows(projects, lastWorkingMonth) {
 const projectProgressMonthMetrics = {
     TRACKER_MONTH_NAMES,
     getWorkingMonthEntries,
+    getWorkingMonthEntriesRange,
     getLastWorkingMonth,
     isIncludedInProgressTracker,
     filterProjectsForProgressTracker,

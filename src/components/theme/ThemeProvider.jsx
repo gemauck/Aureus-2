@@ -105,14 +105,50 @@ const ThemeProvider = ({ children }) => {
         }
     }, [followSystem, theme]);
 
+    const setExplicitTheme = useCallback((next) => {
+        if (next !== 'light' && next !== 'dark') return;
+        setFollowSystem(false);
+        setUserTheme(next);
+        try {
+            localStorage.setItem(FOLLOW_SYSTEM_KEY, 'false');
+            localStorage.setItem(THEME_STORAGE_KEY, next);
+        } catch (error) {
+            console.warn('⚠️ ThemeProvider: Failed to persist theme preference', error);
+        }
+    }, []);
+
+    const setFollowSystemPreference = useCallback((enabled) => {
+        if (enabled) {
+            if (followSystem) return;
+            setFollowSystem(true);
+            try {
+                localStorage.setItem(FOLLOW_SYSTEM_KEY, 'true');
+            } catch (error) {
+                console.warn('⚠️ ThemeProvider: Failed to persist system preference', error);
+            }
+            return;
+        }
+        if (!followSystem) return;
+        setFollowSystem(false);
+        setUserTheme(theme);
+        try {
+            localStorage.setItem(FOLLOW_SYSTEM_KEY, 'false');
+            localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (error) {
+            console.warn('⚠️ ThemeProvider: Failed to persist system preference', error);
+        }
+    }, [followSystem, theme]);
+
     const contextValue = useMemo(() => ({
         theme,
         toggleTheme,
         toggleSystemPreference,
+        setExplicitTheme,
+        setFollowSystemPreference,
         isFollowingSystem: followSystem,
         systemPreference,
         isDark: theme === 'dark'
-    }), [followSystem, systemPreference, theme, toggleTheme, toggleSystemPreference]);
+    }), [followSystem, systemPreference, theme, toggleTheme, toggleSystemPreference, setExplicitTheme, setFollowSystemPreference]);
 
     return (
         <ThemeContext.Provider value={contextValue}>

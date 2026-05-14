@@ -41,7 +41,14 @@ const Settings = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [saveStatus, setSaveStatus] = useState('');
-    const { isDark } = window.useTheme();
+    const {
+        isDark,
+        theme,
+        isFollowingSystem,
+        systemPreference,
+        setExplicitTheme,
+        setFollowSystemPreference
+    } = window.useTheme();
 
     const authHook = window.useAuth || (() => ({ user: null }));
     const { user: authUser } = authHook();
@@ -747,6 +754,68 @@ const Settings = () => {
 
     const renderGeneralSettings = () => (
         <div className="space-y-6">
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Appearance
+                </label>
+                <p className={`text-xs mb-3 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Choose light or dark mode. You can also match your device setting.
+                </p>
+                <div
+                    className={`inline-flex rounded-lg border p-1 ${isDark ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}
+                    role="group"
+                    aria-label="Color theme"
+                >
+                    <button
+                        type="button"
+                        onClick={() => setExplicitTheme('light')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] sm:min-h-0 ${
+                            !isFollowingSystem && theme === 'light'
+                                ? isDark
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-white text-primary-700 shadow-sm'
+                                : isDark
+                                    ? 'text-gray-300 hover:bg-gray-600'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-sun mr-2" aria-hidden="true" />
+                        Light
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setExplicitTheme('dark')}
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] sm:min-h-0 ${
+                            !isFollowingSystem && theme === 'dark'
+                                ? isDark
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-white text-primary-700 shadow-sm'
+                                : isDark
+                                    ? 'text-gray-300 hover:bg-gray-600'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        <i className="fas fa-moon mr-2" aria-hidden="true" />
+                        Dark
+                    </button>
+                </div>
+                <div className="mt-4 flex items-start gap-3">
+                    <input
+                        id="settings-follow-system-theme"
+                        type="checkbox"
+                        checked={isFollowingSystem}
+                        onChange={(e) => setFollowSystemPreference(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <label htmlFor="settings-follow-system-theme" className={`text-sm cursor-pointer ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        Follow system appearance
+                        <span className={`block text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Device is currently {systemPreference === 'dark' ? 'dark' : 'light'} mode.
+                        </span>
+                    </label>
+                </div>
+            </div>
+
             <div>
                 <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                     Company
