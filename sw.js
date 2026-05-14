@@ -1,8 +1,9 @@
-const SW_VERSION = 'jobcard-offline-v6';
+const SW_VERSION = 'abcotronics-pwa-v1';
 const APP_CACHE = `${SW_VERSION}-app`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
 const PRECACHE_URLS = [
+  '/manifest.webmanifest',
   '/job-card',
   '/jobcard',
   '/job-cards',
@@ -22,7 +23,11 @@ self.addEventListener('install', event => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(APP_CACHE);
-      await cache.addAll(PRECACHE_URLS);
+      try {
+        await cache.addAll(PRECACHE_URLS);
+      } catch (e) {
+        console.warn('[sw] precache partial failure', e);
+      }
       await self.skipWaiting();
     })()
   );
@@ -32,11 +37,8 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter(key => key.startsWith('jobcard-offline-') && key !== APP_CACHE && key !== RUNTIME_CACHE)
-          .map(key => caches.delete(key))
-      );
+      const keep = new Set([APP_CACHE, RUNTIME_CACHE]);
+      await Promise.all(keys.filter((key) => !keep.has(key)).map((key) => caches.delete(key)));
       await self.clients.claim();
     })()
   );
@@ -88,7 +90,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Only runtime-cache script/style assets required by the job-card shell.
   const isStaticAsset = request.destination === 'script' || request.destination === 'style';
   if (!isStaticAsset) return;
 

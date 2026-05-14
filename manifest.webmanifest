@@ -1,0 +1,30 @@
+{
+  "id": "/",
+  "name": "Abcotronics ERP",
+  "short_name": "Abcotronics",
+  "description": "Fuel management and operations — Abcotronics ERP",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "browser"],
+  "orientation": "any",
+  "theme_color": "#2563eb",
+  "background_color": "#f8fafc",
+  "lang": "en-ZA",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}

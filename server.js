@@ -3205,6 +3205,17 @@ app.get('/dist/build-version.json', (req, res) => {
   }
 })
 
+// Web App Manifest — always fresh so PWA install metadata updates on deploy
+app.get('/manifest.webmanifest', (req, res) => {
+  const manifestPath = path.join(rootDir, 'manifest.webmanifest')
+  if (!existsSync(manifestPath)) {
+    return res.status(404).type('text/plain').send('manifest not found')
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.type('application/manifest+json')
+  res.sendFile(manifestPath)
+})
+
 // Serve static files from root directory with HTTP/2-safe headers
 // MUST be after API routes to avoid serving HTML for API endpoints
 app.use(
