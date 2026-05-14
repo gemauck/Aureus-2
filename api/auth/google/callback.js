@@ -3,7 +3,7 @@ import { prisma } from '../../_lib/prisma.js'
 import { badRequest, ok, serverError } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
-import { signAccessToken, signRefreshToken } from '../../_lib/jwt.js'
+import { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } from '../../_lib/jwt.js'
 import { getAppUrl } from '../../_lib/getAppUrl.js'
 import { addUserToAbcoAllStaff } from '../../_lib/addToAbcoAllStaff.js'
 
@@ -102,12 +102,8 @@ async function handler(req, res) {
         const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
         const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
         res.setHeader('Set-Cookie', [
-            `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
-        ])
-        
-        // Clear OAuth state cookie
-        res.setHeader('Set-Cookie', [
-            `oauth_state=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
+            `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${REFRESH_TOKEN_MAX_AGE_SECONDS}${isSecure ? '; Secure' : ''}${domainAttr}`,
+            `oauth_state=; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}; Max-Age=0`
         ])
         
         // Redirect to frontend with success

@@ -2,12 +2,15 @@ import jwt from 'jsonwebtoken'
 
 const DAY = 24 * 60 * 60
 
+/** Keep HttpOnly refresh cookie Max-Age aligned with `signRefreshToken` expiry. */
+export const REFRESH_TOKEN_MAX_AGE_SECONDS = 14 * DAY
+
 export function signAccessToken(payload) {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 6 * 60 * 60 }) // 6 hours
 }
 
 export function signRefreshToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 14 * DAY })
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: REFRESH_TOKEN_MAX_AGE_SECONDS })
 }
 
 export function verifyToken(token) {

@@ -1,7 +1,7 @@
 import { prisma } from './_lib/prisma.js'
 import bcrypt from 'bcryptjs'
 import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
-import { signAccessToken, signRefreshToken } from './_lib/jwt.js'
+import { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } from './_lib/jwt.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
@@ -36,7 +36,7 @@ async function handler(req, res) {
     const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
     const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
     res.setHeader('Set-Cookie', [
-      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${isSecure ? '; Secure' : ''}${domainAttr}` // 7 days
+      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${REFRESH_TOKEN_MAX_AGE_SECONDS}${isSecure ? '; Secure' : ''}${domainAttr}`
     ])
     return ok(res, { accessToken })
   } catch (e) {

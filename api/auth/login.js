@@ -1,7 +1,7 @@
 import { prisma } from '../_lib/prisma.js'
 import bcrypt from 'bcryptjs'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
-import { signAccessToken, signRefreshToken } from '../_lib/jwt.js'
+import { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } from '../_lib/jwt.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging, logger } from '../_lib/logger.js'
 
@@ -57,7 +57,7 @@ async function handler(req, res) {
       const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
       const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
       const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
-      const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
+      const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${REFRESH_TOKEN_MAX_AGE_SECONDS}${isSecure ? '; Secure' : ''}${domainAttr}`
       res.setHeader('Set-Cookie', [cookieValue])
 
       return ok(res, {
@@ -197,7 +197,7 @@ async function handler(req, res) {
     const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
     const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
     const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
-    const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
+    const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${REFRESH_TOKEN_MAX_AGE_SECONDS}${isSecure ? '; Secure' : ''}${domainAttr}`
     res.setHeader('Set-Cookie', [cookieValue])
     
     logger.info({ email, userId: user.id, role: user.role }, '✅ Login successful')
