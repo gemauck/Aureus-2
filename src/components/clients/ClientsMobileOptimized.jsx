@@ -439,9 +439,9 @@ const ClientsMobileOptimized = () => {
     const MobileCard = ({ item, type, onClick }) => (
         <div 
             onClick={() => onClick(item)}
-            className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-3 mb-2 cursor-pointer transition-all duration-200 active:scale-98`}
+            className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-2.5 mb-1.5 cursor-pointer transition-all duration-200 active:scale-98`}
         >
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between gap-2 mb-1.5">
                 <div className="flex-1">
                     <h3 className={`font-semibold text-base ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-1`}>
                         {item.name}
@@ -488,7 +488,7 @@ const ClientsMobileOptimized = () => {
     // Mobile-optimized tabs
     const MobileTabs = () => (
         <div className={`${isDark ? 'bg-gray-900' : 'bg-white'} px-4 pt-1`}>
-            <div className="flex border-b border-gray-200 dark:border-gray-600">
+            <div className="inline-flex flex-row w-full min-w-0 border-b border-gray-200 dark:border-gray-600">
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${

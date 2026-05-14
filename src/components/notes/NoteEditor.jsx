@@ -22,7 +22,7 @@ const RichTextToolbar = ({ editorRef, isDark }) => {
         </button>
     );
     return (
-        <div className={`flex items-center gap-0.5 flex-wrap border-b ${isDark ? 'border-gray-600' : 'border-gray-200'} px-2 py-1`}>
+        <div className={`inline-flex flex-row flex-nowrap items-center gap-0.5 w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden border-b ${isDark ? 'border-gray-600' : 'border-gray-200'} px-2 py-1 touch-pan-x`}>
             {btn('bold', 'Bold', 'bold')}
             {btn('italic', 'Italic', 'italic')}
             {btn('underline', 'Underline', 'underline')}
@@ -423,7 +423,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
 
     return (
         <div className="flex flex-col h-full min-h-0">
-            <div className={`sticky top-0 z-10 p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} flex items-center justify-between gap-2 flex-wrap`}>
+            <div className={`sticky top-0 z-10 p-4 border-b ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'} flex flex-row flex-wrap sm:flex-nowrap items-center justify-between gap-2 min-w-0`}>
                 <input
                     type="text"
                     value={title}
@@ -434,7 +434,7 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
                     }`}
                     aria-label="Note title"
                 />
-                <div className="flex items-center gap-1 flex-wrap">
+                <div className="inline-flex flex-row flex-nowrap items-center gap-1 overflow-x-auto max-w-full min-w-0 touch-pan-x">
                     <button
                         type="button"
                         onClick={async () => {
@@ -627,9 +627,11 @@ const NoteEditor = ({ note, allTags = [], clients = [], projects = [], clientPro
             )}
 
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div className={`flex items-center border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
-                    <RichTextToolbar editorRef={editorRef} isDark={isDark} />
-                    <div className={`flex items-center gap-1 px-2 py-1 ml-auto border-l ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                <div className={`flex flex-row flex-nowrap items-stretch w-full min-w-0 border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                    <div className="min-w-0 flex-1 overflow-x-auto touch-pan-x">
+                        <RichTextToolbar editorRef={editorRef} isDark={isDark} />
+                    </div>
+                    <div className={`inline-flex flex-row flex-shrink-0 items-center gap-1 px-2 py-1 border-l ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                         <button
                             type="button"
                             onClick={insertMentionTrigger}

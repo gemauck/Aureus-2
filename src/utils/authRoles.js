@@ -20,6 +20,7 @@ const SUPER_ADMIN_TIER_SET = new Set([
   'super-admin',
   'super_admin',
   'super_administrator',
+  'super_user',
   'system_admin',
 ])
 

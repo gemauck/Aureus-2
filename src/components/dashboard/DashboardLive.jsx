@@ -40,6 +40,24 @@ const calculateStats = (clients, leads, projects, timeEntries) => {
     };
 };
 
+/** Engagement lifecycle (Potential → Tender); matches CRM / Pipeline */
+const leadEngagementKey = (lead) => {
+    const raw = lead?.engagementStage ?? lead?.status ?? '';
+    return String(raw).trim().toLowerCase();
+};
+
+const formatEngagementStageLabel = (lead) => {
+    const raw = lead?.engagementStage ?? lead?.status ?? '';
+    const s = String(raw).trim();
+    if (!s) return '—';
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+};
+
+const isProposalOrTenderEngagement = (lead) => {
+    const k = leadEngagementKey(lead);
+    return k === 'proposal' || k === 'tender';
+};
+
 // WidgetWrapper - Wrapper component to ensure hooks are called at component level
 const WidgetWrapper = ({ widgetDef, dashboardData }) => {
     // This wrapper ensures that widget rendering happens at the component level
@@ -81,6 +99,49 @@ function getDashboardGridColumnCount(widthPx) {
     if (widthPx < 768) return 1;
     if (widthPx < 1280) return 2;
     return 3;
+}
+
+const DASHBOARD_WIDGET_DEFAULT_SIZES = {
+    'my-project-tasks': { w: 2, h: 1 },
+    'last-working-month-progress': { w: 2, h: 2 },
+    'erp-usage-insights': { w: 2, h: 2 },
+    'leads-proposal-tender': { w: 1, h: 2 },
+    'recent-activity': { w: 1, h: 1 },
+    'client-activity-metrics': { w: 1, h: 2 },
+    'recent-jobcards': { w: 1, h: 2 },
+    'recent-stock-movements': { w: 2, h: 2 }
+};
+
+/** Phone layout uses a single column; desktop/tablet can use wider tiles. */
+function defaultLayoutForWidget(widgetId, index, bucket) {
+    const size = DASHBOARD_WIDGET_DEFAULT_SIZES[widgetId] || { w: 1, h: 1 };
+    const w = bucket === 'mobile' ? 1 : Math.max(1, Math.min(3, size.w));
+    const h = Math.max(1, Math.min(3, size.h));
+    return { w, h, order: index };
+}
+
+/**
+ * v2 storage: { mobile: { [id]: layout }, desktop: { [id]: layout } }
+ * Legacy: flat map of id -> layout (treated as desktop); mobile derived with w=1.
+ */
+function normalizeWidgetLayoutsStorage(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { mobile: {}, desktop: {} };
+    if (Object.prototype.hasOwnProperty.call(raw, 'mobile') || Object.prototype.hasOwnProperty.call(raw, 'desktop')) {
+        const mobile = raw.mobile && typeof raw.mobile === 'object' && !Array.isArray(raw.mobile) ? { ...raw.mobile } : {};
+        const desktop = raw.desktop && typeof raw.desktop === 'object' && !Array.isArray(raw.desktop) ? { ...raw.desktop } : {};
+        return { mobile, desktop };
+    }
+    const desktop = { ...raw };
+    const mobile = {};
+    for (const k of Object.keys(desktop)) {
+        const L = desktop[k];
+        if (L && typeof L === 'object' && !Array.isArray(L)) {
+            const h = Math.max(1, Math.min(3, Number(L.h) || 1));
+            const order = typeof L.order === 'number' ? L.order : undefined;
+            mobile[k] = { ...L, w: 1, h, ...(order !== undefined ? { order } : {}) };
+        }
+    }
+    return { mobile, desktop };
 }
 
 // MyProjectTasksWidget - Separate component to properly use hooks
@@ -579,6 +640,401 @@ async function promiseAllSettledChunked(items, chunkSize, mapper) {
     }
     return out;
 }
+
+function parseClientRecordActivityLog(record) {
+    if (!record) return [];
+    const raw = record.activityLog;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        try {
+            return JSON.parse(raw || '[]');
+        } catch (_) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function tsMs(v) {
+    if (v == null || v === '') return NaN;
+    const ms = new Date(v).getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+}
+
+function normName(s) {
+    return String(s || '').trim().toLowerCase();
+}
+
+/** Map a project row to a CRM client or lead using clientId or clientName fallback. */
+function resolveProjectEntity(project, clients, leads) {
+    if (!project) return null;
+    const cid = project.clientId != null ? String(project.clientId).trim() : '';
+    if (cid) {
+        const c = (clients || []).find((x) => x.type !== 'lead' && String(x.id) === cid);
+        if (c) return { kind: 'client', id: c.id, name: c.name || project.clientName || 'Client' };
+        const l = (leads || []).find((x) => x.type !== 'client' && String(x.id) === cid);
+        if (l) return { kind: 'lead', id: l.id, name: l.name || project.clientName || 'Lead' };
+        return { kind: 'client', id: cid, name: project.clientName || 'Client' };
+    }
+    const cn = normName(project.clientName);
+    if (!cn) return null;
+    for (const c of clients || []) {
+        if (c.type === 'lead') continue;
+        if (normName(c.name) === cn) return { kind: 'client', id: c.id, name: c.name };
+    }
+    for (const l of leads || []) {
+        if (l.type === 'client') continue;
+        if (normName(l.name) === cn) return { kind: 'lead', id: l.id, name: l.name };
+    }
+    return null;
+}
+
+function parseJsonArrayField(raw) {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        try {
+            return JSON.parse(raw || '[]');
+        } catch (_) {
+            return [];
+        }
+    }
+    return [];
+}
+
+function parseTasksApi(json) {
+    if (!json) return [];
+    if (Array.isArray(json?.data?.tasks)) return json.data.tasks;
+    if (Array.isArray(json?.tasks)) return json.tasks;
+    return [];
+}
+
+function parseTicketsApi(json) {
+    if (!json) return [];
+    if (Array.isArray(json?.data?.tickets)) return json.data.tickets;
+    if (Array.isArray(json?.tickets)) return json.tickets;
+    return [];
+}
+
+function parseUserTasksApi(json) {
+    if (!json) return [];
+    if (Array.isArray(json?.data?.tasks)) return json.data.tasks;
+    if (Array.isArray(json?.tasks)) return json.tasks;
+    return [];
+}
+
+function parseSalesOrdersApi(so) {
+    const d = so?.data ?? so;
+    if (Array.isArray(d?.salesOrders)) return d.salesOrders;
+    if (Array.isArray(so?.salesOrders)) return so.salesOrders;
+    return [];
+}
+
+function parseInvoicesApi(inv) {
+    const d = inv?.data ?? inv;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.invoices)) return d.invoices;
+    return [];
+}
+
+/**
+ * Cross-module client/lead activity: CRM logs, linked projects & time, project tasks,
+ * personal tasks, helpdesk (ticket + ticket log), sales orders, invoices.
+ */
+const ClientActivityMetricsWidget = ({ cardBase, headerText, subText, isDark, clients, leads, projects, timeEntries }) => {
+    const [supplement, setSupplement] = React.useState({
+        tasks: [],
+        tickets: [],
+        userTasks: [],
+        salesOrders: [],
+        invoices: []
+    });
+
+    React.useEffect(() => {
+        let cancelled = false;
+        const token = window.storage?.getToken?.();
+        if (!token) return undefined;
+
+        const headers = { Authorization: `Bearer ${token}` };
+
+        (async () => {
+            try {
+                const results = await Promise.allSettled([
+                    fetch('/api/tasks?lightweight=true', { headers }).then((r) => (r.ok ? r.json() : null)),
+                    fetch('/api/helpdesk?limit=120', { headers }).then((r) => (r.ok ? r.json() : null)),
+                    fetch('/api/user-tasks?lightweight=true&limit=200', { headers }).then((r) => (r.ok ? r.json() : null)),
+                    typeof window.DatabaseAPI?.getSalesOrders === 'function' ? window.DatabaseAPI.getSalesOrders() : Promise.resolve(null),
+                    typeof window.DatabaseAPI?.getInvoices === 'function' ? window.DatabaseAPI.getInvoices() : Promise.resolve(null)
+                ]);
+                if (cancelled) return;
+                setSupplement({
+                    tasks: results[0].status === 'fulfilled' ? parseTasksApi(results[0].value) : [],
+                    tickets: results[1].status === 'fulfilled' ? parseTicketsApi(results[1].value) : [],
+                    userTasks: results[2].status === 'fulfilled' ? parseUserTasksApi(results[2].value) : [],
+                    salesOrders: results[3].status === 'fulfilled' ? parseSalesOrdersApi(results[3].value) : [],
+                    invoices: results[4].status === 'fulfilled' ? parseInvoicesApi(results[4].value) : []
+                });
+            } catch (_) {
+                if (!cancelled) {
+                    setSupplement({
+                        tasks: [],
+                        tickets: [],
+                        userTasks: [],
+                        salesOrders: [],
+                        invoices: []
+                    });
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [clients, leads, projects, timeEntries]);
+
+    const metrics = React.useMemo(() => {
+        const now = Date.now();
+        const startToday = new Date();
+        startToday.setHours(0, 0, 0, 0);
+        const tToday = startToday.getTime();
+        const t7 = now - 7 * 24 * 60 * 60 * 1000;
+        const t30 = now - 30 * 24 * 60 * 60 * 1000;
+
+        let countToday = 0;
+        let count7 = 0;
+        let count30 = 0;
+        const activeKeys7 = new Set();
+        const byEntity7 = new Map();
+        const srcToday = { crm: 0, projects: 0, time: 0, projTasks: 0, tickets: 0, orders: 0, invoices: 0, myTasks: 0 };
+        const src7 = { crm: 0, projects: 0, time: 0, projTasks: 0, tickets: 0, orders: 0, invoices: 0, myTasks: 0 };
+        const src30 = { crm: 0, projects: 0, time: 0, projTasks: 0, tickets: 0, orders: 0, invoices: 0, myTasks: 0 };
+
+        const bump = (entity, ms, source) => {
+            if (!entity?.id || !Number.isFinite(ms)) return;
+            const mapKey = `${entity.kind}:${String(entity.id)}`;
+            if (ms >= tToday) {
+                countToday += 1;
+                if (source && srcToday[source] !== undefined) srcToday[source] += 1;
+            }
+            if (ms >= t7) {
+                count7 += 1;
+                activeKeys7.add(mapKey);
+                const cur = byEntity7.get(mapKey) || { id: entity.id, name: entity.name, kind: entity.kind, count: 0 };
+                cur.count += 1;
+                byEntity7.set(mapKey, cur);
+                if (source && src7[source] !== undefined) src7[source] += 1;
+            }
+            if (ms >= t30) {
+                count30 += 1;
+                if (source && src30[source] !== undefined) src30[source] += 1;
+            }
+        };
+
+        const bumpTouchPair = (entity, createdRaw, updatedRaw, source) => {
+            const c = tsMs(createdRaw);
+            const u = tsMs(updatedRaw);
+            bump(entity, c, source);
+            if (Number.isFinite(u) && u !== c) bump(entity, u, source);
+        };
+
+        const clientNameById = new Map();
+        (clients || []).forEach((c) => {
+            if (c.type === 'lead') return;
+            if (c.id) clientNameById.set(String(c.id), c.name || 'Client');
+        });
+
+        (clients || []).forEach((c) => {
+            if (c.type === 'lead') return;
+            if (!c.id) return;
+            const logs = parseClientRecordActivityLog(c);
+            const entity = { kind: 'client', id: c.id, name: c.name || 'Unnamed' };
+            logs.forEach((a) => {
+                bump(entity, tsMs(a.timestamp || a.createdAt || a.date), 'crm');
+            });
+        });
+        (leads || []).forEach((lead) => {
+            if (lead.type === 'client') return;
+            if (!lead.id) return;
+            const logs = parseClientRecordActivityLog(lead);
+            const entity = { kind: 'lead', id: lead.id, name: lead.name || 'Unnamed' };
+            logs.forEach((a) => {
+                bump(entity, tsMs(a.timestamp || a.createdAt || a.date), 'crm');
+            });
+        });
+
+        const projectIdToEntity = new Map();
+        (projects || []).forEach((p) => {
+            if (!p?.id) return;
+            const ent = resolveProjectEntity(p, clients, leads);
+            if (ent) projectIdToEntity.set(String(p.id), ent);
+            if (ent) bumpTouchPair(ent, p.createdAt, p.updatedAt, 'projects');
+        });
+
+        (timeEntries || []).forEach((te) => {
+            const pid = te.projectId != null ? String(te.projectId).trim() : '';
+            if (!pid) return;
+            const ent = projectIdToEntity.get(pid);
+            if (!ent) return;
+            bump(ent, tsMs(te.date || te.createdAt || te.updatedAt), 'time');
+        });
+
+        (supplement.tasks || []).forEach((task) => {
+            const pid = task.projectId != null ? String(task.projectId).trim() : '';
+            if (!pid) return;
+            const ent = projectIdToEntity.get(pid);
+            if (!ent) return;
+            bumpTouchPair(ent, task.createdAt, task.updatedAt, 'projTasks');
+        });
+
+        (supplement.tickets || []).forEach((t) => {
+            const cid = t.clientId != null ? String(t.clientId).trim() : '';
+            if (!cid) return;
+            const name = clientNameById.get(cid) || t.client?.name || 'Client';
+            const entity = { kind: 'client', id: cid, name };
+            bumpTouchPair(entity, t.createdAt, t.updatedAt, 'tickets');
+            parseJsonArrayField(t.activityLog).forEach((a) => {
+                bump(entity, tsMs(a.timestamp || a.createdAt || a.date), 'tickets');
+            });
+        });
+
+        (supplement.salesOrders || []).forEach((o) => {
+            const cid = o.clientId != null ? String(o.clientId).trim() : '';
+            if (!cid) return;
+            const name = clientNameById.get(cid) || o.clientName || 'Client';
+            bumpTouchPair({ kind: 'client', id: cid, name }, o.createdAt, o.updatedAt, 'orders');
+        });
+
+        (supplement.invoices || []).forEach((inv) => {
+            const cid = inv.clientId != null ? String(inv.clientId).trim() : '';
+            if (!cid) return;
+            const name = clientNameById.get(cid) || inv.clientName || 'Client';
+            bumpTouchPair({ kind: 'client', id: cid, name }, inv.createdAt, inv.updatedAt, 'invoices');
+        });
+
+        (supplement.userTasks || []).forEach((ut) => {
+            const cId = ut.clientId != null ? String(ut.clientId).trim() : '';
+            const lId = ut.leadId != null ? String(ut.leadId).trim() : '';
+            if (cId) {
+                const name = clientNameById.get(cId) || 'Client';
+                bumpTouchPair({ kind: 'client', id: cId, name }, ut.createdAt, ut.updatedAt, 'myTasks');
+            } else if (lId) {
+                const lead = (leads || []).find((x) => x.type !== 'client' && String(x.id) === lId);
+                const name = lead?.name || 'Lead';
+                bumpTouchPair({ kind: 'lead', id: lId, name }, ut.createdAt, ut.updatedAt, 'myTasks');
+            } else if (ut.projectId) {
+                const ent = projectIdToEntity.get(String(ut.projectId).trim());
+                if (ent) bumpTouchPair(ent, ut.createdAt, ut.updatedAt, 'myTasks');
+            }
+        });
+
+        const topEntities = Array.from(byEntity7.values())
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+
+        return {
+            countToday,
+            count7,
+            count30,
+            activeAccounts7: activeKeys7.size,
+            topEntities,
+            srcToday,
+            src7,
+            src30
+        };
+    }, [clients, leads, projects, timeEntries, supplement]);
+
+    const chipBase = isDark ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-50 border-gray-100';
+
+    const srcLabels = [
+        ['crm', 'CRM'],
+        ['projects', 'Projects'],
+        ['time', 'Time'],
+        ['projTasks', 'Proj. tasks'],
+        ['tickets', 'Helpdesk'],
+        ['orders', 'SO'],
+        ['invoices', 'Invoices'],
+        ['myTasks', 'My tasks']
+    ];
+
+    return (
+        <div className={`${cardBase} border rounded-xl p-4 sm:p-5 shadow-sm min-w-0 flex flex-col h-full`}>
+            <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4 min-w-0">
+                <div className="min-w-0 flex-1">
+                    <h3 className={`text-sm font-semibold ${headerText} leading-tight`}>Account activity</h3>
+                    <p className={`text-xs mt-0.5 ${subText} leading-snug`}>
+                        CRM, projects, time, tasks, helpdesk, sales orders, and invoices linked to clients or leads
+                    </p>
+                </div>
+                <i className="fas fa-network-wired text-primary-500 opacity-80 flex-shrink-0 mt-0.5" aria-hidden="true"></i>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 flex-shrink-0">
+                <div className={`rounded-lg border px-3 py-2.5 sm:py-3 min-h-[3.25rem] flex flex-col justify-center ${chipBase}`}>
+                    <div className={`text-[10px] sm:text-xs uppercase tracking-wide ${subText}`}>Today</div>
+                    <div className={`text-xl sm:text-2xl font-semibold tabular-nums ${headerText}`}>{metrics.countToday}</div>
+                </div>
+                <div className={`rounded-lg border px-3 py-2.5 sm:py-3 min-h-[3.25rem] flex flex-col justify-center ${chipBase}`}>
+                    <div className={`text-[10px] sm:text-xs uppercase tracking-wide ${subText}`}>Last 7 days</div>
+                    <div className={`text-xl sm:text-2xl font-semibold tabular-nums ${headerText}`}>{metrics.count7}</div>
+                </div>
+            </div>
+
+            <div className={`mt-2 sm:mt-3 rounded-lg border px-2.5 sm:px-3 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] sm:text-xs ${chipBase} ${subText}`}>
+                <span className={`font-medium ${headerText} mr-0.5`}>7d mix:</span>
+                {srcLabels.map(([key, label]) => {
+                    const n = metrics.src7[key];
+                    if (!n) return null;
+                    return (
+                        <span key={key} className="tabular-nums whitespace-nowrap">
+                            {label} <span className={`font-semibold ${headerText}`}>{n}</span>
+                        </span>
+                    );
+                })}
+                {metrics.count7 === 0 && <span className="italic">No signals in range</span>}
+            </div>
+
+            <div className={`mt-2 rounded-lg border px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm ${chipBase}`}>
+                <span className={subText}>Active clients / leads (7d)</span>
+                <span className={`font-semibold tabular-nums ${headerText}`}>{metrics.activeAccounts7}</span>
+            </div>
+            <div className={`mt-1 text-[10px] sm:text-xs ${subText}`}>
+                <span className="tabular-nums">{metrics.count30}</span> signals in the last 30 days
+            </div>
+
+            <div className={`mt-3 sm:mt-4 flex-1 min-h-0 flex flex-col border-t pt-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                <div className={`text-xs font-medium mb-2 ${headerText}`}>Top accounts (7d)</div>
+                {metrics.topEntities.length === 0 ? (
+                    <div className={`text-xs ${subText} py-2`}>No linked activity in the last week.</div>
+                ) : (
+                    <ul className="space-y-0 divide-y divide-gray-100 dark:divide-gray-800 min-w-0 flex-1 overflow-y-auto max-h-[9rem] sm:max-h-[10rem]">
+                        {metrics.topEntities.map((row) => (
+                            <li key={`${row.kind}:${row.id}`} className="flex items-center justify-between gap-2 py-2.5 min-h-[44px] first:pt-0">
+                                <div className="min-w-0 flex-1 flex items-center gap-2">
+                                    <span
+                                        className={`flex-shrink-0 text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${
+                                            row.kind === 'lead'
+                                                ? isDark
+                                                    ? 'bg-amber-900/50 text-amber-200'
+                                                    : 'bg-amber-100 text-amber-900'
+                                                : isDark
+                                                  ? 'bg-primary-900/40 text-primary-200'
+                                                  : 'bg-primary-50 text-primary-800'
+                                        }`}
+                                    >
+                                        {row.kind === 'lead' ? 'Lead' : 'Client'}
+                                    </span>
+                                    <span className={`text-sm truncate ${headerText}`} title={row.name}>
+                                        {row.name}
+                                    </span>
+                                </div>
+                                <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ${headerText}`}>{row.count}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </div>
+    );
+};
 
 /** Below this *widget width*, show compact row cards instead of the wide table (not `window.innerWidth`, so narrow dashboard tiles still lay out correctly). */
 const DASHBOARD_PROGRESS_NARROW_MAX_PX = 768;
@@ -1151,6 +1607,877 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     );
 };
 
+/** Recent job cards (Service & Maintenance) — list + navigate to detail. */
+function normalizeJobCardStatusKey(statusRaw) {
+    return String(statusRaw || 'draft')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_');
+}
+
+function formatJobCardStatusLabel(statusRaw) {
+    const s = String(statusRaw || 'draft').trim();
+    if (!s) return 'Draft';
+    return s
+        .replace(/_/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+}
+
+function recentJobCardStatusPillClasses(statusRaw, isDark) {
+    const status = normalizeJobCardStatusKey(statusRaw);
+    if (status === 'completed') {
+        return isDark
+            ? 'bg-emerald-900/50 text-emerald-200 border-emerald-800'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    }
+    if (status === 'open') {
+        return isDark ? 'bg-sky-900/40 text-sky-200 border-sky-800' : 'bg-sky-50 text-sky-700 border-sky-200';
+    }
+    if (status === 'cancelled' || status === 'canceled') {
+        return isDark ? 'bg-rose-900/40 text-rose-200 border-rose-800' : 'bg-rose-50 text-rose-700 border-rose-200';
+    }
+    if (status === 'submitted') {
+        return isDark ? 'bg-amber-900/45 text-amber-100 border-amber-700/60' : 'bg-amber-50 text-amber-900 border-amber-200';
+    }
+    if (status === 'ready_for_invoice' || status === 'readyforinvoice') {
+        return isDark ? 'bg-violet-900/45 text-violet-100 border-violet-700/50' : 'bg-violet-50 text-violet-900 border-violet-200';
+    }
+    if (status === 'in_progress' || status === 'inprogress' || status === 'active') {
+        return isDark ? 'bg-blue-900/40 text-blue-100 border-blue-700/50' : 'bg-blue-50 text-blue-800 border-blue-200';
+    }
+    return isDark ? 'bg-slate-800 text-slate-300 border-slate-600' : 'bg-slate-50 text-slate-700 border-slate-200';
+}
+
+function formatJobCardListWhen(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (_e) {
+        return '—';
+    }
+}
+
+/** Narrow screens: shorter stamp (year only when not current year). */
+function formatJobCardListWhenCompact(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '—';
+        const now = new Date();
+        const sameYear = d.getFullYear() === now.getFullYear();
+        const opts = sameYear
+            ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+            : { month: 'short', day: 'numeric', year: '2-digit', hour: '2-digit', minute: '2-digit' };
+        return d.toLocaleString(undefined, opts);
+    } catch (_e) {
+        return '—';
+    }
+}
+
+function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
+    const [items, setItems] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+
+    const load = React.useCallback(async (opts = {}) => {
+        const silent = !!opts.silent;
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            setItems([]);
+            setError(null);
+            if (!silent) setLoading(false);
+            return;
+        }
+        if (!silent) {
+            setLoading(true);
+            setError(null);
+        }
+        try {
+            const params = new URLSearchParams({
+                page: '1',
+                pageSize: '8',
+                sortField: 'createdAt',
+                sortDirection: 'desc'
+            });
+            const res = await fetch(`/api/jobcards?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                let msg = 'Could not load job cards.';
+                try {
+                    const j = JSON.parse(text);
+                    msg = j.message || j.error || msg;
+                } catch (_parseErr) {
+                    if (res.status === 403) msg = 'You do not have permission to view job cards.';
+                }
+                throw new Error(msg);
+            }
+            const raw = await res.json();
+            const list = (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
+            setItems(Array.isArray(list) ? list : []);
+            if (!silent) setError(null);
+        } catch (e) {
+            if (!silent) {
+                setError(e?.message || 'Failed to load job cards.');
+                setItems([]);
+            }
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        load({ silent: false });
+        const id = setInterval(() => load({ silent: true }), 120000);
+        return () => clearInterval(id);
+    }, [load]);
+
+    const openJobCard = (jc) => {
+        const id = jc?.id;
+        if (!id) return;
+        if (window.RouteState?.setPageSubpath) {
+            window.RouteState.setPageSubpath('service-maintenance', [String(id)], {
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        } else {
+            window.dispatchEvent(
+                new CustomEvent('navigateToPage', {
+                    detail: { page: 'service-maintenance', subpath: [String(id)] }
+                })
+            );
+        }
+    };
+
+    return (
+        <div
+            className={`dashboard-jobcards-widget ${cardBase} border rounded-lg sm:rounded-2xl p-3 sm:p-5 shadow-sm flex flex-col min-h-0 min-w-0 text-left`}
+            style={{ textAlign: 'left' }}
+        >
+            <div className="djw-toolbar flex items-center justify-between mb-2 sm:mb-3 flex-shrink-0 gap-2 min-h-[44px] sm:min-h-0 text-left">
+                <h3 className={`text-sm font-semibold leading-tight pr-1 ${headerText}`}>Recent job cards</h3>
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                    <button
+                        type="button"
+                        title="Refresh"
+                        aria-label="Refresh job cards"
+                        onClick={() => load({ silent: false })}
+                        disabled={loading}
+                        className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center rounded-lg touch-manipulation transition-colors text-left ${
+                            isDark ? 'hover:bg-gray-800 active:bg-gray-800/80 text-gray-300' : 'hover:bg-gray-100 active:bg-gray-200/80 text-gray-600'
+                        } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        <i className={`fas fa-sync-alt text-sm sm:text-xs ${loading ? 'fa-spin' : ''}`} />
+                    </button>
+                    <i
+                        className="fas fa-clipboard-list text-primary-500 opacity-80 text-base flex-shrink-0"
+                        title="Service & Maintenance"
+                        aria-hidden
+                    />
+                </div>
+            </div>
+            {loading && items.length === 0 ? (
+                <div className={`text-sm py-2 text-left ${subText}`}>Loading…</div>
+            ) : error ? (
+                <div className={`text-sm py-1 leading-snug text-left ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                    {error}
+                </div>
+            ) : items.length === 0 ? (
+                <div className={`text-sm py-2 text-left ${subText}`}>No job cards yet.</div>
+            ) : (
+                <ul className="flex flex-col gap-2 sm:gap-0 min-h-0 max-h-[min(52vh,20rem)] sm:max-h-80 overflow-y-auto overscroll-y-contain sm:divide-y sm:divide-gray-200 dark:sm:divide-gray-700 sm:rounded-lg sm:-mx-1 sm:px-1 -mx-0.5 px-0.5 sm:mx-0 sm:px-0">
+                    {items.map((jc) => {
+                        const statusLabel = formatJobCardStatusLabel(jc.status);
+                        const clientLine = [jc.clientName, jc.siteName].filter(Boolean).join(' · ') || '—';
+                        const summary =
+                            (jc.reasonForVisit && String(jc.reasonForVisit).trim()) ||
+                            (jc.diagnosis && String(jc.diagnosis).trim()) ||
+                            '';
+                        const tech = jc.agentName || '—';
+                        const rowBg = isDark
+                            ? 'border-gray-700/90 bg-gray-800/35 sm:border-0 sm:bg-transparent'
+                            : 'border-gray-200/90 bg-slate-50/90 sm:border-0 sm:bg-transparent';
+                        return (
+                            <li key={jc.id} className={`min-w-0 rounded-xl border shadow-sm sm:shadow-none sm:rounded-none ${rowBg}`}>
+                                <button
+                                    type="button"
+                                    onClick={() => openJobCard(jc)}
+                                    style={{ textAlign: 'left' }}
+                                    className={`w-full text-left rounded-xl sm:rounded-lg px-3 py-2.5 sm:px-2 sm:py-2.5 flex flex-col gap-1 touch-manipulation transition-colors ${
+                                        isDark
+                                            ? 'active:bg-gray-800/80 sm:hover:bg-gray-800/90 sm:active:bg-gray-800'
+                                            : 'active:bg-white sm:hover:bg-gray-50 sm:active:bg-gray-100'
+                                    }`}
+                                >
+                                    <div className="djw-norowrap flex items-start justify-between gap-2 min-w-0">
+                                        <div className="min-w-0 flex-1 text-left">
+                                            <div className={`text-base sm:text-sm font-bold tracking-tight tabular-nums leading-tight ${headerText}`}>
+                                                {jc.jobCardNumber || '—'}
+                                            </div>
+                                            <div
+                                                className={`text-[11px] sm:text-[11px] font-medium uppercase tracking-wide truncate mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}
+                                            >
+                                                {clientLine}
+                                            </div>
+                                        </div>
+                                        <span
+                                            className={`shrink-0 self-start inline-flex items-center justify-center rounded-lg border px-2 py-1 text-[10px] sm:text-[10px] font-semibold uppercase leading-tight tracking-wide whitespace-nowrap max-w-[48%] sm:max-w-none text-center ${recentJobCardStatusPillClasses(jc.status, isDark)}`}
+                                        >
+                                            <span className="truncate">{statusLabel}</span>
+                                        </span>
+                                    </div>
+                                    {summary ? (
+                                        <p
+                                            className={`text-[13px] sm:text-xs line-clamp-2 leading-snug text-left font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
+                                        >
+                                            {summary}
+                                        </p>
+                                    ) : null}
+                                    <div
+                                        className={`djw-norowrap flex items-baseline justify-between gap-x-2 gap-y-0.5 text-left text-[11px] sm:text-[11px] ${subText}`}
+                                    >
+                                        <span className="truncate min-w-0 font-medium">{tech}</span>
+                                        <span className="tabular-nums flex-shrink-0 opacity-90">
+                                            <span className="sm:hidden">{formatJobCardListWhenCompact(jc.createdAt)}</span>
+                                            <span className="hidden sm:inline">{formatJobCardListWhen(jc.createdAt)}</span>
+                                        </span>
+                                    </div>
+                                    {jc.callOutCategory ? (
+                                        <div className="text-left pt-0.5">
+                                            <span
+                                                className={`inline-flex max-w-full items-center rounded-md border px-2 py-1 text-[11px] font-semibold leading-snug ${
+                                                    isDark
+                                                        ? 'border-primary-700/50 bg-primary-900/30 text-primary-200'
+                                                        : 'border-primary-200 bg-primary-50 text-primary-800'
+                                                }`}
+                                            >
+                                                <span className="truncate">{String(jc.callOutCategory).trim()}</span>
+                                            </span>
+                                        </div>
+                                    ) : null}
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+            <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex-shrink-0 text-left ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                <button
+                    type="button"
+                    style={{ textAlign: 'left' }}
+                    onClick={() => {
+                        if (window.RouteState?.setPageSubpath) {
+                            window.RouteState.setPageSubpath('service-maintenance', [], {
+                                replace: false,
+                                preserveSearch: false,
+                                preserveHash: false
+                            });
+                        } else {
+                            window.dispatchEvent(
+                                new CustomEvent('navigateToPage', { detail: { page: 'service-maintenance', subpath: [] } })
+                            );
+                        }
+                    }}
+                    className={`w-full min-h-[44px] sm:min-h-0 text-left flex items-center justify-start rounded-lg border px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-semibold touch-manipulation transition-colors ${
+                        isDark
+                            ? 'border-primary-700/50 text-primary-200 bg-gray-800/50 hover:bg-gray-800 active:bg-gray-800/90'
+                            : 'border-primary-200 text-primary-700 bg-white hover:bg-primary-50 active:bg-primary-50/80'
+                    }`}
+                >
+                    <span className="sm:hidden">Open Service & Maintenance</span>
+                    <span className="hidden sm:inline">Open Service & Maintenance →</span>
+                </button>
+            </div>
+        </div>
+    );
+}
+
+const STOCK_MOVEMENT_PERIOD_MS = {
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+    '90d': 90 * 24 * 60 * 60 * 1000
+};
+
+function stockMovementPeriodStorageKey() {
+    const uid = window.storage?.getUser?.()?.id || 'anon';
+    return `dashboard.stockMovements.period.${uid}`;
+}
+
+/** Recent manufacturing stock movements — period filter, mobile-first, optional silent refresh. */
+function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, autoRefresh, refreshInterval }) {
+    const [period, setPeriod] = React.useState(() => {
+        try {
+            const raw = localStorage.getItem(stockMovementPeriodStorageKey());
+            if (raw && STOCK_MOVEMENT_PERIOD_MS[raw]) return raw;
+        } catch (_) {}
+        return '7d';
+    });
+    const [movements, setMovements] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
+    const [silentBusy, setSilentBusy] = React.useState(false);
+    const [error, setError] = React.useState(null);
+
+    const setPeriodPersist = React.useCallback((p) => {
+        setPeriod(p);
+        try {
+            localStorage.setItem(stockMovementPeriodStorageKey(), p);
+        } catch (_) {}
+    }, []);
+
+    const createdAfterIso = React.useMemo(() => {
+        const ms = STOCK_MOVEMENT_PERIOD_MS[period] ?? STOCK_MOVEMENT_PERIOD_MS['7d'];
+        return new Date(Date.now() - ms).toISOString();
+    }, [period]);
+
+    const load = React.useCallback(
+        async (silent = false) => {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                setError('Sign in required');
+                setMovements([]);
+                setLoading(false);
+                return;
+            }
+            if (silent) {
+                setSilentBusy(true);
+            } else {
+                setLoading(true);
+            }
+            setError(null);
+            try {
+                const qs = new URLSearchParams({
+                    page: '1',
+                    pageSize: '10',
+                    createdAfter: createdAfterIso
+                });
+                const res = await fetch(`/api/manufacturing/stock-movements?${qs.toString()}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    cache: 'no-store'
+                });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    const msg =
+                        body?.error?.message ||
+                        body?.message ||
+                        (typeof body?.error === 'string' ? body.error : null) ||
+                        `HTTP ${res.status}`;
+                    setError(msg);
+                    if (!silent) setMovements([]);
+                    return;
+                }
+                const list = Array.isArray(body?.data?.movements) ? body.data.movements : [];
+                setMovements(list);
+            } catch (e) {
+                setError(e.message || 'Request failed');
+                if (!silent) setMovements([]);
+            } finally {
+                setLoading(false);
+                setSilentBusy(false);
+            }
+        },
+        [createdAfterIso]
+    );
+
+    React.useEffect(() => {
+        void load(false);
+    }, [load]);
+
+    React.useEffect(() => {
+        if (!autoRefresh || !refreshInterval || refreshInterval < 5000) return undefined;
+        const id = window.setInterval(() => {
+            void load(true);
+        }, refreshInterval);
+        return () => window.clearInterval(id);
+    }, [autoRefresh, refreshInterval, load]);
+
+    const openManufacturingMovements = React.useCallback(() => {
+        if (!window.RouteState?.setPageSubpath) return;
+        window.RouteState.setPageSubpath('manufacturing', ['movements'], {
+            replace: false,
+            preserveSearch: false,
+            preserveHash: false
+        });
+    }, []);
+
+    const typeBadgeClass = (t) => {
+        const k = String(t || '').toLowerCase();
+        if (k === 'receipt')
+            return isDark ? 'bg-emerald-900/50 text-emerald-200' : 'bg-emerald-100 text-emerald-900';
+        if (k === 'consumption' || k === 'sale')
+            return isDark ? 'bg-rose-900/45 text-rose-100' : 'bg-rose-100 text-rose-900';
+        if (k === 'transfer')
+            return isDark ? 'bg-sky-900/45 text-sky-100' : 'bg-sky-100 text-sky-900';
+        if (k === 'production')
+            return isDark ? 'bg-violet-900/45 text-violet-100' : 'bg-violet-100 text-violet-900';
+        if (k === 'adjustment')
+            return isDark ? 'bg-amber-900/45 text-amber-100' : 'bg-amber-100 text-amber-900';
+        return isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-100 text-gray-800';
+    };
+
+    const formatQty = (q) => {
+        const n = Number(q);
+        if (!Number.isFinite(n)) return '—';
+        const abs = Math.abs(n);
+        const s = abs >= 100 ? n.toFixed(0) : abs >= 10 ? n.toFixed(1) : n.toFixed(2);
+        return n > 0 ? `+${s}` : s;
+    };
+
+    const locHint = (m) => {
+        const f = String(m.fromLocation || '').trim();
+        const t = String(m.toLocation || '').trim();
+        if (f && t) return `${f} → ${t}`;
+        if (t) return `→ ${t}`;
+        if (f) return `${f} →`;
+        return '';
+    };
+
+    const periodPills = React.useMemo(
+        () =>
+            ['24h', '7d', '30d', '90d'].map((p) => {
+                const on = period === p;
+                return (
+                    <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPeriodPersist(p)}
+                        className={`min-h-[44px] min-w-[56px] px-3 rounded-full text-xs font-semibold ${
+                            on
+                                ? isDark
+                                    ? 'bg-teal-500/30 text-teal-100 ring-1 ring-teal-400/50'
+                                    : 'bg-teal-100 text-teal-900 ring-1 ring-teal-200'
+                                : isDark
+                                  ? 'bg-gray-800 text-gray-400'
+                                  : 'bg-gray-100 text-gray-600'
+                        }`}
+                    >
+                        {p}
+                    </button>
+                );
+            }),
+        [isDark, period, setPeriodPersist]
+    );
+
+    return (
+        <div
+            className={`${cardBase} border rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-0`}
+            style={{
+                background: isDark
+                    ? 'linear-gradient(160deg, rgba(15,118,110,0.18) 0%, rgba(17,24,39,0.96) 42%, rgba(17,24,39,1) 100%)'
+                    : 'linear-gradient(160deg, #ecfdf5 0%, #ffffff 45%, #fafafa 100%)'
+            }}
+        >
+            <div className="p-4 sm:p-5 border-b border-black/5 dark:border-white/10 shrink-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                            <span
+                                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-sm ${
+                                    isDark ? 'bg-teal-500/25 text-teal-100' : 'bg-teal-100 text-teal-800'
+                                }`}
+                            >
+                                <i className="fas fa-dolly" aria-hidden />
+                            </span>
+                            <h3 className={`text-sm font-semibold tracking-tight sm:text-base ${headerText}`}>
+                                Recent stock movements
+                            </h3>
+                        </div>
+                        <p className={`mt-1 text-xs leading-snug ${subText}`}>
+                            Filtered by when each movement was recorded (created time)
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">
+                        <button
+                            type="button"
+                            onClick={() => void load(false)}
+                            disabled={loading}
+                            className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-opacity ${
+                                isDark ? 'bg-gray-800 text-gray-200 hover:bg-gray-750' : 'bg-white text-gray-700 shadow-sm border border-gray-200 hover:bg-gray-50'
+                            } ${loading ? 'opacity-60' : ''}`}
+                            title="Refresh"
+                            aria-label="Refresh stock movements"
+                        >
+                            <i className={`fas fa-sync-alt text-sm ${loading ? 'animate-spin' : ''}`} aria-hidden />
+                        </button>
+                        {silentBusy ? (
+                            <span className={`text-[10px] uppercase tracking-wide ${subText}`} aria-live="polite">
+                                Updating…
+                            </span>
+                        ) : null}
+                    </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">{periodPills}</div>
+            </div>
+
+            <div className="p-3 sm:p-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                {error ? (
+                    <div className={`text-sm rounded-xl px-3 py-3 ${isDark ? 'bg-red-950/40 text-red-200' : 'bg-red-50 text-red-800'}`}>
+                        {error}
+                    </div>
+                ) : null}
+
+                {loading && movements.length === 0 ? (
+                    <div className={`flex flex-col items-center justify-center py-10 gap-3 ${subText}`}>
+                        <i className="fas fa-circle-notch fa-spin text-2xl text-teal-500" aria-hidden />
+                        <span className="text-sm">Loading movements…</span>
+                    </div>
+                ) : null}
+
+                {!loading && !error && movements.length === 0 ? (
+                    <div className={`text-sm ${subText}`}>No movements in this period.</div>
+                ) : null}
+
+                {movements.length > 0 ? (
+                    <ul className="space-y-2">
+                        {movements.map((m) => {
+                            const loc = locHint(m);
+                            return (
+                                <li
+                                    key={m.id || m.movementId}
+                                    className={`rounded-xl border px-3 py-3 sm:px-4 ${
+                                        isDark ? 'border-white/10 bg-black/20' : 'border-gray-100 bg-white/80'
+                                    }`}
+                                >
+                                    <div className="flex flex-wrap items-start gap-2">
+                                        <span
+                                            className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide ${typeBadgeClass(
+                                                m.type
+                                            )}`}
+                                        >
+                                            {m.type || '—'}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className={`text-sm font-medium leading-snug break-words ${headerText}`}>
+                                                {m.itemName || '—'}
+                                            </div>
+                                            <div className={`mt-1 text-xs ${subText} flex flex-wrap gap-x-2 gap-y-0.5`}>
+                                                <span className="font-mono">{m.sku || '—'}</span>
+                                                <span className={Number(m.quantity) < 0 ? 'text-rose-600 dark:text-rose-300' : ''}>
+                                                    {formatQty(m.quantity)}
+                                                </span>
+                                                <span>{m.date || '—'}</span>
+                                            </div>
+                                            {loc ? (
+                                                <div className={`mt-1 text-[11px] leading-snug break-all ${subText}`}>{loc}</div>
+                                            ) : null}
+                                            {m.reference ? (
+                                                <div className={`mt-0.5 text-[11px] ${subText}`}>Ref: {m.reference}</div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                ) : null}
+            </div>
+
+            <div
+                className={`p-3 sm:px-4 sm:py-3 border-t shrink-0 ${isDark ? 'border-white/10' : 'border-gray-100'} flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between`}
+            >
+                <button
+                    type="button"
+                    onClick={openManufacturingMovements}
+                    className={`min-h-[44px] w-full sm:w-auto rounded-xl px-4 text-sm font-semibold transition-colors ${
+                        isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-750' : 'bg-gray-900 text-white hover:bg-gray-800'
+                    }`}
+                >
+                    Open movements
+                </button>
+                <p className={`text-[11px] text-center sm:text-right ${subText}`}>Up to 10 rows · newest first</p>
+            </div>
+        </div>
+    );
+}
+
+/** Super-admin only: ERP usage (session window, audit activity, modules) — mobile-first. */
+function erpUsageFormatMinutes(m) {
+    if (m == null || Number.isNaN(m)) return '—';
+    if (m < 60) return `${Math.round(m)}m`;
+    const h = Math.floor(m / 60);
+    const rem = Math.round(m % 60);
+    return rem > 0 ? `${h}h ${rem}m` : `${h}h`;
+}
+
+function erpUsageHumanizeModule(key) {
+    if (!key || key === '—') return '—';
+    const s = String(key).replace(/[-_]+/g, ' ').trim();
+    if (!s) return key;
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function erpUsageInitials(name) {
+    const n = String(name || '?').trim();
+    if (!n) return '?';
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return n.slice(0, 2).toUpperCase();
+}
+
+function ErpUsageInsightsWidget({ cardBase, headerText, subText, isDark }) {
+    const [days, setDays] = React.useState(30);
+    const [tab, setTab] = React.useState('time');
+    const [data, setData] = React.useState(null);
+    const [error, setError] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+
+    const load = React.useCallback(async () => {
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            setError('Sign in required');
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(`/api/erp-usage-insights?days=${days}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                cache: 'no-store'
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setData(null);
+                const msg =
+                    body?.error?.message ||
+                    body?.message ||
+                    (typeof body?.error === 'string' ? body.error : null) ||
+                    `HTTP ${res.status}`;
+                setError(msg);
+                return;
+            }
+            setData(body?.data ?? body);
+        } catch (e) {
+            setData(null);
+            setError(e.message || 'Request failed');
+        } finally {
+            setLoading(false);
+        }
+    }, [days]);
+
+    React.useEffect(() => {
+        void load();
+    }, [load]);
+
+    const rangePills = React.useMemo(
+        () =>
+            [7, 30, 90].map((d) => {
+                const on = days === d;
+                return (
+                    <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDays(d)}
+                        className={`min-h-[36px] min-w-[52px] px-3 rounded-full text-xs font-medium ${
+                            on
+                                ? isDark
+                                    ? 'bg-violet-500/30 text-violet-100 ring-1 ring-violet-400/50'
+                                    : 'bg-violet-100 text-violet-900 ring-1 ring-violet-200'
+                                : isDark
+                                  ? 'bg-gray-800 text-gray-400'
+                                  : 'bg-gray-100 text-gray-600'
+                        }`}
+                    >
+                        {d}d
+                    </button>
+                );
+            }),
+        [days, isDark]
+    );
+
+    const tabBtn = (id, label) => {
+        const active = tab === id;
+        return (
+            <button
+                type="button"
+                key={id}
+                onClick={() => setTab(id)}
+                className={`flex-1 min-h-[44px] px-2 py-2.5 text-xs font-semibold rounded-lg transition-colors sm:text-sm ${
+                    active
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : isDark
+                          ? 'bg-gray-800/80 text-gray-300 hover:bg-gray-800'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+                {label}
+            </button>
+        );
+    };
+
+    const listTime = (data?.topBySessionMinutes || []).slice(0, 10);
+    const listAct = (data?.topByActivity || []).slice(0, 10);
+    const listMod = (data?.modules || []).slice(0, 16);
+
+    return (
+        <div
+            className={`${cardBase} border rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-0`}
+            style={{
+                background: isDark
+                    ? 'linear-gradient(145deg, rgba(30,27,75,0.35) 0%, rgba(17,24,39,0.95) 45%, rgba(17,24,39,1) 100%)'
+                    : 'linear-gradient(145deg, #f5f3ff 0%, #ffffff 40%, #fafafa 100%)'
+            }}
+        >
+            <div className="p-4 sm:p-5 border-b border-black/5 dark:border-white/10 shrink-0">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <span
+                                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${
+                                    isDark ? 'bg-indigo-500/30 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
+                                }`}
+                            >
+                                <i className="fas fa-chart-pie" aria-hidden />
+                            </span>
+                            <h3 className={`text-sm font-semibold tracking-tight sm:text-base ${headerText}`}>ERP usage</h3>
+                        </div>
+                        <p className={`mt-1 text-xs leading-snug ${subText}`}>
+                            Super-admin only · ranked by approximate session time and audit activity
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void load()}
+                        disabled={loading}
+                        className={`shrink-0 min-h-[40px] min-w-[40px] rounded-xl flex items-center justify-center transition-opacity ${
+                            isDark ? 'bg-gray-800 text-gray-200 hover:bg-gray-750' : 'bg-white text-gray-700 shadow-sm border border-gray-200 hover:bg-gray-50'
+                        } ${loading ? 'opacity-60' : ''}`}
+                        title="Refresh"
+                        aria-label="Refresh usage data"
+                    >
+                        <i className={`fas fa-sync-alt text-sm ${loading ? 'animate-spin' : ''}`} aria-hidden />
+                    </button>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">{rangePills}</div>
+                <div className="mt-3 flex gap-1.5 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.06]">
+                    {tabBtn('time', 'Session time')}
+                    {tabBtn('activity', 'Activity')}
+                    {tabBtn('modules', 'Modules')}
+                </div>
+            </div>
+
+            <div className="p-3 sm:p-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                {error ? (
+                    <div className={`text-sm rounded-xl px-3 py-3 ${isDark ? 'bg-red-950/40 text-red-200' : 'bg-red-50 text-red-800'}`}>
+                        {error}
+                    </div>
+                ) : null}
+
+                {loading && !data ? (
+                    <div className={`flex flex-col items-center justify-center py-10 gap-3 ${subText}`}>
+                        <i className="fas fa-circle-notch fa-spin text-2xl text-indigo-500" aria-hidden />
+                        <span className="text-sm">Loading usage…</span>
+                    </div>
+                ) : null}
+
+                {data && tab === 'time' ? (
+                    <ul className="space-y-2">
+                        {listTime.length === 0 ? (
+                            <li className={`text-sm ${subText}`}>No session data in this range.</li>
+                        ) : (
+                            listTime.map((row, i) => (
+                                <li
+                                    key={row.userId}
+                                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+                                        isDark ? 'bg-gray-800/50' : 'bg-white/80 shadow-sm border border-gray-100'
+                                    }`}
+                                >
+                                    <span className={`text-xs font-bold w-6 text-center ${subText}`}>{i + 1}</span>
+                                    <span
+                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                            isDark ? 'bg-violet-600/40 text-violet-100' : 'bg-violet-100 text-violet-800'
+                                        }`}
+                                    >
+                                        {erpUsageInitials(row.name)}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className={`text-sm font-medium truncate ${headerText}`}>{row.name}</div>
+                                        {row.lastSeenAt ? (
+                                            <div className={`text-[11px] truncate ${subText}`}>
+                                                Last seen {new Date(row.lastSeenAt).toLocaleString()}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                    <div className={`text-sm font-semibold tabular-nums shrink-0 ${headerText}`}>
+                                        {erpUsageFormatMinutes(row.minutes)}
+                                    </div>
+                                </li>
+                            ))
+                        )}
+                    </ul>
+                ) : null}
+
+                {data && tab === 'activity' ? (
+                    <ul className="space-y-2">
+                        {listAct.length === 0 ? (
+                            <li className={`text-sm ${subText}`}>No audit events in this range.</li>
+                        ) : (
+                            listAct.map((row, i) => (
+                                <li
+                                    key={row.userId}
+                                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+                                        isDark ? 'bg-gray-800/50' : 'bg-white/80 shadow-sm border border-gray-100'
+                                    }`}
+                                >
+                                    <span className={`text-xs font-bold w-6 text-center ${subText}`}>{i + 1}</span>
+                                    <span
+                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                            isDark ? 'bg-emerald-600/35 text-emerald-100' : 'bg-emerald-100 text-emerald-900'
+                                        }`}
+                                    >
+                                        {erpUsageInitials(row.name)}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className={`text-sm font-medium truncate ${headerText}`}>{row.name}</div>
+                                        <div className={`text-[11px] truncate ${subText}`}>{row.email || ''}</div>
+                                    </div>
+                                    <div className={`text-sm font-semibold tabular-nums shrink-0 ${headerText}`}>{row.events}</div>
+                                </li>
+                            ))
+                        )}
+                    </ul>
+                ) : null}
+
+                {data && tab === 'modules' ? (
+                    <div className="flex flex-wrap gap-2">
+                        {listMod.length === 0 ? (
+                            <div className={`text-sm ${subText}`}>No module hits in this range.</div>
+                        ) : (
+                            listMod.map((m) => (
+                                <div
+                                    key={m.module}
+                                    className={`inline-flex items-center gap-2 rounded-full pl-3 pr-3 py-2 min-h-[40px] max-w-full ${
+                                        isDark ? 'bg-gray-800/80 text-gray-100 ring-1 ring-white/10' : 'bg-gray-900 text-white'
+                                    }`}
+                                >
+                                    <span className="text-xs font-medium truncate">{erpUsageHumanizeModule(m.module)}</span>
+                                    <span className="text-xs font-bold tabular-nums opacity-90">{m.events}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                ) : null}
+
+                {data?.meta?.sessionWindowNote && tab === 'time' ? (
+                    <p className={`mt-4 text-[11px] leading-relaxed ${subText}`}>{data.meta.sessionWindowNote}</p>
+                ) : null}
+                {data?.meta?.sessionsCapped ? (
+                    <p className={`mt-2 text-[11px] ${subText}`}>
+                        Session sample capped at {data.meta.sessionsSampled} rows; totals may be understated.
+                    </p>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
 const DashboardLive = () => {
     // Version indicator - logged to console for verification
     React.useEffect(() => {
@@ -1195,7 +2522,7 @@ const DashboardLive = () => {
     const [availableWidgets, setAvailableWidgets] = useState([]);
     const [selectedWidgets, setSelectedWidgets] = useState([]);
     const [savingWidgets, setSavingWidgets] = useState(false);
-    const [widgetLayouts, setWidgetLayouts] = useState({}); // { widgetId: { x, y, w, h } }
+    const [widgetLayoutsByBreakpoint, setWidgetLayoutsByBreakpoint] = useState({ mobile: {}, desktop: {} });
     const [draggedWidget, setDraggedWidget] = useState(null);
     const [dragOverWidget, setDragOverWidget] = useState(null);
     const [isResizing, setIsResizing] = useState(null); // widgetId being resized
@@ -1204,17 +2531,16 @@ const DashboardLive = () => {
     const [gridColumnCount, setGridColumnCount] = useState(() =>
         typeof window !== 'undefined' ? getDashboardGridColumnCount(window.innerWidth) : 3
     );
-    const layoutEditingSupported = gridColumnCount >= 2;
+    const layoutBucket = gridColumnCount === 1 ? 'mobile' : 'desktop';
+    const layoutBucketRef = React.useRef(layoutBucket);
+    layoutBucketRef.current = layoutBucket;
+    const widgetLayouts = widgetLayoutsByBreakpoint[layoutBucket] || {};
 
     React.useEffect(() => {
         const onResize = () => setGridColumnCount(getDashboardGridColumnCount(window.innerWidth));
         window.addEventListener('resize', onResize);
         return () => window.removeEventListener('resize', onResize);
     }, []);
-
-    React.useEffect(() => {
-        if (!layoutEditingSupported && editMode) setEditMode(false);
-    }, [layoutEditingSupported, editMode]);
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
@@ -1369,11 +2695,20 @@ const DashboardLive = () => {
         }
     }, []);
 
+    const viewerRole = window.storage?.getUser?.()?.role;
+    const isErpSuperUser =
+        typeof window.isSuperAdminRole === 'function' && window.isSuperAdminRole(viewerRole);
+
     // Widget definitions (excluding finance)
     const widgetRegistry = React.useMemo(() => {
         const cardBase = isDark ? 'bg-gray-900 border-gray-800 text-gray-100' : 'bg-white border-gray-100 text-gray-900';
         const subText = isDark ? 'text-gray-400' : 'text-gray-500';
         const headerText = isDark ? 'text-gray-100' : 'text-gray-900';
+
+        const canAccessServiceMaintenance =
+            typeof window.permissionChecker?.hasPermission !== 'function' ||
+            !window.PERMISSIONS?.ACCESS_SERVICE_MAINTENANCE ||
+            window.permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_SERVICE_MAINTENANCE);
         
         const formatCurrency = (val) => {
             try {
@@ -1385,33 +2720,82 @@ const DashboardLive = () => {
         
         return [
             {
-                id: 'leads-by-stage',
+                id: 'leads-proposal-tender',
                 group: 'Sales',
-                title: 'Leads by Stage',
+                title: 'Proposal & tender leads',
                 render: (data) => {
-                    const stageCounts = (data.leads || []).reduce((acc, lead) => {
-                        const stage = lead.stage || 'Unknown';
-                        acc[stage] = (acc[stage] || 0) + 1;
-                        return acc;
-                    }, {});
-                    const entries = Object.entries(stageCounts);
+                    const all = Array.isArray(data.leads) ? data.leads : [];
+                    const inStage = all.filter(isProposalOrTenderEngagement);
+                    const proposalCount = inStage.filter((l) => leadEngagementKey(l) === 'proposal').length;
+                    const tenderCount = inStage.filter((l) => leadEngagementKey(l) === 'tender').length;
+                    const sorted = [...inStage].sort((a, b) =>
+                        String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+                    );
+
+                    const openLead = (lead) => {
+                        const id = lead?.id;
+                        if (!id || !window.RouteState?.setPageSubpath) return;
+                        window.RouteState.setPageSubpath('clients', [String(id)], {
+                            replace: false,
+                            preserveSearch: false,
+                            preserveHash: false
+                        });
+                    };
+
                     return (
-                        <div className={`${cardBase} border rounded-xl p-5 shadow-sm`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className={`text-sm font-semibold ${headerText}`}>Leads by Stage</h3>
-                                <i className="fas fa-filter text-primary-500 opacity-70"></i>
+                        <div className={`${cardBase} border rounded-xl p-5 shadow-sm flex flex-col min-h-0`}>
+                            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                                <h3 className={`text-sm font-semibold ${headerText}`}>Proposal & tender leads</h3>
+                                <i className="fas fa-file-signature text-emerald-500 opacity-80" title="Engagement stage"></i>
                             </div>
-                            {entries.length === 0 ? (
-                                <div className={`text-sm ${subText}`}>No leads data.</div>
+                            {inStage.length === 0 ? (
+                                <div className={`text-sm ${subText}`}>No leads in Proposal or Tender.</div>
                             ) : (
-                                <div className="space-y-2">
-                                    {entries.map(([stage, count]) => (
-                                        <div key={stage} className="flex items-center justify-between">
-                                            <span className={`text-sm ${headerText}`}>{stage}</span>
-                                            <span className="text-sm font-medium">{count}</span>
+                                <>
+                                    <div className={`grid grid-cols-2 gap-2 text-xs mb-3 flex-shrink-0 ${subText}`}>
+                                        <div className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'} p-2`}>
+                                            <div className={headerText}>Proposal</div>
+                                            <div className={`text-lg font-semibold ${headerText}`}>{proposalCount}</div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'} p-2`}>
+                                            <div className={headerText}>Tender</div>
+                                            <div className={`text-lg font-semibold ${headerText}`}>{tenderCount}</div>
+                                        </div>
+                                    </div>
+                                    <div className={`text-xs font-medium uppercase tracking-wide mb-1 ${subText}`}>Leads</div>
+                                    <ul className="space-y-1.5 overflow-y-auto max-h-72 min-h-0 pr-0.5 overscroll-contain">
+                                        {sorted.map((lead) => {
+                                            const stageLabel = formatEngagementStageLabel(lead);
+                                            const isTender = leadEngagementKey(lead) === 'tender';
+                                            return (
+                                                <li key={lead.id}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openLead(lead)}
+                                                        className={`w-full text-left rounded-lg px-2 py-1.5 flex items-center justify-between gap-2 transition-colors ${
+                                                            isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <span className={`text-sm truncate ${headerText}`}>{lead.name || 'Untitled'}</span>
+                                                        <span
+                                                            className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                                                isTender
+                                                                    ? isDark
+                                                                        ? 'bg-amber-900/60 text-amber-200'
+                                                                        : 'bg-amber-100 text-amber-900'
+                                                                    : isDark
+                                                                      ? 'bg-emerald-900/50 text-emerald-200'
+                                                                      : 'bg-emerald-100 text-emerald-900'
+                                                            }`}
+                                                        >
+                                                            {stageLabel}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
                             )}
                         </div>
                     );
@@ -1422,6 +2806,21 @@ const DashboardLive = () => {
                 group: 'Projects',
                 title: 'My Tasks',
                 render: () => <MyProjectTasksWidget cardBase={cardBase} headerText={headerText} subText={subText} isDark={isDark} />
+            },
+            {
+                id: 'recent-stock-movements',
+                group: 'Manufacturing',
+                title: 'Stock movements',
+                render: () => (
+                    <RecentStockMovementsWidget
+                        cardBase={cardBase}
+                        headerText={headerText}
+                        subText={subText}
+                        isDark={isDark}
+                        autoRefresh={autoRefresh}
+                        refreshInterval={refreshInterval}
+                    />
+                )
             },
             ...(isDashboardAdmin
                 ? [
@@ -1436,6 +2835,40 @@ const DashboardLive = () => {
                                   subText={subText}
                                   isDark={isDark}
                                   projects={data.projects}
+                              />
+                          )
+                      }
+                  ]
+                : []),
+            ...(isErpSuperUser
+                ? [
+                      {
+                          id: 'erp-usage-insights',
+                          group: 'Admin',
+                          title: 'ERP usage',
+                          render: () => (
+                              <ErpUsageInsightsWidget
+                                  cardBase={cardBase}
+                                  headerText={headerText}
+                                  subText={subText}
+                                  isDark={isDark}
+                              />
+                          )
+                      }
+                  ]
+                : []),
+            ...(canAccessServiceMaintenance
+                ? [
+                      {
+                          id: 'recent-jobcards',
+                          group: 'Service',
+                          title: 'Recent job cards',
+                          render: () => (
+                              <RecentJobCardsWidget
+                                  cardBase={cardBase}
+                                  headerText={headerText}
+                                  subText={subText}
+                                  isDark={isDark}
                               />
                           )
                       }
@@ -1484,9 +2917,26 @@ const DashboardLive = () => {
                         </div>
                     );
                 }
+            },
+            {
+                id: 'client-activity-metrics',
+                group: 'Clients',
+                title: 'Account activity',
+                render: (data) => (
+                    <ClientActivityMetricsWidget
+                        cardBase={cardBase}
+                        headerText={headerText}
+                        subText={subText}
+                        isDark={isDark}
+                        clients={data.clients}
+                        leads={data.leads}
+                        projects={data.projects}
+                        timeEntries={data.timeEntries}
+                    />
+                )
             }
         ];
-    }, [isDark, isDashboardAdmin]);
+    }, [isDark, isDashboardAdmin, isErpSuperUser, autoRefresh, refreshInterval]);
 
     // Helper function to persist widget preferences
     const persistWidgets = (ids) => {
@@ -1506,38 +2956,34 @@ const DashboardLive = () => {
         } catch (_) {}
     };
 
-    // Load widget layouts from localStorage
+    // Load widget layouts from localStorage (mobile + desktop buckets)
     const loadWidgetLayouts = () => {
         const userId = window.storage?.getUser?.()?.id || 'anon';
         const key = `dashboard.widgetLayouts.${userId}`;
         try {
             const stored = window.localStorage.getItem(key);
             if (stored) {
-                return JSON.parse(stored);
+                const raw = JSON.parse(stored);
+                const normalized = normalizeWidgetLayoutsStorage(raw);
+                const hadV2 =
+                    raw &&
+                    typeof raw === 'object' &&
+                    !Array.isArray(raw) &&
+                    (Object.prototype.hasOwnProperty.call(raw, 'mobile') ||
+                        Object.prototype.hasOwnProperty.call(raw, 'desktop'));
+                if (!hadV2 && raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0) {
+                    persistWidgetLayouts(normalized);
+                }
+                return normalized;
             }
         } catch (_) {}
-        return {};
+        return { mobile: {}, desktop: {} };
     };
 
-    // Get default layout for a widget
     const getDefaultLayout = (widgetId, index) => {
         const existing = widgetLayouts[widgetId];
         if (existing) return existing;
-        
-        // Default sizes: 1x1 (small), 2x1 (medium), 2x2 (large)
-        // Most widgets start as 1x1, tasks can be larger
-        const defaultSizes = {
-            'my-project-tasks': { w: 2, h: 1 },
-            'last-working-month-progress': { w: 2, h: 2 },
-            'leads-by-stage': { w: 1, h: 1 },
-            'recent-activity': { w: 1, h: 1 }
-        };
-        
-        const size = defaultSizes[widgetId] || { w: 1, h: 1 };
-        return {
-            ...size,
-            order: index
-        };
+        return defaultLayoutForWidget(widgetId, index, layoutBucket);
     };
 
 
@@ -1567,26 +3013,45 @@ const DashboardLive = () => {
                     valid.push('last-working-month-progress');
                     persistWidgets(valid);
                 }
+                if (widgetRegistry.some(w => w.id === 'client-activity-metrics') && !valid.includes('client-activity-metrics')) {
+                    valid.push('client-activity-metrics');
+                    persistWidgets(valid);
+                }
+                if (widgetRegistry.some(w => w.id === 'recent-stock-movements') && !valid.includes('recent-stock-movements')) {
+                    valid.push('recent-stock-movements');
+                    persistWidgets(valid);
+                }
+                if (
+                    isErpSuperUser &&
+                    widgetRegistry.some(w => w.id === 'erp-usage-insights') &&
+                    !valid.includes('erp-usage-insights')
+                ) {
+                    valid.push('erp-usage-insights');
+                    persistWidgets(valid);
+                }
                 setSelectedWidgets(valid);
             } else {
-                const defaults = isDashboardAdmin
-                    ? ['my-project-tasks', 'last-working-month-progress']
-                    : ['my-project-tasks'];
+                const defaults = ['my-project-tasks', 'client-activity-metrics', 'recent-stock-movements'];
+                if (widgetRegistry.some(w => w.id === 'recent-jobcards')) defaults.push('recent-jobcards');
+                if (isDashboardAdmin) defaults.push('last-working-month-progress');
+                if (isErpSuperUser) defaults.push('erp-usage-insights');
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
             }
             
             // Load widget layouts
             const layouts = loadWidgetLayouts();
-            setWidgetLayouts(layouts);
+            setWidgetLayoutsByBreakpoint(layouts);
         } catch (_) {
             setAvailableWidgets(widgetRegistry);
-            setSelectedWidgets(
-                isDashboardAdmin ? ['my-project-tasks', 'last-working-month-progress'] : ['my-project-tasks']
-            );
-            setWidgetLayouts({});
+            const fb = ['my-project-tasks', 'client-activity-metrics', 'recent-stock-movements'];
+            if (widgetRegistry.some(w => w.id === 'recent-jobcards')) fb.push('recent-jobcards');
+            if (isDashboardAdmin) fb.push('last-working-month-progress');
+            if (isErpSuperUser) fb.push('erp-usage-insights');
+            setSelectedWidgets(fb.filter(id => widgetRegistry.some(w => w.id === id)));
+            setWidgetLayoutsByBreakpoint({ mobile: {}, desktop: {} });
         }
-    }, [widgetRegistry, isDashboardAdmin]);
+    }, [widgetRegistry, isDashboardAdmin, isErpSuperUser]);
 
     const handleToggleWidget = (id) => {
         setSelectedWidgets(prev => {
@@ -1595,9 +3060,12 @@ const DashboardLive = () => {
             
             // Remove layout if widget is removed
             if (!next.includes(id)) {
-                setWidgetLayouts(prevLayouts => {
-                    const newLayouts = { ...prevLayouts };
-                    delete newLayouts[id];
+                setWidgetLayoutsByBreakpoint(prevLayouts => {
+                    const newMobile = { ...prevLayouts.mobile };
+                    const newDesktop = { ...prevLayouts.desktop };
+                    delete newMobile[id];
+                    delete newDesktop[id];
+                    const newLayouts = { mobile: newMobile, desktop: newDesktop };
                     persistWidgetLayouts(newLayouts);
                     return newLayouts;
                 });
@@ -1608,16 +3076,21 @@ const DashboardLive = () => {
     };
 
     const handleResetWidgets = () => {
-        const defaults = ['my-project-tasks'];
-        setSelectedWidgets(defaults);
-        persistWidgets(defaults);
-        setWidgetLayouts({});
-        persistWidgetLayouts({});
+        const defaults = ['my-project-tasks', 'client-activity-metrics', 'recent-stock-movements'];
+        if (availableWidgets.some(w => w.id === 'recent-jobcards')) defaults.push('recent-jobcards');
+        if (isDashboardAdmin) defaults.push('last-working-month-progress');
+        if (isErpSuperUser) defaults.push('erp-usage-insights');
+        const valid = defaults.filter((id) => availableWidgets.some((w) => w.id === id));
+        setSelectedWidgets(valid);
+        persistWidgets(valid);
+        const empty = { mobile: {}, desktop: {} };
+        setWidgetLayoutsByBreakpoint(empty);
+        persistWidgetLayouts(empty);
     };
 
     // Drag and drop handlers
     const handleDragStart = (e, widgetId) => {
-        if (!editMode || !layoutEditingSupported) return;
+        if (!editMode) return;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', widgetId);
         setDraggedWidget(widgetId);
@@ -1631,40 +3104,35 @@ const DashboardLive = () => {
     };
 
     const handleDragOver = (e, targetWidgetId) => {
-        if (!editMode || !layoutEditingSupported || !draggedWidget || draggedWidget === targetWidgetId) return;
+        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         setDragOverWidget(targetWidgetId);
     };
 
     const handleDrop = (e, targetWidgetId) => {
-        if (!editMode || !layoutEditingSupported || !draggedWidget || draggedWidget === targetWidgetId) return;
+        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
         e.preventDefault();
-        
-        // Swap order instead of exact positions
+
+        const bucket = layoutBucketRef.current;
         const draggedIndex = selectedWidgets.indexOf(draggedWidget);
         const targetIndex = selectedWidgets.indexOf(targetWidgetId);
-        
-        setWidgetLayouts(prev => {
-            const draggedLayout = prev[draggedWidget] || getDefaultLayout(draggedWidget, draggedIndex);
-            const targetLayout = prev[targetWidgetId] || getDefaultLayout(targetWidgetId, targetIndex);
-            
-            const newLayouts = {
-                ...prev,
+
+        setWidgetLayoutsByBreakpoint(prev => {
+            const cur = { ...(prev[bucket] || {}) };
+            const draggedLayout = cur[draggedWidget] || defaultLayoutForWidget(draggedWidget, draggedIndex, bucket);
+            const targetLayout = cur[targetWidgetId] || defaultLayoutForWidget(targetWidgetId, targetIndex, bucket);
+
+            const newBucket = {
+                ...cur,
                 [draggedWidget]: { ...draggedLayout, order: targetIndex },
                 [targetWidgetId]: { ...targetLayout, order: draggedIndex }
             };
-            persistWidgetLayouts(newLayouts);
-            return newLayouts;
+            const next = { ...prev, [bucket]: newBucket };
+            persistWidgetLayouts(next);
+            return next;
         });
-        
-        // Also swap in selectedWidgets array
-        setSelectedWidgets(prev => {
-            const newWidgets = [...prev];
-            [newWidgets[draggedIndex], newWidgets[targetIndex]] = [newWidgets[targetIndex], newWidgets[draggedIndex]];
-            return newWidgets;
-        });
-        
+
         setDraggedWidget(null);
         setDragOverWidget(null);
     };
@@ -1675,10 +3143,10 @@ const DashboardLive = () => {
 
     // Resize handlers
     const handleResizeStart = (e, widgetId, direction) => {
-        if (!editMode || !layoutEditingSupported) return;
+        if (!editMode) return;
         e.preventDefault();
         e.stopPropagation();
-        
+
         const layout = widgetLayouts[widgetId] || getDefaultLayout(widgetId, selectedWidgets.indexOf(widgetId));
         setIsResizing({ widgetId, direction });
         setResizeStart({
@@ -1719,18 +3187,34 @@ const DashboardLive = () => {
                 }
                 const deltaW = Math.round(deltaX / cellWidth);
                 const deltaH = Math.round(deltaY / cellHeight);
-                setWidgetLayouts(prev => {
-                    const layout = prev[isResizing.widgetId] || getDefaultLayout(isResizing.widgetId, selectedWidgets.indexOf(isResizing.widgetId));
+                const bucket = layoutBucketRef.current;
+                setWidgetLayoutsByBreakpoint(prev => {
+                    const cur = { ...(prev[bucket] || {}) };
+                    const idx = selectedWidgets.indexOf(isResizing.widgetId);
+                    const layout =
+                        cur[isResizing.widgetId] ||
+                        defaultLayoutForWidget(isResizing.widgetId, idx === -1 ? 0 : idx, bucket);
                     let newW = resizeStart.w;
                     let newH = resizeStart.h;
-                    if (isResizing.direction.includes('e')) newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
+                    const cols = getDashboardGridColumnCount(window.innerWidth);
+                    if (cols > 1 && isResizing.direction.includes('e')) {
+                        newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
+                    } else {
+                        newW = 1;
+                    }
                     if (isResizing.direction.includes('s')) newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
-                    const newLayouts = {
-                        ...prev,
-                        [isResizing.widgetId]: { ...layout, w: newW, h: newH, order: layout.order !== undefined ? layout.order : selectedWidgets.indexOf(isResizing.widgetId) }
+                    const newBucket = {
+                        ...cur,
+                        [isResizing.widgetId]: {
+                            ...layout,
+                            w: newW,
+                            h: newH,
+                            order: layout.order !== undefined ? layout.order : (idx === -1 ? 0 : idx)
+                        }
                     };
-                    persistWidgetLayouts(newLayouts);
-                    return newLayouts;
+                    const next = { ...prev, [bucket]: newBucket };
+                    persistWidgetLayouts(next);
+                    return next;
                 });
             });
         };
@@ -1755,7 +3239,7 @@ const DashboardLive = () => {
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         };
-    }, [isResizing, resizeStart, selectedWidgets, widgetLayouts]);
+    }, [isResizing, resizeStart, selectedWidgets, widgetLayoutsByBreakpoint]);
 
     // Live data sync integration
     useEffect(() => {
@@ -1973,10 +3457,39 @@ const DashboardLive = () => {
     // Customizable widgets UI
     return (
         <div className="erp-module-root space-y-6">
-            <div className="flex flex-col gap-3 min-w-0 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+            <div className="flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-start sm:gap-8">
+                <div className="shrink-0 sm:pt-0.5">
                     <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Welcome, {userName}</h2>
-                    <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Here's what's happening today</p>
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                    <p
+                        className={`text-sm leading-relaxed sm:text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                    >
+                        {"Here's what's happening today"}
+                    </p>
+                    {editMode ? (
+                        <div
+                            className={`rounded-lg border px-3 py-2.5 text-sm leading-relaxed sm:py-3 sm:text-[15px] ${isDark ? 'border-blue-800 bg-blue-950/40 text-blue-100' : 'border-blue-200 bg-blue-50 text-blue-900'}`}
+                            role="status"
+                        >
+                            <span className="inline-flex w-full min-w-0 items-start gap-2">
+                                <i
+                                    className={`mt-0.5 shrink-0 opacity-80 fas ${layoutBucket === 'mobile' ? 'fa-mobile-alt' : 'fa-columns'}`}
+                                    aria-hidden
+                                />
+                                <span className="min-w-0 flex-1">
+                                    Editing the{' '}
+                                    <strong className="font-semibold">
+                                        {layoutBucket === 'mobile' ? 'phone' : 'tablet / desktop'}
+                                    </strong>{' '}
+                                    widget layout (saved separately from the other breakpoint). Drag tiles to reorder
+                                    {gridColumnCount >= 2
+                                        ? '; drag the corner to resize width and height.'
+                                        : '; drag the corner to change tile height.'}
+                                </span>
+                            </span>
+                        </div>
+                    ) : null}
                 </div>
             </div>
 
@@ -2007,7 +3520,7 @@ const DashboardLive = () => {
                         return (
                             <div
                                 key={id}
-                                draggable={editMode && layoutEditingSupported}
+                                draggable={editMode}
                                 onDragStart={(e) => handleDragStart(e, id)}
                                 onDragEnd={handleDragEnd}
                                 onDragOver={(e) => handleDragOver(e, id)}
@@ -2019,7 +3532,7 @@ const DashboardLive = () => {
                                     gridRow: `span ${spanH}`
                                 }}
                             >
-                                {editMode && layoutEditingSupported && (
+                                {editMode && (
                                     <>
                                         {/* Remove button */}
                                         <div className="absolute right-2 top-2 z-20">
@@ -2031,16 +3544,22 @@ const DashboardLive = () => {
                                                 <i className="fas fa-times text-xs"></i>
                                             </button>
                                         </div>
-                                        
+
                                         {/* Resize handles - larger and more visible */}
                                         <div
-                                            className="absolute right-0 bottom-0 w-8 h-8 bg-blue-600 hover:bg-blue-700 cursor-se-resize z-20 rounded-tl-lg flex items-center justify-center shadow-lg"
+                                            className={`absolute right-0 bottom-0 w-8 h-8 bg-blue-600 hover:bg-blue-700 z-20 rounded-tl-lg flex items-center justify-center shadow-lg ${
+                                                gridColumnCount >= 2 ? 'cursor-se-resize' : 'cursor-s-resize'
+                                            }`}
                                             onMouseDown={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
                                                 handleResizeStart(e, id, 'se');
                                             }}
-                                            title="Drag to resize widget (bottom-right corner)"
+                                            title={
+                                                gridColumnCount >= 2
+                                                    ? 'Drag to resize widget (bottom-right corner)'
+                                                    : 'Drag vertically to change tile height'
+                                            }
                                         >
                                             <div className="w-4 h-4 border-r-2 border-b-2 border-white"></div>
                                         </div>
@@ -2080,27 +3599,16 @@ const DashboardLive = () => {
                     Manage Widgets
                 </button>
                 <button
-                    onClick={() => {
-                        if (!layoutEditingSupported) return;
-                        setEditMode(!editMode);
-                        console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
-                    }}
-                    disabled={!layoutEditingSupported}
+                    onClick={() => setEditMode(!editMode)}
                     className={`w-full sm:w-auto px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        !layoutEditingSupported
-                            ? isDark
-                                ? 'bg-gray-800/50 text-gray-500 border border-gray-700 cursor-not-allowed'
-                                : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                            : editMode
-                              ? 'bg-blue-600 text-white hover:bg-blue-700'
-                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                        editMode
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-blue-500 text-white hover:bg-blue-600'
                     }`}
                     title={
-                        !layoutEditingSupported
-                            ? 'Edit layout needs a wider screen (drag, resize)'
-                            : editMode
-                              ? 'Exit edit mode to hide controls'
-                              : 'Click to enable drag, drop, and resize'
+                        editMode
+                            ? 'Exit edit mode to hide controls'
+                            : 'Reorder and resize widgets; phone and wider screens each keep their own layout'
                     }
                 >
                     <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
@@ -2151,7 +3659,7 @@ const DashboardLive = () => {
                                 </button>
                                 <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <i className="fas fa-info-circle mr-1"></i>
-                                    Use "Edit Layout" to drag, resize, and rearrange widgets
+                                    Use &quot;Edit Layout&quot; on phone or a wide screen — each saves its own order and sizes.
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">

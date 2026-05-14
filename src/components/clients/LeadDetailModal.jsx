@@ -2917,7 +2917,7 @@ const LeadDetailModal = ({
             <div className="w-full h-full flex flex-col">
                 {/* Breadcrumb Navigation */}
                 <div className={`px-6 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <nav className="flex items-center space-x-2 text-sm">
+                    <nav className="inline-flex flex-row flex-nowrap items-center gap-2 text-sm overflow-x-auto touch-pan-x min-w-0 w-full">
                         <button
                             onClick={(e) => {
                                 e.preventDefault();
@@ -2967,7 +2967,7 @@ const LeadDetailModal = ({
                 </div>
                 {/* Header */}
                 <div className={`flex justify-between items-center px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <div className="min-w-0 flex-1 flex items-center gap-3">
+                    <div className="min-w-0 flex-1 inline-flex flex-row flex-nowrap items-center gap-3">
                         {(formData.thumbnail || (lead && lead.thumbnail)) ? (
                             <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 bg-white flex items-center justify-center">
                                 <img src={formData.thumbnail || lead.thumbnail} alt="" className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling?.classList.remove('hidden'); }} />
@@ -2996,10 +2996,11 @@ const LeadDetailModal = ({
                         )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="inline-flex flex-row flex-nowrap items-center gap-2 shrink-0">
                         {/* Quick Navigation Menu */}
                         <div className="relative group">
                             <button
+                                type="button"
                                 className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded transition-colors`}
                                 title="Navigate to other pages"
                             >
@@ -3049,7 +3050,12 @@ const LeadDetailModal = ({
 
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
-                    <div className="flex flex-wrap gap-2 sm:gap-6">
+                    <div
+                        className="inline-flex flex-row flex-nowrap w-full min-w-0 max-w-full gap-2 sm:gap-6 overflow-x-auto scrollbar-hide touch-pan-x"
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        role="tablist"
+                        aria-label="Lead sections"
+                    >
                         {['overview', 'contacts', 'sites', 'calendar', 'activity', 'notes', ...(isAdmin ? ['proposals'] : [])].map(tab => (
                             <button
                                 key={tab}
@@ -5697,9 +5703,15 @@ const LeadDetailModal = ({
                                     className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isSaving ? (
-                                        <><i className="fas fa-spinner fa-spin mr-2"></i>Saving...</>
+                                        <span className="inline-flex items-center">
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Saving...
+                                        </span>
                                     ) : (
-                                        <><i className="fas fa-save mr-2"></i>{hasBeenSaved || leadId ? 'Update Lead' : 'Create Lead'}</>
+                                        <span className="inline-flex items-center">
+                                            <i className="fas fa-save mr-2"></i>
+                                            {hasBeenSaved || leadId ? 'Update Lead' : 'Create Lead'}
+                                        </span>
                                     )}
                                 </button>
                             </div>

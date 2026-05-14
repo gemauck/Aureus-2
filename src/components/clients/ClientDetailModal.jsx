@@ -5523,7 +5523,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     )}
                     {/* Header */}
                     <div className={`flex justify-between items-center px-3 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <div className="min-w-0 flex-1 flex items-center gap-2">
+                        <div className="min-w-0 flex-1 inline-flex flex-row flex-nowrap items-center gap-2">
                             {client && (
                                 <button
                                     onClick={async (e) => {
@@ -5564,7 +5564,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 )}
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="inline-flex flex-row flex-nowrap items-center gap-2 shrink-0">
                             {/* Quick Navigation Menu */}
                             {isFullPage && (
                                 <div className="relative group">
@@ -5621,7 +5621,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
-                    <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <div
+                        className={`inline-flex flex-row flex-nowrap w-full min-w-0 max-w-full ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide touch-pan-x`}
+                        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                        role="tablist"
+                        aria-label="Client or lead sections"
+                    >
                         {(() => {
                             // For new clients/leads (client is null), only show overview tab
                             if (!client) {

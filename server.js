@@ -1169,6 +1169,32 @@ app.all('/api/audit-logs', async (req, res, next) => {
   }
 })
 
+// GET /api/erp-usage-insights — super-admin dashboard usage rollup (read-only)
+app.all('/api/erp-usage-insights', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'erp-usage-insights.js'))
+    if (!handler) {
+      console.error('❌ erp-usage-insights handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in erp-usage-insights handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for system settings (GET, PUT /api/settings)
 app.all('/api/settings', async (req, res, next) => {
   try {

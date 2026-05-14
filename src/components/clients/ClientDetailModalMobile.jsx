@@ -246,7 +246,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
             {/* Modal */}
             <div className="absolute inset-0 bg-white dark:bg-gray-800 flex flex-col">
                 {/* Mobile Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10">
+                <div className="inline-flex flex-row flex-nowrap items-center justify-between gap-2 w-full min-w-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sticky top-0 z-10">
                     <button
                         onClick={onClose}
                         className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -265,7 +265,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                 </div>
 
                 {/* Mobile Tabs */}
-                <div className="flex overflow-x-auto bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 sticky top-16 z-10">
+                <div className="inline-flex flex-row flex-nowrap w-full min-w-0 overflow-x-auto touch-pan-x bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 sticky top-16 z-10">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}

@@ -9870,7 +9870,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Modern View Tabs */}
-            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 sm:p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible mb-2 gap-1`}>
+            <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 sm:p-1 inline-flex flex-row flex-nowrap shadow-sm overflow-x-auto w-full min-w-0 mb-2 gap-1`}>
                 <button
                     type="button"
                     onClick={() => {

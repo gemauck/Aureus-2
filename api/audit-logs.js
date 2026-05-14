@@ -2,7 +2,7 @@ import { prisma } from './_lib/prisma.js';
 import { verifyToken } from './_lib/jwt.js';
 import { parseJsonBody } from './_lib/body.js';
 import { created, ok, badRequest, serverError, unauthorized, forbidden } from './_lib/response.js';
-import { isAdminRole } from './_lib/authRoles.js';
+import { isAdminRole, isSuperAdminRole } from './_lib/authRoles.js';
 
 async function handler(req, res) {
   try {
@@ -138,9 +138,8 @@ async function handler(req, res) {
     // Get Audit Logs (GET /api/audit-logs)
     // Only Superadmins can view the detailed audit trail (all users' interactions)
     if (req.method === 'GET') {
-      const viewerRole = (user.role || '').toLowerCase();
-      if (viewerRole !== 'superadmin') {
-        return forbidden(res, 'Access to the detailed audit trail is restricted to Superadmins only.');
+      if (!isSuperAdminRole(user.role)) {
+        return forbidden(res, 'Access to the detailed audit trail is restricted to super-admins only.');
       }
 
       // Parse query parameters from req.url

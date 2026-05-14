@@ -662,6 +662,30 @@ html.dark .crm-leads-table-dark-body > tr + tr > td {
     border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/*
+ * Dashboard — Recent job cards widget
+ * mobile-optimizations / mobile-refresh target `div[class*="rounded-xl"]` for calendar hacks; `sm:rounded-xl`
+ * in class names matches and forces `> div.flex { flex-direction: column }`. Global `.flex { flex-wrap: wrap !important }`
+ * also hits these rows. Lock left alignment + row layout here (wins vs broad mobile bundles).
+ */
+.dashboard-jobcards-widget {
+    text-align: left !important;
+}
+.dashboard-jobcards-widget button[type='button'] {
+    text-align: left !important;
+}
+@media (max-width: 766px) {
+    .dashboard-jobcards-widget > .djw-toolbar {
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        flex-wrap: nowrap !important;
+    }
+    .dashboard-jobcards-widget .djw-norowrap {
+        flex-wrap: nowrap !important;
+    }
+}
+
 /* Shared stack helper for module roots (flex children need min-w-0 to allow inner overflow-x) */
 .erp-module-root {
     min-width: 0;

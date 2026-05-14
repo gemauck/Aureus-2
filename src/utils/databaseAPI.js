@@ -2097,6 +2097,9 @@ const DatabaseAPI = {
         if (options?.sku != null && String(options.sku).trim() !== '') {
             params.set('sku', String(options.sku).trim());
         }
+        if (options?.createdAfter != null && String(options.createdAfter).trim() !== '') {
+            params.set('createdAfter', String(options.createdAfter).trim());
+        }
         const endpoint = params.toString()
             ? `/manufacturing/stock-movements?${params.toString()}`
             : '/manufacturing/stock-movements';
