@@ -1770,7 +1770,7 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
                         aria-label="Refresh job cards"
                         onClick={() => load({ silent: false })}
                         disabled={loading}
-                        className={`min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center rounded-lg touch-manipulation transition-colors text-left ${
+                        className={`djw-icon-btn min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center rounded-lg touch-manipulation transition-colors text-left ${
                             isDark ? 'hover:bg-gray-800 active:bg-gray-800/80 text-gray-300' : 'hover:bg-gray-100 active:bg-gray-200/80 text-gray-600'
                         } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
@@ -1810,7 +1810,7 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
                                     type="button"
                                     onClick={() => openJobCard(jc)}
                                     style={{ textAlign: 'left' }}
-                                    className={`w-full text-left rounded-xl sm:rounded-lg px-3 py-2.5 sm:px-2 sm:py-2.5 flex flex-col gap-1 touch-manipulation transition-colors ${
+                                    className={`djw-row-btn w-full text-left rounded-xl sm:rounded-lg px-3 py-2.5 sm:px-2 sm:py-2.5 flex flex-col gap-1 touch-manipulation transition-colors ${
                                         isDark
                                             ? 'active:bg-gray-800/80 sm:hover:bg-gray-800/90 sm:active:bg-gray-800'
                                             : 'active:bg-white sm:hover:bg-gray-50 sm:active:bg-gray-100'
@@ -1885,7 +1885,7 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
                             );
                         }
                     }}
-                    className={`w-full min-h-[44px] sm:min-h-0 text-left flex items-center justify-start rounded-lg border px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-semibold touch-manipulation transition-colors ${
+                    className={`djw-footer-btn w-full min-h-[44px] sm:min-h-0 text-left flex items-center justify-start rounded-lg border px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-semibold touch-manipulation transition-colors ${
                         isDark
                             ? 'border-primary-700/50 text-primary-200 bg-gray-800/50 hover:bg-gray-800 active:bg-gray-800/90'
                             : 'border-primary-200 text-primary-700 bg-white hover:bg-primary-50 active:bg-primary-50/80'
@@ -2556,13 +2556,18 @@ const DashboardLive = () => {
         try {
             // IMMEDIATE: Load from localStorage first for instant display
             const allClients = window.storage?.getClients?.() || [];
-            
+            const roleForLeads = window.storage?.getUser?.()?.role;
+            const canViewLeads =
+                typeof window.isAdminRole === 'function' && window.isAdminRole(roleForLeads);
+
             // Get clients and leads from separate localStorage keys
             const cachedClients = allClients.filter(c => c.type === 'client' || !c.type); // Default to client if no type
             const storedLeads = window.storage?.getLeads?.();
-            const cachedLeads = Array.isArray(storedLeads) && storedLeads.length > 0 
-                ? storedLeads 
-                : (allClients.filter(c => c.type === 'lead') || []);
+            const cachedLeadsRaw =
+                Array.isArray(storedLeads) && storedLeads.length > 0
+                    ? storedLeads
+                    : allClients.filter(c => c.type === 'lead') || [];
+            const cachedLeads = canViewLeads ? cachedLeadsRaw : [];
             
             const cachedProjects = window.storage?.getProjects?.() || [];
             const cachedTimeEntries = window.storage?.getTimeEntries?.() || [];
@@ -2603,7 +2608,10 @@ const DashboardLive = () => {
                     console.warn('Client sync failed:', err);
                     return { data: { clients: [] } };
                 }),
-                window.DatabaseAPI.getLeads().catch(err => {
+                (canViewLeads
+                    ? window.DatabaseAPI.getLeads()
+                    : Promise.resolve({ data: { leads: [] } })
+                ).catch(err => {
                     console.warn('Lead sync failed:', err);
                     return { data: { leads: [] } };
                 }),
@@ -2651,10 +2659,10 @@ const DashboardLive = () => {
                 
                 // Get leads from leads API endpoint
                 const leadsFromAPI = Array.isArray(leadsRes.data?.leads) ? leadsRes.data.leads : [];
-                const leads = leadsFromAPI.length > 0 ? leadsFromAPI : cachedLeads;
-                
+                const leads = canViewLeads ? (leadsFromAPI.length > 0 ? leadsFromAPI : cachedLeads) : [];
+
                 // Store leads in localStorage for next load (even if empty to prevent stale cache)
-                if (window.storage?.setLeads) {
+                if (canViewLeads && window.storage?.setLeads) {
                     window.storage.setLeads(leadsFromAPI);
                 }
                 
@@ -2719,88 +2727,117 @@ const DashboardLive = () => {
         };
         
         return [
-            {
-                id: 'leads-proposal-tender',
-                group: 'Sales',
-                title: 'Proposal & tender leads',
-                render: (data) => {
-                    const all = Array.isArray(data.leads) ? data.leads : [];
-                    const inStage = all.filter(isProposalOrTenderEngagement);
-                    const proposalCount = inStage.filter((l) => leadEngagementKey(l) === 'proposal').length;
-                    const tenderCount = inStage.filter((l) => leadEngagementKey(l) === 'tender').length;
-                    const sorted = [...inStage].sort((a, b) =>
-                        String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
-                    );
+            ...(isDashboardAdmin
+                ? [
+                      {
+                          id: 'leads-proposal-tender',
+                          group: 'Sales',
+                          title: 'Proposal & tender leads',
+                          render: (data) => {
+                              const all = Array.isArray(data.leads) ? data.leads : [];
+                              const inStage = all.filter(isProposalOrTenderEngagement);
+                              const proposalCount = inStage.filter((l) => leadEngagementKey(l) === 'proposal').length;
+                              const tenderCount = inStage.filter((l) => leadEngagementKey(l) === 'tender').length;
+                              const sorted = [...inStage].sort((a, b) =>
+                                  String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+                                      sensitivity: 'base'
+                                  })
+                              );
 
-                    const openLead = (lead) => {
-                        const id = lead?.id;
-                        if (!id || !window.RouteState?.setPageSubpath) return;
-                        window.RouteState.setPageSubpath('clients', [String(id)], {
-                            replace: false,
-                            preserveSearch: false,
-                            preserveHash: false
-                        });
-                    };
+                              const openLead = (lead) => {
+                                  const id = lead?.id;
+                                  if (!id || !window.RouteState?.setPageSubpath) return;
+                                  window.RouteState.setPageSubpath('clients', [String(id)], {
+                                      replace: false,
+                                      preserveSearch: false,
+                                      preserveHash: false
+                                  });
+                              };
 
-                    return (
-                        <div className={`${cardBase} border rounded-xl p-5 shadow-sm flex flex-col min-h-0`}>
-                            <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                                <h3 className={`text-sm font-semibold ${headerText}`}>Proposal & tender leads</h3>
-                                <i className="fas fa-file-signature text-emerald-500 opacity-80" title="Engagement stage"></i>
-                            </div>
-                            {inStage.length === 0 ? (
-                                <div className={`text-sm ${subText}`}>No leads in Proposal or Tender.</div>
-                            ) : (
-                                <>
-                                    <div className={`grid grid-cols-2 gap-2 text-xs mb-3 flex-shrink-0 ${subText}`}>
-                                        <div className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'} p-2`}>
-                                            <div className={headerText}>Proposal</div>
-                                            <div className={`text-lg font-semibold ${headerText}`}>{proposalCount}</div>
-                                        </div>
-                                        <div className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'} p-2`}>
-                                            <div className={headerText}>Tender</div>
-                                            <div className={`text-lg font-semibold ${headerText}`}>{tenderCount}</div>
-                                        </div>
-                                    </div>
-                                    <div className={`text-xs font-medium uppercase tracking-wide mb-1 ${subText}`}>Leads</div>
-                                    <ul className="space-y-1.5 overflow-y-auto max-h-72 min-h-0 pr-0.5 overscroll-contain">
-                                        {sorted.map((lead) => {
-                                            const stageLabel = formatEngagementStageLabel(lead);
-                                            const isTender = leadEngagementKey(lead) === 'tender';
-                                            return (
-                                                <li key={lead.id}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openLead(lead)}
-                                                        className={`w-full text-left rounded-lg px-2 py-1.5 flex items-center justify-between gap-2 transition-colors ${
-                                                            isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        <span className={`text-sm truncate ${headerText}`}>{lead.name || 'Untitled'}</span>
-                                                        <span
-                                                            className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                                                isTender
-                                                                    ? isDark
-                                                                        ? 'bg-amber-900/60 text-amber-200'
-                                                                        : 'bg-amber-100 text-amber-900'
-                                                                    : isDark
-                                                                      ? 'bg-emerald-900/50 text-emerald-200'
-                                                                      : 'bg-emerald-100 text-emerald-900'
-                                                            }`}
-                                                        >
-                                                            {stageLabel}
-                                                        </span>
-                                                    </button>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </>
-                            )}
-                        </div>
-                    );
-                }
-            },
+                              return (
+                                  <div className={`${cardBase} border rounded-xl p-5 shadow-sm flex flex-col min-h-0`}>
+                                      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                                          <h3 className={`text-sm font-semibold ${headerText}`}>
+                                              Proposal & tender leads
+                                          </h3>
+                                          <i
+                                              className="fas fa-file-signature text-emerald-500 opacity-80"
+                                              title="Engagement stage"
+                                          ></i>
+                                      </div>
+                                      {inStage.length === 0 ? (
+                                          <div className={`text-sm ${subText}`}>No leads in Proposal or Tender.</div>
+                                      ) : (
+                                          <>
+                                              <div
+                                                  className={`grid grid-cols-2 gap-2 text-xs mb-3 flex-shrink-0 ${subText}`}
+                                              >
+                                                  <div
+                                                      className={`rounded-lg border ${
+                                                          isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'
+                                                      } p-2`}
+                                                  >
+                                                      <div className={headerText}>Proposal</div>
+                                                      <div className={`text-lg font-semibold ${headerText}`}>
+                                                          {proposalCount}
+                                                      </div>
+                                                  </div>
+                                                  <div
+                                                      className={`rounded-lg border ${
+                                                          isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'
+                                                      } p-2`}
+                                                  >
+                                                      <div className={headerText}>Tender</div>
+                                                      <div className={`text-lg font-semibold ${headerText}`}>
+                                                          {tenderCount}
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                              <div className={`text-xs font-medium uppercase tracking-wide mb-1 ${subText}`}>
+                                                  Leads
+                                              </div>
+                                              <ul className="space-y-1.5 overflow-y-auto max-h-72 min-h-0 pr-0.5 overscroll-contain">
+                                                  {sorted.map((lead) => {
+                                                      const stageLabel = formatEngagementStageLabel(lead);
+                                                      const isTender = leadEngagementKey(lead) === 'tender';
+                                                      return (
+                                                          <li key={lead.id}>
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={() => openLead(lead)}
+                                                                  className={`w-full text-left rounded-lg px-2 py-1.5 flex items-center justify-between gap-2 transition-colors ${
+                                                                      isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                                                                  }`}
+                                                              >
+                                                                  <span className={`text-sm truncate ${headerText}`}>
+                                                                      {lead.name || 'Untitled'}
+                                                                  </span>
+                                                                  <span
+                                                                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                                                          isTender
+                                                                              ? isDark
+                                                                                  ? 'bg-amber-900/60 text-amber-200'
+                                                                                  : 'bg-amber-100 text-amber-900'
+                                                                              : isDark
+                                                                                ? 'bg-emerald-900/50 text-emerald-200'
+                                                                                : 'bg-emerald-100 text-emerald-900'
+                                                                      }`}
+                                                                  >
+                                                                      {stageLabel}
+                                                                  </span>
+                                                              </button>
+                                                          </li>
+                                                      );
+                                                  })}
+                                              </ul>
+                                          </>
+                                      )}
+                                  </div>
+                              );
+                          }
+                      }
+                  ]
+                : []),
             {
                 id: 'my-project-tasks',
                 group: 'Projects',
@@ -2929,7 +2966,7 @@ const DashboardLive = () => {
                         subText={subText}
                         isDark={isDark}
                         clients={data.clients}
-                        leads={data.leads}
+                        leads={isDashboardAdmin ? data.leads : []}
                         projects={data.projects}
                         timeEntries={data.timeEntries}
                     />
@@ -3259,6 +3296,14 @@ const DashboardLive = () => {
                     break;
                     
                 case 'data':
+                    // Non-admins must not receive lead payloads from background sync
+                    if (message.dataType === 'leads') {
+                        const rr = window.storage?.getUser?.()?.role;
+                        if (typeof window.isAdminRole === 'function' && !window.isAdminRole(rr)) {
+                            setLastUpdated(message.timestamp);
+                            break;
+                        }
+                    }
                     // Update specific data type
                     // Handle both direct arrays and API response format
                     let normalizedData = message.data;

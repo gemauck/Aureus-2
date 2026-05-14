@@ -664,25 +664,61 @@ html.dark .crm-leads-table-dark-body > tr + tr > td {
 
 /*
  * Dashboard — Recent job cards widget
- * mobile-optimizations / mobile-refresh target `div[class*="rounded-xl"]` for calendar hacks; `sm:rounded-xl`
- * in class names matches and forces `> div.flex { flex-direction: column }`. Global `.flex { flex-wrap: wrap !important }`
- * also hits these rows. Lock left alignment + row layout here (wins vs broad mobile bundles).
+ * - mobile-responsive.css (loads after dist/styles.css) sets ALL `button` to
+ *   `display:inline-flex; align-items:center; justify-content:center` — that centers
+ *   every flex-col stack horizontally. Reset per button role below.
+ * - Calendar hacks target `div[class*="rounded-xl"]`; keep `rounded-2xl` / avoid `rounded-xl` in class strings.
  */
 .dashboard-jobcards-widget {
     text-align: left !important;
 }
-.dashboard-jobcards-widget button[type='button'] {
+.dashboard-jobcards-widget .djw-norowrap,
+.dashboard-jobcards-widget .djw-toolbar {
     text-align: left !important;
 }
-@media (max-width: 766px) {
-    .dashboard-jobcards-widget > .djw-toolbar {
+
+@media (max-width: 1024px) {
+    /* Full-width job row: column stack, children stretch left (beats global mobile `button` flex) */
+    body.erp-app .dashboard-jobcards-widget button.djw-row-btn[type='button'] {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
+    }
+
+    body.erp-app .dashboard-jobcards-widget button.djw-footer-btn[type='button'] {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
+    }
+
+    /* Icon-only refresh — keep centered icon */
+    body.erp-app .dashboard-jobcards-widget button.djw-icon-btn[type='button'] {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    body.erp-app .dashboard-jobcards-widget .djw-norowrap {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        flex-wrap: nowrap !important;
+    }
+
+    body.erp-app .dashboard-jobcards-widget > .djw-toolbar {
         flex-direction: row !important;
         align-items: center !important;
         justify-content: space-between !important;
         flex-wrap: nowrap !important;
-    }
-    .dashboard-jobcards-widget .djw-norowrap {
-        flex-wrap: nowrap !important;
+        width: 100% !important;
     }
 }
 
