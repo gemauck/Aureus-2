@@ -1154,7 +1154,7 @@ const TankSizeCalculator = () => {
                         
                         {/* Advanced options for F&D heads */}
                         {dimensions.endType === 'torispherical' && (
-                            <div className="col-span-2 bg-blue-50 rounded-lg p-3 border border-blue-200">
+                            <div className="col-span-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                                 <div className="flex items-center justify-between mb-2">
                                     <h4 className="text-xs font-semibold text-blue-900">
                                         <i className="fas fa-cog mr-1.5"></i>
@@ -1747,7 +1747,7 @@ const TankSizeCalculator = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-2 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <p className="text-[10px] text-blue-700">
                                 <i className="fas fa-info-circle mr-1"></i>
                                 Temperature affects fuel density. Higher temps = lower density = less weight per liter.
@@ -1765,7 +1765,7 @@ const TankSizeCalculator = () => {
                                 <i className="fas fa-eye mr-1.5 text-blue-600"></i>
                                 Visual Preview
                             </h3>
-                            <div className="bg-gradient-to-b from-blue-50 to-white rounded-lg p-4 border border-blue-200">
+                            <div className="rounded-lg border border-blue-200 bg-gradient-to-b from-blue-50 to-white p-4 dark:border-blue-900/50 dark:from-blue-950/35 dark:to-gray-900">
                                 <svg viewBox="0 0 300 200" className="w-full">
                                     {tankType.includes('horizontal') ? (
                                         // Horizontal tank visualization
@@ -1888,7 +1888,7 @@ const TankSizeCalculator = () => {
                                 </div>
                             )}
                             {tankType === 'horizontal-convex' && dimensions.endType !== 'torispherical' && !dimensions.dishDepth && (
-                                <div className="bg-blue-50 rounded-lg border border-blue-200 p-3">
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                                     <div className="flex items-start gap-2">
                                         <i className="fas fa-info-circle text-blue-600 text-sm mt-0.5"></i>
                                         <div>
@@ -2223,10 +2223,10 @@ const TankSizeCalculator = () => {
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
+                                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
                                         {calibrationChart.map((row, idx) => (
-                                            <tr key={idx} className={`hover:bg-blue-50 transition-colors ${
-                                                idx % 5 === 0 ? 'bg-gray-50' : ''
+                                            <tr key={idx} className={`transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/25 ${
+                                                idx % 5 === 0 ? 'bg-gray-50 dark:bg-gray-800/50' : ''
                                             }`}>
                                                 <td className="px-2 py-1.5 text-gray-900 font-medium border-r border-gray-200">{row.height}</td>
                                                 <td className="px-2 py-1.5 text-gray-900 text-right font-semibold border-r border-gray-200">
@@ -2379,7 +2379,7 @@ const TankSizeCalculator = () => {
                                     <i className="fas fa-folder-open text-4xl mb-3"></i>
                                     <p className="text-sm font-medium">No saved configurations</p>
                                     <p className="text-xs mt-1">Save a tank configuration first to see it here</p>
-                                    <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-left text-gray-700">
+                                    <div className="mt-4 rounded-lg bg-blue-50 p-3 text-left text-xs text-gray-700 dark:bg-blue-950/30 dark:text-gray-200">
                                         <p className="font-semibold text-blue-900 mb-1">How to save:</p>
                                         <p>1. Enter tank dimensions and get results</p>
                                         <p>2. Click "Save Config" button</p>

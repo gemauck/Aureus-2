@@ -331,28 +331,28 @@ export const InvoiceReports = ({ invoices, onClose }) => {
                         <div>
                             <h3 className="text-lg font-bold text-gray-800 mb-4">Payment Trends & KPIs</h3>
                             <div className="grid grid-cols-4 gap-4 mb-6">
-                                <div className="bg-blue-50 p-4 rounded-lg">
-                                    <div className="text-sm text-gray-600 mb-1">Avg Days to Pay</div>
-                                    <div className="text-3xl font-bold text-blue-600">{paymentStats.avgDaysToPay}</div>
+                                <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/35">
+                                    <div className="mb-1 text-sm text-gray-600 dark:text-gray-400">Avg Days to Pay</div>
+                                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{paymentStats.avgDaysToPay}</div>
                                 </div>
-                                <div className="bg-green-50 p-4 rounded-lg">
-                                    <div className="text-sm text-gray-600 mb-1">On-Time Payments</div>
-                                    <div className="text-3xl font-bold text-green-600">{paymentStats.onTimePayments}</div>
+                                <div className="rounded-lg bg-green-50 p-4 dark:bg-green-950/30">
+                                    <div className="mb-1 text-sm text-gray-600 dark:text-gray-400">On-Time Payments</div>
+                                    <div className="text-3xl font-bold text-green-600 dark:text-green-400">{paymentStats.onTimePayments}</div>
                                 </div>
-                                <div className="bg-red-50 p-4 rounded-lg">
-                                    <div className="text-sm text-gray-600 mb-1">Late Payments</div>
-                                    <div className="text-3xl font-bold text-red-600">{paymentStats.latePayments}</div>
+                                <div className="rounded-lg bg-red-50 p-4 dark:bg-red-950/30">
+                                    <div className="mb-1 text-sm text-gray-600 dark:text-gray-400">Late Payments</div>
+                                    <div className="text-3xl font-bold text-red-600 dark:text-red-400">{paymentStats.latePayments}</div>
                                 </div>
-                                <div className="bg-primary-50 p-4 rounded-lg">
-                                    <div className="text-sm text-gray-600 mb-1">Total Collected</div>
-                                    <div className="text-2xl font-bold text-primary-600">
+                                <div className="rounded-lg bg-primary-50 p-4 dark:bg-primary-950/35">
+                                    <div className="mb-1 text-sm text-gray-600 dark:text-gray-400">Total Collected</div>
+                                    <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                                         R{paymentStats.totalPaid.toLocaleString('en-ZA')}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white border rounded-lg p-6">
-                                <h4 className="font-bold text-gray-800 mb-4">Payment Performance</h4>
+                            <div className="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
+                                <h4 className="mb-4 font-bold text-gray-800 dark:text-gray-100">Payment Performance</h4>
                                 <div className="space-y-3">
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">

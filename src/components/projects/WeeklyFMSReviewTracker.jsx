@@ -4870,16 +4870,16 @@ const baseTextColorClass = statusConfig && statusConfig.color
             </div>
             
             {/* Legend */}
-            <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-200 p-3 mb-4 shadow-sm">
+            <div className="mb-4 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 to-white p-3 shadow-sm dark:border-gray-600 dark:from-gray-800 dark:to-gray-900">
                 <div className="flex flex-wrap items-center gap-4">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Status Legend:</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Status Legend:</span>
                     {statusOptions.map((option, idx) => (
                         <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm">
+                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm dark:border-gray-600 dark:bg-gray-800">
                                 <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200 dark:bg-gray-600'} ring-2 ring-white dark:ring-gray-700 shadow-sm`}></div>
-                                <span className="text-xs font-medium text-gray-700">{option.label}</span>
+                                <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{option.label}</span>
                             </div>
-                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400"></i>}
+                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400 dark:text-gray-500"></i>}
                         </React.Fragment>
                     ))}
                 </div>
@@ -4888,14 +4888,14 @@ const baseTextColorClass = statusConfig && statusConfig.color
             {/* Per-section tables with independent horizontal scroll */}
             <div className="space-y-3">
                 {sections.length === 0 ? (
-                    <div className="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
+                    <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center dark:border-gray-600 dark:bg-gray-900">
                         <div className="flex flex-col items-center gap-4">
-                            <div className="w-20 h-20 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
-                                <i className="fas fa-folder-open text-3xl text-primary-600"></i>
+                            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary-100 to-primary-200 dark:from-primary-900/60 dark:to-primary-800/50">
+                                <i className="fas fa-folder-open text-3xl text-primary-600 dark:text-primary-300"></i>
                             </div>
                             <div>
-                                <p className="text-lg font-bold text-gray-900">No sections yet</p>
-                                <p className="text-sm text-gray-600 mt-1">Create your first section to start organizing documents</p>
+                                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">No sections yet</p>
+                                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Create your first section to start organizing documents</p>
                             </div>
                             <button
                                 onClick={handleAddSection}
@@ -4909,7 +4909,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className={`bg-white rounded-xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${dragOverIndex === sectionIndex ? 'ring-2 ring-primary-500 ring-offset-2 border-primary-300' : 'border-gray-200'}`}
+                            className={`rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md cursor-grab active:cursor-grabbing dark:border-gray-700 dark:bg-gray-900 dark:ring-offset-gray-900 overflow-hidden ${dragOverIndex === sectionIndex ? 'ring-2 ring-primary-500 ring-offset-2 border-primary-300 dark:border-primary-500' : ''}`}
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -4918,26 +4918,26 @@ const baseTextColorClass = statusConfig && statusConfig.color
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <i className="fas fa-grip-vertical text-gray-400 text-sm flex-shrink-0"></i>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="font-bold text-base text-gray-900 flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white px-4 py-3 dark:border-gray-700 dark:from-gray-800 dark:to-gray-900">
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <i className="fas fa-grip-vertical flex-shrink-0 text-sm text-gray-400 dark:text-gray-500"></i>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-gray-100">
                                             <span>#{sectionIndex + 1}</span>
                                             <span>{section.name}</span>
                                         </div>
                                         {section.description && (
-                                            <div className="text-xs text-gray-600 mt-1">{section.description}</div>
+                                            <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">{section.description}</div>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                                    <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-gray-200">
-                                        <label className="text-xs font-semibold text-gray-700">Reviewer:</label>
+                                    <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-1 dark:border-gray-600 dark:bg-gray-800">
+                                        <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Reviewer:</label>
                                         <select
                                             value={section.reviewer || ''}
                                             onChange={(e) => handleUpdateReviewer(section.id, e.target.value)}
-                                            className="text-xs font-medium text-gray-900 bg-transparent border-0 focus:ring-0 cursor-pointer"
+                                            className="cursor-pointer border-0 bg-transparent text-xs font-medium text-gray-900 focus:ring-0 dark:text-gray-100"
                                             onClick={(e) => e.stopPropagation()}
                                             onMouseDown={(e) => e.stopPropagation()}
                                         >

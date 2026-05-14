@@ -8425,7 +8425,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4 space-y-4">
               {/* IMPORTANT: Select Finished Product Inventory Item First */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4 mb-4">
                 <div className="flex items-start gap-2 mb-3">
                   <i className="fas fa-info-circle text-blue-600 text-sm mt-0.5"></i>
                   <div className="flex-1">
@@ -11797,7 +11797,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Totals */}
                 {salesOrderItems.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4">
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       <div>
                         <p className="text-gray-600">Subtotal:</p>
@@ -12005,7 +12005,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </select>
                   </div>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3">
                   <p className="text-xs text-blue-700">
                     <i className="fas fa-info-circle mr-1"></i>
                     <strong>Note:</strong> New POs start as <strong>Draft</strong>. Move to <strong>Final</strong>, then <strong>Sent</strong>, then confirm <strong>Goods received</strong> with quantities and prices to post stock.
@@ -12175,7 +12175,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Totals */}
                 {purchaseOrderItems.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4 space-y-3">
                     <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                       <input
                         type="checkbox"
@@ -14816,7 +14816,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 ))}
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4">
                 <p className="text-sm text-blue-900">
                   <strong>New Part Details:</strong>
                 </p>

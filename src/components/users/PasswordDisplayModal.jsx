@@ -74,7 +74,7 @@ const PasswordDisplayModal = ({ email, password, onClose }) => {
                             </div>
                         </div>
 
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <p className="text-xs text-blue-800">
                                 <i className="fas fa-info-circle mr-2"></i>
                                 <strong>Security Note:</strong> This is the only time this password will be shown. Make sure to copy it before closing this dialog.

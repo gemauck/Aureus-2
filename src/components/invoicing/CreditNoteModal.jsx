@@ -71,7 +71,7 @@ export const CreditNoteModal = ({ invoice, onSave, onClose }) => {
                 </div>
 
                 <div className="p-4">
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="mb-4 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                         <div className="flex justify-between items-start">
                             <div>
                                 <div className="text-xs text-gray-600">Original Invoice</div>

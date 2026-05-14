@@ -2,6 +2,7 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, serverError } from './_lib/response.js'
+import { isAdminRole } from './_lib/authRoles.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
@@ -19,18 +20,24 @@ async function handler(req, res) {
 
     const searchTerm = searchQuery.toLowerCase().trim()
     const results = []
+    const canSearchLeads = isAdminRole(req.user?.role)
 
     // Search Clients/Leads
     try {
+      const clientOrBlock = {
+        OR: [
+          { name: { contains: searchTerm, mode: 'insensitive' } },
+          { industry: { contains: searchTerm, mode: 'insensitive' } },
+          { website: { contains: searchTerm, mode: 'insensitive' } },
+          { notes: { contains: searchTerm, mode: 'insensitive' } }
+        ]
+      }
       const clients = await prisma.client.findMany({
-        where: {
-          OR: [
-            { name: { contains: searchTerm, mode: 'insensitive' } },
-            { industry: { contains: searchTerm, mode: 'insensitive' } },
-            { website: { contains: searchTerm, mode: 'insensitive' } },
-            { notes: { contains: searchTerm, mode: 'insensitive' } }
-          ]
-        },
+        where: canSearchLeads
+          ? clientOrBlock
+          : {
+              AND: [{ NOT: { type: 'lead' } }, clientOrBlock]
+            },
         take: 10,
         orderBy: { name: 'asc' },
         select: {

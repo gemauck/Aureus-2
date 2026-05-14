@@ -48,7 +48,7 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
 
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Enable/Disable */}
-                    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                         <div>
                             <div className="font-medium text-sm text-gray-900">Enable Automated Reminders</div>
                             <div className="text-xs text-gray-600 mt-0.5">

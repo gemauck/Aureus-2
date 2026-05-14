@@ -5272,7 +5272,7 @@ const JobCardFormPublic = () => {
           </div>
 
           {travelKm > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30 flex items-center gap-2">
               <i className="fas fa-road text-blue-600"></i>
               <p className="text-sm font-medium text-blue-950">
                 Travel Distance: {travelKm.toFixed(1)} km

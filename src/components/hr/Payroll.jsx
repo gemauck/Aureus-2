@@ -279,7 +279,7 @@ const Payroll = () => {
                         </div>
 
                         {/* Tax Information */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3">
                             <p className="text-[10px] text-blue-900 font-medium mb-1">Tax Information</p>
                             <div className="grid grid-cols-2 gap-2 text-xs text-blue-800">
                                 <div>PAYE: {formatZAR(payslip.deductions.paye)}</div>

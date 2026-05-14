@@ -359,7 +359,7 @@ const DieselRefundEvidenceEvaluator = () => {
                             </div>
                         )}
                         {evaluationResult.method === 'llm' && (
-                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="mb-4 p-3 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                                 <p className="text-sm text-blue-800">
                                     <i className="fas fa-brain mr-2"></i>
                                     Analysis powered by AI (GPT Model: {evaluationResult.model || 'gpt-4o-mini'})
@@ -447,7 +447,7 @@ const DieselRefundEvidenceEvaluator = () => {
 
                     {/* Recommendations Card */}
                     {evaluationResult.recommendations && evaluationResult.recommendations.length > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4">
                             <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
                                 <i className="fas fa-lightbulb mr-2"></i>
                                 Recommendations

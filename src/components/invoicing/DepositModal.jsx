@@ -39,7 +39,7 @@ export const DepositModal = ({ invoices, clients, onSave, onClose }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                    <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                         <div className="flex items-start">
                             <i className="fas fa-info-circle text-blue-600 mt-0.5 mr-2 text-sm"></i>
                             <div className="text-xs text-blue-800">

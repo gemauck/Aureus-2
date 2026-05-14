@@ -146,7 +146,7 @@ export const ExpenseModal = ({ expense, clients, projects, onSave, onClose }) =>
                     </div>
 
                     {formData.markup > 0 && (
-                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <div className="flex justify-between text-xs mb-1">
                                 <span className="text-gray-600">Cost:</span>
                                 <span className="font-medium">R{formData.amount.toFixed(2)}</span>

@@ -217,8 +217,8 @@ const EmployeeManagement = () => {
                     </div>
 
                     {!selectedEmployee && (
-                        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
-                            <p className="text-xs text-blue-800">
+                        <div className="border-b border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/50 dark:bg-blue-950/35">
+                            <p className="text-xs text-blue-800 dark:text-blue-200">
                                 <i className="fas fa-info-circle mr-1"></i>
                                 To add a new employee, please go to <strong>User Management</strong> to invite them. Once they accept the invitation, they will appear here and you can add their HR details.
                             </p>

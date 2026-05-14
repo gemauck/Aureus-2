@@ -167,7 +167,7 @@ const Attendance = () => {
                             </select>
                         </div>
 
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <div className="text-center">
                                 <i className="fas fa-clock text-blue-600 text-2xl mb-2"></i>
                                 <p className="text-lg font-bold text-blue-900">

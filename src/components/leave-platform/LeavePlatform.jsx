@@ -1941,7 +1941,7 @@ const TeamLeaveView = ({
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Working Days
                                 </label>
-                                <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                                     <span className="text-2xl font-bold text-blue-600">
                                         {calculateWorkingDays(editFormData.startDate, editFormData.endDate)}
                                     </span>
@@ -2258,7 +2258,7 @@ const MyLeaveView = ({
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Working Days
                                 </label>
-                                <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                                     <span className="text-2xl font-bold text-blue-600">
                                         {calculateWorkingDays(editFormData.startDate, editFormData.endDate)}
                                     </span>
@@ -2472,7 +2472,7 @@ const ApplyForLeaveView = ({
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Working Days
                         </label>
-                        <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <span className="text-2xl font-bold text-blue-600">{workingDays}</span>
                         </div>
                     </div>

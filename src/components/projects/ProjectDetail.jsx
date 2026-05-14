@@ -373,21 +373,21 @@ function initializeProjectDetail() {
 
         return (
             <div className="space-y-4" style={{ position: 'relative', zIndex: 1 }}>
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h2 className="text-sm font-semibold text-gray-900 mb-2">Record time</h2>
-                    <p className="text-xs text-gray-500 mb-3">Use the timer to record time as you work. Start and stop to capture the exact span.</p>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                    <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Record time</h2>
+                    <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">Use the timer to record time as you work. Start and stop to capture the exact span.</p>
                     <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
-                            <div className="text-2xl font-mono tabular-nums text-gray-900 min-w-[6rem]">
+                            <div className="min-w-[6rem] font-mono text-2xl tabular-nums text-gray-900 dark:text-gray-100">
                                 {timerRunning ? formatElapsed(elapsed) : '00:00:00'}
                             </div>
                             {timerRunning && (
-                                <span className="text-sm text-gray-600">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
                                     Start: {formatTime(timerStartedAt)} · Stop: —
                                 </span>
                             )}
                             {!timerRunning && lastRecordedStart != null && (
-                                <span className="text-sm text-gray-600">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
                                     Last run — Start: {formatTime(lastRecordedStart)} · Stop: {formatTime(lastRecordedStop)}
                                 </span>
                             )}
@@ -410,51 +410,51 @@ function initializeProjectDetail() {
                             )}
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
                             <textarea
                                 placeholder="What are you working on? Add details, tasks, or notes…"
                                 value={timerDescription}
                                 onChange={e => setTimerDescription(e.target.value)}
                                 rows={3}
-                                className="w-full max-w-xl px-2 py-1.5 border border-gray-300 rounded text-sm resize-y min-h-[4.5rem]"
+                                className="min-h-[4.5rem] w-full max-w-xl resize-y rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                                 autoComplete="off"
                             />
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h2 className="text-sm font-semibold text-gray-900 mb-2">Manually capture time</h2>
-                    <p className="text-xs text-gray-500 mb-3">Enter date and start/end times for work already done. Hours are computed from the span.</p>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                    <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Manually capture time</h2>
+                    <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">Enter date and start/end times for work already done. Hours are computed from the span.</p>
                     <div className="space-y-3">
                         <div className="flex flex-wrap items-end gap-2">
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Date</label>
                                 <input
                                     type="date"
                                     value={manualDate}
                                     onChange={e => setManualDate(e.target.value)}
-                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                    className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Start time</label>
+                                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Start time</label>
                                 <input
                                     type="time"
                                     value={manualStartTime}
                                     onChange={e => setManualStartTime(e.target.value)}
-                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                    className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">End time</label>
+                                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">End time</label>
                                 <input
                                     type="time"
                                     value={manualEndTime}
                                     onChange={e => setManualEndTime(e.target.value)}
-                                    className="px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                    className="rounded border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                 />
                             </div>
-                            <div className="text-sm text-gray-500 self-end pb-1.5">
+                            <div className="self-end pb-1.5 text-sm text-gray-500 dark:text-gray-400">
                                 = {(() => {
                                     const d = manualDate || new Date().toISOString().slice(0, 10);
                                     const s = new Date(d + 'T' + (manualStartTime || '00:00') + ':00');
@@ -472,34 +472,34 @@ function initializeProjectDetail() {
                             </button>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                            <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
                             <textarea
                                 placeholder="Describe what you did, tasks completed, or other notes…"
                                 value={manualDescription}
                                 onChange={e => setManualDescription(e.target.value)}
                                 rows={3}
-                                className="w-full max-w-xl px-2 py-1.5 border border-gray-300 rounded text-sm resize-y min-h-[4.5rem]"
+                                className="min-h-[4.5rem] w-full max-w-xl resize-y rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                                 autoComplete="off"
                             />
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-sm font-semibold text-gray-900">Time entries</h2>
-                        <span className="text-xs text-gray-600">Total: {totalHours.toFixed(2)} h</span>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="mb-3 flex items-center justify-between">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Time entries</h2>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">Total: {totalHours.toFixed(2)} h</span>
                     </div>
                     {loading ? (
-                        <p className="text-sm text-gray-500">Loading…</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
                     ) : entries.length === 0 ? (
-                        <p className="text-sm text-gray-500">No time logged yet. Start the timer or add a manual entry.</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No time logged yet. Start the timer or add a manual entry.</p>
                     ) : (
                         <ul className="space-y-2">
                             {entries.map(e => (
-                                <li key={e.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                                <li key={e.id} className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0 dark:border-gray-700">
                                     <div>
-                                        <span className="text-sm text-gray-900">{e.description || '—'}</span>
-                                        <span className="text-xs text-gray-500 ml-2">
+                                        <span className="text-sm text-gray-900 dark:text-gray-100">{e.description || '—'}</span>
+                                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                                             {e.date ? new Date(e.date).toLocaleDateString() : ''} · {(e.hours || 0).toFixed(2)} h
                                         </span>
                                     </div>
@@ -732,7 +732,7 @@ function initializeProjectDetail() {
 
             if (!isComponentReady) {
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -953,7 +953,7 @@ function initializeProjectDetail() {
 
             if (!isComponentReady) {
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -1169,7 +1169,7 @@ function initializeProjectDetail() {
 
             if (!isComponentReady) {
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -1322,7 +1322,7 @@ function initializeProjectDetail() {
                     projectId: project?.id
                 });
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -1473,7 +1473,7 @@ function initializeProjectDetail() {
 
             if (!trackerReady || !window.WeeklyFMSReviewTracker) {
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -1516,7 +1516,7 @@ function initializeProjectDetail() {
             const LatestTracker = window.WeeklyFMSReviewTracker;
             if (!LatestTracker) {
                 return (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
                         <p className="text-sm text-gray-600">The Weekly FMS Review Tracker is loading...</p>
@@ -1879,20 +1879,20 @@ function initializeProjectDetail() {
                 <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                     <div className="flex items-start gap-2 min-w-0">
                         <div
-                            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/80 shadow-sm border border-gray-100"
+                            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white/80 shadow-sm dark:border-gray-600 dark:bg-gray-800/90"
                             aria-hidden
                         >
                             <i className={`${iconClass} text-lg`} />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-                            <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+                            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={() => addSpot(provider)}
-                        className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50"
+                        className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 dark:border-gray-600 dark:bg-gray-800 dark:text-primary-300 dark:hover:bg-primary-900/35"
                     >
                         <i className="fas fa-plus text-[10px]" />
                         Add link
@@ -1909,7 +1909,7 @@ function initializeProjectDetail() {
                                     value={entry.name ?? ''}
                                     onChange={(e) => updateName(provider, index, e.target.value)}
                                     placeholder="Display name (optional)"
-                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                                 <input
                                     type="text"
@@ -1919,7 +1919,7 @@ function initializeProjectDetail() {
                                     value={entry.url}
                                     onChange={(e) => updateUrl(provider, index, e.target.value)}
                                     placeholder={placeholder}
-                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                             </div>
                             <div className="flex shrink-0 items-center gap-2 sm:pt-0.5">
@@ -1933,7 +1933,7 @@ function initializeProjectDetail() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         title={entry.name?.trim() || entry.url.trim()}
-                                        className="inline-flex max-w-[10rem] items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                        className="inline-flex max-w-[10rem] items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                                     >
                                         <i className="fas fa-external-link-alt mr-1.5 shrink-0 text-[10px]" />
                                         <span className="truncate">
@@ -1944,7 +1944,7 @@ function initializeProjectDetail() {
                                 <button
                                     type="button"
                                     onClick={() => removeSpot(provider, index)}
-                                    className="inline-flex items-center justify-center rounded-lg border border-red-100 bg-red-50/80 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100"
+                                    className="inline-flex items-center justify-center rounded-lg border border-red-100 bg-red-50/80 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/45"
                                     title="Remove this row"
                                 >
                                     <i className="fas fa-times" />
@@ -1959,26 +1959,26 @@ function initializeProjectDetail() {
         if (!projectId) return null;
 
         return (
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-slate-50/80 to-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-white/90 px-4 py-3">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-slate-50/80 to-white shadow-sm dark:border-gray-700 dark:from-gray-900/90 dark:to-gray-950 dark:shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-white/90 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/85">
                     <div className="flex items-center gap-2">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-900/45 dark:text-primary-300">
                             <i className="fas fa-cloud" />
                         </div>
                         <div>
-                            <h2 className="text-sm font-semibold text-gray-900">Online drive</h2>
-                            <p className="text-xs text-gray-500">Folder or share links for this project</p>
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Online drive</h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Folder or share links for this project</p>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         {saveHint === 'saved' && (
-                            <span className="text-xs font-medium text-emerald-600">
+                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                                 <i className="fas fa-check-circle mr-1" />
                                 Saved
                             </span>
                         )}
                         {saveHint === 'error' && (
-                            <span className="text-xs font-medium text-red-600">Save failed</span>
+                            <span className="text-xs font-medium text-red-600 dark:text-red-400">Save failed</span>
                         )}
                         <button
                             type="button"
@@ -2005,17 +2005,17 @@ function initializeProjectDetail() {
                         'googleDrive',
                         'Google Drive',
                         'Shared drives or folder links',
-                        'fab fa-google-drive text-green-600',
+                        'fab fa-google-drive text-green-600 dark:text-green-400',
                         'https://drive.google.com/...',
-                        'border-green-100 bg-green-50/40'
+                        'border-green-100 bg-green-50/40 dark:border-green-900/45 dark:bg-green-950/30'
                     )}
                     {renderDriveBlock(
                         'oneDrive',
                         'OneDrive',
                         'SharePoint or personal OneDrive',
-                        'fab fa-microsoft text-blue-600',
+                        'fab fa-microsoft text-blue-600 dark:text-blue-400',
                         'https://onedrive.live.com/...',
-                        'border-blue-100 bg-blue-50/40'
+                        'border-blue-100 bg-blue-50/40 dark:border-blue-900/45 dark:bg-blue-950/30'
                     )}
                 </div>
             </div>
@@ -2419,25 +2419,25 @@ function initializeProjectDetail() {
         if (!projectId) return null;
 
         return (
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 dark:border-gray-700">
                     <div className="flex items-center gap-2">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
                             <i className="fas fa-address-book" />
                         </div>
                         <div>
-                            <h2 className="text-sm font-semibold text-gray-900">Project contacts</h2>
-                            <p className="text-xs text-gray-500">Link contacts from this client's CRM record</p>
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Project contacts</h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Link contacts from this client's CRM record</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         {saveHint === 'saved' && (
-                            <span className="text-xs font-medium text-emerald-600">
+                            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                                 <i className="fas fa-check-circle mr-1" />
                                 Saved
                             </span>
                         )}
-                        {saveHint === 'error' && <span className="text-xs font-medium text-red-600">Save failed</span>}
+                        {saveHint === 'error' && <span className="text-xs font-medium text-red-600 dark:text-red-400">Save failed</span>}
                         <button
                             type="button"
                             onClick={handleSave}
@@ -2451,13 +2451,13 @@ function initializeProjectDetail() {
                 </div>
 
                 {!resolvedClientId ? (
-                    <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                    <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 p-2.5 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-200">
                         Link a client to this project first, then you can select contacts from CRM.
                     </p>
                 ) : (
                     <div className="mt-3 space-y-3">
-                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                            <h3 className="text-xs font-semibold text-gray-800 uppercase tracking-wide mb-2">
+                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60">
+                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-800 dark:text-gray-200">
                                 Add new CRM contact
                             </h3>
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2466,33 +2466,33 @@ function initializeProjectDetail() {
                                     value={newContact.name}
                                     onChange={(e) => setNewContact((prev) => ({ ...prev, name: e.target.value }))}
                                     placeholder="Name *"
-                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                                 <input
                                     type="email"
                                     value={newContact.email}
                                     onChange={(e) => setNewContact((prev) => ({ ...prev, email: e.target.value }))}
                                     placeholder="Email"
-                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                                 <input
                                     type="tel"
                                     value={newContact.phone}
                                     onChange={(e) => setNewContact((prev) => ({ ...prev, phone: e.target.value }))}
                                     placeholder="Phone"
-                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                                 <input
                                     type="text"
                                     value={newContact.role}
                                     onChange={(e) => setNewContact((prev) => ({ ...prev, role: e.target.value }))}
                                     placeholder="Role"
-                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 />
                                 <select
                                     value={newContact.siteId}
                                     onChange={(e) => setNewContact((prev) => ({ ...prev, siteId: e.target.value }))}
-                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 sm:col-span-2"
+                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25 sm:col-span-2"
                                 >
                                     <option value="">No specific site</option>
                                     {(sites || []).map((site) => (
@@ -2507,7 +2507,7 @@ function initializeProjectDetail() {
                                     type="button"
                                     onClick={createAndLinkContact}
                                     disabled={savingNewContact || !String(newContact.name || '').trim()}
-                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary-800 dark:bg-primary-950/40 dark:text-primary-200 dark:hover:bg-primary-900/50"
                                 >
                                     {savingNewContact ? <i className="fas fa-spinner fa-spin text-[10px]" /> : <i className="fas fa-plus text-[10px]" />}
                                     Add to CRM and link
@@ -2519,7 +2519,7 @@ function initializeProjectDetail() {
                             <select
                                 value={selectedContactId}
                                 onChange={(e) => setSelectedContactId(e.target.value)}
-                                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                 disabled={loadingContacts || availableToLink.length === 0}
                             >
                                 <option value="">
@@ -2539,7 +2539,7 @@ function initializeProjectDetail() {
                                 type="button"
                                 onClick={addSelectedContact}
                                 disabled={!selectedContactId}
-                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-primary-300 dark:hover:bg-primary-900/35"
                             >
                                 <i className="fas fa-link text-[10px]" />
                                 Link contact
@@ -2547,24 +2547,24 @@ function initializeProjectDetail() {
                         </div>
 
                         {linkedContacts.length === 0 ? (
-                            <p className="text-xs text-gray-500">No contacts linked to this project yet.</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">No contacts linked to this project yet.</p>
                         ) : (
                             <ul className="space-y-2">
                                 {linkedContacts.map((contact) => (
                                     <li
                                         key={contact.id}
-                                        className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                        className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700 dark:bg-gray-800/60"
                                     >
                                         <div className="min-w-0">
-                                            <p className="text-sm font-medium text-gray-900 truncate">
+                                            <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                                                 {contact.name || 'Unnamed contact'}
                                             </p>
-                                            <p className="text-xs text-gray-600 truncate">{contact.role || 'No role set'}</p>
-                                            <p className="text-xs text-gray-600 truncate">
+                                            <p className="truncate text-xs text-gray-600 dark:text-gray-400">{contact.role || 'No role set'}</p>
+                                            <p className="truncate text-xs text-gray-600 dark:text-gray-400">
                                                 {[contact.email, contact.phone].filter(Boolean).join(' - ') || 'No contact details'}
                                             </p>
                                             {contact.siteId ? (
-                                                <p className="text-xs text-primary-700 truncate">
+                                                <p className="truncate text-xs text-primary-700 dark:text-primary-300">
                                                     <i className="fas fa-map-marker-alt mr-1 text-[10px]" />
                                                     {siteNameById.get(String(contact.siteId)) || `Site ${contact.siteId}`}
                                                 </p>
@@ -2574,7 +2574,7 @@ function initializeProjectDetail() {
                                             <select
                                                 value={contact.siteId || ''}
                                                 onChange={(e) => updateContactSite(contact.id, e.target.value)}
-                                                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                                                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:focus:border-primary-400 dark:focus:ring-primary-400/25"
                                                 title="Assign site"
                                             >
                                                 <option value="">No site</option>
@@ -2587,7 +2587,7 @@ function initializeProjectDetail() {
                                             {contact.email ? (
                                                 <a
                                                     href={`mailto:${contact.email}`}
-                                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                                                 >
                                                     <i className="fas fa-envelope mr-1.5 text-[10px]" />
                                                     Email
@@ -2596,7 +2596,7 @@ function initializeProjectDetail() {
                                             <button
                                                 type="button"
                                                 onClick={() => removeLinkedContact(contact.id)}
-                                                className="inline-flex items-center rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                                                className="inline-flex items-center rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/45"
                                             >
                                                 <i className="fas fa-unlink mr-1.5 text-[10px]" />
                                                 Unlink
@@ -2645,105 +2645,105 @@ function initializeProjectDetail() {
 
         return (
             <div className="space-y-4">
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Project Information</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                    <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Project Information</h2>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Client</label>
-                            <p className="text-sm text-gray-900">{project.client || 'Not assigned'}</p>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Client</label>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">{project.client || 'Not assigned'}</p>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Project Type</label>
-                            <p className="text-sm text-gray-900">{project.type}</p>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Project Type</label>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">{project.type}</p>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Status</label>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Status</label>
                             <span
-                                className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${
+                                className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
                                     project.status === 'In Progress'
-                                        ? 'bg-blue-100 text-blue-700'
+                                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/45 dark:text-blue-200'
                                         : project.status === 'Active'
-                                          ? 'bg-green-100 text-green-700'
+                                          ? 'bg-green-100 text-green-700 dark:bg-green-900/45 dark:text-green-200'
                                           : project.status === 'Completed'
-                                            ? 'bg-blue-100 text-blue-700'
+                                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/45 dark:text-blue-200'
                                             : project.status === 'On Hold'
-                                              ? 'bg-yellow-100 text-yellow-700'
+                                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200'
                                               : project.status === 'Cancelled'
-                                                ? 'bg-red-100 text-red-700'
-                                                : 'bg-gray-100 text-gray-700'
+                                                ? 'bg-red-100 text-red-700 dark:bg-red-900/45 dark:text-red-200'
+                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
                                 }`}
                             >
                                 {project.status}
                             </span>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Assigned To</label>
-                            <p className="text-sm text-gray-900">{project.assignedTo || 'Not assigned'}</p>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Assigned To</label>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">{project.assignedTo || 'Not assigned'}</p>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Start Date</label>
-                            <p className="text-sm text-gray-900">{formatProjectDate(project.startDate) || 'Not set'}</p>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Start Date</label>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">{formatProjectDate(project.startDate) || 'Not set'}</p>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Due Date</label>
-                            <p className="text-sm text-gray-900">{formatProjectDate(project.dueDate) || 'Not set'}</p>
+                            <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Due Date</label>
+                            <p className="text-sm text-gray-900 dark:text-gray-100">{formatProjectDate(project.dueDate) || 'Not set'}</p>
                         </div>
                         {project.description && (
                             <div className="md:col-span-2">
-                                <label className="block text-xs font-medium text-gray-500 mb-0.5">Description</label>
-                                <p className="text-sm text-gray-700">{project.description}</p>
+                                <label className="mb-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Description</label>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">{project.description}</p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Total Tasks</p>
-                                <p className="text-xl font-bold text-gray-900">{totalTasks}</p>
+                                <p className="mb-0.5 text-xs text-gray-600 dark:text-gray-400">Total Tasks</p>
+                                <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{totalTasks}</p>
                             </div>
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-tasks text-blue-600"></i>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                                <i className="fas fa-tasks text-blue-600 dark:text-blue-300"></i>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Completed</p>
-                                <p className="text-xl font-bold text-green-600">{completedTasks}</p>
+                                <p className="mb-0.5 text-xs text-gray-600 dark:text-gray-400">Completed</p>
+                                <p className="text-xl font-bold text-green-600 dark:text-green-400">{completedTasks}</p>
                             </div>
-                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-check-circle text-green-600"></i>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/40">
+                                <i className="fas fa-check-circle text-green-600 dark:text-green-400"></i>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Completion</p>
-                                <p className="text-xl font-bold text-primary-600">{completionPercentage}%</p>
+                                <p className="mb-0.5 text-xs text-gray-600 dark:text-gray-400">Completion</p>
+                                <p className="text-xl font-bold text-primary-600 dark:text-primary-400">{completionPercentage}%</p>
                             </div>
-                            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-chart-pie text-primary-600"></i>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-100 dark:bg-primary-900/40">
+                                <i className="fas fa-chart-pie text-primary-600 dark:text-primary-300"></i>
                             </div>
                         </div>
                     </div>
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-xs text-gray-600 mb-0.5">Days Until Due</p>
+                                <p className="mb-0.5 text-xs text-gray-600 dark:text-gray-400">Days Until Due</p>
                                 <p
                                     className={`text-xl font-bold ${
                                         daysUntilDue === null
-                                            ? 'text-gray-400'
+                                            ? 'text-gray-400 dark:text-gray-500'
                                             : daysUntilDue < 0
-                                              ? 'text-red-600'
+                                              ? 'text-red-600 dark:text-red-400'
                                               : daysUntilDue <= 7
-                                                ? 'text-yellow-600'
-                                                : 'text-gray-900'
+                                                ? 'text-yellow-600 dark:text-yellow-400'
+                                                : 'text-gray-900 dark:text-gray-100'
                                     }`}
                                 >
                                     {daysUntilDue === null
@@ -2753,8 +2753,8 @@ function initializeProjectDetail() {
                                           : daysUntilDue}
                                 </p>
                             </div>
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-calendar-alt text-blue-600"></i>
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/40">
+                                <i className="fas fa-calendar-alt text-blue-600 dark:text-blue-300"></i>
                             </div>
                         </div>
                     </div>
@@ -2774,23 +2774,23 @@ function initializeProjectDetail() {
                 />
 
                 {activeUsers.length > 0 && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Team Members</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                        <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Team Members</h2>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                             {activeUsers.map((user) => (
-                                <div key={user.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                                    <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm">
+                                <div key={user.id} className="flex items-center gap-3 rounded-lg bg-gray-50 p-2 dark:bg-gray-800/70">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white">
                                         {user.name.charAt(0)}
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                                        <p className="text-xs text-gray-500">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
                                             {user.role} • {user.department}
                                         </p>
                                     </div>
                                     <a
                                         href={`mailto:${user.email}`}
-                                        className="text-primary-600 hover:text-primary-700 text-xs"
+                                        className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                                     >
                                         <i className="fas fa-envelope"></i>
                                     </a>
@@ -9756,7 +9756,7 @@ function initializeProjectDetail() {
             </div>
 
             {/* Tab Navigation — native select on small screens; horizontal tabs from lg and up */}
-            <div className="bg-white rounded-lg border border-gray-200 p-1 min-w-0">
+            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-1 min-w-0">
                 <div className="lg:hidden px-2 pt-2 pb-1 space-y-1">
                     <label htmlFor="project-detail-section-nav" className="block text-xs font-medium text-gray-600">
                         Jump to section
@@ -10024,7 +10024,7 @@ function initializeProjectDetail() {
             )}
 
             {activeSection === 'notes' && (
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
                     {editingNoteFull ? (
                         <div className="flex flex-col h-full min-h-[500px]">
                             <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
@@ -10283,16 +10283,16 @@ function initializeProjectDetail() {
             })}
 
             {activeSection === 'activity' && (
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                        <i className="fas fa-history text-primary-600"></i>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <i className="fas fa-history text-primary-600 dark:text-primary-400"></i>
                         Project activity & history
                     </h3>
-                    <p className="text-sm text-gray-500 mb-4">Recent changes to tasks, documents, reviews, and project settings.</p>
+                    <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">Recent changes to tasks, documents, reviews, and project settings.</p>
                     <button
                         type="button"
                         onClick={() => loadActivityLog()}
-                        className="mb-3 px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded"
+                        className="mb-3 rounded px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 hover:text-primary-700 dark:text-primary-400 dark:hover:bg-primary-900/35 dark:hover:text-primary-300"
                     >
                         <i className="fas fa-sync-alt mr-1"></i> Refresh
                     </button>
@@ -10328,34 +10328,34 @@ function initializeProjectDetail() {
                                     return log.description || log.type || 'Activity';
                                 })();
                                 return (
-                                    <div key={log.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50 hover:bg-gray-50">
+                                    <div key={log.id} className="rounded-lg border border-gray-200 bg-gray-50/50 p-3 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800/40 dark:hover:bg-gray-800/70">
                                         <div className="flex flex-wrap items-center gap-2 text-sm">
-                                            <span className="font-medium text-gray-900">{summaryLine}</span>
+                                            <span className="font-medium text-gray-900 dark:text-gray-100">{summaryLine}</span>
                                             {log.type && (
-                                                <span className="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700">{log.type.replace(/_/g, ' ')}</span>
+                                                <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-200">{log.type.replace(/_/g, ' ')}</span>
                                             )}
-                                            <span className="text-gray-500">{log.userName || 'System'}</span>
-                                            <span className="text-gray-400 text-xs">{dateStr}</span>
+                                            <span className="text-gray-500 dark:text-gray-400">{log.userName || 'System'}</span>
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">{dateStr}</span>
                                         </div>
                                         {log.description && summaryLine !== log.description && (
-                                            <div className="mt-1 text-xs text-gray-600">{log.description}</div>
+                                            <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">{log.description}</div>
                                         )}
                                         {meta.noteSnippet && (
-                                            <div className="mt-2 text-xs text-gray-700 bg-white/90 rounded px-2 py-1.5 border border-gray-200">
-                                                <span className="text-gray-500 font-medium">Note: </span>
+                                            <div className="mt-2 rounded border border-gray-200 bg-white/90 px-2 py-1.5 text-xs text-gray-700 dark:border-gray-600 dark:bg-gray-900/90 dark:text-gray-200">
+                                                <span className="font-medium text-gray-500 dark:text-gray-400">Note: </span>
                                                 <span className="italic">{meta.noteSnippet}</span>
                                             </div>
                                         )}
                                         {(meta.oldValue != null || meta.newValue != null) && !meta.noteSnippet && (
-                                            <div className="mt-2 text-xs text-gray-600">
-                                                {fieldLabel && <span className="text-gray-500">{fieldLabel}: </span>}
-                                                {meta.oldValue != null && <span className="line-through text-gray-500">{String(meta.oldValue)}</span>}
+                                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                                                {fieldLabel && <span className="text-gray-500 dark:text-gray-400">{fieldLabel}: </span>}
+                                                {meta.oldValue != null && <span className="line-through text-gray-500 dark:text-gray-500">{String(meta.oldValue)}</span>}
                                                 {meta.oldValue != null && meta.newValue != null && <span className="mx-1">→</span>}
                                                 {meta.newValue != null && <span>{String(meta.newValue)}</span>}
                                             </div>
                                         )}
                                         {(meta.oldValue != null || meta.newValue != null) && meta.noteSnippet && (meta.oldValue !== meta.newValue) && (
-                                            <div className="mt-1 text-xs text-gray-500">
+                                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                                 {meta.oldValue ? 'Updated from previous note' : 'New note added'}
                                             </div>
                                         )}
@@ -10366,7 +10366,7 @@ function initializeProjectDetail() {
                                                     onClick={() => {
                                                         window.dispatchEvent(new CustomEvent('openTask', { detail: { taskId } }));
                                                     }}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-external-link-alt mr-1"></i> View task
                                                 </button>
@@ -10375,7 +10375,7 @@ function initializeProjectDetail() {
                                                 <button
                                                     type="button"
                                                     onClick={() => switchSection('documentCollection')}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-folder-open mr-1"></i> Document Collection
                                                 </button>
@@ -10384,7 +10384,7 @@ function initializeProjectDetail() {
                                                 <button
                                                     type="button"
                                                     onClick={() => switchSection('weeklyFMSReview')}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-calendar-week mr-1"></i> Weekly FMS Review
                                                 </button>
@@ -10393,7 +10393,7 @@ function initializeProjectDetail() {
                                                 <button
                                                     type="button"
                                                     onClick={() => switchSection('monthlyFMSReview')}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-calendar-alt mr-1"></i> Monthly FMS Review
                                                 </button>
@@ -10402,7 +10402,7 @@ function initializeProjectDetail() {
                                                 <button
                                                     type="button"
                                                     onClick={() => switchSection('monthlyDataReview')}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-clipboard-check mr-1"></i> Monthly Data Review
                                                 </button>
@@ -10411,7 +10411,7 @@ function initializeProjectDetail() {
                                                 <button
                                                     type="button"
                                                     onClick={() => switchSection('complianceReview')}
-                                                    className="text-xs text-primary-600 hover:text-primary-700 hover:underline font-medium"
+                                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
                                                 >
                                                     <i className="fas fa-clipboard-list mr-1"></i> Compliance Review
                                                 </button>
@@ -10421,7 +10421,7 @@ function initializeProjectDetail() {
                                 );
                             })
                             ) : (
-                            <p className="text-gray-500 text-sm">No activity recorded yet. Changes to tasks, document status, and reviews will appear here.</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">No activity recorded yet. Changes to tasks, document status, and reviews will appear here.</p>
                         );
                         })()}
                     </div>
@@ -10518,7 +10518,7 @@ function initializeProjectDetail() {
                     />
                     </div>
                 ) : (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center">
                         <i className="fas fa-spinner fa-spin text-3xl text-gray-300 mb-2"></i>
                         <p className="text-sm text-gray-600 mb-1">Loading Kanban view...</p>
                     </div>

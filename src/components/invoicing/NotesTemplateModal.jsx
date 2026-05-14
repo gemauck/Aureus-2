@@ -65,7 +65,7 @@ export const NotesTemplateModal = ({ templates, onSave, onDelete, onClose }) => 
                     </button>
                 </div>
 
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="mb-6 p-4 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30">
                     <div className="flex items-start">
                         <i className="fas fa-lightbulb text-blue-600 mt-1 mr-3"></i>
                         <div className="text-sm text-blue-800">

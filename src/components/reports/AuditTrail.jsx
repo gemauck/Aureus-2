@@ -399,7 +399,7 @@ const AuditTrail = () => {
         <div className="space-y-3">
             {/* View Mode Indicator */}
             {userIsAdmin ? (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-2 flex items-center gap-2">
                     <i className="fas fa-shield-alt text-blue-600"></i>
                     <p className="text-xs text-blue-800 font-medium">
                         Superadmin View: Full audit trail for all users (extreme detail)
@@ -462,7 +462,7 @@ const AuditTrail = () => {
                     <p className="text-xl font-bold text-emerald-900">{resultsCount ? `${successRate}%` : '—'}</p>
                     <p className="text-[9px] text-emerald-600 mt-0.5">{resultsCount ? `${successCount}/${resultsCount} successful` : 'no data'}</p>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3">
                     <p className="text-[10px] text-blue-600 font-medium mb-0.5">Date range</p>
                     <p className="text-sm font-bold text-blue-900 truncate" title={dateSpan || ''}>{dateSpan || '—'}</p>
                     <p className="text-[9px] text-blue-600 mt-0.5">of results</p>
@@ -623,13 +623,13 @@ const AuditTrail = () => {
 
             {/* Tab content */}
             {auditReportTab === 'users' && (
-                <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/80">
-                        <h2 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-                            <i className="fas fa-users text-blue-600"></i>
+                <div className="overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white shadow-sm dark:border-blue-900/50 dark:from-blue-950/40 dark:to-gray-900 dark:shadow-none">
+                    <div className="border-b border-blue-100 bg-blue-50/80 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/35">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-blue-900 dark:text-blue-100">
+                            <i className="fas fa-users text-blue-600 dark:text-blue-400"></i>
                             Most active users
                         </h2>
-                        <p className="text-[10px] text-blue-600 mt-0.5">Activity count from filtered audit logs</p>
+                        <p className="mt-0.5 text-[10px] text-blue-600 dark:text-blue-300">Activity count from filtered audit logs</p>
                     </div>
                     <div className="p-4">
                         {mostActiveUsers.length === 0 ? (
@@ -637,16 +637,16 @@ const AuditTrail = () => {
                         ) : (
                             <div className="space-y-3">
                                 {mostActiveUsers.map((u, i) => (
-                                    <div key={i} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-blue-50/60' : ''}`}>
+                                    <div key={i} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-blue-50/60 dark:bg-blue-950/35' : ''}`}>
                                         <span className="text-[10px] font-mono w-6 flex items-center justify-center">
                                             {i === 0 ? <i className="fas fa-trophy text-amber-500" title="Top user"></i> : i === 1 ? <span className="text-slate-500">2</span> : i === 2 ? <span className="text-amber-600">3</span> : `${i + 1}.`}
                                         </span>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                                                <span className="text-xs font-medium text-gray-900 truncate" title={u.email || u.label}>{u.label}</span>
-                                                <span className="text-xs font-semibold text-blue-700 tabular-nums">{u.count.toLocaleString()}</span>
+                                                <span className="truncate text-xs font-medium text-gray-900 dark:text-gray-100" title={u.email || u.label}>{u.label}</span>
+                                                <span className="tabular-nums text-xs font-semibold text-blue-700 dark:text-blue-300">{u.count.toLocaleString()}</span>
                                             </div>
-                                            <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+                                            <div className="h-2 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/60">
                                                 <div
                                                     className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
                                                     style={{ width: `${Math.max(4, (u.count / maxUserCount) * 100)}%` }}
@@ -662,13 +662,13 @@ const AuditTrail = () => {
             )}
 
             {auditReportTab === 'modules' && (
-                <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b border-emerald-100 bg-emerald-50/80">
-                        <h2 className="text-sm font-semibold text-emerald-900 flex items-center gap-2">
-                            <i className="fas fa-cubes text-emerald-600"></i>
+                <div className="overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm dark:border-emerald-900/50 dark:from-emerald-950/35 dark:to-gray-900 dark:shadow-none">
+                    <div className="border-b border-emerald-100 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                        <h2 className="flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                            <i className="fas fa-cubes text-emerald-600 dark:text-emerald-400"></i>
                             Most used modules
                         </h2>
-                        <p className="text-[10px] text-emerald-600 mt-0.5">Actions per module (filtered results)</p>
+                        <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-300">Actions per module (filtered results)</p>
                     </div>
                     <div className="p-4">
                         {mostUsedModules.length === 0 ? (
@@ -677,16 +677,16 @@ const AuditTrail = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-3">
                                     {mostUsedModules.slice(0, 10).map((m, i) => (
-                                        <div key={m.module} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-emerald-50/60' : ''}`}>
+                                        <div key={m.module} className={`flex items-center gap-3 rounded-lg px-2 py-1 -mx-2 ${i < 3 ? 'bg-emerald-50/60 dark:bg-emerald-950/35' : ''}`}>
                                             <span className="text-[10px] font-mono w-6 flex items-center justify-center">
                                                 {i === 0 ? <i className="fas fa-chart-pie text-emerald-600" title="Most used"></i> : `${i + 1}.`}
                                             </span>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                                                    <span className="text-xs font-medium text-gray-900 capitalize">{m.module}</span>
-                                                    <span className="text-xs font-semibold text-emerald-700 tabular-nums">{m.count.toLocaleString()}{totalModuleActions ? ` (${Math.round((m.count / totalModuleActions) * 100)}%)` : ''}</span>
+                                                    <span className="capitalize text-xs font-medium text-gray-900 dark:text-gray-100">{m.module}</span>
+                                                    <span className="tabular-nums text-xs font-semibold text-emerald-700 dark:text-emerald-300">{m.count.toLocaleString()}{totalModuleActions ? ` (${Math.round((m.count / totalModuleActions) * 100)}%)` : ''}</span>
                                                 </div>
-                                                <div className="h-2 bg-emerald-100 rounded-full overflow-hidden">
+                                                <div className="h-2 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950/60">
                                                     <div
                                                         className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
                                                         style={{ width: `${Math.max(4, (m.count / maxModuleCount) * 100)}%` }}

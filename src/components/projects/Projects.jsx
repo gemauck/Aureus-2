@@ -4801,9 +4801,9 @@ const Projects = () => {
                     setForceRender(prev => prev + 1);
                     // Return loading state - next render will show the component
                     return (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <h2 className="text-lg font-semibold text-blue-800 mb-2">
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 text-center dark:border-blue-900/50 dark:bg-blue-950/30">
+                            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600 dark:border-blue-400"></div>
+                            <h2 className="mb-2 text-lg font-semibold text-blue-800 dark:text-blue-200">
                                 Loading Project Details...
                             </h2>
                         </div>
@@ -4824,15 +4824,15 @@ const Projects = () => {
                 }
                 
                 return (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                        <h2 className="text-lg font-semibold text-blue-800 mb-2">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-6 text-center dark:border-blue-900/50 dark:bg-blue-950/30">
+                        <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600 dark:border-blue-400"></div>
+                        <h2 className="mb-2 text-lg font-semibold text-blue-800 dark:text-blue-200">
                             Loading Project Details...
                         </h2>
-                        <p className="text-sm text-blue-600 mb-4">
+                        <p className="mb-4 text-sm text-blue-600 dark:text-blue-300">
                             Loading the ProjectDetail component. Please wait...
                         </p>
-                        <p className="text-xs text-blue-500 mb-4">
+                        <p className="mb-4 text-xs text-blue-500 dark:text-blue-400">
                             If this takes too long, try refreshing the page.
                         </p>
                         <button 

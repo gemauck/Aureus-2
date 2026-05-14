@@ -251,7 +251,7 @@ const QuickBooksPayrollSync = ({ onClose }) => {
                                         Connect to QuickBooks
                                     </button>
                                     
-                                    <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto text-left">
+                                    <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-4 max-w-md mx-auto text-left">
                                         <p className="text-xs font-semibold text-blue-900 mb-2">What you'll get:</p>
                                         <ul className="text-xs text-blue-800 space-y-1">
                                             <li><i className="fas fa-check mr-2"></i>Automatic payroll sync</li>
@@ -325,7 +325,7 @@ const QuickBooksPayrollSync = ({ onClose }) => {
                     {/* Employee Mapping Tab */}
                     {activeTab === 'employees' && (
                         <div className="space-y-4">
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3">
                                 <p className="text-xs text-blue-900">
                                     <i className="fas fa-info-circle mr-1.5"></i>
                                     Map your employees to QuickBooks employees to enable payroll sync.

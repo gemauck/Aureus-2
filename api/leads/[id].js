@@ -1,6 +1,6 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
-import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
+import { badRequest, forbidden, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
@@ -36,6 +36,10 @@ async function handler(req, res) {
     if (typeof id !== 'string' || id.trim().length === 0) {
       console.error('❌ [LEADS ID] Invalid ID format:', id)
       return badRequest(res, 'Invalid lead ID format')
+    }
+
+    if (!isAdminRole(req.user?.role)) {
+      return forbidden(res, 'Leads are restricted to administrators')
     }
 
     // Get Single Lead (GET /api/leads/[id])

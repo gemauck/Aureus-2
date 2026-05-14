@@ -368,9 +368,12 @@ class LiveDataSync {
             // Stagger API calls to prevent hitting rate limits
             // Start with most important data types first
             const syncPromises = [];
+            const role = window.storage?.getUser?.()?.role;
+            const syncLeads =
+                typeof window.isAdminRole === 'function' && window.isAdminRole(role);
             const syncCalls = [
                 { type: 'clients', fn: () => window.DatabaseAPI.getClients() },
-                { type: 'leads', fn: () => window.DatabaseAPI.getLeads() },
+                ...(syncLeads ? [{ type: 'leads', fn: () => window.DatabaseAPI.getLeads() }] : []),
                 { type: 'projects', fn: () => window.DatabaseAPI.getProjects() },
                 { type: 'invoices', fn: () => window.DatabaseAPI.getInvoices() },
                 { type: 'timeEntries', fn: () => window.DatabaseAPI.getTimeEntries() }

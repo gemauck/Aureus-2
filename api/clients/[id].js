@@ -1,6 +1,6 @@
 import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
-import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
+import { badRequest, forbidden, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
@@ -93,6 +93,10 @@ async function handler(req, res) {
         
         if (!clientBasic) {
           return notFound(res)
+        }
+
+        if (clientBasic.type === 'lead' && !isAdminRole(req.user?.role)) {
+          return forbidden(res, 'Lead records are restricted to administrators')
         }
 
         // Phase 3 & 6: Get normalized data using raw SQL

@@ -491,7 +491,7 @@ const DocumentParser = () => {
 
             {/* Tips Section */}
             {!documentFile && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                     <div className="flex items-start">
                         <i className="fas fa-info-circle text-blue-600 text-xs mt-0.5 mr-2"></i>
                         <div>

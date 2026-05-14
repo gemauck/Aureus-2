@@ -1292,6 +1292,14 @@ const Clients = React.memo(() => {
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
     const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(currentUser?.role);
+
+    useEffect(() => {
+        if (isAdmin) return;
+        setLeads([]);
+        try {
+            window.storage?.setLeads?.([]);
+        } catch (_) {}
+    }, [isAdmin]);
     
     // Debug logging removed for performance - only log in development mode if needed
     // useEffect(() => {
@@ -1861,6 +1869,13 @@ const Clients = React.memo(() => {
             
             // Handle client entities
             if (entityType === 'client' || entityType === 'lead' || entityType === 'opportunity') {
+                const role = window.storage?.getUser?.()?.role;
+                if (
+                    entityType === 'lead' &&
+                    (typeof window.isAdminRole !== 'function' || !window.isAdminRole(role))
+                ) {
+                    return;
+                }
                 // Find the entity in our data
                 let entity = null;
                 if (entityType === 'client') {
@@ -1906,7 +1921,17 @@ const Clients = React.memo(() => {
     // Listen for resetClientsView event to reset view when navigating from detail pages
     useEffect(() => {
         const handleResetView = (event) => {
-            const targetViewMode = event.detail?.viewMode || 'clients';
+            let targetViewMode = event.detail?.viewMode || 'clients';
+            const role = window.storage?.getUser?.()?.role;
+            if (typeof window.isAdminRole === 'function' && !window.isAdminRole(role)) {
+                if (
+                    targetViewMode === 'leads' ||
+                    targetViewMode === 'pipeline' ||
+                    targetViewMode === 'lead-detail'
+                ) {
+                    targetViewMode = 'clients';
+                }
+            }
             setViewMode(targetViewMode);
             selectedClientRef.current = null;
             selectedLeadRef.current = null;
@@ -1922,6 +1947,10 @@ const Clients = React.memo(() => {
     // Sync parent state when Pipeline updates stage/status so values don't revert on view switch or refetch
     useEffect(() => {
         const handlePipelineLeadsClientsUpdated = (event) => {
+            const role = window.storage?.getUser?.()?.role;
+            if (typeof window.isAdminRole !== 'function' || !window.isAdminRole(role)) {
+                return;
+            }
             const { leads: nextLeads, clients: nextClients } = event.detail || {};
             if (Array.isArray(nextLeads)) {
                 setLeads(nextLeads);
@@ -1966,6 +1995,43 @@ const Clients = React.memo(() => {
                 return;
             }
             lastHandledRouteKeyRef.current = routeKey;
+
+            const crmCanAccessLeads =
+                typeof window.isAdminRole === 'function' && window.isAdminRole(window.storage?.getUser?.()?.role);
+
+            const redirectNonAdminFromLeadsRoutes = () => {
+                lastHandledRouteKeyRef.current = '';
+                setViewMode('clients');
+                setEditingClientId(null);
+                setEditingLeadId(null);
+                selectedClientRef.current = null;
+                selectedLeadRef.current = null;
+                if (window.RouteState?.navigate) {
+                    try {
+                        window.RouteState.navigate({
+                            page: 'clients',
+                            segments: [],
+                            search: '',
+                            hash: '',
+                            replace: true,
+                            preserveSearch: false,
+                            preserveHash: false
+                        });
+                    } catch (_) {}
+                }
+            };
+
+            if (!crmCanAccessLeads) {
+                const segs = route.segments || [];
+                if (segs.length === 1 && (segs[0] === 'leads' || segs[0] === 'pipeline')) {
+                    redirectNonAdminFromLeadsRoutes();
+                    return;
+                }
+                if (segs.length >= 2 && segs[0] === 'leads' && segs[1] === 'new') {
+                    redirectNonAdminFromLeadsRoutes();
+                    return;
+                }
+            }
             
             // If no segments, ensure we're showing a valid list view
             // CRITICAL: Don't reset detail views if they were opened programmatically (via handleOpenClient/handleOpenLead)
@@ -1978,6 +2044,32 @@ const Clients = React.memo(() => {
                         ? String(route.search.get('lead') || '').trim()
                         : '';
                 if (legacyLeadId && window.RouteState?.navigate) {
+                    if (!crmCanAccessLeads) {
+                        lastHandledRouteKeyRef.current = '';
+                        const params = new URLSearchParams(
+                            typeof window !== 'undefined' ? window.location.search || '' : ''
+                        );
+                        params.delete('lead');
+                        const tab = route.search.get('tab');
+                        const proposalId = route.search.get('proposalId');
+                        const siteId = route.search.get('siteId');
+                        if (tab) params.set('tab', tab);
+                        if (proposalId) params.set('proposalId', proposalId);
+                        if (siteId) params.set('siteId', siteId);
+                        const searchStr = params.toString();
+                        window.RouteState.navigate({
+                            page: 'clients',
+                            segments: [],
+                            search: searchStr,
+                            preserveSearch: false,
+                            preserveHash: false,
+                            replace: true
+                        });
+                        setViewMode('clients');
+                        setEditingClientId(null);
+                        setEditingLeadId(null);
+                        return;
+                    }
                     // Keep root query (e.g. ?v= cache bust) while replacing legacy hash params
                     const params = new URLSearchParams(
                         typeof window !== 'undefined' ? window.location.search || '' : ''
@@ -2035,12 +2127,16 @@ const Clients = React.memo(() => {
                 setEditingClientId(null);
                 selectedClientRef.current = null;
                 selectedLeadRef.current = null;
-                setViewMode('leads');
+                setViewMode(crmCanAccessLeads ? 'leads' : 'clients');
                 return;
             }
             
             // Show leads list when URL is /clients/leads (single segment "leads")
             if (route.segments.length === 1 && route.segments[0] === 'leads') {
+                if (!crmCanAccessLeads) {
+                    redirectNonAdminFromLeadsRoutes();
+                    return;
+                }
                 setEntityNotFoundId(null);
                 setViewMode('leads');
                 setEditingLeadId(null);
@@ -2054,6 +2150,11 @@ const Clients = React.memo(() => {
             // Check if the first segment is "new" (new client) or if we have ["leads", "new"] (new lead)
             const isNewClient = entityId === 'new';
             const isNewLead = route.segments.length >= 2 && route.segments[0] === 'leads' && route.segments[1] === 'new';
+
+            if (isNewLead && !crmCanAccessLeads) {
+                redirectNonAdminFromLeadsRoutes();
+                return;
+            }
             
             if (isNewClient || isNewLead) {
                 if (isNewLead) {
@@ -2142,7 +2243,7 @@ const Clients = React.memo(() => {
                             setEditingClientId(null);
                             selectedLeadRef.current = null;
                             selectedClientRef.current = null;
-                            setViewMode('leads');
+                            setViewMode(crmCanAccessLeads ? 'leads' : 'clients');
                             // Inline "Lead not found" UI is shown below; no redirect or alert to avoid repeated 404s on re-renders
                         } else {
                             console.error('Failed to load client/lead from URL:', error);
@@ -2152,6 +2253,10 @@ const Clients = React.memo(() => {
             }
             
             if (entity && entityType) {
+                if (entityType === 'lead' && !crmCanAccessLeads) {
+                    redirectNonAdminFromLeadsRoutes();
+                    return;
+                }
                 // When opening an entity: set tab to overview only if we're not already viewing this entity.
                 // If we're already on this lead/client (e.g. we added a contact and leads refetched), leave
                 // the current tab so we don't revert from Contacts/Sites/Calendar back to Overview.
@@ -2380,7 +2485,7 @@ const Clients = React.memo(() => {
                 
                 // Show cached leads IMMEDIATELY (this is critical for fast loading!)
                 // Only update if data actually changed to prevent unnecessary re-renders
-                if (cachedLeads.length > 0) {
+                if (isAdmin && cachedLeads.length > 0) {
                     const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
                     // Use startTransition for non-critical updates to prevent jittering
                     startTransition(() => {
@@ -2821,7 +2926,7 @@ const Clients = React.memo(() => {
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
                 // Use startTransition to prevent jittering during background updates
-                if (leadsOnly.length > 0) {
+                if (isAdmin && leadsOnly.length > 0) {
                     startTransition(() => {
                         // API returned leads mixed with clients - use them
                         // Only update if data actually changed
@@ -3527,6 +3632,13 @@ const Clients = React.memo(() => {
                 if (isAddClientForm || isAddLeadForm || isDetailView) {
                     return; // Ignore all updates when forms are open
                 }
+
+                if (message.dataType === 'leads') {
+                    const r = window.storage?.getUser?.()?.role;
+                    if (typeof window.isAdminRole !== 'function' || !window.isAdminRole(r)) {
+                        return;
+                    }
+                }
                 
                 if (message.dataType === 'clients') {
                     // Check if data changed to prevent unnecessary updates
@@ -3828,6 +3940,14 @@ const Clients = React.memo(() => {
 
     // Load leads from database only
     const loadLeads = async (forceRefresh = false) => {
+        const role = window.storage?.getUser?.()?.role;
+        if (typeof window.isAdminRole !== 'function' || !window.isAdminRole(role)) {
+            setLeads([]);
+            try {
+                window.storage?.setLeads?.([]);
+            } catch (_) {}
+            return;
+        }
         // On first load, always force refresh to get fresh data with groups
         if (isFirstLoad) {
             forceRefresh = true;
@@ -4528,9 +4648,15 @@ const Clients = React.memo(() => {
     // Leads are now database-only, no localStorage sync needed
 
     const navigateToCrmListView = useCallback((targetView = 'clients', { replace = true } = {}) => {
-        const safeTargetView = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'].includes(targetView)
+        const role = window.storage?.getUser?.()?.role;
+        const canLeads = typeof window.isAdminRole === 'function' && window.isAdminRole(role);
+        const safeTargetViewRaw = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'].includes(targetView)
             ? targetView
             : 'clients';
+        const safeTargetView =
+            !canLeads && (safeTargetViewRaw === 'leads' || safeTargetViewRaw === 'pipeline')
+                ? 'clients'
+                : safeTargetViewRaw;
         setViewMode(safeTargetView);
         setEditingClientId(null);
         setEditingLeadId(null);
@@ -9842,6 +9968,7 @@ const Clients = React.memo(() => {
                         <i className={`fas fa-plus text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}></i>
                         <span>Add Client</span>
                     </button>
+                    {isAdmin && (
                     <button 
                     onClick={() => {
                         stopSync();
@@ -9866,6 +9993,7 @@ const Clients = React.memo(() => {
                         <i className="fas fa-plus text-xs"></i>
                         <span>Add Lead</span>
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -9904,6 +10032,7 @@ const Clients = React.memo(() => {
                     <span className="hidden sm:inline">Clients</span>
                     <span className="sm:hidden">Clients</span>
                 </button>
+                {isAdmin && (
                 <button
                     onClick={() => {
                         navigateToCrmListView('leads', { replace: true });
@@ -9920,6 +10049,8 @@ const Clients = React.memo(() => {
                     <span className="hidden sm:inline">Leads</span>
                     <span className="sm:hidden">Leads</span>
                 </button>
+                )}
+                {isAdmin && (
                 <button
                     onClick={() => {
                         navigateToCrmListView('pipeline', { replace: true });
@@ -9935,6 +10066,7 @@ const Clients = React.memo(() => {
                     <i className="fas fa-stream mr-2"></i>
                     Pipeline
                 </button>
+                )}
                 <button
                     onClick={() => {
                         navigateToCrmListView('news-feed', { replace: true });

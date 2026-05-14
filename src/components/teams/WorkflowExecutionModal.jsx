@@ -219,7 +219,7 @@ const WorkflowExecutionModal = ({ isOpen, onClose, workflow, onComplete }) => {
 
                         {/* Step Description */}
                         {currentStepData.description && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                                 <p className="text-xs font-medium text-blue-900 mb-1">
                                     <i className="fas fa-info-circle mr-1"></i>
                                     Instructions

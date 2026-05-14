@@ -34,7 +34,7 @@ export const PaymentModal = ({ invoice, onSave, onClose }) => {
                 </div>
 
                 <div className="p-4">
-                    <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30">
                         <div className="text-xs text-gray-600">Invoice {invoice.invoiceNumber}</div>
                         <div className="text-lg font-bold text-gray-900 mt-0.5">
                             R{(invoice.amountDue || invoice.total).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}

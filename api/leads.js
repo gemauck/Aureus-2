@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
-import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
+import { badRequest, created, forbidden, ok, serverError, notFound } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
@@ -37,6 +37,11 @@ async function handler(req, res) {
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
+
+    // Leads CRM: administrators and super-admins only (see api/_lib/authRoles.js)
+    if (!isAdminRole(req.user?.role)) {
+      return forbidden(res, 'Leads are restricted to administrators')
+    }
 
     // List Leads (GET /api/leads)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'leads') {

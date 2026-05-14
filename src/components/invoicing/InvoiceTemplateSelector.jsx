@@ -48,28 +48,28 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                         <div
                             key={template.id}
                             onClick={() => setSelectedTemplate(template.id)}
-                            className={`border-2 rounded-lg p-6 cursor-pointer transition-all hover:shadow-lg ${
+                            className={`cursor-pointer rounded-lg border-2 p-6 transition-all hover:shadow-lg ${
                                 selectedTemplate === template.id
-                                    ? 'border-primary-600 bg-primary-50'
-                                    : 'border-gray-200 hover:border-primary-300'
+                                    ? 'border-primary-600 bg-primary-50 dark:border-primary-500 dark:bg-primary-950/40'
+                                    : 'border-gray-200 hover:border-primary-300 dark:border-gray-600 dark:hover:border-primary-500'
                             }`}
                         >
                             {/* Preview Area */}
-                            <div className={`mb-4 p-6 rounded-lg ${
-                                template.id === 'modern' ? 'bg-gradient-to-br from-blue-50 to-blue-100' :
-                                template.id === 'classic' ? 'bg-gradient-to-br from-gray-50 to-gray-100' :
-                                template.id === 'minimal' ? 'bg-white border-2 border-gray-300' :
-                                'bg-gradient-to-br from-primary-50 to-pink-50'
+                            <div className={`mb-4 rounded-lg p-6 ${
+                                template.id === 'modern' ? 'bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/40' :
+                                template.id === 'classic' ? 'bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900' :
+                                template.id === 'minimal' ? 'border-2 border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900' :
+                                'bg-gradient-to-br from-primary-50 to-pink-50 dark:from-primary-950/35 dark:to-pink-950/25'
                             }`}>
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <div className={`text-2xl font-bold ${
-                                                template.id === 'creative' ? 'text-primary-600' : 'text-gray-800'
+                                                template.id === 'creative' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-800 dark:text-gray-100'
                                             }`}>
                                                 INVOICE
                                             </div>
-                                            <div className="text-xs text-gray-600 mt-1">#INV-0001</div>
+                                            <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">#INV-0001</div>
                                         </div>
                                         <div className={`w-12 h-12 rounded ${
                                             template.id === 'modern' ? 'bg-blue-600' :
@@ -78,14 +78,14 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                                             'bg-gradient-to-br from-primary-600 to-pink-600'
                                         }`}></div>
                                     </div>
-                                    <div className="h-16 bg-white bg-opacity-70 rounded p-2">
-                                        <div className="h-2 bg-gray-300 rounded w-3/4 mb-2"></div>
-                                        <div className="h-2 bg-gray-300 rounded w-1/2"></div>
+                                    <div className="h-16 rounded bg-white/70 p-2 dark:bg-gray-800/80">
+                                        <div className="mb-2 h-2 w-3/4 rounded bg-gray-300 dark:bg-gray-600"></div>
+                                        <div className="h-2 w-1/2 rounded bg-gray-300 dark:bg-gray-600"></div>
                                     </div>
                                     <div className="space-y-1">
-                                        <div className="h-1 bg-gray-300 rounded w-full"></div>
-                                        <div className="h-1 bg-gray-300 rounded w-full"></div>
-                                        <div className="h-1 bg-gray-300 rounded w-3/4"></div>
+                                        <div className="h-1 w-full rounded bg-gray-300 dark:bg-gray-600"></div>
+                                        <div className="h-1 w-full rounded bg-gray-300 dark:bg-gray-600"></div>
+                                        <div className="h-1 w-3/4 rounded bg-gray-300 dark:bg-gray-600"></div>
                                     </div>
                                 </div>
                             </div>
@@ -93,25 +93,25 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                             {/* Template Info */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-bold text-gray-800">{template.name}</h3>
+                                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">{template.name}</h3>
                                     {selectedTemplate === template.id && (
                                         <div className="w-6 h-6 bg-primary-600 rounded-full flex items-center justify-center">
                                             <i className="fas fa-check text-white text-xs"></i>
                                         </div>
                                     )}
                                 </div>
-                                <p className="text-sm text-gray-600">{template.description}</p>
-                                <p className="text-xs text-gray-500 italic">{template.preview}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-300">{template.description}</p>
+                                <p className="text-xs italic text-gray-500 dark:text-gray-400">{template.preview}</p>
                             </div>
 
                             {/* Features */}
-                            <div className="mt-4 pt-4 border-t">
-                                <div className="flex items-center text-xs text-gray-600">
-                                    <i className="fas fa-check text-green-600 mr-2"></i>
+                            <div className="mt-4 border-t pt-4 dark:border-gray-700">
+                                <div className="flex items-center text-xs text-gray-600 dark:text-gray-400">
+                                    <i className="fas fa-check mr-2 text-green-600 dark:text-green-400"></i>
                                     <span>Professional layout</span>
                                 </div>
-                                <div className="flex items-center text-xs text-gray-600 mt-1">
-                                    <i className="fas fa-check text-green-600 mr-2"></i>
+                                <div className="mt-1 flex items-center text-xs text-gray-600 dark:text-gray-400">
+                                    <i className="fas fa-check mr-2 text-green-600 dark:text-green-400"></i>
                                     <span>Print-optimized</span>
                                 </div>
                             </div>
@@ -120,15 +120,15 @@ export const InvoiceTemplateSelector = ({ currentTemplate, onSelect, onClose }) 
                 </div>
 
                 {/* Custom Template Coming Soon */}
-                <div className="p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-center">
-                    <i className="fas fa-magic text-gray-400 text-2xl mb-2"></i>
-                    <div className="font-medium text-gray-700">Custom Template Designer</div>
-                    <div className="text-sm text-gray-500">Coming Soon - Create your own branded template</div>
+                <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center dark:border-gray-600 dark:bg-gray-800/50">
+                    <i className="fas fa-magic mb-2 text-2xl text-gray-400 dark:text-gray-500"></i>
+                    <div className="font-medium text-gray-700 dark:text-gray-200">Custom Template Designer</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">Coming Soon - Create your own branded template</div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex justify-between items-center mt-6 pt-6 border-t">
-                    <div className="text-sm text-gray-600">
+                <div className="mt-6 flex items-center justify-between border-t pt-6 dark:border-gray-700">
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
                         Current template: <span className="font-medium">{templates.find(t => t.id === currentTemplate)?.name}</span>
                     </div>
                     <div className="flex gap-3">

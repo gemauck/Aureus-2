@@ -224,7 +224,7 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
                             ))}
                         </select>
                         {formData.role && (
-                            <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                            <div className="mt-2 rounded-lg bg-blue-50 p-2 dark:bg-blue-950/30">
                                 <p className="text-xs text-blue-800 font-medium">
                                     <i className="fas fa-info-circle mr-1"></i>
                                     {getRoleDescription()}

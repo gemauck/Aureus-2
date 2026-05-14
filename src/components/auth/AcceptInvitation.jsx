@@ -200,7 +200,7 @@ const AcceptInvitation = () => {
                 {/* Form */}
                 <div className="p-6">
                     {invitation && (
-                        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                        <div className="mb-6 rounded-lg bg-blue-50 p-4 dark:bg-blue-950/35">
                             <p className="text-sm text-gray-700">
                                 <strong>Email:</strong> {invitation.email}
                             </p>

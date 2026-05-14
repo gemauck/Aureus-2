@@ -38,9 +38,11 @@ const ClientNewsFeed = () => {
 
     const loadClients = async () => {
         try {
+            const role = window.storage?.getUser?.()?.role;
+            const canLeads = typeof window.isAdminRole === 'function' && window.isAdminRole(role);
             // Load both clients and leads
             const clientsResponse = await window.DatabaseAPI?.getClients();
-            const leadsResponse = await window.DatabaseAPI?.getLeads?.();
+            const leadsResponse = canLeads ? await window.DatabaseAPI?.getLeads?.() : null;
             
             let allClients = [];
             if (clientsResponse?.data?.clients) {
@@ -60,10 +62,12 @@ const ClientNewsFeed = () => {
         const silent = opts?.silent === true;
         if (!silent) setIsLoading(true);
         try {
+            const role = window.storage?.getUser?.()?.role;
+            const canLeads = typeof window.isAdminRole === 'function' && window.isAdminRole(role);
             
             // Fetch activities from all clients' and leads' activityLogs
             const clientsResponse = await window.DatabaseAPI?.getClients();
-            const leadsResponse = await window.DatabaseAPI?.getLeads?.();
+            const leadsResponse = canLeads ? await window.DatabaseAPI?.getLeads?.() : null;
             
             
             const allActivities = [];

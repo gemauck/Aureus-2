@@ -164,10 +164,16 @@ const DataProvider = ({ children }) => {
                     data = data.filter(c => c.type === 'client');
                     break;
                     
-                case 'leads':
+                case 'leads': {
+                    const role = window.storage?.getUser?.()?.role;
+                    if (typeof window.isAdminRole !== 'function' || !window.isAdminRole(role)) {
+                        data = [];
+                        break;
+                    }
                     response = await window.api.getLeads();
                     data = response?.data?.leads || [];
                     break;
+                }
                     
                 case 'projects':
                     // Wait for DatabaseAPI to be available before fetching projects
