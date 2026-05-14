@@ -42,6 +42,10 @@ const DataProvider = ({ children }) => {
     // Prevent duplicate fetches
     const fetchingRef = useRef(new Set());
 
+    // Single in-flight wait for DatabaseAPI — parallel initial fetches (projects + users, etc.)
+    // must not each start their own 10s poll + corebundle listener.
+    const waitForDatabaseAPIInFlightRef = useRef(null);
+
     // Check if cache is still valid
     const isCacheValid = useCallback((key) => {
         const cached = cache[key];
@@ -70,39 +74,54 @@ const DataProvider = ({ children }) => {
         if (window.DatabaseAPI) {
             return true;
         }
-        
-        // Listen for corebundle:ready event as a signal that DatabaseAPI might be available
-        const bundleReadyPromise = new Promise((resolve) => {
-            const handler = () => {
-                window.removeEventListener('corebundle:ready', handler);
-                resolve(window.DatabaseAPI ? true : false);
-            };
-            window.addEventListener('corebundle:ready', handler, { once: true });
-        });
-        
-        // Also poll for DatabaseAPI
-        const pollPromise = new Promise((resolve) => {
-            const startTime = Date.now();
-            const checkInterval = setInterval(() => {
-                if (window.DatabaseAPI) {
-                    clearInterval(checkInterval);
-                    resolve(true);
-                } else if (Date.now() - startTime >= maxWait) {
-                    clearInterval(checkInterval);
-                    resolve(false);
-                }
-            }, 100);
-        });
-        
-        // Wait for either the bundle to be ready or DatabaseAPI to appear
-        const result = await Promise.race([bundleReadyPromise, pollPromise]);
-        
-        // If bundle was ready but DatabaseAPI still not available, wait a bit more
-        if (!result && window.DatabaseAPI) {
-            return true;
+
+        if (waitForDatabaseAPIInFlightRef.current) {
+            return waitForDatabaseAPIInFlightRef.current;
         }
-        
-        return result;
+
+        const promise = (async () => {
+            // Listen for corebundle:ready event as a signal that DatabaseAPI might be available
+            const bundleReadyPromise = new Promise((resolve) => {
+                const handler = () => {
+                    window.removeEventListener('corebundle:ready', handler);
+                    resolve(window.DatabaseAPI ? true : false);
+                };
+                window.addEventListener('corebundle:ready', handler, { once: true });
+            });
+
+            // Also poll for DatabaseAPI
+            const pollPromise = new Promise((resolve) => {
+                const startTime = Date.now();
+                const checkInterval = setInterval(() => {
+                    if (window.DatabaseAPI) {
+                        clearInterval(checkInterval);
+                        resolve(true);
+                    } else if (Date.now() - startTime >= maxWait) {
+                        clearInterval(checkInterval);
+                        resolve(false);
+                    }
+                }, 100);
+            });
+
+            // Wait for either the bundle to be ready or DatabaseAPI to appear
+            const result = await Promise.race([bundleReadyPromise, pollPromise]);
+
+            // If bundle was ready but DatabaseAPI still not available, wait a bit more
+            if (!result && window.DatabaseAPI) {
+                return true;
+            }
+
+            return result;
+        })();
+
+        waitForDatabaseAPIInFlightRef.current = promise;
+        promise.finally(() => {
+            if (waitForDatabaseAPIInFlightRef.current === promise) {
+                waitForDatabaseAPIInFlightRef.current = null;
+            }
+        });
+
+        return promise;
     }, []);
 
     // Fetch data with cache awareness

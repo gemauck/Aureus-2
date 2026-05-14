@@ -75,6 +75,14 @@ const isArchivedTask = (task) => {
     return normalizedStatus === 'archived';
 };
 
+/** Matches Tailwind grid in this file: `grid-cols-1 md:grid-cols-2 xl:grid-cols-3` */
+function getDashboardGridColumnCount(widthPx) {
+    if (typeof widthPx !== 'number' || Number.isNaN(widthPx)) return 1;
+    if (widthPx < 768) return 1;
+    if (widthPx < 1280) return 2;
+    return 3;
+}
+
 // MyProjectTasksWidget - Separate component to properly use hooks
 const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     const [projectTasks, setProjectTasks] = React.useState([]);
@@ -927,6 +935,20 @@ const DashboardLive = () => {
     const [isResizing, setIsResizing] = useState(null); // widgetId being resized
     const [resizeStart, setResizeStart] = useState(null); // { x, y, w, h }
     const [editMode, setEditMode] = useState(false);
+    const [gridColumnCount, setGridColumnCount] = useState(() =>
+        typeof window !== 'undefined' ? getDashboardGridColumnCount(window.innerWidth) : 3
+    );
+    const layoutEditingSupported = gridColumnCount >= 2;
+
+    React.useEffect(() => {
+        const onResize = () => setGridColumnCount(getDashboardGridColumnCount(window.innerWidth));
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    React.useEffect(() => {
+        if (!layoutEditingSupported && editMode) setEditMode(false);
+    }, [layoutEditingSupported, editMode]);
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
@@ -1329,7 +1351,7 @@ const DashboardLive = () => {
 
     // Drag and drop handlers
     const handleDragStart = (e, widgetId) => {
-        if (!editMode) return;
+        if (!editMode || !layoutEditingSupported) return;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', widgetId);
         setDraggedWidget(widgetId);
@@ -1343,14 +1365,14 @@ const DashboardLive = () => {
     };
 
     const handleDragOver = (e, targetWidgetId) => {
-        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
+        if (!editMode || !layoutEditingSupported || !draggedWidget || draggedWidget === targetWidgetId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         setDragOverWidget(targetWidgetId);
     };
 
     const handleDrop = (e, targetWidgetId) => {
-        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
+        if (!editMode || !layoutEditingSupported || !draggedWidget || draggedWidget === targetWidgetId) return;
         e.preventDefault();
         
         // Swap order instead of exact positions
@@ -1387,7 +1409,7 @@ const DashboardLive = () => {
 
     // Resize handlers
     const handleResizeStart = (e, widgetId, direction) => {
-        if (!editMode) return;
+        if (!editMode || !layoutEditingSupported) return;
         e.preventDefault();
         e.stopPropagation();
         
@@ -1418,13 +1440,14 @@ const DashboardLive = () => {
                 const deltaX = ev.clientX - resizeStart.x;
                 const deltaY = ev.clientY - resizeStart.y;
                 // Read layout once per frame to avoid forced reflow violations
-                const gridContainer = document.querySelector('.grid.gap-4[style*="gridTemplateColumns"]');
+                const gridContainer = document.querySelector('.dashboard-live-widget-grid');
                 let cellWidth = 300;
                 let cellHeight = 200;
                 if (gridContainer) {
                     const containerWidth = gridContainer.offsetWidth;
-                    const gap = 16;
-                    cellWidth = (containerWidth - (gap * 2)) / 3;
+                    const cols = getDashboardGridColumnCount(window.innerWidth);
+                    const gap = 20; /* gap-5 */
+                    cellWidth = cols > 0 ? (containerWidth - gap * (cols - 1)) / cols : containerWidth;
                     const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');
                     if (firstWidget) cellHeight = firstWidget.offsetHeight || 200;
                 }
@@ -1692,7 +1715,7 @@ const DashboardLive = () => {
             </div>
 
             <div 
-                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
+                className="dashboard-live-widget-grid grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
                 style={{
                     gridAutoRows: 'minmax(200px, auto)'
                 }}
@@ -1712,11 +1735,13 @@ const DashboardLive = () => {
                         const isDragOver = dragOverWidget === id;
                         const w = Math.max(1, Math.min(3, layout.w || 1));
                         const h = Math.max(1, Math.min(3, layout.h || 1));
+                        const spanW = Math.min(w, gridColumnCount);
+                        const spanH = h;
                         
                         return (
                             <div
                                 key={id}
-                                draggable={editMode}
+                                draggable={editMode && layoutEditingSupported}
                                 onDragStart={(e) => handleDragStart(e, id)}
                                 onDragEnd={handleDragEnd}
                                 onDragOver={(e) => handleDragOver(e, id)}
@@ -1724,11 +1749,11 @@ const DashboardLive = () => {
                                 onDragLeave={handleDragLeave}
                                 className={`relative transition-all ${editMode ? 'cursor-move' : ''} ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
                                 style={{
-                                    gridColumn: `span ${w}`,
-                                    gridRow: `span ${h}`
+                                    gridColumn: `span ${spanW}`,
+                                    gridRow: `span ${spanH}`
                                 }}
                             >
-                                {editMode && (
+                                {editMode && layoutEditingSupported && (
                                     <>
                                         {/* Remove button */}
                                         <div className="absolute right-2 top-2 z-20">
@@ -1757,7 +1782,7 @@ const DashboardLive = () => {
                                         {/* Size indicator */}
                                         <div className="absolute left-2 top-2 z-20">
                                             <div className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-semibold shadow-lg">
-                                                {w}×{h}
+                                                {spanW}×{spanH}
                                             </div>
                                         </div>
                                         
@@ -1780,21 +1805,37 @@ const DashboardLive = () => {
             </div>
 
             {/* Edit Layout and Manage Widgets Buttons at Bottom */}
-            <div className={`flex justify-center gap-3 pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className={`flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-3 pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                 <button
                     onClick={() => setManageOpen(true)}
-                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'} transition-all duration-200`}
+                    className={`w-full sm:w-auto px-5 py-2.5 text-sm font-medium rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'} transition-all duration-200`}
                 >
                     <i className="fas fa-cog mr-2"></i>
                     Manage Widgets
                 </button>
                 <button
                     onClick={() => {
+                        if (!layoutEditingSupported) return;
                         setEditMode(!editMode);
                         console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
                     }}
-                    className={`px-5 py-2.5 text-sm font-medium rounded-lg ${editMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'} transition-all duration-200`}
-                    title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
+                    disabled={!layoutEditingSupported}
+                    className={`w-full sm:w-auto px-5 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                        !layoutEditingSupported
+                            ? isDark
+                                ? 'bg-gray-800/50 text-gray-500 border border-gray-700 cursor-not-allowed'
+                                : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                            : editMode
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                    title={
+                        !layoutEditingSupported
+                            ? 'Edit layout needs a wider screen (drag, resize)'
+                            : editMode
+                              ? 'Exit edit mode to hide controls'
+                              : 'Click to enable drag, drop, and resize'
+                    }
                 >
                     <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
                     {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
@@ -1804,8 +1845,8 @@ const DashboardLive = () => {
             {manageOpen ? (
                 <div className="fixed inset-0 z-50 flex items-center justify-center">
                     <div className="absolute inset-0 bg-black bg-opacity-40" onClick={() => setManageOpen(false)}></div>
-                    <div className={`${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} relative rounded-xl shadow-xl w-full max-w-2xl border ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-                        <div className={`p-5 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                    <div className={`${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} relative rounded-xl shadow-xl w-full max-h-[90vh] overflow-hidden flex flex-col mx-4 max-w-2xl border ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+                        <div className={`p-5 border-b flex-shrink-0 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold">Manage Widgets</h3>
                                 <button className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} transition-colors`} onClick={() => setManageOpen(false)}>
@@ -1813,7 +1854,7 @@ const DashboardLive = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="p-5">
+                        <div className="p-5 overflow-y-auto flex-1 min-h-0">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {availableWidgets.map(w => {
                                     const checked = selectedWidgets.includes(w.id);
@@ -1834,7 +1875,7 @@ const DashboardLive = () => {
                                 })}
                             </div>
                         </div>
-                        <div className={`p-5 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex items-center justify-between`}>
+                        <div className={`p-5 border-t flex-shrink-0 ${isDark ? 'border-gray-800' : 'border-gray-100'} flex items-center justify-between`}>
                             <div className="flex items-center gap-3">
                                 <button
                                     className={`text-sm px-4 py-2 rounded-lg ${isDark ? 'bg-gray-800 border border-gray-700 text-gray-200 hover:bg-gray-750' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'} transition-all duration-200`}
