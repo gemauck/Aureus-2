@@ -1918,7 +1918,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
             const raw = localStorage.getItem(stockMovementPeriodStorageKey());
             if (raw && STOCK_MOVEMENT_PERIOD_MS[raw]) return raw;
         } catch (_) {}
-        return '7d';
+        return '24h';
     });
     const [movements, setMovements] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
@@ -1933,7 +1933,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
     }, []);
 
     const createdAfterIso = React.useMemo(() => {
-        const ms = STOCK_MOVEMENT_PERIOD_MS[period] ?? STOCK_MOVEMENT_PERIOD_MS['7d'];
+        const ms = STOCK_MOVEMENT_PERIOD_MS[period] ?? STOCK_MOVEMENT_PERIOD_MS['24h'];
         return new Date(Date.now() - ms).toISOString();
     }, [period]);
 
