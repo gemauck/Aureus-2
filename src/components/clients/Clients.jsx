@@ -7318,7 +7318,7 @@ const Clients = React.memo(() => {
 
                 {/* Pipeline List View - Kanban removed */}
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
-                    <div className="table-responsive overflow-x-auto">
+                    <div className="overflow-x-auto min-w-0 w-full">
                         <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                             <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                                 <tr>
@@ -7467,7 +7467,7 @@ const Clients = React.memo(() => {
     const ClientsListView = () => (
         <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl shadow-sm border flex flex-col h-full w-full min-w-0`}>
             <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <div className="table-responsive inventory-desktop-xscroll overflow-x-auto min-w-0 w-full">
+                <div className="inventory-desktop-xscroll overflow-x-auto min-w-0 w-full">
                 <table className={`w-full min-w-max divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     <thead className={isDark ? 'bg-gray-800' : 'bg-gray-100'}>
                         <tr>
@@ -9074,7 +9074,7 @@ const Clients = React.memo(() => {
 
         const renderListView = () => (
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm`}>
-                <div className="table-responsive overflow-x-auto">
+                <div className="overflow-x-auto min-w-0 w-full">
                     <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                         <thead className={isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-500'}>
                             <tr>
@@ -9596,9 +9596,9 @@ const Clients = React.memo(() => {
         return (
         <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 shrink-0`}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-3 sm:px-6 py-4 shrink-0`}>
+                <div className="flex items-center justify-between min-w-0">
+                    <div className="flex items-center space-x-4 min-w-0 flex-1">
                         <button 
                             type="button"
                             onClick={handleClientModalClose}
@@ -9607,9 +9607,9 @@ const Clients = React.memo(() => {
                         >
                             <i className="fas fa-arrow-left"></i>
                         </button>
-                        <div className="flex items-center space-x-3">
-                            <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-primary-400' : 'bg-primary-600'}`}></div>
-                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        <div className="flex items-center space-x-3 min-w-0">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? 'bg-primary-400' : 'bg-primary-600'}`}></div>
+                            <h1 className={`text-lg sm:text-2xl font-bold min-w-0 max-sm:truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {selectedClient ? selectedClient.name : 'New Client'}
                             </h1>
                         </div>
@@ -9619,7 +9619,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Full-page client detail content — flex child so nested overlays stay inside main column (sidebar visible) */}
-            <div className="flex-1 min-h-0 flex flex-col p-6">
+            <div className="flex-1 min-h-0 flex flex-col p-3 sm:p-6">
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
                         key={editingClientId || 'new-client'}
@@ -9673,9 +9673,9 @@ const Clients = React.memo(() => {
         return (
         <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4 shrink-0`}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-3 sm:px-6 py-4 shrink-0`}>
+                <div className="flex items-center justify-between min-w-0">
+                    <div className="flex items-center space-x-4 min-w-0 flex-1">
                         <button 
                             onClick={() => {
                                 handleLeadModalClose();
@@ -9685,9 +9685,9 @@ const Clients = React.memo(() => {
                         >
                             <i className="fas fa-arrow-left"></i>
                         </button>
-                        <div className="flex items-center space-x-3">
-                            <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-yellow-400' : 'bg-yellow-500'}`}></div>
-                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        <div className="flex items-center space-x-3 min-w-0">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isDark ? 'bg-yellow-400' : 'bg-yellow-500'}`}></div>
+                            <h1 className={`text-lg sm:text-2xl font-bold min-w-0 max-sm:truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {selectedLead ? selectedLead.name : 'New Lead'}
                             </h1>
                         </div>
@@ -9697,7 +9697,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Full-page lead detail — flex child so proposal wizard overlays this column only (ERP chrome stays) */}
-            <div className="flex-1 min-h-0 flex flex-col p-6">
+            <div className="flex-1 min-h-0 flex flex-col p-3 sm:p-6">
                 {ClientDetailModalComponent ? (
                     <ClientDetailModalComponent
                         client={selectedLead} // Use 'client' prop (ClientDetailModal handles both)
@@ -9733,9 +9733,9 @@ const Clients = React.memo(() => {
         return (
             <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
                 {/* Header with breadcrumb */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-3 sm:px-6 py-4`}>
+                    <div className="flex items-center justify-between min-w-0">
+                        <div className="flex items-center space-x-4 min-w-0">
                             <button 
                                 onClick={onClose}
                                 className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
@@ -9745,7 +9745,7 @@ const Clients = React.memo(() => {
                             </button>
                             <div className="flex items-center space-x-3">
                                 <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-green-400' : 'bg-green-500'}`}></div>
-                                <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                <h1 className={`text-lg sm:text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                     Opportunity Details
                                 </h1>
                             </div>
@@ -9754,7 +9754,7 @@ const Clients = React.memo(() => {
                 </div>
 
                 {/* Full-page opportunity detail content */}
-                <div className="p-6">
+                <div className="p-3 sm:p-6">
                     {OpportunityDetailModalComponent ? (
                         <OpportunityDetailModalComponent
                             key={opportunityId}
@@ -9786,7 +9786,7 @@ const Clients = React.memo(() => {
                         <i className={`fas fa-users ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm sm:text-lg`}></i>
                     </div>
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between w-full min-w-0">
                             <div className="flex-1 min-w-0">
                                 <h1 
                                     id="clients-leads-heading"
@@ -9801,7 +9801,7 @@ const Clients = React.memo(() => {
                                 </p>
                             </div>
                             {SectionCommentWidget && (
-                                <div className="hidden sm:block flex-shrink-0">
+                                <div className="flex-shrink-0 self-end sm:self-start">
                                     <SectionCommentWidget 
                                         sectionId="clients-main"
                                         sectionName="Clients and Leads"
@@ -9813,7 +9813,7 @@ const Clients = React.memo(() => {
                 </div>
                 
                 {/* Modern Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 pr-4 sm:pr-6">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-3 sm:pr-2">
                     <button 
                     onClick={() => {
                         stopSync();
@@ -9924,7 +9924,7 @@ const Clients = React.memo(() => {
                     onClick={() => {
                         navigateToCrmListView('pipeline', { replace: true });
                     }}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'pipeline' 
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
@@ -9939,7 +9939,7 @@ const Clients = React.memo(() => {
                     onClick={() => {
                         navigateToCrmListView('news-feed', { replace: true });
                     }}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'news-feed' 
                             ? 'bg-gray-200 text-gray-900 shadow-sm' 
                             : isDark 
@@ -9954,8 +9954,8 @@ const Clients = React.memo(() => {
 
         {/* Modern Search and Filters */}
         {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'pipeline' && (
-                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'} rounded-xl border p-5 sm:p-6 shadow-sm`}>
-                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
+                <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'} rounded-xl border p-3 sm:p-6 shadow-sm`}>
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
                                 <input
@@ -10053,7 +10053,7 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                 />
                             </div>
                         )}
-                        <div className="flex items-center gap-6 flex-nowrap">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 sm:gap-x-6">
                             <label className="inline-flex items-center gap-2 cursor-pointer flex-shrink-0">
                                 <input
                                     type="checkbox"
