@@ -120,6 +120,103 @@ function richEditorMoveCaretToCell(cell, collapseToEnd) {
     sel.addRange(range);
 }
 
+/** Nearest `<li>` inside the editor, if any. */
+function richEditorGetContainingListItem(editorRoot, node) {
+    let el = node && node.nodeType === 3 ? node.parentElement : node;
+    while (el && el !== editorRoot) {
+        if (el.tagName === 'LI') return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+/** True when the list item has no meaningful text (ignores nested lists). */
+function richEditorIsListItemEmpty(li) {
+    if (!li) return true;
+    const clone = li.cloneNode(true);
+    clone.querySelectorAll('ul,ol').forEach((n) => n.remove());
+    const text = (clone.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (text.length > 0) return false;
+    return !Array.from(clone.childNodes).some((n) => {
+        if (n.nodeType === 3) return (n.textContent || '').trim().length > 0;
+        return n.nodeName !== 'BR';
+    });
+}
+
+function richEditorPlaceCaretInElement(el, atStart) {
+    if (!el) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(!!atStart);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
+/**
+ * Exit list at an empty item: remove the item, insert a paragraph, and optionally
+ * continue the list after the paragraph when there were following items.
+ */
+function richEditorExitListAtItem(li, editorRoot) {
+    const list = li && li.parentElement;
+    if (!list || !editorRoot.contains(list)) return null;
+    const tag = list.tagName;
+    if (tag !== 'UL' && tag !== 'OL') return null;
+
+    const afterItems = [];
+    let sib = li.nextSibling;
+    while (sib) {
+        const next = sib.nextSibling;
+        if (sib.nodeName === 'LI') afterItems.push(sib);
+        sib = next;
+    }
+
+    li.remove();
+
+    const p = document.createElement('p');
+    p.innerHTML = '<br>';
+
+    const parent = list.parentNode;
+    if (!parent) return p;
+
+    parent.insertBefore(p, list.nextSibling);
+
+    if (afterItems.length > 0) {
+        const newList = document.createElement(tag);
+        if (tag === 'OL') {
+            const startAttr = list.getAttribute('start');
+            const startNum = startAttr ? parseInt(startAttr, 10) : 1;
+            const beforeCount = list.querySelectorAll(':scope > li').length;
+            if (beforeCount > 0) {
+                newList.setAttribute('start', String(startNum + beforeCount));
+            }
+        }
+        afterItems.forEach((item) => newList.appendChild(item));
+        parent.insertBefore(newList, p.nextSibling);
+    }
+
+    if (!list.querySelector('li')) {
+        list.remove();
+    }
+
+    return p;
+}
+
+/** Insert a soft line break inside the current list item. */
+function richEditorInsertLineBreakInListItem() {
+    try {
+        if (document.execCommand('insertLineBreak', false, null)) return true;
+    } catch (_) {
+        /* fall through */
+    }
+    try {
+        return document.execCommand('insertHTML', false, '<br>');
+    } catch (_) {
+        return false;
+    }
+}
+
 const BASIC_TEXT_COLORS = [
     { color: '#000000', label: 'Black' },
     { color: '#6b7280', label: 'Gray' },
@@ -973,50 +1070,33 @@ const RichTextEditor = ({
         editorRef.current.focus();
         
         try {
-            // Special handling for lists
-            if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+            // Lists: execCommand toggles same type off and converts between ul/ol; fallback builds markup manually.
+            if (
+                command === 'insertUnorderedList' ||
+                command === 'insertOrderedList' ||
+                command === 'indent' ||
+                command === 'outdent'
+            ) {
                 const selection = window.getSelection();
                 if (selection.rangeCount > 0) {
                     const range = selection.getRangeAt(0);
-                    // Check if we're already in a list
-                    let node = range.commonAncestorContainer;
-                    let inList = false;
-                    while (node && node !== editorRef.current) {
-                        if (node.nodeName === 'UL' || node.nodeName === 'OL') {
-                            inList = true;
-                            break;
-                        }
-                        node = node.parentNode;
-                    }
-                    
-                    if (inList) {
-                        // Toggle list off
-                        document.execCommand('outdent', false, null);
-                    } else {
-                        // Insert new list
-                        const success = document.execCommand(command, false, null);
-                        if (!success) {
-                            // Fallback: manually create list
-                            if (range.collapsed) {
-                                // Create empty list item
-                                const list = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
-                                const li = document.createElement('li');
-                                list.appendChild(li);
-                                range.insertNode(list);
-                                // Place cursor in list item
-                                const newRange = document.createRange();
-                                newRange.setStart(li, 0);
-                                newRange.setEnd(li, 0);
-                                selection.removeAllRanges();
-                                selection.addRange(newRange);
-                            } else {
-                                // Wrap selected text in list
-                                const list = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
-                                const li = document.createElement('li');
-                                li.appendChild(range.extractContents());
-                                list.appendChild(li);
-                                range.insertNode(list);
-                            }
+                    const success = document.execCommand(command, false, null);
+                    if (!success && (command === 'insertUnorderedList' || command === 'insertOrderedList')) {
+                        const listTag = command === 'insertUnorderedList' ? 'ul' : 'ol';
+                        if (range.collapsed) {
+                            const list = document.createElement(listTag);
+                            const li = document.createElement('li');
+                            li.innerHTML = '<br>';
+                            list.appendChild(li);
+                            range.insertNode(list);
+                            richEditorPlaceCaretInElement(li, true);
+                        } else {
+                            const list = document.createElement(listTag);
+                            const li = document.createElement('li');
+                            li.appendChild(range.extractContents());
+                            list.appendChild(li);
+                            range.insertNode(list);
+                            richEditorPlaceCaretInElement(li, false);
                         }
                     }
                     handleInput(true);
@@ -1145,6 +1225,8 @@ const RichTextEditor = ({
                 {tbDivider}
                 {getToolbarButton('fa-list-ul', 'insertUnorderedList', 'Bullet List')}
                 {getToolbarButton('fa-list-ol', 'insertOrderedList', 'Numbered List')}
+                {getToolbarButton('fa-indent', 'indent', 'Indent (Tab in list)')}
+                {getToolbarButton('fa-outdent', 'outdent', 'Outdent (Shift+Tab in list)')}
                 {tbDivider}
                 {getToolbarButton('fa-align-left', 'justifyLeft', 'Align Left')}
                 {getToolbarButton('fa-align-center', 'justifyCenter', 'Align Center')}
@@ -1513,45 +1595,60 @@ const RichTextEditor = ({
                     }
                 }}
                 onKeyDown={(e) => {
-                    if (tableTools && e.key === 'Tab' && editorRef.current) {
-                        const ctx = richEditorGetTableContext(editorRef.current);
-                        if (ctx) {
+                    const editor = editorRef.current;
+                    if (!editor) return;
+
+                    if (e.key === 'Tab') {
+                        const tableCtx = tableTools ? richEditorGetTableContext(editor) : null;
+                        if (tableCtx) {
                             e.preventDefault();
-                            const cells = richEditorTableCellsInOrder(ctx.table);
-                            const idx = cells.indexOf(ctx.cell);
+                            const cells = richEditorTableCellsInOrder(tableCtx.table);
+                            const idx = cells.indexOf(tableCtx.cell);
                             if (idx === -1) return;
                             const nextIdx = e.shiftKey ? idx - 1 : idx + 1;
                             if (nextIdx >= 0 && nextIdx < cells.length) {
                                 richEditorMoveCaretToCell(cells[nextIdx], false);
-                                editorRef.current.focus();
+                                editor.focus();
                             }
                             return;
                         }
+
+                        const li = richEditorGetContainingListItem(editor, window.getSelection()?.anchorNode);
+                        if (li) {
+                            e.preventDefault();
+                            document.execCommand(e.shiftKey ? 'outdent' : 'indent', false, null);
+                            handleInput(true);
+                            return;
+                        }
                     }
-                    // Prevent form submission on Enter (unless in a list)
+
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                        // Allow Ctrl/Cmd+Enter for line breaks
                         return;
                     }
-                    
-                    // Handle Enter key for lists
+
                     if (e.key === 'Enter') {
                         const selection = window.getSelection();
-                        if (selection.rangeCount > 0) {
-                            const range = selection.getRangeAt(0);
-                            let node = range.commonAncestorContainer;
-                            
-                            // Check if we're in a list item
-                            while (node && node !== editorRef.current) {
-                                if (node.nodeName === 'LI') {
-                                    // Allow default Enter behavior in lists
-                                    return;
-                                }
-                                node = node.parentNode;
-                            }
+                        if (!selection || selection.rangeCount === 0) return;
+                        const li = richEditorGetContainingListItem(editor, selection.anchorNode);
+                        if (!li) return;
+
+                        if (e.shiftKey) {
+                            e.preventDefault();
+                            richEditorInsertLineBreakInListItem();
+                            handleInput(true);
+                            return;
                         }
-                        // Prevent form submission on Enter outside of lists
-                        // The default behavior will create a new line, which is what we want
+
+                        if (richEditorIsListItemEmpty(li)) {
+                            e.preventDefault();
+                            const p = richEditorExitListAtItem(li, editor);
+                            if (p) {
+                                richEditorPlaceCaretInElement(p, true);
+                                editor.focus();
+                                handleInput(true);
+                            }
+                            return;
+                        }
                     }
                 }}
                 onPaste={(e) => {
@@ -1608,13 +1705,30 @@ const RichTextEditor = ({
                     margin-left: 1.5rem;
                     margin-top: 0.5rem;
                     margin-bottom: 0.5rem;
-                    padding-left: 1rem;
+                    padding-left: 1.25rem;
                 }
                 [contenteditable] ul {
                     list-style-type: disc;
                 }
                 [contenteditable] ol {
                     list-style-type: decimal;
+                }
+                [contenteditable] ul ul {
+                    list-style-type: circle;
+                }
+                [contenteditable] ul ul ul {
+                    list-style-type: square;
+                }
+                [contenteditable] ol ol {
+                    list-style-type: lower-alpha;
+                }
+                [contenteditable] ol ol ol {
+                    list-style-type: lower-roman;
+                }
+                [contenteditable] li > ul,
+                [contenteditable] li > ol {
+                    margin-top: 0.2rem;
+                    margin-bottom: 0.2rem;
                 }
                 [contenteditable] li {
                     margin: 0.25rem 0;
@@ -1688,6 +1802,6 @@ if (typeof window !== 'undefined') {
     // Also export unmemoized version in case needed
     window.RichTextEditorUnmemoized = RichTextEditor;
     // Version: 20260109-cursor-fix-v10 - Fixed backwards typing by ignoring mutations during typing
-    console.log('✅ RichTextEditor loaded - cursor fix v10 (Fixed backwards typing issue)');
+    console.log('✅ RichTextEditor loaded - list nesting & split (v11)');
 }
 
