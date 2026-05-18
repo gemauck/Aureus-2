@@ -29,6 +29,48 @@ function isAdminOrSuperAdminRole(role) {
   ].includes(normalized);
 }
 
+const JOB_CARDS_LIST_TEXT_SCALE_STORAGE_KEY = 'jobcards-list-text-scale';
+const JOB_CARDS_LIST_TEXT_SCALE_EMAILS = new Set([
+  'garethm@abcotronics.co.za',
+  'gemauck@gmail.com',
+  'gregk@abcotronics.co.za',
+]);
+const JOB_CARDS_LIST_TEXT_SCALE_NAMES = new Set(['gareth mauck', 'greg keague']);
+
+function canAdjustJobCardsListTextSize(user) {
+  if (!user) return false;
+  const email = String(user.email || '')
+    .trim()
+    .toLowerCase();
+  if (JOB_CARDS_LIST_TEXT_SCALE_EMAILS.has(email)) return true;
+  const name = String(user.name || '')
+    .trim()
+    .toLowerCase();
+  return JOB_CARDS_LIST_TEXT_SCALE_NAMES.has(name);
+}
+
+function readJobCardsListTextScale() {
+  try {
+    const raw =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(JOB_CARDS_LIST_TEXT_SCALE_STORAGE_KEY)
+        : null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? Math.max(0, Math.min(3, n)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function jobCardsListTextScaleClasses(scale) {
+  const s = Math.max(0, Math.min(3, Number(scale) || 0));
+  return {
+    body: ['text-xs', 'text-sm', 'text-base', 'text-lg'][s],
+    small: ['text-[11px]', 'text-xs', 'text-sm', 'text-base'][s],
+    micro: ['text-[10px]', 'text-[11px]', 'text-xs', 'text-sm'][s],
+  };
+}
+
 function jobCardAttachmentUrlIsVideo(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -461,7 +503,7 @@ function JobCardVoiceClips({ items, tone = 'auto' }) {
 }
 
 /** Compact metric chips for list / card rows (uses GET /api/jobcards extended fields). */
-function JobCardListMetricChips({ jc, isDark }) {
+function JobCardListMetricChips({ jc, isDark, chipTextClass = 'text-[10px]' }) {
   const parts = [];
   if (typeof jc.totalTimeMinutes === 'number' && jc.totalTimeMinutes > 0) {
     parts.push({ key: 't', text: `${jc.totalTimeMinutes} min`, icon: 'fa-clock' });
@@ -503,7 +545,7 @@ function JobCardListMetricChips({ jc, isDark }) {
       {parts.map((p) => (
         <span
           key={p.key}
-          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${chipBase}`}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium ${chipTextClass} ${chipBase}`}
         >
           <i className={`fa-solid ${p.icon} text-[9px] opacity-80`} aria-hidden />
           {p.text}
@@ -622,6 +664,24 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     []
   );
   const canDeleteJobCards = isAdminOrSuperAdminRole(currentUser?.role);
+  const canAdjustListTextSize = useMemo(
+    () => canAdjustJobCardsListTextSize(currentUser),
+    [currentUser]
+  );
+  const [listTextScale, setListTextScale] = useState(() => readJobCardsListTextScale());
+  const listTextClasses = useMemo(
+    () => jobCardsListTextScaleClasses(listTextScale),
+    [listTextScale]
+  );
+  const persistListTextScale = useCallback((next) => {
+    const clamped = Math.max(0, Math.min(3, next));
+    setListTextScale(clamped);
+    try {
+      localStorage.setItem(JOB_CARDS_LIST_TEXT_SCALE_STORAGE_KEY, String(clamped));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, []);
 
   const technicianOptions = useMemo(() => {
     const list = Array.isArray(users) ? [...users] : [];
@@ -1252,6 +1312,40 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               Search and filter field captures; open a row for the full report.
             </p>
           </div>
+          {canAdjustListTextSize ? (
+            <div
+              className={`flex shrink-0 items-center gap-1 rounded-lg border p-1 ${isDark ? 'border-slate-600 bg-slate-800/80' : 'border-slate-200 bg-slate-50'}`}
+              role="group"
+              aria-label="List text size"
+            >
+              <button
+                type="button"
+                onClick={() => persistListTextScale(listTextScale - 1)}
+                disabled={listTextScale <= 0}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${isDark ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-white'}`}
+                aria-label="Decrease list text size"
+                title="Smaller list text"
+              >
+                A−
+              </button>
+              <span
+                className={`min-w-[4.5rem] px-1 text-center text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                aria-live="polite"
+              >
+                {['Default', 'Medium', 'Large', 'Extra large'][listTextScale]}
+              </span>
+              <button
+                type="button"
+                onClick={() => persistListTextScale(listTextScale + 1)}
+                disabled={listTextScale >= 3}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${isDark ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-white'}`}
+                aria-label="Increase list text size"
+                title="Larger list text"
+              >
+                A+
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -1473,7 +1567,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         </div>
       ) : (
         <>
-        <div className={`sm:hidden divide-y border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+        <div className={`sm:hidden divide-y border-t ${listTextClasses.body} ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           {displayJobCards.map((jc) => {
             const ownerUser = users.find((u) => u.id === jc.ownerId);
             const createdByName =
@@ -1513,32 +1607,32 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <div className={`font-semibold ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
                       {jc.jobCardNumber || '–'}
                     </div>
-                    <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <div className={`${listTextClasses.small} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       {jc.clientName || '–'}
                       {jc.siteName ? ` · ${jc.siteName}` : ''}
                     </div>
-                    <div className={`mt-1 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <div className={`mt-1 ${listTextClasses.body} ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       {jc.reasonForVisit || jc.diagnosis || 'No summary'}
                     </div>
                     {jc.callOutCategory ? (
-                      <div className={`mt-1 text-[11px] font-medium ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
+                      <div className={`mt-1 ${listTextClasses.small} font-medium ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
                         Category: {jc.callOutCategory}
                       </div>
                     ) : null}
-                    <JobCardListMetricChips jc={jc} isDark={isDark} />
+                    <JobCardListMetricChips jc={jc} isDark={isDark} chipTextClass={listTextClasses.micro} />
                   </div>
                   <span
-                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses}`}
+                    className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${listTextClasses.small} font-medium ${statusClasses}`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {status.charAt(0).toUpperCase() + status.slice(1)}
                   </span>
                 </div>
-                <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <div className={`mt-3 flex flex-wrap items-center justify-between gap-2 ${listTextClasses.small} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   <span>{technicianName || '–'}</span>
                   <span>{formatDate(jc.startedAt || jc.createdAt)}</span>
                 </div>
-                <div className={`mt-1 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                <div className={`mt-1 ${listTextClasses.small} ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
                   Created by: {createdByName || '–'}
                 </div>
                 {canDeleteJobCards ? (
@@ -1550,7 +1644,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         handleDeleteJobCard(jc);
                       }}
                       disabled={deletingJobCardId === jc.id}
-                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 ${listTextClasses.small} font-medium transition-colors ${
                         deletingJobCardId === jc.id
                           ? isDark
                             ? 'border-slate-700 text-slate-500 cursor-not-allowed'
@@ -1571,8 +1665,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         </div>
 
         <div className="hidden sm:block overflow-x-auto">
-          <table className={`min-w-full divide-y text-xs ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
-            <thead className={`text-xs ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
+          <table className={`min-w-full divide-y ${listTextClasses.body} ${isDark ? 'divide-slate-800' : 'divide-slate-200'}`}>
+            <thead className={`${listTextClasses.body} ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-50 text-slate-500'}`}>
               <tr>
                 <th className="px-4 py-2 text-left">
                   <button
@@ -1696,7 +1790,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       {jc.clientName || '–'}
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                      <div className="text-[11px]">
+                      <div className={listTextClasses.small}>
                         {createdByName || '–'}
                       </div>
                     </td>
@@ -1705,14 +1799,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusClasses}`}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${listTextClasses.small} font-medium ${statusClasses}`}
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
                         {status.charAt(0).toUpperCase() + status.slice(1)}
                       </span>
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                      <div className="text-[11px]">
+                      <div className={listTextClasses.small}>
                         {formatDate(jc.startedAt || jc.createdAt)}
                       </div>
                     </td>
@@ -1725,7 +1819,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                             handleDeleteJobCard(jc);
                           }}
                           disabled={deletingJobCardId === jc.id}
-                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors ${
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${listTextClasses.small} font-medium transition-colors ${
                             deletingJobCardId === jc.id
                               ? isDark
                                 ? 'border-slate-700 text-slate-500 cursor-not-allowed'
@@ -1751,7 +1845,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </table>
         </div>
           {pagination && (
-            <div className={`flex items-center justify-between px-4 py-3 border-t text-[11px] ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+            <div className={`flex items-center justify-between px-4 py-3 border-t ${listTextClasses.small} ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
               <div>
                 <span>
                   Page {page} of {pagination.totalPages || 1}
