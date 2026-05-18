@@ -205,9 +205,16 @@
       'p',
       {
         className:
-          'erp-qr-label-name font-semibold leading-tight line-clamp-2 ' + (isSheet ? '' : 'mt-2 text-xs ' + text),
+          'erp-qr-label-name font-semibold leading-tight line-clamp-2 ' +
+          (isSheet ? 'text-center w-full' : 'mt-2 text-xs ' + text),
         style: isSheet
-          ? { fontSize: preset.namePt + 'pt', margin: 0, lineHeight: 1.15, overflow: 'hidden' }
+          ? {
+              fontSize: preset.namePt + 'pt',
+              margin: '0.4mm 0 0',
+              lineHeight: 1.1,
+              overflow: 'hidden',
+              width: '100%'
+            }
           : undefined
       },
       item.name
@@ -215,9 +222,10 @@
     const skuEl = React.createElement(
       'p',
       {
-        className: 'erp-qr-label-meta font-mono ' + (isSheet ? '' : 'mt-0.5 text-[11px] ' + muted),
+        className:
+          'erp-qr-label-meta font-mono ' + (isSheet ? 'text-center w-full' : 'mt-0.5 text-[11px] ' + muted),
         style: isSheet
-          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1 }
+          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1, width: '100%' }
           : undefined
       },
       item.sku
@@ -228,12 +236,13 @@
         {
           key: item.inventoryItemId,
           className:
-            'erp-qr-label-cell flex flex-row items-center gap-[1mm] text-left overflow-hidden ' +
+            'erp-qr-label-cell flex flex-col items-center justify-start text-center overflow-hidden ' +
             (opts.cellClass || ''),
           style: opts.cellStyle
         },
         imgEl,
-        React.createElement('div', { className: 'min-w-0 flex-1 overflow-hidden' }, nameEl, skuEl)
+        nameEl,
+        skuEl
       );
     }
     return React.createElement(
