@@ -222,16 +222,6 @@
       },
       item.sku
     );
-    const qtyEl = React.createElement(
-      'p',
-      {
-        className: 'erp-qr-label-meta ' + (isSheet ? '' : 'mt-1 text-[10px] ' + muted),
-        style: isSheet
-          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1 }
-          : undefined
-      },
-      'Qty ' + item.quantity
-    );
     if (isSheet) {
       return React.createElement(
         'div',
@@ -243,7 +233,7 @@
           style: opts.cellStyle
         },
         imgEl,
-        React.createElement('div', { className: 'min-w-0 flex-1 overflow-hidden' }, nameEl, skuEl, qtyEl)
+        React.createElement('div', { className: 'min-w-0 flex-1 overflow-hidden' }, nameEl, skuEl)
       );
     }
     return React.createElement(
@@ -257,8 +247,7 @@
       },
       imgEl,
       nameEl,
-      skuEl,
-      qtyEl
+      skuEl
     );
   }
 
