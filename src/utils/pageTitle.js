@@ -155,6 +155,7 @@
         'suppliers',
         'locations',
         'stock-count',
+        'reports',
         'activity',
         'location-inventory',
         'stock-transactions',
