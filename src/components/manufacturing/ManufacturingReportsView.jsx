@@ -41,7 +41,7 @@
     return { start: formatYmd(start), end: formatYmd(end) };
   }
 
-  const DEFAULT_DATE_RANGE = getCurrentCalendarMonthRange();
+  const DEFAULT_DATE_RANGE = getLastCalendarMonthRange();
 
   function parseJsonSafe(raw, fallback = []) {
     if (raw == null || raw === '') return fallback;
@@ -252,7 +252,7 @@
     stockLocations = []
   }) {
     const [reportTab, setReportTab] = useState('stock-movements');
-    const [datePreset, setDatePreset] = useState(DATE_PRESET_CURRENT_CALENDAR_MONTH);
+    const [datePreset, setDatePreset] = useState(DATE_PRESET_LAST_CALENDAR_MONTH);
     const [dateStart, setDateStart] = useState(DEFAULT_DATE_RANGE.start);
     const [dateEnd, setDateEnd] = useState(DEFAULT_DATE_RANGE.end);
     const [loading, setLoading] = useState(false);
@@ -574,7 +574,7 @@
             React.createElement(
               'p',
               { className: `text-xs mt-1 ${textMuted}` },
-              'Export full field sets to Excel for stock movements, client stock allocation (sales orders & job card consumption), and stock receipts. Default period: current calendar month.'
+              'Export full field sets to Excel for stock movements, client stock allocation (sales orders & job card consumption), and stock receipts. Default period: last calendar month.'
             )
           ),
           React.createElement(
@@ -590,13 +590,13 @@
               },
               React.createElement(
                 'option',
-                { value: DATE_PRESET_CURRENT_CALENDAR_MONTH },
-                'Current calendar month'
+                { value: DATE_PRESET_LAST_CALENDAR_MONTH },
+                'Last calendar month'
               ),
               React.createElement(
                 'option',
-                { value: DATE_PRESET_LAST_CALENDAR_MONTH },
-                'Last calendar month'
+                { value: DATE_PRESET_CURRENT_CALENDAR_MONTH },
+                'Current calendar month'
               ),
               React.createElement('option', { value: DATE_PRESET_CUSTOM }, 'Custom range'),
               React.createElement('option', { value: DATE_PRESET_ALL }, 'All time')
