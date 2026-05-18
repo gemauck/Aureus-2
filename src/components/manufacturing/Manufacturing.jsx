@@ -5073,7 +5073,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     </td>
                     )}
                     <td className="inventory-desktop-name-col px-3 py-1.5" title={item.name || ''}>
-                      <div className="text-xs font-medium text-gray-900 leading-snug truncate">{item.name}</div>
+                      <div
+                        className={`text-xs font-medium text-gray-900 leading-snug min-w-0 break-words ${
+                          item.reorderPoint > 0 ? 'line-clamp-1' : 'line-clamp-2 min-h-[2.75em]'
+                        }`}
+                      >
+                        {item.name}
+                      </div>
                       {item.reorderPoint > 0 && (
                         <div className="text-[11px] text-gray-500 leading-tight truncate">Reorder: {item.reorderPoint} {item.unit}</div>
                       )}
