@@ -5148,7 +5148,8 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/stock-movements)
     // Optional query: page (1-based), pageSize (default 100, max 200). Omit for full list (backward compatible).
     // Optional query: sku — restrict to one SKU (used by inventory detail ledger; avoids loading full table client-side).
-    // Optional query: createdAfter — ISO 8601 timestamp; only movements with createdAt >= this instant (dashboard / widgets).
+    // Optional query: dateAfter — ISO 8601; only movements with date (date used) >= this instant.
+    // Optional query: createdAfter — ISO 8601; only movements with createdAt >= this instant (legacy).
     if (req.method === 'GET' && !id) {
       try {
         const page = Math.max(1, parseInt(req.query?.page || req.query?.pageNumber, 10) || 1)
@@ -5160,6 +5161,13 @@ async function handler(req, res) {
             ? String(skuFilterRaw).trim()
             : null
         const where = skuFilter ? { sku: skuFilter } : {}
+        const dateAfterRaw = req.query?.dateAfter
+        if (dateAfterRaw != null && String(dateAfterRaw).trim() !== '') {
+          const dt = new Date(String(dateAfterRaw).trim())
+          if (!Number.isNaN(dt.getTime())) {
+            where.date = { ...(where.date || {}), gte: dt }
+          }
+        }
         const createdAfterRaw = req.query?.createdAfter
         if (createdAfterRaw != null && String(createdAfterRaw).trim() !== '') {
           const dt = new Date(String(createdAfterRaw).trim())

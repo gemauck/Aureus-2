@@ -1932,7 +1932,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
         } catch (_) {}
     }, []);
 
-    const createdAfterIso = React.useMemo(() => {
+    const dateAfterIso = React.useMemo(() => {
         const ms = STOCK_MOVEMENT_PERIOD_MS[period] ?? STOCK_MOVEMENT_PERIOD_MS['24h'];
         return new Date(Date.now() - ms).toISOString();
     }, [period]);
@@ -1956,7 +1956,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
                 const qs = new URLSearchParams({
                     page: '1',
                     pageSize: '10',
-                    createdAfter: createdAfterIso
+                    dateAfter: dateAfterIso
                 });
                 const res = await fetch(`/api/manufacturing/stock-movements?${qs.toString()}`, {
                     headers: { Authorization: `Bearer ${token}` },
@@ -1983,7 +1983,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
                 setSilentBusy(false);
             }
         },
-        [createdAfterIso]
+        [dateAfterIso]
     );
 
     React.useEffect(() => {
@@ -2090,7 +2090,7 @@ function RecentStockMovementsWidget({ cardBase, headerText, subText, isDark, aut
                             </h3>
                         </div>
                         <p className={`mt-1 text-xs leading-snug ${subText}`}>
-                            Filtered by when each movement was recorded (created time)
+                            Filtered by movement date used (e.g. job card consumption date)
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-start">

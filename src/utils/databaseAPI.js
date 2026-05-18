@@ -2097,6 +2097,9 @@ const DatabaseAPI = {
         if (options?.sku != null && String(options.sku).trim() !== '') {
             params.set('sku', String(options.sku).trim());
         }
+        if (options?.dateAfter != null && String(options.dateAfter).trim() !== '') {
+            params.set('dateAfter', String(options.dateAfter).trim());
+        }
         if (options?.createdAfter != null && String(options.createdAfter).trim() !== '') {
             params.set('createdAfter', String(options.createdAfter).trim());
         }
