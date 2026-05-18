@@ -2454,8 +2454,21 @@ const DatabaseAPI = {
     },
 
     // JOB CARDS OPERATIONS
-    async getJobCards() {
-        const raw = await this.makeRequest('/jobcards');
+    async getJobCards(options = {}) {
+        const params = new URLSearchParams();
+        const page = parseInt(options?.page, 10);
+        const pageSize = parseInt(options?.pageSize, 10);
+        if (Number.isFinite(page) && page > 0) params.set('page', String(page));
+        if (Number.isFinite(pageSize) && pageSize > 0) params.set('pageSize', String(pageSize));
+        if (options?.includeStockUsed) params.set('includeStockUsed', '1');
+        if (options?.withStockUsedOnly) params.set('withStockUsedOnly', '1');
+        if (options?.clientId) params.set('clientId', String(options.clientId));
+        if (options?.status) params.set('status', String(options.status));
+        const qs = params.toString();
+        const path = qs ? `/jobcards?${qs}` : '/jobcards';
+        const raw = await this.makeRequest(path, {
+            forceRefresh: options.forceRefresh === true
+        });
         const normalized = {
             data: {
                 jobCards: Array.isArray(raw?.data?.jobCards)
@@ -2464,7 +2477,8 @@ const DatabaseAPI = {
                         ? raw.jobCards
                         : Array.isArray(raw?.data)
                             ? raw.data
-                            : []
+                            : [],
+                pagination: raw?.data?.pagination || raw?.pagination || null
             }
         };
         return normalized;

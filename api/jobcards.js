@@ -855,6 +855,12 @@ async function handler(req, res) {
         const ownerIdParamRaw = (url.searchParams.get('ownerId') || '').trim()
         const createdFromRaw = (url.searchParams.get('createdFrom') || '').trim()
         const createdToRaw = (url.searchParams.get('createdTo') || '').trim()
+        const includeStockUsed =
+          url.searchParams.get('includeStockUsed') === '1' ||
+          String(url.searchParams.get('includeStockUsed') || '').toLowerCase() === 'true'
+        const withStockUsedOnly =
+          url.searchParams.get('withStockUsedOnly') === '1' ||
+          String(url.searchParams.get('withStockUsedOnly') || '').toLowerCase() === 'true'
 
         function looksLikeJobCardOwnerId(value) {
           if (!value || typeof value !== 'string') return false
@@ -872,7 +878,8 @@ async function handler(req, res) {
           mineParam ||
           ownerIdParamRaw ||
           createdFromRaw ||
-          createdToRaw
+          createdToRaw ||
+          includeStockUsed
         )
         const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
@@ -898,6 +905,9 @@ async function handler(req, res) {
             equals: callOutCategory,
             mode: 'insensitive'
           }
+        }
+        if (withStockUsedOnly) {
+          baseFilters.stockUsed = { notIn: ['[]', ''] }
         }
 
         if (mineParam && owner) {
@@ -999,12 +1009,17 @@ async function handler(req, res) {
 
         const totalItemsPromise = prisma.jobCard.count({ where: whereClause })
 
+        const listSelect = {
+          ...listSelectBase,
+          ...(includeStockUsed ? { stockUsed: true } : {})
+        }
+
         let jobCards
         try {
           jobCards = await prisma.jobCard.findMany({
             where: whereClause,
             select: {
-              ...listSelectBase,
+              ...listSelect,
               _count: {
                 select: { serviceForms: true }
               }
@@ -1017,7 +1032,7 @@ async function handler(req, res) {
           if (!isMissingServiceFormInstanceTables(err)) throw err
           jobCards = await prisma.jobCard.findMany({
             where: whereClause,
-            select: { ...listSelectBase },
+            select: { ...listSelect },
             orderBy,
             skip: (page - 1) * pageSize,
             take: pageSize
@@ -1032,12 +1047,12 @@ async function handler(req, res) {
 
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {
-          const { _count, otherComments, ...rest } = jobCard
+          const { _count, otherComments, stockUsed: stockUsedRaw, ...rest } = jobCard
           const heading =
             rest.heading != null && String(rest.heading).trim() !== ''
               ? String(rest.heading).trim()
               : extractHeadingFromComments(otherComments)
-          return {
+          const row = {
             ...rest,
             heading,
             serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
@@ -1054,6 +1069,10 @@ async function handler(req, res) {
             departureFromSite: formatDate(rest.departureFromSite),
             arrivalBackAtOffice: formatDate(rest.arrivalBackAtOffice)
           }
+          if (includeStockUsed) {
+            row.stockUsed = parseJson(stockUsedRaw, [])
+          }
+          return row
         })
         
         return ok(res, { 

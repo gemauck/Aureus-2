@@ -148,6 +148,34 @@
     URL.revokeObjectURL(url);
   }
 
+  async function fetchAllJobCardsWithStockUsed() {
+    if (!window.DatabaseAPI?.getJobCards) return [];
+    const all = [];
+    let page = 1;
+    let totalPages = 1;
+    const pageSize = 200;
+
+    while (page <= totalPages) {
+      const res = await window.DatabaseAPI.getJobCards({
+        page,
+        pageSize,
+        includeStockUsed: true,
+        withStockUsedOnly: true,
+        forceRefresh: true
+      });
+      const batch = res?.data?.jobCards || [];
+      const pag = res?.data?.pagination;
+      if (!pag) {
+        return batch.length ? batch : all;
+      }
+      all.push(...batch);
+      totalPages = pag.totalPages || 1;
+      page += 1;
+      if (!batch.length) break;
+    }
+    return all;
+  }
+
   async function fetchAllStockMovements() {
     if (!window.DatabaseAPI?.getStockMovements) return [];
     const all = [];
@@ -306,40 +334,40 @@
           }
         }
 
-        if (window.DatabaseAPI?.getJobCards) {
-          const jcRes = await window.DatabaseAPI.getJobCards();
-          const jobCards = jcRes?.data?.jobCards || [];
-          for (const jc of jobCards) {
-            const stockUsed = parseJsonSafe(jc.stockUsed, []);
-            if (!stockUsed.length) continue;
+        const jobCards = await fetchAllJobCardsWithStockUsed();
+        for (const jc of jobCards) {
+          const stockUsed = parseJsonSafe(jc.stockUsed, []);
+          if (!stockUsed.length) continue;
 
-            const jcDate = jc.completedAt || jc.submittedAt || jc.updatedAt || jc.createdAt;
-            if (!inDateRange(jcDate, dateStart, dateEnd)) continue;
+          const jcDate =
+            jc.completedAt || jc.submittedAt || jc.startedAt || jc.updatedAt || jc.createdAt;
+          if (!inDateRange(jcDate, dateStart, dateEnd)) continue;
 
-            const jcFields = prefixKeys(jc, 'jobCard');
+          const jcFields = prefixKeys(jc, 'jobCard');
 
-            stockUsed.forEach((line, idx) => {
-              const qty = parseFloat(line.quantity) || 0;
-              const unitCost = parseFloat(line.unitCost) || costMap.get(String(line.sku)) || 0;
-              const lineValue = qty * unitCost;
-              out.push({
-                sourceType: 'Job Card Consumption',
-                ...jcFields,
-                line_index: idx + 1,
-                line_id: line.id || '',
-                line_sku: line.sku || '',
-                line_itemName: line.itemName || '',
-                line_quantity: qty,
-                line_unitCost: unitCost,
-                line_lineValue: lineValue,
-                line_locationId: line.locationId || '',
-                line_locationName: line.locationName || '',
-                line_locationLabel: line.locationName || resolveLocationLabel(line.locationId),
-                allocationDate: flattenValue(jcDate),
-                quickbooksMemo: `Stock to client: ${jc.clientName || ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
-              });
+          stockUsed.forEach((line, idx) => {
+            const qty = parseFloat(line.quantity) || 0;
+            if (!(qty > 0) && !String(line.sku || '').trim()) return;
+            const unitCost = parseFloat(line.unitCost) || costMap.get(String(line.sku)) || 0;
+            const lineValue = qty * unitCost;
+            out.push({
+              sourceType: 'Job Card Consumption',
+              ...jcFields,
+              line_index: idx + 1,
+              line_id: line.id || '',
+              line_sku: line.sku || '',
+              line_itemName: line.itemName || '',
+              line_quantity: qty,
+              line_unitCost: unitCost,
+              line_lineValue: lineValue,
+              line_locationId: line.locationId || '',
+              line_locationName: line.locationName || '',
+              line_locationLabel: line.locationName || resolveLocationLabel(line.locationId),
+              allocationDate: flattenValue(jcDate),
+              jobCard_status: jc.status || '',
+              quickbooksMemo: `Stock to client: ${jc.clientName || ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
             });
-          }
+          });
         }
 
         return out;
