@@ -414,6 +414,8 @@
     const [stJoinInput, setStJoinInput] = React.useState('');
     const [stScanOpen, setStScanOpen] = React.useState(false);
     const [stHighlightSku, setStHighlightSku] = React.useState('');
+    /** After QR scan: show only this SKU until search is cleared. */
+    const [stScanFilterSku, setStScanFilterSku] = React.useState('');
     const stScanVideoRef = React.useRef(null);
     const stScanCanvasRef = React.useRef(null);
     const stScanStreamRef = React.useRef(null);
@@ -756,6 +758,7 @@
       if (!stSessionId) {
         setStScanOpen(false);
         setStHighlightSku('');
+        setStScanFilterSku('');
         setStShowNewItemForm(false);
       }
     }, [stSessionId]);
@@ -810,25 +813,9 @@
           sku = String(row.sku || '').trim();
         }
         if (!sku) return;
-        const q = String(stLineSearchRef.current || '').trim().toLowerCase();
-        const rowMatchesSearch = (r) => {
-          const skuStr = String(r?.sku || '').trim().toLowerCase();
-          const name = String(r?.name || r?.itemName || '').trim().toLowerCase();
-          return !q || skuStr.includes(q) || name.includes(q);
-        };
-        let filtered = rows.filter(rowMatchesSearch);
-        let idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
-        if (idx < 0) {
-          setStLineSearch('');
-          filtered = rows;
-          idx = filtered.findIndex((r) => String(r?.sku || '').trim() === sku);
-        }
-        if (idx < 0) {
-          setError('This item is not in the stock list for this session’s location.');
-          return;
-        }
-        const page = Math.floor(idx / STOCK_TAKE_PAGE_SIZE) + 1;
-        setStPage(page);
+        setStScanFilterSku(sku);
+        setStLineSearch(sku);
+        setStPage(1);
         setStHighlightSku(sku);
         setStScanOpen(false);
         setError(null);
@@ -1408,15 +1395,19 @@
     }, [stLocationOptions, qrLocationId]);
 
     const stFilteredRows = React.useMemo(() => {
-      const q = String(stLineSearch || '').trim().toLowerCase();
       const rows = stRows || [];
+      const scanSku = String(stScanFilterSku || '').trim();
+      if (scanSku) {
+        return rows.filter((row) => String(row?.sku || '').trim() === scanSku);
+      }
+      const q = String(stLineSearch || '').trim().toLowerCase();
       if (!q) return rows;
       return rows.filter((row) => {
         const sku = String(row?.sku || '').trim().toLowerCase();
         const name = String(row?.name || '').trim().toLowerCase();
         return sku.includes(q) || name.includes(q);
       });
-    }, [stRows, stLineSearch]);
+    }, [stRows, stLineSearch, stScanFilterSku]);
 
     const stAllLineCount = stRows?.length ?? 0;
     const stLineCount = stFilteredRows.length;
@@ -1437,7 +1428,7 @@
 
     React.useEffect(() => {
       setStPage(1);
-    }, [stLineSearch]);
+    }, [stLineSearch, stScanFilterSku]);
 
     const handleDownload = async () => {
       setError(null);
@@ -2048,9 +2039,11 @@
                       ? 'Loading…'
                       : stCountedTotal +
                           ' counted · ' +
-                          (String(stLineSearch || '').trim()
-                            ? stLineCount + ' matching of ' + stAllLineCount + ' lines'
-                            : stAllLineCount + ' lines') +
+                          (stScanFilterSku
+                            ? '1 scanned item (of ' + stAllLineCount + ' lines)'
+                            : String(stLineSearch || '').trim()
+                              ? stLineCount + ' matching of ' + stAllLineCount + ' lines'
+                              : stAllLineCount + ' lines') +
                           (stTotalPages > 1 ? ' · page ' + stPage + ' of ' + stTotalPages : '')
                   )
                 ),
@@ -2111,15 +2104,41 @@
                           className:
                             'px-3 py-2 border-b ' + (isDark ? 'border-gray-800 bg-gray-950/50' : 'border-gray-100 bg-gray-50/50')
                         },
-                        React.createElement('input', {
-                          id: 'erp-st-line-search',
-                          type: 'search',
-                          autoComplete: 'off',
-                          className: inputCls,
-                          value: stLineSearch,
-                          onChange: (e) => setStLineSearch(e.target.value),
-                          placeholder: 'Search by name or SKU…'
-                        })
+                        React.createElement(
+                          'div',
+                          { className: 'flex flex-wrap items-center gap-2' },
+                          React.createElement('input', {
+                            id: 'erp-st-line-search',
+                            type: 'search',
+                            autoComplete: 'off',
+                            className: inputCls + ' flex-1 min-w-[12rem]',
+                            value: stLineSearch,
+                            onChange: (e) => {
+                              setStScanFilterSku('');
+                              setStLineSearch(e.target.value);
+                            },
+                            placeholder: 'Search by name or SKU…'
+                          }),
+                          stScanFilterSku
+                            ? React.createElement(
+                                'button',
+                                {
+                                  type: 'button',
+                                  className:
+                                    'shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold ' +
+                                    (isDark
+                                      ? 'border-slate-600 text-slate-200 hover:bg-slate-800'
+                                      : 'border-slate-300 text-slate-700 hover:bg-slate-100'),
+                                  onClick: () => {
+                                    setStScanFilterSku('');
+                                    setStLineSearch('');
+                                    setStHighlightSku('');
+                                  }
+                                },
+                                'Show all lines'
+                              )
+                            : null
+                        )
                       ),
                       stFilteredRows.length === 0
                         ? React.createElement(
