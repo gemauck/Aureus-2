@@ -3285,7 +3285,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
     setViewingInventoryItemDetail(prev => {
       if (!prev || getInventoryItemId(prev) !== viewedId) return prev;
-      const preserveLiveStockFields = Array.isArray(prev.locations) && prev.locations.length > 0;
+      const listScopeLocationId =
+        selectedLocationId && selectedLocationId !== 'all' ? String(selectedLocationId) : '';
+      const preserveLiveStockFields =
+        (Array.isArray(prev.locations) && prev.locations.length > 0) || Boolean(listScopeLocationId);
       const merged = {
         ...prev,
         ...fromList,
@@ -3300,14 +3303,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         merged.quantity = prev.quantity;
         merged.status = prev.status;
         merged.location = prev.location;
-        merged.locationId = prev.locationId;
+        merged.locationId = prev.locationId || listScopeLocationId || merged.locationId;
         merged.allocatedQuantity = prev.allocatedQuantity;
         merged.inProductionQuantity = prev.inProductionQuantity;
         merged.completedQuantity = prev.completedQuantity;
       }
       return normalizeInventoryItemRow(merged);
     });
-  }, [inventory, detailInventoryCanonicalId, isInventoryDetailOpen]);
+  }, [inventory, detailInventoryCanonicalId, isInventoryDetailOpen, selectedLocationId]);
 
   // Load canonical InventoryItem from the API so detail matches the database (list rows can be merged/stale).
   useEffect(() => {
@@ -3321,7 +3324,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (!fresh || cancelled) return;
         setViewingInventoryItemDetail(prev => {
           if (!prev || getInventoryItemId(prev) !== detailInventoryCanonicalId) return prev;
-          const preserveLiveStockFields = Array.isArray(prev.locations) && prev.locations.length > 0;
+          const listScopeLocationId =
+            selectedLocationId && selectedLocationId !== 'all' ? String(selectedLocationId) : '';
+          const preserveLiveStockFields =
+            (Array.isArray(prev.locations) && prev.locations.length > 0) || Boolean(listScopeLocationId);
           const merged = {
             ...fresh,
             id: prev.id,
@@ -3338,7 +3344,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             merged.quantity = prev.quantity;
             merged.status = prev.status;
             merged.location = prev.location;
-            merged.locationId = prev.locationId;
+            merged.locationId = prev.locationId || listScopeLocationId || merged.locationId;
             merged.allocatedQuantity = prev.allocatedQuantity;
             merged.inProductionQuantity = prev.inProductionQuantity;
             merged.completedQuantity = prev.completedQuantity;
@@ -3354,7 +3360,44 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     return () => {
       cancelled = true;
     };
-  }, [detailInventoryCanonicalId, isInventoryDetailOpen]);
+  }, [detailInventoryCanonicalId, isInventoryDetailOpen, selectedLocationId]);
+
+  // Catalog GET /inventory/:id has no per-warehouse breakdown — load it from the aggregated list.
+  useEffect(() => {
+    if (!isInventoryDetailOpen || !viewingInventoryItemDetail?.sku) return;
+    if (
+      Array.isArray(viewingInventoryItemDetail.locations) &&
+      viewingInventoryItemDetail.locations.length > 1
+    ) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!window.DatabaseAPI?.getInventory) return;
+        const res = await window.DatabaseAPI.getInventory(null);
+        const rows = res?.data?.inventory || [];
+        const match = rows.find(
+          (row) =>
+            (viewingInventoryItemDetail.sku && row.sku === viewingInventoryItemDetail.sku) ||
+            getInventoryItemId(row) === detailInventoryCanonicalId
+        );
+        if (!match?.locations?.length || cancelled) return;
+        setViewingInventoryItemDetail((prev) => {
+          if (!prev || prev.sku !== match.sku) return prev;
+          return normalizeInventoryItemRow({
+            ...prev,
+            locations: match.locations
+          });
+        });
+      } catch (e) {
+        console.warn('Manufacturing: failed to load location breakdown for detail', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isInventoryDetailOpen, detailInventoryCanonicalId, viewingInventoryItemDetail?.sku]);
 
   // Reload inventory when location changes - BUT NOT if user is actively typing
   useEffect(() => {
@@ -13262,15 +13305,22 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       // When list is filtered to a specific location, open detail on that same location
       // so qty/available match the clicked list row by default.
       const preferredLocationId =
-        selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : '';
+        selectedLocationId && selectedLocationId !== 'all' ? String(selectedLocationId) : '';
       if (!preferredLocationId) return '';
 
+      // Warehouse-scoped inventory list: always default detail to that warehouse.
+      if (selectedLocationId && selectedLocationId !== 'all') {
+        return preferredLocationId;
+      }
+
       const hasPreferredInBreakdown = Array.isArray(inventoryItem?.locations)
-        ? inventoryItem.locations.some((loc) => loc?.locationId === preferredLocationId)
+        ? inventoryItem.locations.some(
+            (loc) => String(loc?.locationId || '') === preferredLocationId
+          )
         : false;
       if (hasPreferredInBreakdown) return preferredLocationId;
 
-      if (inventoryItem?.locationId === preferredLocationId) return preferredLocationId;
+      if (String(inventoryItem?.locationId || '') === preferredLocationId) return preferredLocationId;
       return '';
     };
 
@@ -13472,10 +13522,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       // Prefer real browser query string — hash-router `route.search` can lag or omit `?location=`.
       const search = new URLSearchParams(typeof window !== 'undefined' ? window.location.search || '' : '');
       const urlLocation = search.get('location');
-      if (urlLocation && validLocationIds.has(urlLocation)) {
-        setSelectedDetailLocationId(urlLocation);
+      const preferredListLocation = String(selectedLocationId);
+      const pick =
+        (urlLocation && validLocationIds.has(urlLocation) ? urlLocation : null) ||
+        preferredListLocation;
+      if (pick) {
+        setSelectedDetailLocationId(pick);
       }
-    }, [item?.id, validLocationIds, inventoryListIsLocationScoped]);
+    }, [item?.id, validLocationIds, inventoryListIsLocationScoped, selectedLocationId]);
     useEffect(() => {
       if (!window.RouteState?.navigate) return;
       const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search || '' : '');
@@ -13512,18 +13566,24 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     // Prefer location-derived quantity for detail cards so stockholding reflects selected location
     // (and correctly shows full reversals netting to zero). Fall back to catalog quantity when
     // no location breakdown is available.
+    const detailListMatchesSelectedSite =
+      inventoryListIsLocationScoped &&
+      selectedDetailLocationId &&
+      String(selectedDetailLocationId) === String(selectedLocationId);
     const detailMetricsSource = selectedLocationInfo
       ? {
           ...item,
           quantity: selectedLocationInfo.quantity,
           allocatedQuantity: selectedLocationInfo.allocatedQuantity
         }
-      : hasLocationBreakdown
-        ? {
-            ...item,
-            quantity: totalQuantityFromLocations
-          }
-        : item;
+      : detailListMatchesSelectedSite
+        ? item
+        : hasLocationBreakdown
+          ? {
+              ...item,
+              quantity: totalQuantityFromLocations
+            }
+          : item;
     const detailMetrics = getInventoryDetailMetrics(detailMetricsSource);
     const displayQuantity = detailMetrics.quantity;
     const allocatedQtyForDisplay = detailMetrics.allocated;
@@ -14147,10 +14207,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-xs text-gray-500 mb-1">Supplier</p>
                       <p className="text-sm font-semibold text-gray-900">{item.supplier || '-'}</p>
                     </div>
-                    {item.location && (
+                    {(selectedLocationInfo?.locationName ||
+                      selectedLocationInfo?.locationCode ||
+                      item.location) && (
                       <div>
                         <p className="text-xs text-gray-500 mb-1">Location</p>
-                        <p className="text-sm font-semibold text-gray-900">{item.location}</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {selectedLocationInfo?.locationName ||
+                            selectedLocationInfo?.locationCode ||
+                            item.location}
+                        </p>
                       </div>
                     )}
                     {item.manufacturingPartNumber && (
