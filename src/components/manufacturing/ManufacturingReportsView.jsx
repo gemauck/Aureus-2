@@ -367,6 +367,12 @@
     return map;
   }
 
+  /** Client allocation / journal COGS always uses master inventory unit cost (never location or line snapshot). */
+  function getMasterUnitCost(sku, costMap) {
+    const n = costMap.get(String(sku ?? ''));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
   function ManufacturingReportsView({
     isDark = false,
     getLocationLabel,
@@ -464,7 +470,7 @@
             items.forEach((item, idx) => {
               const qty = parseFloat(item.quantity) || 0;
               const unitPrice = parseFloat(item.unitPrice) || 0;
-              const unitCost = parseFloat(item.unitCost) || costMap.get(String(item.sku)) || unitPrice || 0;
+              const unitCost = getMasterUnitCost(item.sku, costMap);
               const lineValue = qty * unitCost;
               out.push({
                 sourceType: 'Sales Order',
@@ -501,7 +507,7 @@
           stockUsed.forEach((line, idx) => {
             const qty = parseFloat(line.quantity) || 0;
             if (!(qty > 0) && !String(line.sku || '').trim()) return;
-            const unitCost = parseFloat(line.unitCost) || costMap.get(String(line.sku)) || 0;
+            const unitCost = getMasterUnitCost(line.sku, costMap);
             const lineValue = qty * unitCost;
             out.push({
               sourceType: 'Job Card Consumption',
