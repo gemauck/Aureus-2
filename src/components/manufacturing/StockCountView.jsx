@@ -180,7 +180,10 @@
     };
 
     const run = () => {
-      scrollTargetToTop(document.getElementById('erp-st-scanned-item-top'));
+      const panel = document.getElementById('erp-st-stock-lines-panel');
+      const card = document.getElementById('erp-st-scanned-item-top');
+      scrollTargetToTop(panel || card);
+      if (card && panel) scrollTargetToTop(card);
       focusQty();
     };
 
@@ -1842,16 +1845,28 @@
       { className: 'space-y-4 erp-module-root' },
       React.createElement(
         'div',
-        { className: 'rounded-xl border p-4 shadow-sm ' + card },
-        React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock count tools'),
-        React.createElement(
-          'p',
-          { className: 'mt-1 text-xs ' + muted },
-          'Open a dedicated page for in-app stocktake, inventory labels, or stock count Excel.'
-        ),
+        {
+          className:
+            'rounded-xl border shadow-sm ' +
+            card +
+            (stockCountPage === 'in-app' && stSessionId ? ' p-2' : ' p-4')
+        },
+        stockCountPage === 'in-app' && stSessionId
+          ? null
+          : React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Stock count tools'),
+        stockCountPage === 'in-app' && stSessionId
+          ? null
+          : React.createElement(
+              'p',
+              { className: 'mt-1 text-xs ' + muted },
+              'Open a dedicated page for in-app stocktake, inventory labels, or stock count Excel.'
+            ),
         React.createElement(
           'div',
-          { className: 'mt-3 flex flex-wrap gap-2' },
+          {
+            className:
+              stockCountPage === 'in-app' && stSessionId ? 'flex flex-wrap gap-2' : 'mt-3 flex flex-wrap gap-2'
+          },
           [
             { id: 'in-app', label: 'In-app stocktake', icon: 'fa-play-circle' },
             { id: 'labels', label: 'Inventory labels', icon: 'fa-tags' },
@@ -1883,13 +1898,22 @@
       stockCountPage === 'in-app'
         ? React.createElement(
         'div',
-        { className: 'rounded-xl border p-5 shadow-sm ' + card },
-        React.createElement('h3', { className: 'text-lg font-semibold ' + text }, 'In-app stocktake'),
+        {
+          className:
+            'rounded-xl border shadow-sm ' + card + (stSessionId ? ' p-3 flex flex-col' : ' p-5')
+        },
         React.createElement(
-          'p',
-          { className: 'mt-1 text-sm ' + muted },
-          'Choose location and when the count started, then start a stock take (or join with a session ID). Counts and notes sync in real time with the Job Cards app. Save a draft on this device to remember setup, or save while in progress to store the session ID and resume later.'
+          'h3',
+          { className: (stSessionId ? 'text-base font-semibold ' : 'text-lg font-semibold ') + text },
+          'In-app stocktake'
         ),
+        stSessionId
+          ? null
+          : React.createElement(
+              'p',
+              { className: 'mt-1 text-sm ' + muted },
+              'Choose location and when the count started, then start a stock take (or join with a session ID). Counts and notes sync in real time with the Job Cards app.'
+            ),
         !stSessionId
           ? React.createElement(
               'div',
@@ -1945,38 +1969,38 @@
               'div',
               {
                 className:
-                  'mt-4 rounded-lg border px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 ' +
-                  (isDark ? 'border-blue-900/60 bg-blue-950/30' : 'border-blue-200 bg-blue-50/80')
+                  'mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md border px-2 py-1 text-[11px] order-2 ' +
+                  (isDark ? 'border-blue-900/60 bg-blue-950/30 text-blue-100' : 'border-blue-200 bg-blue-50/90 text-blue-950')
               },
               React.createElement(
-                'div',
-                { className: 'min-w-0' },
-                React.createElement(
-                  'p',
-                  { className: 'text-sm font-semibold ' + text },
-                  'Shared session active'
-                ),
-                React.createElement(
-                  'p',
-                  { className: 'text-xs ' + muted + ' break-all' },
-                  'Session ID: ' + stSessionId + ' · revision ' + stSessionRevision
-                )
+                'span',
+                { className: 'min-w-0 truncate font-medium' },
+                (stActiveLocationLabel || 'Location') +
+                  ' · ' +
+                  stCountedTotal +
+                  ' counted · rev ' +
+                  stSessionRevision +
+                  (stScanFilterSku ? ' · scan' : '')
               ),
               React.createElement(
-                'div',
-                { className: 'flex flex-wrap gap-2 shrink-0' },
-                React.createElement(
-                  'button',
-                  { type: 'button', className: btn, onClick: leaveStockTakeSession },
-                  'Leave session'
-                )
+                'button',
+                {
+                  type: 'button',
+                  className:
+                    'shrink-0 rounded border px-2 py-0.5 text-[11px] font-semibold ' +
+                    (isDark
+                      ? 'border-gray-600 text-gray-200 hover:bg-gray-800'
+                      : 'border-gray-300 text-gray-700 hover:bg-white'),
+                  onClick: leaveStockTakeSession
+                },
+                'Leave'
               )
             )
           : null,
-        stSessionId
+        stSessionId && !stScanFilterSku
           ? React.createElement(
               'div',
-              { className: 'mt-3 rounded-lg border p-3 ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
+              { className: 'mt-2 rounded-lg border p-2 order-3 ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
               React.createElement('p', { className: 'text-xs font-semibold ' + muted + ' mb-2' }, 'People on this count'),
               React.createElement(
                 'div',
@@ -2065,7 +2089,8 @@
                 : null
             )
           : null,
-        React.createElement(
+        !stSessionId
+          ? React.createElement(
           'div',
           { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
           React.createElement(
@@ -2133,29 +2158,59 @@
               )
             )
           )
-        ),
-        React.createElement(
-          'label',
-          { htmlFor: 'erp-st-notes', className: 'block text-xs font-semibold ' + muted + ' mt-3 mb-1' },
-          'Notes (optional)'
-        ),
-        React.createElement('textarea', {
-          id: 'erp-st-notes',
-          rows: 2,
-          className: inputCls,
-          value: stNotes,
-          onChange: (e) => setStNotes(e.target.value),
-          onBlur: () => {
-            if (stSessionId) void pushSessionNotes();
-          },
-          placeholder: 'Anything reviewers should know about this count…'
-        }),
+        )
+          : null,
+        stSessionId && !stScanFilterSku
+          ? React.createElement(
+              React.Fragment,
+              null,
+              React.createElement(
+                'label',
+                { htmlFor: 'erp-st-notes', className: 'block text-xs font-semibold ' + muted + ' mt-2 mb-1 order-4' },
+                'Notes (optional)'
+              ),
+              React.createElement('textarea', {
+                id: 'erp-st-notes',
+                rows: 1,
+                className: inputCls + ' order-4',
+                value: stNotes,
+                onChange: (e) => setStNotes(e.target.value),
+                onBlur: () => {
+                  if (stSessionId) void pushSessionNotes();
+                },
+                placeholder: 'Notes for reviewers…'
+              })
+            )
+          : !stSessionId
+            ? React.createElement(
+                React.Fragment,
+                null,
+                React.createElement(
+                  'label',
+                  { htmlFor: 'erp-st-notes', className: 'block text-xs font-semibold ' + muted + ' mt-3 mb-1' },
+                  'Notes (optional)'
+                ),
+                React.createElement('textarea', {
+                  id: 'erp-st-notes',
+                  rows: 2,
+                  className: inputCls,
+                  value: stNotes,
+                  onChange: (e) => setStNotes(e.target.value),
+                  onBlur: () => {
+                    if (stSessionId) void pushSessionNotes();
+                  },
+                  placeholder: 'Anything reviewers should know about this count…'
+                })
+              )
+            : null,
         stSessionId
           ? React.createElement(
               'div',
               {
                 id: 'erp-st-stock-lines-panel',
-                className: 'mt-2 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200')
+                className:
+                  'mt-2 rounded-lg border overflow-hidden order-first ' +
+                  (isDark ? 'border-gray-700' : 'border-gray-200')
               },
               renderStScannedTopCard(),
               React.createElement(
@@ -2235,48 +2290,28 @@
                   : React.createElement(
                       React.Fragment,
                       null,
-                      React.createElement(
-                        'div',
-                        {
-                          className:
-                            'px-3 py-2 border-b ' + (isDark ? 'border-gray-800 bg-gray-950/50' : 'border-gray-100 bg-gray-50/50')
-                        },
-                        React.createElement(
-                          'div',
-                          { className: 'flex flex-wrap items-center gap-2' },
-                          React.createElement('input', {
-                            id: 'erp-st-line-search',
-                            type: 'search',
-                            autoComplete: 'off',
-                            className: inputCls + ' flex-1 min-w-[12rem]',
-                            value: stLineSearch,
-                            onChange: (e) => {
-                              setStScanFilterSku('');
-                              setStLineSearch(e.target.value);
+                      !stScanFilterSku
+                        ? React.createElement(
+                            'div',
+                            {
+                              className:
+                                'px-3 py-2 border-b ' +
+                                (isDark ? 'border-gray-800 bg-gray-950/50' : 'border-gray-100 bg-gray-50/50')
                             },
-                            placeholder: 'Search by name or SKU…'
-                          }),
-                          stScanFilterSku
-                            ? React.createElement(
-                                'button',
-                                {
-                                  type: 'button',
-                                  className:
-                                    'shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold ' +
-                                    (isDark
-                                      ? 'border-slate-600 text-slate-200 hover:bg-slate-800'
-                                      : 'border-slate-300 text-slate-700 hover:bg-slate-100'),
-                                  onClick: () => {
-                                    setStScanFilterSku('');
-                                    setStLineSearch('');
-                                    setStHighlightSku('');
-                                  }
-                                },
-                                'Show all lines'
-                              )
-                            : null
-                        )
-                      ),
+                            React.createElement('input', {
+                              id: 'erp-st-line-search',
+                              type: 'search',
+                              autoComplete: 'off',
+                              className: inputCls + ' w-full',
+                              value: stLineSearch,
+                              onChange: (e) => {
+                                setStScanFilterSku('');
+                                setStLineSearch(e.target.value);
+                              },
+                              placeholder: 'Search by name or SKU…'
+                            })
+                          )
+                        : null,
                       stFilteredRows.length === 0
                         ? React.createElement(
                             'div',
