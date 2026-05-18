@@ -5,6 +5,7 @@ import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges } from '../_lib/jobCardActivityDiff.js'
 import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
+import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
 
 function parseJson(str, defaultValue = []) {
   try {
@@ -282,6 +283,13 @@ async function handler(req, res) {
         source: 'public_api'
       })
     }
+
+    void syncJobCardStockMovements(prisma, {
+      jobCard: updated,
+      performedBy: updated.agentName || 'Public job card'
+    }).catch((err) => {
+      console.warn('syncJobCardStockMovements (public patch) failed:', err?.message || err)
+    })
 
     return ok(res, {
       jobCard: {

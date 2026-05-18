@@ -3,6 +3,7 @@ import { prisma } from '../_lib/prisma.js'
 import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
+import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
 
 function formatDate(date) {
   if (!date) return null
@@ -248,6 +249,13 @@ async function handler(req, res) {
       action: 'created_public',
       metadata: { status: jobCard.status },
       source: 'public_api'
+    })
+
+    void syncJobCardStockMovements(prisma, {
+      jobCard,
+      performedBy: jobCard.agentName || 'Public job card'
+    }).catch((err) => {
+      console.warn('syncJobCardStockMovements (public create) failed:', err?.message || err)
     })
 
     // Create service form instances if provided

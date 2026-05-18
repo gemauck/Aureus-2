@@ -7,6 +7,7 @@ import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges, buildServiceFormInstanceChanges } from './_lib/jobCardActivityDiff.js'
 import { computeNextJobCardNumber } from './_lib/jobCardNumber.js'
+import { syncJobCardStockMovements } from './_lib/jobCardStockMovements.js'
 import { sendEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import PDFDocument from 'pdfkit'
@@ -780,6 +781,25 @@ async function handler(req, res) {
     })
   }
 
+  const scheduleJobCardStockMovementSync = async (jobCardRow) => {
+    if (!jobCardRow?.id) return
+    const actorName = await resolveActorDisplayName(prisma, req)
+    void syncJobCardStockMovements(prisma, {
+      jobCard: jobCardRow,
+      performedBy: actorName || jobCardRow.agentName || 'System',
+      audit: (action, entityId, details) => {
+        auditManufacturing(action, 'stock-movements', entityId, {
+          source: 'job_card_sync',
+          jobCardId: jobCardRow.id,
+          jobCardNumber: jobCardRow.jobCardNumber,
+          ...details
+        })
+      }
+    }).catch((err) => {
+      console.warn('syncJobCardStockMovements failed (non-fatal):', err?.message || err)
+    })
+  }
+
   // Helper to read pagination params from the query string
   const getPagination = (allowLargePageSize = false) => {
     try {
@@ -1345,6 +1365,8 @@ async function handler(req, res) {
           jobCardNumber: jobCard.jobCardNumber
         })
 
+        await scheduleJobCardStockMovementSync(jobCard)
+
         return created(res, { 
           jobCard: {
             ...jobCard,
@@ -1584,6 +1606,8 @@ async function handler(req, res) {
             console.error('jobcards: failed to notify billing recipients', notifyError)
           }
         }
+
+        await scheduleJobCardStockMovementSync(jobCard)
 
         return ok(res, { 
           jobCard: {

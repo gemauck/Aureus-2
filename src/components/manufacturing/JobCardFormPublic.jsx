@@ -3381,30 +3381,6 @@ const JobCardFormPublic = () => {
   };
 
 
-  const persistStockMovement = async (movementData) => {
-            const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-            cachedMovements.push({
-              ...movementData,
-              id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              synced: false
-            });
-            try {
-              localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-            } catch (e) {
-              if (e?.name === 'QuotaExceededError' || e?.code === 22) {
-                console.warn('⚠️ localStorage quota exceeded, skipping manufacturing_movements cache');
-              } else {
-                throw e;
-              }
-            }
-            
-            if (isOnline && window.DatabaseAPI?.createStockMovement) {
-              window.DatabaseAPI.createStockMovement(movementData).catch(err => {
-                console.warn('Failed to sync stock movement:', err);
-              });
-            }
-  };
-
   const syncClientContact = async (jobCardData) => {
     if (!formData.clientId || !window.DatabaseAPI?.updateClient) return;
               const client = clients.find(c => c.id === formData.clientId);
@@ -4577,30 +4553,7 @@ const JobCardFormPublic = () => {
         ? [...prevPending.activityQueue]
         : [];
 
-      if (formData.stockUsed && formData.stockUsed.length > 0) {
-        const jobCardReference = `Job Card ${jobCardData.id}`;
-        for (const stockItem of formData.stockUsed) {
-          if (!stockItem.locationId || !stockItem.sku || stockItem.quantity <= 0) {
-            console.warn('Skipping invalid stock item:', stockItem);
-            continue;
-          }
-
-          const movementData = {
-            type: 'consumption',
-            sku: stockItem.sku,
-            itemName: stockItem.itemName || '',
-            quantity: parseFloat(stockItem.quantity),
-            unitCost: stockItem.unitCost ? parseFloat(stockItem.unitCost) : undefined,
-            fromLocation: stockItem.locationId,
-            toLocation: '',
-            reference: jobCardReference,
-            notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
-            date: new Date().toISOString()
-          };
-
-          await persistStockMovement(movementData);
-        }
-      }
+      // Stock movements are posted server-side when /api/jobcards saves (all statuses).
 
       const serverJobCardId =
         editingMeta?.serverJobCardId ||
