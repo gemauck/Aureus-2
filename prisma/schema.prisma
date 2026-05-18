@@ -2361,6 +2361,8 @@ model SystemSettings {
   slack                 Boolean  @default(false)
   /// Safety Culture (iAuditor) API token; optional when SAFETY_CULTURE_API_KEY env is unset. Admin-only to write via API.
   safetyCultureApiKey   String?
+  /// Next sequence for Client Allocation QuickBooks journal export (Stock-01, Stock-02, …).
+  clientAllocationJournalSeq Int @default(0)
   updatedBy             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

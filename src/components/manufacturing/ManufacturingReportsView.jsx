@@ -177,6 +177,128 @@
     URL.revokeObjectURL(url);
   }
 
+  const JOURNAL_CSV_HEADERS = [
+    'Journal No.',
+    'Journal Date',
+    'Account Name',
+    'Description',
+    'Debits',
+    'Credits',
+    'Name',
+    'Class'
+  ];
+  const JOURNAL_ACCOUNT_STOCK_ASSET = 'Stock Asset';
+  const JOURNAL_ACCOUNT_PARTS_COS = 'Parts & Components - COS';
+  const JOURNAL_DEFAULT_CLASS = 'Technical';
+
+  function excelSerialFromLocalDate(date = new Date()) {
+    const epoch = new Date(1899, 11, 30);
+    const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return Math.round((local - epoch) / 86400000);
+  }
+
+  function formatJournalAmount(value) {
+    const n = Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+    if (!Number.isFinite(n) || n <= 0) return '';
+    return Number.isInteger(n) ? String(n) : String(n);
+  }
+
+  function getClientNameFromAllocationRow(row) {
+    const name = row.jobCard_clientName || row.order_clientName || '';
+    if (name && String(name).trim()) return String(name).trim();
+    return '';
+  }
+
+  function getJournalClassFromRow(row) {
+    const svc = row.jobCard_serviceCategory;
+    if (svc && String(svc).trim()) return String(svc).trim();
+    return JOURNAL_DEFAULT_CLASS;
+  }
+
+  function getAllocationLineValue(row) {
+    const v = parseFloat(row.line_lineValue);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  }
+
+  function buildJournalDebitDescription(row) {
+    const client = getClientNameFromAllocationRow(row);
+    const item = row.line_itemName || row.line_sku || '';
+    if (row.sourceType === 'Sales Order') {
+      const so = row.order_orderNumber || '';
+      return `Sales Order ${so} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
+    }
+    if (row.sourceType === 'Job Card Consumption') {
+      const jc = row.jobCard_jobCardNumber || '';
+      return `Job Card ${jc} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
+    }
+    if (row.quickbooksMemo) return String(row.quickbooksMemo);
+    return `Stock to client - ${client} - ${item}`.trim();
+  }
+
+  function buildStockIssuedCreditDescription(dateStart, dateEnd) {
+    const refRaw = dateEnd || dateStart;
+    const ref = refRaw ? new Date(`${refRaw}T12:00:00`) : new Date();
+    const month = ref.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    return `Stock Issued ${month}`;
+  }
+
+  function buildClientAllocationJournalRows(journalNo, journalDateSerial, allocationRows, dateStart, dateEnd) {
+    const lines = (allocationRows || [])
+      .map((row) => ({ row, value: getAllocationLineValue(row) }))
+      .filter((entry) => entry.value > 0);
+    if (!lines.length) return [];
+
+    const totalCredit = lines.reduce((sum, { value }) => sum + value, 0);
+    const out = [
+      [
+        journalNo,
+        journalDateSerial,
+        JOURNAL_ACCOUNT_STOCK_ASSET,
+        buildStockIssuedCreditDescription(dateStart, dateEnd),
+        '',
+        formatJournalAmount(totalCredit),
+        '',
+        ''
+      ]
+    ];
+
+    for (const { row, value } of lines) {
+      out.push([
+        journalNo,
+        journalDateSerial,
+        JOURNAL_ACCOUNT_PARTS_COS,
+        buildJournalDebitDescription(row),
+        formatJournalAmount(value),
+        '',
+        getClientNameFromAllocationRow(row),
+        getJournalClassFromRow(row)
+      ]);
+    }
+    return out;
+  }
+
+  function downloadJournalCsv(journalRows, journalNo) {
+    const sanitizeCsv = (value) => {
+      const s = value === null || value === undefined ? '' : String(value);
+      if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const lines = [
+      JOURNAL_CSV_HEADERS.map(sanitizeCsv).join(','),
+      ...journalRows.map((r) => r.map(sanitizeCsv).join(','))
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `client_allocation_journal_${journalNo}_${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   async function fetchAllJobCardsWithStockUsed() {
     if (!window.DatabaseAPI?.getJobCards) return [];
     const all = [];
@@ -259,6 +381,7 @@
     const [error, setError] = useState(null);
     const [rows, setRows] = useState([]);
     const [exporting, setExporting] = useState(false);
+    const [journalExporting, setJournalExporting] = useState(false);
 
     const inventoryCostMap = useMemo(() => buildInventoryCostMap(inventory), [inventory]);
 
@@ -550,6 +673,45 @@
       }
     };
 
+    const handleJournalExport = async () => {
+      const eligible = (rows || []).filter((row) => getAllocationLineValue(row) > 0);
+      if (!eligible.length) {
+        window.alert('No allocation lines with a value to export for this date range.');
+        return;
+      }
+      if (!window.DatabaseAPI?.allocateClientAllocationJournalNumber) {
+        window.alert('Journal export is not available. Please refresh the page.');
+        return;
+      }
+
+      setJournalExporting(true);
+      try {
+        const res = await window.DatabaseAPI.allocateClientAllocationJournalNumber();
+        const journalNo = res?.data?.journalNo;
+        if (!journalNo) {
+          throw new Error(res?.error || 'No journal number returned from server');
+        }
+        const journalDateSerial = excelSerialFromLocalDate(new Date());
+        const journalRows = buildClientAllocationJournalRows(
+          journalNo,
+          journalDateSerial,
+          eligible,
+          dateStart,
+          dateEnd
+        );
+        if (!journalRows.length) {
+          window.alert('No journal lines to export.');
+          return;
+        }
+        downloadJournalCsv(journalRows, journalNo);
+      } catch (err) {
+        console.error('Journal export failed:', err);
+        window.alert(err?.message || 'Journal export failed. See console for details.');
+      } finally {
+        setJournalExporting(false);
+      }
+    };
+
     const columns = useMemo(() => collectColumnKeys(rows), [rows]);
     const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
     const textMain = isDark ? 'text-gray-100' : 'text-gray-900';
@@ -641,7 +803,24 @@
               },
               React.createElement('i', { className: 'fas fa-file-excel text-xs' }),
               exporting ? 'Exporting…' : 'Export Excel'
-            )
+            ),
+            reportTab === 'client-allocation' &&
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => void handleJournalExport(),
+                  disabled:
+                    journalExporting ||
+                    loading ||
+                    !rows.some((row) => getAllocationLineValue(row) > 0),
+                  className: 'px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50',
+                  title:
+                    'Download QuickBooks journal CSV (Stock Asset credit, Parts & Components - COS debit per client line)'
+                },
+                React.createElement('i', { className: 'fas fa-book text-xs' }),
+                journalExporting ? 'Exporting journal…' : 'Journal Export'
+              )
           )
         ),
         React.createElement(

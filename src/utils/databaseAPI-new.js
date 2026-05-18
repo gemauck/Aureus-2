@@ -751,6 +751,11 @@ const DatabaseAPI = {
         return result;
     },
 
+    /** Allocate next QuickBooks journal number for Client Allocation journal CSV export. */
+    async allocateClientAllocationJournalNumber() {
+        return this.makeRequest('/manufacturing/client-allocation-journal', { method: 'POST' });
+    },
+
     // Manufacturing operations - Suppliers
     async getSuppliers() {
         const log = window.debug?.log || (() => {});

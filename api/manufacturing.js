@@ -6342,6 +6342,32 @@ async function handler(req, res) {
     }
   }
 
+  // Client Allocation journal number (POST /api/manufacturing/client-allocation-journal)
+  if (resourceType === 'client-allocation-journal') {
+    if (req.method !== 'POST') {
+      return badRequest(res, 'POST required to allocate a client allocation journal number')
+    }
+    try {
+      const journalNo = await prisma.$transaction(async (tx) => {
+        const system = await tx.systemSettings.findUnique({ where: { id: 'system' } })
+        const nextSeq = (system?.clientAllocationJournalSeq ?? 0) + 1
+        await tx.systemSettings.upsert({
+          where: { id: 'system' },
+          update: { clientAllocationJournalSeq: nextSeq },
+          create: { id: 'system', clientAllocationJournalSeq: nextSeq }
+        })
+        return `Stock-${String(nextSeq).padStart(2, '0')}`
+      })
+      auditManufacturing('create', 'client-allocation-journal', journalNo, {
+        summary: `Allocated client allocation journal number ${journalNo}`
+      })
+      return ok(res, { journalNo })
+    } catch (error) {
+      console.error('❌ Failed to allocate client allocation journal number:', error)
+      return serverError(res, 'Failed to allocate journal number', error.message)
+    }
+  }
+
   // PURCHASE ORDERS - Proxy to /api/purchase-orders endpoint
   if (resourceType === 'purchase-orders') {
     // Redirect to the main purchase-orders API
