@@ -2,6 +2,8 @@
  * Unique public StockMovement.movementId allocation (collision-safe).
  */
 
+import { assertValidTransferLocations } from './stockMovementTransfer.js'
+
 export function buildMovementId() {
   const stamp = Date.now().toString(36).toUpperCase()
   const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
@@ -13,6 +15,9 @@ export function buildMovementId() {
  * Pass payload.movementId only for deterministic ids (e.g. MOV-JC-{jobCardId}-L{n}).
  */
 export async function createStockMovementTx(tx, payload) {
+  if (String(payload?.type || '').toLowerCase() === 'transfer') {
+    assertValidTransferLocations(payload.fromLocation, payload.toLocation)
+  }
   const explicitId = payload.movementId
   for (let attempt = 0; attempt < 5; attempt++) {
     try {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Align per-warehouse ledgers with LocationInventory without changing combined SKU totals:
- * inserts neutral transfers (combined net +0) so site-scoped movement sums match each site's qty.
+ * inserts neutral **two-legged** transfers (combined net +0) so site-scoped movement sums match each site's qty.
  *
  * Omit `--sku` to plan **all** mismatched LocationInventory rows (bulk). Prefer `--dry-run` first,
  * then `--write` after a stock-movement backup.
@@ -20,6 +20,7 @@
 import 'dotenv/config'
 import { prisma } from '../api/_lib/prisma.js'
 import { buildMovementId } from '../api/_lib/stockCountAdjustment.js'
+import { buildPairedLedgerAlignTransfers } from '../api/_lib/stockMovementTransfer.js'
 
 const EPS = 0.001
 const REF_TAG = 'LEDGER_SITE_ALIGN'
@@ -193,16 +194,28 @@ async function main() {
     planned.length = maxRows
   }
 
-  const skuSet = new Set(planned.map((p) => p.sku))
-  const totalQty = planned.reduce((s, p) => s + (parseFloat(p.quantity) || 0), 0)
-  const topByQuantity = [...planned]
+  const mainLoc =
+    locations.find((l) => l.code === '01_LOC1') ||
+    locations.find((l) => l.code === 'LOC001') ||
+    locations[0]
+  if (!mainLoc?.id) {
+    console.error('No stock location found for pairing ledger-align transfers')
+    process.exit(1)
+  }
+
+  const paired = buildPairedLedgerAlignTransfers(planned, mainLoc.id)
+
+  const skuSet = new Set(paired.map((p) => p.sku))
+  const totalQty = paired.reduce((s, p) => s + (parseFloat(p.quantity) || 0), 0)
+  const topByQuantity = [...paired]
     .sort((a, b) => (parseFloat(b.quantity) || 0) - (parseFloat(a.quantity) || 0))
     .slice(0, 25)
     .map((p) => ({
       sku: p.sku,
-      locationLabel: p.locationLabel,
-      kind: p.kind,
-      quantity: p.quantity
+      quantity: p.quantity,
+      fromLocation: p.fromLocation,
+      toLocation: p.toLocation,
+      reference: p.reference
     }))
 
   console.log(
@@ -212,14 +225,16 @@ async function main() {
         skuFilter: skuFilter || null,
         requireCombinedOk: requireCombinedOk || undefined,
         maxRows: maxRows || undefined,
-        rowsToInsert: planned.length,
+        siteLegPlans: planned.length,
+        pairedTransferRows: paired.length,
+        mainLocationCounterparty: { id: mainLoc.id, code: mainLoc.code, name: mainLoc.name },
         plannedBeforeMaxRowsCap: droppedForMaxRows ? plannedBeforeCap : undefined,
         droppedForMaxRows: droppedForMaxRows || undefined,
         distinctSkus: skuSet.size,
         sumAbsQuantities: totalQty,
         topByQuantity,
-        sample: planned.slice(0, 20),
-        sampleTruncated: planned.length > 20
+        sample: paired.slice(0, 20),
+        sampleTruncated: paired.length > 20
       },
       null,
       2
@@ -239,7 +254,7 @@ async function main() {
   let inserted = 0
   await prisma.$transaction(
     async (tx) => {
-      for (const p of planned) {
+      for (const p of paired) {
         await tx.stockMovement.create({
           data: {
             movementId: buildMovementId(),
@@ -250,9 +265,9 @@ async function main() {
             quantity: p.quantity,
             fromLocation: p.fromLocation,
             toLocation: p.toLocation,
-            reference: `${REF_TAG}:${p.sku}:${p.locationLabel}`.slice(0, 500),
+            reference: String(p.reference || `${REF_TAG}:${p.sku}`).slice(0, 500),
             performedBy: 'repair-ledger-per-location.js',
-            notes: `Align site ledger to LocationInventory (neutral in combined total): ${p.kind}`.slice(0, 2000),
+            notes: String(p.notes || 'Align site ledger to LocationInventory (paired transfer)').slice(0, 2000),
             ownerId: null
           }
         })
@@ -262,7 +277,7 @@ async function main() {
     { maxWait: 60000, timeout: 300000 }
   )
 
-  console.log(JSON.stringify({ insertedTransferLines: inserted }, null, 2))
+  console.log(JSON.stringify({ insertedPairedTransferRows: inserted }, null, 2))
   await prisma.$disconnect()
 }
 

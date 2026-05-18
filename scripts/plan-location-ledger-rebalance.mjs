@@ -5,8 +5,9 @@
  * (movement-only story; does NOT write) to move attribution from sites with
  * excess movement net vs on-hand toward sites with a deficit.
  *
- * Option B (multi-warehouse truth): use this output to post matching transfers in
- * Manufacturing (or paired adjustments that net to zero company-wide), then re-run verify.
+ * Option B (multi-warehouse truth): use this output to post matching **two-legged** transfers
+ * in Manufacturing (`fromLocationId` + `toLocationId`), then re-run verify. Do not use
+ * one-legged `repair-ledger-per-location.js` rows for new work — that script now pairs legs too.
  *
  * Usage:
  *   node scripts/plan-location-ledger-rebalance.mjs

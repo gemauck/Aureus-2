@@ -18,6 +18,7 @@ import {
   allocateStockCountSkuTx
 } from './_lib/stockCountAdjustment.js'
 import { createStockMovementTx } from './_lib/movementId.js'
+import { assertValidTransferLocations } from './_lib/stockMovementTransfer.js'
 import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
@@ -1402,9 +1403,7 @@ async function handler(req, res) {
           }
 
           if (type === 'transfer') {
-            if (!body.fromLocationId || !body.toLocationId) {
-              throw httpError(400, 'fromLocationId and toLocationId required for transfer')
-            }
+            assertValidTransferLocations(body.fromLocationId, body.toLocationId)
             const fromLi = await upsertLocationSku(body.fromLocationId)
             if ((fromLi.quantity || 0) < qty) throw new Error('Insufficient stock at source location')
             const toLi = await upsertLocationSku(body.toLocationId)
@@ -5311,6 +5310,14 @@ async function handler(req, res) {
           return badRequest(res, 'quantity cannot be zero for non-adjustment movements')
         }
 
+        if (type === 'transfer') {
+          try {
+            assertValidTransferLocations(body.fromLocationId, body.toLocationId)
+          } catch (e) {
+            return badRequest(res, e?.message || 'Invalid transfer locations')
+          }
+        }
+
         // Perform movement and inventory adjustment atomically (basic aggregate store)
         const result = await prisma.$transaction(async (tx) => {
           // Resolve location IDs first (best practice: always persist IDs in movement for consistent filtering/ledger)
@@ -5360,6 +5367,10 @@ async function handler(req, res) {
             }
             fromLocationId = adjustmentLocationId
             toLocationId = null
+          }
+
+          if (type === 'transfer') {
+            assertValidTransferLocations(fromLocationId, toLocationId)
           }
 
           // Helper to get or create LocationInventory record
@@ -5425,10 +5436,6 @@ async function handler(req, res) {
 
           // Handle transfer type separately
           if (type === 'transfer') {
-            if (!fromLocationId || !toLocationId) {
-              throw new Error('fromLocationId and toLocationId are required for transfers')
-            }
-            
             // Get source location inventory
             const fromLi = await tx.locationInventory.findUnique({ 
               where: { locationId_sku: { locationId: fromLocationId, sku: body.sku } } 
