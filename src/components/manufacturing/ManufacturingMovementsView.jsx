@@ -76,6 +76,73 @@
     });
   }
 
+  const EXPORT_HEADERS = [
+    'Movement ID',
+    'Date',
+    'Type',
+    'Item',
+    'SKU',
+    'Quantity',
+    'From Location',
+    'To Location',
+    'Reference',
+    'Performed By',
+    'Notes'
+  ];
+
+  function movementExportRow(movement, getLocationLabel) {
+    const rawDate = movement?.date || movement?.createdAt || '';
+    let dateCell = '';
+    if (rawDate) {
+      const parsed = new Date(rawDate);
+      dateCell = Number.isNaN(parsed.getTime())
+        ? String(rawDate)
+        : parsed.toISOString().slice(0, 10);
+    }
+    const fromLabel = getLocationLabel
+      ? getLocationLabel(movement.fromLocation)
+      : movement.fromLocation;
+    const toLabel = getLocationLabel
+      ? getLocationLabel(movement.toLocation)
+      : movement.toLocation;
+    const qty = parseFloat(movement.quantity);
+    return [
+      movement.movementId || movement.id || '',
+      dateCell,
+      movement.type || '',
+      movement.itemName || '',
+      movement.sku || '',
+      Number.isFinite(qty) ? qty : movement.quantity ?? '',
+      fromLabel || '',
+      toLabel || '',
+      movement.reference || '',
+      movement.performedBy || '',
+      movement.notes || ''
+    ];
+  }
+
+  async function waitForXLSX(maxAttempts) {
+    let XLSXLib = window.XLSX;
+    for (let i = 0; i < maxAttempts && (!XLSXLib || !XLSXLib.utils); i++) {
+      await new Promise(function (resolve) {
+        setTimeout(resolve, 100);
+      });
+      XLSXLib = window.XLSX;
+    }
+    return XLSXLib && XLSXLib.utils ? XLSXLib : null;
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   function ManufacturingMovementsView({
     movements = [],
     movementsLoadedFromAPI = false,
@@ -86,6 +153,7 @@
     getLocationLabel
   }) {
     const [columnFilters, setColumnFilters] = useState({});
+    const [isExporting, setIsExporting] = useState(false);
     const columnFiltersRef = useRef({});
     const filterInputRefs = useRef({});
     const typingTimeoutRef = useRef(null);
@@ -127,6 +195,58 @@
       e?.stopPropagation();
       if (typeof onRecordMovement === 'function') onRecordMovement();
     };
+
+    const handleExportMovements = useCallback(
+      async function () {
+        const rows = filteredMovements;
+        if (!rows.length) {
+          window.alert('No movements to export. Adjust filters or refresh the list.');
+          return;
+        }
+        setIsExporting(true);
+        try {
+          const today = new Date().toISOString().slice(0, 10);
+          const suffix = hasActiveFilters ? '_filtered' : '';
+          const baseName = 'stock_movements_' + today + suffix;
+          const dataRows = rows.map(function (m) {
+            return movementExportRow(m, getLocationLabel);
+          });
+
+          const XLSXLib = await waitForXLSX(30);
+          if (XLSXLib) {
+            const aoa = [EXPORT_HEADERS.slice(), ...dataRows];
+            const ws = XLSXLib.utils.aoa_to_sheet(aoa);
+            const wb = XLSXLib.utils.book_new();
+            XLSXLib.utils.book_append_sheet(wb, ws, 'Stock Movements');
+            const out = XLSXLib.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([out], {
+              type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+            downloadBlob(blob, baseName + '.xlsx');
+          } else {
+            const sanitizeCsv = function (value) {
+              const s = value === null || value === undefined ? '' : String(value);
+              if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+              return s;
+            };
+            const lines = [
+              EXPORT_HEADERS.map(sanitizeCsv).join(','),
+              ...dataRows.map(function (row) {
+                return row.map(sanitizeCsv).join(',');
+              })
+            ];
+            const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            downloadBlob(blob, baseName + '.csv');
+          }
+        } catch (err) {
+          console.error('Failed to export stock movements:', err);
+          window.alert('Failed to export movements. Please try again or check the console for details.');
+        } finally {
+          setIsExporting(false);
+        }
+      },
+      [filteredMovements, getLocationLabel, hasActiveFilters]
+    );
 
     function renderFilterInput(col) {
       const thClass =
@@ -274,6 +394,23 @@
               },
               React.createElement('i', { className: 'fas fa-sync-alt text-xs' }),
               ' Refresh'
+            ),
+            React.createElement(
+              'button',
+              {
+                onClick: handleExportMovements,
+                disabled: isExporting || !movementsLoadedFromAPI || filteredMovements.length === 0,
+                className:
+                  'px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed',
+                title: hasActiveFilters
+                  ? 'Download filtered movements to Excel'
+                  : 'Download all movements to Excel',
+                type: 'button'
+              },
+              React.createElement('i', {
+                className: (isExporting ? 'fas fa-spinner animate-spin' : 'fas fa-download') + ' text-xs'
+              }),
+              isExporting ? ' Exporting…' : ' Export'
             ),
             hasActiveFilters &&
               React.createElement(
