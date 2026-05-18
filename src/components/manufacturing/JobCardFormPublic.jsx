@@ -1308,6 +1308,144 @@ async function flushJobCardActivityQueue(serverJobCardId, events) {
   }
 }
 
+function parseJobCardSyncFailureMessage(status, text) {
+  if (status === 413) return 'Payload too large. Remove some media and retry.';
+  if (status === 429) return 'Too many requests. Please retry in a moment.';
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Server temporarily unreachable. Please retry in a few moments.';
+  }
+  if (!text) return `HTTP ${status}`;
+  try {
+    const parsed = JSON.parse(text);
+    return (
+      parsed?.error?.message ||
+      parsed?.message ||
+      parsed?.data?.message ||
+      String(text).slice(0, 280)
+    );
+  } catch {
+    return String(text).slice(0, 280);
+  }
+}
+
+/** Push one local pending job card to /api/jobcards (stock movements post server-side on save). */
+async function syncOneLocalPendingJobCardToServer(draftCard) {
+  if (!draftCard || draftCard.id == null) {
+    return { ok: false, serverId: null, errorText: 'Invalid draft' };
+  }
+  const token = getJobCardAuthToken();
+  if (!token) {
+    return { ok: false, serverId: null, errorText: 'Sign in is required to sync this job card.' };
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return { ok: false, serverId: null, errorText: 'Offline' };
+  }
+
+  const localId = String(draftCard.id);
+  const serverJobCardId =
+    draftCard.serverJobCardId || (isLikelyServerJobCardId(localId) ? localId : null);
+  const payloadObj = { ...draftCard };
+  delete payloadObj.activityQueue;
+  delete payloadObj.synced;
+  delete payloadObj.source;
+  delete payloadObj.serverJobCardId;
+
+  const payloadJson = JSON.stringify(payloadObj);
+  const patchBytes = estimateJsonBytes(payloadObj);
+  if (patchBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
+    return {
+      ok: false,
+      serverId: null,
+      errorText: 'Upload payload is too large for reliable sync. Remove some media and retry.'
+    };
+  }
+
+  let synced = false;
+  let resolvedServerId = serverJobCardId ? String(serverJobCardId) : null;
+  let errorText = '';
+
+  if (serverJobCardId) {
+    try {
+      const patchRes = await fetchWithRetry(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: payloadJson
+      });
+      if (patchRes.ok) {
+        synced = true;
+        const patchData = await patchRes.json().catch(() => ({}));
+        const patchedJobCard = patchData?.data?.jobCard || patchData?.jobCard;
+        if (patchedJobCard?.id) resolvedServerId = String(patchedJobCard.id);
+      } else if (patchRes.status !== 404) {
+        const text = await patchRes.text().catch(() => '');
+        errorText = parseJobCardSyncFailureMessage(patchRes.status, text);
+      }
+    } catch (e) {
+      errorText = e?.message || 'Network error';
+    }
+  }
+
+  if (!synced && !errorText) {
+    const createPayload = { ...payloadObj };
+    delete createPayload.id;
+    const createBytes = estimateJsonBytes(createPayload);
+    if (createBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
+      return {
+        ok: false,
+        serverId: null,
+        errorText: 'Upload payload is too large for reliable sync. Remove some media and retry.'
+      };
+    }
+    try {
+      const createRes = await fetchWithRetry('/api/jobcards', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(createPayload)
+      });
+      if (createRes.ok) {
+        synced = true;
+        const createText = await createRes.text().catch(() => '');
+        let createData = {};
+        try {
+          createData = createText ? JSON.parse(createText) : {};
+        } catch {
+          createData = {};
+        }
+        const createdJobCard = createData?.data?.jobCard || createData?.jobCard;
+        if (createdJobCard?.id) {
+          resolvedServerId = String(createdJobCard.id);
+          rememberPublicPriorJobCardId(resolvedServerId);
+        }
+      } else {
+        const text = await createRes.text().catch(() => '');
+        errorText = parseJobCardSyncFailureMessage(createRes.status, text);
+      }
+    } catch (e) {
+      errorText = e?.message || 'Network error';
+    }
+  }
+
+  if (!synced) {
+    return { ok: false, serverId: null, errorText: errorText || 'Sync failed' };
+  }
+
+  if (resolvedServerId && Array.isArray(draftCard.activityQueue) && draftCard.activityQueue.length > 0) {
+    await flushJobCardActivityQueue(resolvedServerId, draftCard.activityQueue);
+  }
+  removeLocalPendingJobCard(localId);
+  return { ok: true, serverId: resolvedServerId, errorText: '' };
+}
+
+function listUnsyncedLocalPendingJobCards() {
+  return readLocalPendingJobCards().filter(j => j && j.synced === false);
+}
+
 /** Searchable text for unsynced local drafts (mirrors server `q` coverage as far as stored fields allow). */
 function priorListLocalSearchHay(jc) {
   if (!jc || typeof jc !== 'object') return '';
@@ -1527,6 +1665,8 @@ const JobCardFormPublic = () => {
   const [priorListRefreshTick, setPriorListRefreshTick] = useState(0);
   /** Bump after local pending queue changes so landing / prior list re-read storage */
   const [localDraftsTick, setLocalDraftsTick] = useState(0);
+  const [pendingAutoSync, setPendingAutoSync] = useState({ running: false, synced: 0, failed: 0 });
+  const pendingAutoSyncInFlightRef = useRef(false);
   /** Activity trail when editing a card opened from prior list (server GET). */
   const [priorLoadedActivities, setPriorLoadedActivities] = useState([]);
   const [priorActivityLoading, setPriorActivityLoading] = useState(false);
@@ -4100,6 +4240,44 @@ const JobCardFormPublic = () => {
     [setLocalDraftsTick]
   );
 
+  const runAutoSyncPendingJobCards = useCallback(async ({ silent = true } = {}) => {
+    if (pendingAutoSyncInFlightRef.current) return { synced: 0, failed: 0 };
+    if (!isOnline || !getJobCardAuthToken()) return { synced: 0, failed: 0 };
+
+    const pending = listUnsyncedLocalPendingJobCards();
+    if (pending.length === 0) return { synced: 0, failed: 0 };
+
+    pendingAutoSyncInFlightRef.current = true;
+    setPendingAutoSync({ running: true, synced: 0, failed: 0 });
+    let synced = 0;
+    let failed = 0;
+
+    try {
+      for (const card of pending) {
+        const localId = String(card.id);
+        setSyncingPriorCardId(localId);
+        const result = await syncOneLocalPendingJobCardToServer(card);
+        if (result.ok) synced += 1;
+        else failed += 1;
+        setSyncingPriorCardId('');
+      }
+    } finally {
+      pendingAutoSyncInFlightRef.current = false;
+      setSyncingPriorCardId('');
+      setPendingAutoSync({ running: false, synced, failed });
+      if (synced > 0) {
+        setLocalDraftsTick(t => t + 1);
+        setPriorListRefreshTick(t => t + 1);
+      }
+      if (!silent && synced > 0 && failed === 0) {
+        alert(synced === 1 ? 'Job card synced.' : `${synced} job cards synced.`);
+      } else if (!silent && failed > 0 && synced === 0) {
+        alert('Could not sync pending job cards. Open a card and tap Sync, or remove large photos and retry.');
+      }
+    }
+    return { synced, failed };
+  }, [isOnline]);
+
   const handleSyncLocalPendingCard = useCallback(
     async (draftCard) => {
       if (!draftCard || draftCard.id == null) return;
@@ -4109,110 +4287,22 @@ const JobCardFormPublic = () => {
         alert('You are offline. Connect to the internet to sync this job card.');
         return;
       }
-      const token = getJobCardAuthToken();
-      if (!token) {
+      if (!getJobCardAuthToken()) {
         alert('Sign in is required to sync this job card.');
         return;
       }
 
-      const parseFailure = (status, text) => {
-        if (status === 413) return 'Payload too large. Remove some media and retry.';
-        if (status === 429) return 'Too many requests. Please retry in a moment.';
-        if (status === 502 || status === 503 || status === 504) {
-          return 'Server temporarily unreachable. Please retry in a few moments.';
-        }
-        if (!text) return `HTTP ${status}`;
-        try {
-          const parsed = JSON.parse(text);
-          return (
-            parsed?.error?.message ||
-            parsed?.message ||
-            parsed?.data?.message ||
-            String(text).slice(0, 280)
-          );
-        } catch {
-          return String(text).slice(0, 280);
-        }
-      };
-
       setSyncingPriorCardId(localId);
       try {
-        const serverJobCardId =
-          draftCard.serverJobCardId ||
-          (isLikelyServerJobCardId(localId) ? localId : null);
-        const payloadObj = { ...draftCard };
-        delete payloadObj.activityQueue;
-        delete payloadObj.synced;
-        delete payloadObj.source;
-        delete payloadObj.serverJobCardId;
-        const payloadJson = JSON.stringify(payloadObj);
-
-        let synced = false;
-        let resolvedServerId = serverJobCardId ? String(serverJobCardId) : null;
-        let errorText = '';
-
-        if (serverJobCardId) {
-          const patchRes = await fetchWithRetry(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
-            method: 'PATCH',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: payloadJson
-          });
-          if (patchRes.ok) {
-            synced = true;
-            const patchData = await patchRes.json().catch(() => ({}));
-            const patchedJobCard = patchData?.data?.jobCard || patchData?.jobCard;
-            if (patchedJobCard?.id) resolvedServerId = String(patchedJobCard.id);
-          } else if (patchRes.status !== 404) {
-            const text = await patchRes.text().catch(() => '');
-            errorText = parseFailure(patchRes.status, text);
-          }
-        }
-
-        if (!synced && !errorText) {
-          const createPayload = { ...payloadObj };
-          delete createPayload.id;
-          const createRes = await fetchWithRetry('/api/jobcards', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(createPayload)
-          });
-          if (createRes.ok) {
-            synced = true;
-            const createText = await createRes.text().catch(() => '');
-            let createData = {};
-            try {
-              createData = createText ? JSON.parse(createText) : {};
-            } catch {
-              createData = {};
-            }
-            const createdJobCard = createData?.data?.jobCard || createData?.jobCard;
-            if (createdJobCard?.id) {
-              resolvedServerId = String(createdJobCard.id);
-              rememberPublicPriorJobCardId(resolvedServerId);
-            }
-          } else {
-            const text = await createRes.text().catch(() => '');
-            errorText = parseFailure(createRes.status, text);
-          }
-        }
-
-        if (!synced) {
-          alert(`Failed to sync this job card.${errorText ? `\n\nDetails: ${errorText}` : ''}`);
+        const result = await syncOneLocalPendingJobCardToServer(draftCard);
+        if (!result.ok) {
+          alert(
+            `Failed to sync this job card.${result.errorText ? `\n\nDetails: ${result.errorText}` : ''}`
+          );
           return;
         }
-
-        if (resolvedServerId && Array.isArray(draftCard.activityQueue) && draftCard.activityQueue.length > 0) {
-          await flushJobCardActivityQueue(resolvedServerId, draftCard.activityQueue);
-        }
-        removeLocalPendingJobCard(localId);
-        setLocalDraftsTick((t) => t + 1);
-        setPriorListRefreshTick((t) => t + 1);
+        setLocalDraftsTick(t => t + 1);
+        setPriorListRefreshTick(t => t + 1);
         alert('Job card synced.');
       } catch (error) {
         alert(`Failed to sync this job card. ${error?.message || ''}`.trim());
@@ -4222,6 +4312,24 @@ const JobCardFormPublic = () => {
     },
     [syncingPriorCardId, isOnline]
   );
+
+  const unsyncedPendingCount = useMemo(
+    () => listUnsyncedLocalPendingJobCards().length,
+    [localDraftsTick, pendingAutoSync.running]
+  );
+
+  useEffect(() => {
+    if (!isOnline || !getJobCardAuthToken()) return undefined;
+    if (listUnsyncedLocalPendingJobCards().length === 0) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!cancelled) void runAutoSyncPendingJobCards({ silent: true });
+    }, 1200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOnline, localDraftsTick, runAutoSyncPendingJobCards]);
 
   const closePhotoLightbox = useCallback(() => {
     setPhotoLightboxUrl('');
@@ -6312,6 +6420,35 @@ const JobCardFormPublic = () => {
               </span>
             </button>
           </div>
+
+          {unsyncedPendingCount > 0 ? (
+            <section className="rounded-2xl border border-blue-200/90 bg-blue-50/95 p-4 shadow-sm space-y-2">
+              <p className="text-sm font-semibold text-blue-950">
+                {pendingAutoSync.running
+                  ? 'Syncing job cards to the server…'
+                  : `${unsyncedPendingCount} job card${unsyncedPendingCount === 1 ? '' : 's'} waiting to sync`}
+              </p>
+              <p className="text-xs text-blue-900/90 leading-snug">
+                Stock used is recorded in Manufacturing only after the job card reaches the server.
+                {pendingAutoSync.synced > 0 && !pendingAutoSync.running
+                  ? ` Last sync: ${pendingAutoSync.synced} succeeded${pendingAutoSync.failed ? `, ${pendingAutoSync.failed} failed` : ''}.`
+                  : ' We sync automatically when you are online and signed in.'}
+              </p>
+              <button
+                type="button"
+                disabled={!isOnline || !getJobCardAuthToken() || pendingAutoSync.running}
+                onClick={() => void runAutoSyncPendingJobCards({ silent: false })}
+                className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-3 py-2.5 text-sm font-semibold text-blue-950 hover:bg-blue-100/80 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {pendingAutoSync.running ? (
+                  <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />
+                ) : (
+                  <i className="fa-solid fa-cloud-arrow-up" aria-hidden />
+                )}
+                {pendingAutoSync.running ? 'Syncing…' : 'Sync now'}
+              </button>
+            </section>
+          ) : null}
 
           {!getJobCardAuthToken() ? (
             <section className="rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm space-y-2">
