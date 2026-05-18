@@ -62,6 +62,7 @@
     "export:location-ledger-imbalances:active": "node scripts/export-location-ledger-imbalances.mjs --ignore-zero-on-hand",
     "bulk:transfer-location-all": "node scripts/bulk-inter-location-transfer-all.mjs",
     "cleanup:zero-li-at-location": "node scripts/delete-zero-qty-location-inventory.mjs",
+    "cleanup:job-card-duplicate-movements": "node scripts/cleanup-job-card-duplicate-stock-movements.mjs",
     "verify:ledger:all": "node scripts/verify-ledger-reconciliation.js && node scripts/verify-ledger-per-location.js",
     "verify:ledger:all:active": "node scripts/verify-ledger-reconciliation.js && node scripts/verify-ledger-per-location.js --ignore-zero-on-hand",
     "plan:location-ledger-rebalance": "node scripts/plan-location-ledger-rebalance.mjs",

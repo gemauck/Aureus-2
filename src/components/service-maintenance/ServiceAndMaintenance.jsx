@@ -2549,10 +2549,13 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       </div>
                       <div className="mt-1">
                         {selectedJobCard.clientName || '–'}
-                        {selectedJobCard.siteName && (
-                          <span className={`ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>• {selectedJobCard.siteName}</span>
-                        )}
                       </div>
+                    </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Site
+                      </div>
+                      <div className="mt-1">{selectedJobCard.siteName || '—'}</div>
                     </div>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -2619,9 +2622,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Location
                       </div>
-                      <div className="mt-1">
-                        {selectedJobCard.location || selectedJobCard.siteName || 'Not recorded'}
-                      </div>
+                      <div className="mt-1">{selectedJobCard.location || 'Not recorded'}</div>
                     </div>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>

@@ -140,15 +140,27 @@ async function applyInventoryReversalForRemovedMovementTx(tx, movement, id) {
  * @param {import('@prisma/client').Prisma.TransactionClient} tx
  * @param {string} id - StockMovement primary key (cuid)
  */
-export async function purgeAdjustmentStockMovementTx(tx, id) {
+/**
+ * Remove a movement and reverse inventory without a compensating ledger row.
+ *
+ * @param {import('@prisma/client').Prisma.TransactionClient} tx
+ * @param {string} id - StockMovement primary key (cuid)
+ * @param {{ allowedTypes?: string[] }} [opts]
+ */
+export async function purgeStockMovementTx(tx, id, opts = {}) {
+  const allowedTypes = opts.allowedTypes || ['adjustment', 'consumption']
   const movement = await tx.stockMovement.findUnique({ where: { id } })
   if (!movement) throw httpError(404, 'Stock movement not found')
   const t = String(movement.type || '').toLowerCase()
-  if (t !== 'adjustment') {
-    throw httpError(400, 'purgeAdjustmentStockMovementTx only supports type=adjustment')
+  if (!allowedTypes.includes(t)) {
+    throw httpError(400, `purgeStockMovementTx only supports: ${allowedTypes.join(', ')}`)
   }
   await applyInventoryReversalForRemovedMovementTx(tx, movement, id)
   await tx.stockMovement.delete({ where: { id } })
+}
+
+export async function purgeAdjustmentStockMovementTx(tx, id) {
+  return purgeStockMovementTx(tx, id, { allowedTypes: ['adjustment'] })
 }
 
 /**

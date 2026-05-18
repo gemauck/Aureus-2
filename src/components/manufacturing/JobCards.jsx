@@ -1880,12 +1880,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                       </div>
                       <div className="mt-1">
                         {selectedJobCard.clientName || '–'}
-                        {selectedJobCard.siteName && (
-                          <span className="ml-1 text-slate-400">
-                            • {selectedJobCard.siteName}
-                          </span>
-                        )}
                       </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Site
+                      </div>
+                      <div className="mt-1">{selectedJobCard.siteName || '—'}</div>
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-400">
@@ -1970,7 +1971,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         Location
                       </div>
                       <div className="mt-1">
-                        {selectedJobCard.location || selectedJobCard.siteName || 'Not recorded'}
+                        {selectedJobCard.location || 'Not recorded'}
                       </div>
                     </div>
                     <div>
