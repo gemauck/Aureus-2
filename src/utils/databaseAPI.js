@@ -2119,6 +2119,11 @@ const DatabaseAPI = {
         return normalized;
     },
 
+    /** Allocate next QuickBooks journal number for Client Allocation journal CSV export. */
+    async allocateClientAllocationJournalNumber() {
+        return this.makeRequest('/manufacturing/client-allocation-journal', { method: 'POST' });
+    },
+
     /**
      * Stock mutations exist on two endpoints; keep behaviour aligned when changing either.
      * - `createStockMovement` → POST `/manufacturing/stock-movements` (legacy aggregate list + Manufacturing UI).
