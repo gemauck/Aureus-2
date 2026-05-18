@@ -15,6 +15,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import XLSX from 'xlsx'
 import { prisma } from '../api/_lib/prisma.js'
+import { buildMovementId } from '../api/_lib/movementId.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -271,7 +272,6 @@ async function main() {
   }
 
   let nextSku = 1
-  let movementCounter = 1
   let created = 0
   const errors = []
 
@@ -343,8 +343,7 @@ async function main() {
       }
 
       // One adjustment per item so ledger shows: Opening 0, In +quantity, Balance quantity
-      const movementId = `MOV${String(movementCounter).padStart(4, '0')}`
-      movementCounter++
+      const movementId = buildMovementId()
       const toLocCode = location ? location.code : ''
       await prisma.stockMovement.create({
         data: {

@@ -8,6 +8,7 @@
 
 import 'dotenv/config'
 import { prisma } from '../api/_lib/prisma.js'
+import { buildMovementId } from '../api/_lib/movementId.js'
 
 async function main() {
   const items = await prisma.inventoryItem.findMany({
@@ -32,18 +33,6 @@ async function main() {
     return
   }
 
-  let nextMov = 1
-  const existing = await prisma.stockMovement.findMany({
-    where: { movementId: { startsWith: 'MOV' } },
-    select: { movementId: true },
-    orderBy: { createdAt: 'desc' },
-    take: 1,
-  })
-  if (existing.length && existing[0].movementId) {
-    const m = existing[0].movementId.match(/^MOV(\d+)$/)
-    if (m) nextMov = parseInt(m[1], 10) + 1
-  }
-
   let created = 0
   for (const item of missing) {
     const loc = item.locationId
@@ -52,7 +41,7 @@ async function main() {
     const toLoc = loc ? loc.code : ''
     await prisma.stockMovement.create({
       data: {
-        movementId: `MOV${String(nextMov).padStart(4, '0')}`,
+        movementId: buildMovementId(),
         date: new Date(),
         type: 'adjustment',
         itemName: item.name,
@@ -66,7 +55,6 @@ async function main() {
         ownerId: null,
       },
     })
-    nextMov++
     created++
   }
   console.log('Created', created, 'missing stock movements.')

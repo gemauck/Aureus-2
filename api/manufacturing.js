@@ -17,6 +17,7 @@ import {
   applyStockCountAdjustmentTx,
   allocateStockCountSkuTx
 } from './_lib/stockCountAdjustment.js'
+import { createStockMovementTx } from './_lib/movementId.js'
 import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
@@ -196,23 +197,6 @@ async function applyFinalProductBomUnitCost(items = []) {
       unitCost: bomUnitCost
     }
   })
-}
-
-async function createStockMovementTxWithRetry(tx, payload) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      return await tx.stockMovement.create({
-        data: {
-          ...payload,
-          movementId: payload.movementId || buildMovementId()
-        }
-      })
-    } catch (error) {
-      if (error?.code === 'P2002') continue
-      throw error
-    }
-  }
-  throw new Error('Could not allocate a unique movementId')
 }
 
 /**
@@ -4172,7 +4156,7 @@ async function handler(req, res) {
               })
                 
               // Create stock movement record (consumption should always be negative)
-              await createStockMovementTxWithRetry(tx, {
+              await createStockMovementTx(tx, {
                   date: new Date(),
                   type: 'consumption',
                   itemName: component.name || component.sku,
@@ -4316,7 +4300,7 @@ async function handler(req, res) {
               console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
             }
             
-            const movement = await createStockMovementTxWithRetry(tx, {
+            const movement = await createStockMovementTx(tx, {
                 date: new Date(),
                 type: 'receipt', // Finished product receipt (increases stock)
                 itemName: finishedProduct.name,
@@ -4635,7 +4619,7 @@ async function handler(req, res) {
                   
                   // Create stock movement record for allocation (no quantity change, just tracking)
                   if (allocationDelta > 0) {
-                    await createStockMovementTxWithRetry(tx, {
+                    await createStockMovementTx(tx, {
                         date: now,
                         type: 'adjustment',
                         itemName: component.name || component.sku,
@@ -4689,7 +4673,7 @@ async function handler(req, res) {
                 
                 
                 // Create stock movement record for allocation
-                await createStockMovementTxWithRetry(tx, {
+                await createStockMovementTx(tx, {
                     date: now,
                     type: 'adjustment',
                     itemName: finishedProduct.name,
@@ -4834,7 +4818,7 @@ async function handler(req, res) {
                     
                     // Create stock movement record for return
                     const movementType = newStatus === 'cancelled' ? 'adjustment' : 'return'
-                    await createStockMovementTxWithRetry(tx, {
+                    await createStockMovementTx(tx, {
                         date: now,
                         type: movementType,
                         itemName: component.name || component.sku,
@@ -4890,7 +4874,7 @@ async function handler(req, res) {
                   
                   
                   // Create stock movement record
-                  await createStockMovementTxWithRetry(tx, {
+                  await createStockMovementTx(tx, {
                       date: now,
                       type: 'adjustment',
                       itemName: finishedProduct.name,
@@ -5128,7 +5112,7 @@ async function handler(req, res) {
                     }
                     
                     // Create stock movement record
-                    await createStockMovementTxWithRetry(tx, {
+                    await createStockMovementTx(tx, {
                         date: now,
                         type: 'adjustment',
                         itemName: component.name || component.sku,
@@ -6086,7 +6070,7 @@ async function handler(req, res) {
           }
 
           // Create movement per component (consumption should be negative)
-          const movement = await createStockMovementTxWithRetry(tx, {
+          const movement = await createStockMovementTx(tx, {
               date: now,
               type: 'consumption',
               itemName: reqComp.itemName || item.name,

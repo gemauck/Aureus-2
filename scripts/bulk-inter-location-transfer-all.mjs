@@ -18,10 +18,10 @@ import path from 'node:path'
 import { prisma } from '../api/_lib/prisma.js'
 import { computedInventoryTotalValue } from '../api/_lib/inventoryValue.js'
 import {
-  buildMovementId,
   findCanonicalInventoryItemBySkuTx,
   getStatusFromQuantity
 } from '../api/_lib/stockCountAdjustment.js'
+import { buildMovementId, createStockMovementTx } from '../api/_lib/movementId.js'
 
 const EPS = 0.0001
 
@@ -91,23 +91,6 @@ async function auditScriptTransfer(prisma, actorId, movementRow, extra) {
   } catch (e) {
     console.warn('⚠️ AuditLog write failed (non-fatal):', e?.message || e)
   }
-}
-
-async function createStockMovementTxWithRetry(tx, payload) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      return await tx.stockMovement.create({
-        data: {
-          ...payload,
-          movementId: payload.movementId || buildMovementId()
-        }
-      })
-    } catch (error) {
-      if (error?.code === 'P2002') continue
-      throw error
-    }
-  }
-  throw new Error('Could not allocate a unique movementId')
 }
 
 async function upsertLocationSkuTx(tx, { locationId, sku, itemName, master, reorderPoint }) {
@@ -191,7 +174,7 @@ async function runTransferTx(tx, { fromLocationId, toLocationId, sku, itemName, 
   }
 
   const now = new Date()
-  const movement = await createStockMovementTxWithRetry(tx, {
+  const movement = await createStockMovementTx(tx, {
     movementId: buildMovementId(),
     date: now,
     type: 'transfer',

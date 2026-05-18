@@ -16,6 +16,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import XLSX from 'xlsx'
 import { prisma } from '../api/_lib/prisma.js'
+import { buildMovementId } from '../api/_lib/movementId.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -586,16 +587,12 @@ async function main() {
       }
 
       if (quantity > 0) {
-        const lastMov = await prisma.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-        const nextNum = lastMov && lastMov.movementId && lastMov.movementId.startsWith('MOV')
-          ? parseInt(lastMov.movementId.replace('MOV', ''), 10) + 1
-          : 1
         const locCode = location ? location.code : ''
         // Legacy format: store location *code* in toLocation (not UUID). New adjustments use fromLocation = UUID
         // (see api/_lib/stockCountAdjustment.js). Run scripts/backfill-stock-movement-location-ids.js to normalize.
         await prisma.stockMovement.create({
           data: {
-            movementId: `MOV${String(nextNum).padStart(4, '0')}`,
+            movementId: buildMovementId(),
             date: new Date(),
             type: 'adjustment',
             itemName: item.name,

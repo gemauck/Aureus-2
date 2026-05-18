@@ -1741,7 +1741,7 @@ model ProductionOrder {
 
 model StockMovement {
   id           String   @id @default(cuid())
-  movementId   String
+  movementId   String   @unique
   date         DateTime @default(now())
   type         String
   itemName     String

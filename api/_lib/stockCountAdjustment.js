@@ -30,11 +30,8 @@ export const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
   return 'out_of_stock'
 }
 
-export function buildMovementId() {
-  const stamp = Date.now().toString(36).toUpperCase()
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
-  return `MOV-${stamp}-${rand}`
-}
+export { buildMovementId, createStockMovementTx } from './movementId.js'
+import { buildMovementId } from './movementId.js'
 
 export async function findCanonicalInventoryItemBySkuTx(tx, sku) {
   if (!sku) return null

@@ -9,6 +9,7 @@ import { isAdminUser } from './_lib/adminRoles.js'
 // Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
+import { createStockMovementTx } from './_lib/movementId.js'
 
 const S_DRAFT = 'draft'
 const S_FINAL = 'final'
@@ -270,14 +271,6 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
     })
   }
 
-  const lastMovement = await tx.stockMovement.findFirst({
-    orderBy: { createdAt: 'desc' }
-  })
-  let seq =
-    lastMovement && lastMovement.movementId?.startsWith('MOV')
-      ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-      : 1
-
   const now = new Date()
 
   for (const item of mergedItems) {
@@ -288,21 +281,18 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
 
     const unitCost = parseFloat(item.receivedUnitPrice) || 0
 
-    await tx.stockMovement.create({
-      data: {
-        movementId: `MOV${String(seq++).padStart(4, '0')}`,
-        date: now,
-        type: 'receipt',
-        itemName: item.name || item.sku,
-        sku: item.sku,
-        quantity: quantity,
-        fromLocation: '',
-        toLocation: toLocationId || mainWarehouse?.id || '',
-        reference: existingOrder.orderNumber || id,
-        performedBy: req.user?.name || 'System',
-        notes: `Stock received from purchase order ${existingOrder.orderNumber || id} - Supplier: ${existingOrder.supplierName || 'N/A'}`,
-        ownerId: null
-      }
+    await createStockMovementTx(tx, {
+      date: now,
+      type: 'receipt',
+      itemName: item.name || item.sku,
+      sku: item.sku,
+      quantity: quantity,
+      fromLocation: '',
+      toLocation: toLocationId || mainWarehouse?.id || '',
+      reference: existingOrder.orderNumber || id,
+      performedBy: req.user?.name || 'System',
+      notes: `Stock received from purchase order ${existingOrder.orderNumber || id} - Supplier: ${existingOrder.supplierName || 'N/A'}`,
+      ownerId: null
     })
 
     let inventoryItem = await tx.inventoryItem.findFirst({

@@ -4,6 +4,8 @@
  */
 
 import { PrismaClient } from '@prisma/client'
+import { createStockMovementTx } from './api/_lib/movementId.js'
+
 const prisma = new PrismaClient()
 
 // Test configuration
@@ -239,14 +241,6 @@ async function test3_UpdatePurchaseOrderStatus(testOrder) {
       where: { code: TEST_CONFIG.locationCode }
     })
     
-    // Get last movement ID BEFORE transaction
-    const lastMovement = await prisma.stockMovement.findFirst({
-      orderBy: { createdAt: 'desc' }
-    })
-    let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-      ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-      : 1
-    
     await prisma.$transaction(async (tx) => {
       const now = new Date()
       
@@ -295,21 +289,17 @@ async function test3_UpdatePurchaseOrderStatus(testOrder) {
         const unitCost = parseFloat(item.unitPrice) || 0
         const quantity = parseFloat(item.quantity)
         
-        // Create stock movement
-        await tx.stockMovement.create({
-          data: {
-            movementId: `MOV${String(seq++).padStart(4, '0')}`,
-            date: now,
-            type: 'receipt',
-            itemName: item.name || item.sku,
-            sku: item.sku,
-            quantity: quantity,
-            fromLocation: '',
-            toLocation: mainWarehouse?.code || '',
-            reference: testOrder.orderNumber,
-            performedBy: 'Test System',
-            notes: `Stock received from purchase order ${testOrder.orderNumber}`
-          }
+        await createStockMovementTx(tx, {
+          date: now,
+          type: 'receipt',
+          itemName: item.name || item.sku,
+          sku: item.sku,
+          quantity: quantity,
+          fromLocation: '',
+          toLocation: mainWarehouse?.code || '',
+          reference: testOrder.orderNumber,
+          performedBy: 'Test System',
+          notes: `Stock received from purchase order ${testOrder.orderNumber}`
         })
         
         // Update or create inventory item

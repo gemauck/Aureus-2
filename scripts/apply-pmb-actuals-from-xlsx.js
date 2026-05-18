@@ -16,6 +16,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import XLSX from 'xlsx'
 import { prisma } from '../api/_lib/prisma.js'
+import { buildMovementId } from '../api/_lib/movementId.js'
 
 function getStatusFromQuantity(quantity = 0, reorderPoint = 0) {
   if (quantity > (reorderPoint || 0)) return 'in_stock'
@@ -117,13 +118,8 @@ async function main() {
     return
   }
 
-  const lastMov = await prisma.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-  let movSeq =
-    lastMov && lastMov.movementId?.startsWith('MOV') ? parseInt(lastMov.movementId.replace('MOV', ''), 10) + 1 : 1
-
   for (const p of plan) {
-    const movementId = `MOV${String(movSeq).padStart(4, '0')}`
-    movSeq += 1
+    const movementId = buildMovementId()
 
     await prisma.$transaction(async (tx) => {
       const master = await findCanonicalInventoryItemTx(tx, p.sku)

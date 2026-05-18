@@ -8,6 +8,7 @@ import { withLogging } from './_lib/logger.js'
 // Mutations: after successful create/update/delete, call logAuditFromRequest (see .cursorrules / manufacturingAuditLog.js).
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
+import { createStockMovementTx } from './_lib/movementId.js'
 
 async function handler(req, res) {
   try {
@@ -205,12 +206,6 @@ async function handler(req, res) {
                 return
               }
               
-              // Get last movement for sequence number
-              const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                : 1
-              
               // Helper to update LocationInventory
               async function upsertLocationInventory(locationId, sku, itemName, quantityDelta) {
                 if (!locationId) {
@@ -308,20 +303,17 @@ async function handler(req, res) {
                 
                 // StockMovement.fromLocation / toLocation: store location UUID (matches adjustments,
                 // ledger cutover, and verify-ledger-per-location.js — codes break site-level audit).
-                const movement = await tx.stockMovement.create({
-                  data: {
-                    movementId: `MOV${String(seq++).padStart(4, '0')}`,
-                    date: body.shippedDate ? new Date(body.shippedDate) : new Date(),
-                    type: 'sale',
-                    itemName: item.name || inventoryItem.name,
-                    sku: item.sku,
-                    quantity: -quantityToDeduct, // negative for sale
-                    fromLocation: locationId,
-                    toLocation: '',
-                    reference: existingOrder.orderNumber || id,
-                    performedBy: req.user?.name || 'System',
-                    notes: `Sales order ${existingOrder.orderNumber || id} - ${item.name || item.sku}`
-                  }
+                const movement = await createStockMovementTx(tx, {
+                  date: body.shippedDate ? new Date(body.shippedDate) : new Date(),
+                  type: 'sale',
+                  itemName: item.name || inventoryItem.name,
+                  sku: item.sku,
+                  quantity: -quantityToDeduct, // negative for sale
+                  fromLocation: locationId,
+                  toLocation: '',
+                  reference: existingOrder.orderNumber || id,
+                  performedBy: req.user?.name || 'System',
+                  notes: `Sales order ${existingOrder.orderNumber || id} - ${item.name || item.sku}`
                 })
                 
                 

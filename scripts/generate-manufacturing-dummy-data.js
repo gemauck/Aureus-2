@@ -23,6 +23,7 @@ import { PrismaClient } from '@prisma/client'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { createStockMovementTx } from '../api/_lib/movementId.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -55,28 +56,18 @@ function getStatusFromQuantity(quantity, reorderPoint) {
 
 // Helper to create stock movement
 async function createStockMovement(tx, movementData) {
-  const lastMovement = await tx.stockMovement.findFirst({
-    orderBy: { createdAt: 'desc' }
-  })
-  const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
-    ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-    : 1
-  
-  return await tx.stockMovement.create({
-    data: {
-      movementId: `MOV${String(nextNumber).padStart(4, '0')}`,
-      date: movementData.date || new Date(),
-      type: movementData.type,
-      itemName: movementData.itemName,
-      sku: movementData.sku,
-      quantity: movementData.quantity,
-      fromLocation: movementData.fromLocation || '',
-      toLocation: movementData.toLocation || '',
-      reference: movementData.reference || '',
-      performedBy: movementData.performedBy || 'System',
-      notes: movementData.notes || '',
-      ownerId: null
-    }
+  return createStockMovementTx(tx, {
+    date: movementData.date || new Date(),
+    type: movementData.type,
+    itemName: movementData.itemName,
+    sku: movementData.sku,
+    quantity: movementData.quantity,
+    fromLocation: movementData.fromLocation || '',
+    toLocation: movementData.toLocation || '',
+    reference: movementData.reference || '',
+    performedBy: movementData.performedBy || 'System',
+    notes: movementData.notes || '',
+    ownerId: null
   })
 }
 

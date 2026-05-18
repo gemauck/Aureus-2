@@ -3,10 +3,10 @@
  * Idempotent per job card line index via deterministic movementId MOV-JC-{jobCardId}-L{n}.
  */
 import {
-  buildMovementId,
   findCanonicalInventoryItemBySkuTx,
   getStatusFromQuantity
 } from './stockCountAdjustment.js'
+import { createStockMovementTx } from './movementId.js'
 import { computedInventoryTotalValue } from './inventoryValue.js'
 
 export function parseJobCardStockUsed(raw) {
@@ -283,21 +283,19 @@ export async function syncJobCardStockMovements(prisma, opts) {
           continue
         }
 
-        const movement = await tx.stockMovement.create({
-          data: {
-            movementId: movementId || buildMovementId(),
-            date: applyJobCardDate ? movementDate : new Date(),
-            type: 'consumption',
-            itemName: line.itemName,
-            sku: line.sku,
-            quantity: targetQty,
-            fromLocation: locationId,
-            toLocation: '',
-            reference,
-            performedBy,
-            notes,
-            ownerId: null
-          }
+        const movement = await createStockMovementTx(tx, {
+          movementId: movementId || undefined,
+          date: applyJobCardDate ? movementDate : new Date(),
+          type: 'consumption',
+          itemName: line.itemName,
+          sku: line.sku,
+          quantity: targetQty,
+          fromLocation: locationId,
+          toLocation: '',
+          reference,
+          performedBy,
+          notes,
+          ownerId: null
         })
 
         await upsertLocationInventoryDelta(

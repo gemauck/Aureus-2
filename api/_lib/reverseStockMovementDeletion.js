@@ -1,9 +1,9 @@
 import { computedInventoryTotalValue } from './inventoryValue.js'
 import {
-  buildMovementId,
   findCanonicalInventoryItemBySkuTx,
   getStatusFromQuantity
 } from './stockCountAdjustment.js'
+import { createStockMovementTx } from './movementId.js'
 
 function httpError(status, message) {
   const err = new Error(message)
@@ -36,23 +36,6 @@ async function resolveAdjustmentLocationIdTx(tx, { fromLocationId, toLocationId,
 
   const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
   return anyLoc?.id || null
-}
-
-async function createStockMovementTxWithRetry(tx, payload) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      return await tx.stockMovement.create({
-        data: {
-          ...payload,
-          movementId: payload.movementId || buildMovementId()
-        }
-      })
-    } catch (error) {
-      if (error?.code === 'P2002') continue
-      throw error
-    }
-  }
-  throw new Error('Could not allocate a unique movementId')
 }
 
 /**
@@ -184,7 +167,7 @@ export async function reverseStockMovementDeletionTx(tx, id, performedBy = 'Syst
   await applyInventoryReversalForRemovedMovementTx(tx, movement, id)
 
   const reverseQty = -1 * (parseFloat(movement.quantity) || 0)
-  await createStockMovementTxWithRetry(tx, {
+  await createStockMovementTx(tx, {
     date: now,
     type: 'adjustment',
     itemName: movement.itemName,
