@@ -381,6 +381,26 @@
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }
 
+  /** Company-wide catalog costs (all SKUs) — not the location-filtered Manufacturing inventory list. */
+  async function fetchMasterInventoryCostMap() {
+    if (!window.DatabaseAPI?.getInventory) return new Map();
+    try {
+      const res = await window.DatabaseAPI.getInventory(null, { forceRefresh: true });
+      return buildInventoryCostMap(res?.data?.inventory || []);
+    } catch (err) {
+      console.warn('ManufacturingReportsView: failed to load master inventory costs', err);
+      return new Map();
+    }
+  }
+
+  function mergeMasterCostMaps(primary, fallback) {
+    const out = new Map(fallback || []);
+    for (const [sku, cost] of primary || []) {
+      out.set(sku, cost);
+    }
+    return out;
+  }
+
   function ManufacturingReportsView({
     isDark = false,
     getLocationLabel,
@@ -445,7 +465,8 @@
     const buildClientAllocationRows = useCallback(
       async () => {
         const out = [];
-        const costMap = inventoryCostMap;
+        const masterFromApi = await fetchMasterInventoryCostMap();
+        const costMap = mergeMasterCostMaps(masterFromApi, inventoryCostMap);
 
         if (window.DatabaseAPI?.getSalesOrders) {
           const soRes = await window.DatabaseAPI.getSalesOrders();

@@ -134,6 +134,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [stockLocations, setStockLocations] = useState([]);
     const [inventoryByLocation, setInventoryByLocation] = useState({});
     const loadingInventoryByLocationRef = useRef({});
+    /** SKU → master catalog unitCost (loaded from /api/public/inventory, all locations). */
+    const masterCostBySkuRef = useRef({});
 
     const signatureCanvasRef = useRef(null);
     const signatureWrapperRef = useRef(null);
@@ -402,6 +404,33 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             loadingInventoryByLocationRef.current[locId] = false;
         }
     }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        (async () => {
+            const token = window.storage?.getToken?.();
+            try {
+                const res = await fetch('/api/public/inventory', {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                if (!res.ok || cancelled) return;
+                const data = await res.json();
+                const inner = data?.data != null ? data.data : data;
+                const rows = Array.isArray(inner?.inventory) ? inner.inventory : [];
+                const map = {};
+                for (const row of rows) {
+                    if (row?.sku) map[String(row.sku)] = Number(row.unitCost) || 0;
+                }
+                masterCostBySkuRef.current = map;
+            } catch (e) {
+                console.warn('JobCardModal: master inventory cost fetch failed', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
 
     // Pre-fetch inventory for any locations already referenced by existing stock rows
     // so the SKU dropdowns can show the saved selections on edit.
@@ -706,10 +735,16 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         const locId = row?.locationId || '';
         const items = inventoryByLocation[locId] || [];
         const item = items.find((it) => String(it.sku) === String(sku));
+        const skuKey = String(sku || '');
+        const masterUc = masterCostBySkuRef.current[skuKey];
+        const unitCost =
+            masterUc != null && Number.isFinite(masterUc)
+                ? masterUc
+                : item?.unitCost ?? row?.unitCost ?? '';
         updateStockRow(index, {
             sku: sku || '',
             itemName: item?.name || row?.itemName || '',
-            unitCost: item?.unitCost ?? row?.unitCost ?? ''
+            unitCost
         });
     };
 
@@ -786,14 +821,18 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                         String(s.locationName || '').trim() ||
                         stockLocations.find((l) => String(l.id) === locId)?.name ||
                         '';
+                    const skuKey = String(s.sku || '').trim();
                     const row = {
-                        sku: String(s.sku || '').trim(),
+                        sku: skuKey,
                         quantity: parseFloat(s.quantity) || 0,
                         locationId: locId,
                         locationName: locName,
                         itemName: String(s.itemName || '').trim()
                     };
-                    if (s.unitCost !== '' && s.unitCost != null && !Number.isNaN(parseFloat(s.unitCost))) {
+                    const masterUc = masterCostBySkuRef.current[skuKey];
+                    if (masterUc != null && Number.isFinite(masterUc)) {
+                        row.unitCost = masterUc;
+                    } else if (s.unitCost !== '' && s.unitCost != null && !Number.isNaN(parseFloat(s.unitCost))) {
                         row.unitCost = parseFloat(s.unitCost);
                     }
                     return row;

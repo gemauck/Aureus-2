@@ -15,6 +15,16 @@ const TEMPLATE_SELECT = {
   quantity: true
 }
 
+/** One unit price per SKU: catalog (InventoryItem) when it exists; else location row (orphan only). */
+function catalogUnitCostForSku(template, locationRecord) {
+  if (template?.id) {
+    const n = Number(template.unitCost)
+    return Number.isFinite(n) ? n : 0
+  }
+  const n = Number(locationRecord?.unitCost)
+  return Number.isFinite(n) ? n : 0
+}
+
 /** One canonical template per SKU (newest row wins) for merging global catalog into a location view. */
 async function loadGlobalActiveInventoryTemplatesBySku() {
   const items = await prisma.inventoryItem.findMany({
@@ -99,7 +109,7 @@ async function inventoryForLocation(locationId, options = {}) {
       template: item,
       sku: item.sku,
       quantity: Number(item.quantity) || 0,
-      unitCost: item.unitCost ?? 0,
+      unitCost: catalogUnitCostForSku(item, null),
       name: item.name || item.sku,
       status: item.status || 'in_stock'
     })
@@ -118,7 +128,7 @@ async function inventoryForLocation(locationId, options = {}) {
         template,
         sku,
         quantity: currentQty,
-        unitCost: record.unitCost ?? template.unitCost ?? 0,
+        unitCost: catalogUnitCostForSku(template, record),
         name: template.name || record.itemName || sku,
         status: template.status || record.status || 'in_stock'
       })
@@ -126,8 +136,7 @@ async function inventoryForLocation(locationId, options = {}) {
     }
 
     existing.quantity += currentQty
-    // Keep non-zero/defined unit cost if available on later rows.
-    if (record.unitCost != null) existing.unitCost = record.unitCost
+    existing.unitCost = catalogUnitCostForSku(template, record)
     if (!existing.name && (record.itemName || template.name)) {
       existing.name = template.name || record.itemName || sku
     }
@@ -141,7 +150,7 @@ async function inventoryForLocation(locationId, options = {}) {
         template,
         sku,
         quantity: 0,
-        unitCost: template.unitCost ?? 0,
+        unitCost: catalogUnitCostForSku(template, null),
         name: template.name || sku,
         status: template.status || 'in_stock'
       })
