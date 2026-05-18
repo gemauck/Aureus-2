@@ -21,6 +21,7 @@ import { createStockMovementTx } from './_lib/movementId.js'
 import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
+import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
   buildCombinedMovementNetBySkuFromMovementRows,
   annotateInventoryRowsWithCompanyWideLedger,
@@ -225,37 +226,6 @@ function manufacturingActivityCreatedAtFilter(startDate, endDate) {
     }
   }
   return Object.keys(createdAt).length ? createdAt : null
-}
-
-/**
- * Inventory list totals are derived from LocationInventory. Adjustments must apply there or on-hand will stay 0
- * even though StockMovement / InventoryItem.quantity were updated.
- */
-async function resolveAdjustmentLocationIdTx(tx, { fromLocationId, toLocationId, itemLocationId, fromStr, toStr }) {
-  let locationId = fromLocationId || toLocationId || itemLocationId || null
-  if (locationId) return locationId
-
-  async function resolveStr(str) {
-    const s = (str || '').trim()
-    if (!s) return null
-    const loc = await tx.stockLocation.findFirst({
-      where: {
-        OR: [{ id: s }, { code: s }, { name: { equals: s, mode: 'insensitive' } }]
-      }
-    })
-    return loc?.id || null
-  }
-
-  locationId = await resolveStr(fromStr)
-  if (locationId) return locationId
-  locationId = await resolveStr(toStr)
-  if (locationId) return locationId
-
-  const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
-  if (mainWarehouse) return mainWarehouse.id
-
-  const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
-  return anyLoc?.id || null
 }
 
 function sanitizeExcelSheetName(name, maxLen = 31) {
@@ -1466,7 +1436,8 @@ async function handler(req, res) {
                 toLocationId: body.toLocationId,
                 itemLocationId: master?.locationId,
                 fromStr: body.fromLocation,
-                toStr: body.toLocation
+                toStr: body.toLocation,
+                quantity: movementQuantity
               })
             }
             if (!locationId) {
@@ -1506,6 +1477,22 @@ async function handler(req, res) {
             await syncAllLocationInventoryUnitCostsToCatalogTx(tx, masterFinal.sku, masterFinal.unitCost)
           }
 
+          let movementFromLoc = body.fromLocationId || body.locationId || ''
+          let movementToLoc = body.toLocationId || ''
+          if (type === 'adjustment') {
+            const adjLoc =
+              (await resolveAdjustmentLocationIdTx(tx, {
+                fromLocationId: movementFromLoc || null,
+                toLocationId: movementToLoc || null,
+                itemLocationId: master?.locationId || null,
+                fromStr: body.fromLocation,
+                toStr: body.toLocation,
+                quantity: movementQuantity
+              })) || movementFromLoc || movementToLoc
+            movementFromLoc = adjLoc
+            movementToLoc = ''
+          }
+
           // Create stock movement record
           const movement = await tx.stockMovement.create({ data: {
             movementId,
@@ -1514,8 +1501,8 @@ async function handler(req, res) {
             itemName: body.itemName,
             sku: body.sku,
             quantity: movementQuantity,
-            fromLocation: body.fromLocationId || body.locationId || '',
-            toLocation: body.toLocationId || '',
+            fromLocation: movementFromLoc,
+            toLocation: movementToLoc,
             reference: body.reference || '',
             performedBy: body.performedBy || req.user?.name || 'System',
             notes: body.notes || ''
@@ -5357,12 +5344,14 @@ async function handler(req, res) {
               toLocationId,
               itemLocationId: null,
               fromStr,
-              toStr
+              toStr,
+              quantity
             })
             if (!adjustmentLocationId) {
               throw new Error('No stock location configured. Create at least one location, then record the adjustment again.')
             }
-            if (!fromLocationId && !toLocationId) fromLocationId = adjustmentLocationId
+            fromLocationId = adjustmentLocationId
+            toLocationId = null
           }
 
           // Helper to get or create LocationInventory record
@@ -5762,13 +5751,7 @@ async function handler(req, res) {
             }
             
             // LocationInventory drives Manufacturing → Inventory totals; never master-only for adjustments.
-            const locationId = await resolveAdjustmentLocationIdTx(tx, {
-              fromLocationId,
-              toLocationId,
-              itemLocationId: item?.locationId,
-              fromStr,
-              toStr
-            })
+            const locationId = fromLocationId
 
             if (!locationId) {
               throw new Error('No stock location configured. Create at least one location, then record the adjustment again.')

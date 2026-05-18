@@ -4,38 +4,12 @@ import {
   getStatusFromQuantity
 } from './stockCountAdjustment.js'
 import { createStockMovementTx } from './movementId.js'
+import { resolveAdjustmentLocationIdTx } from './adjustmentLocation.js'
 
 function httpError(status, message) {
   const err = new Error(message)
   err.httpStatus = status
   return err
-}
-
-async function resolveAdjustmentLocationIdTx(tx, { fromLocationId, toLocationId, itemLocationId, fromStr, toStr }) {
-  let locationId = fromLocationId || toLocationId || itemLocationId || null
-  if (locationId) return locationId
-
-  async function resolveStr(str) {
-    const s = (str || '').trim()
-    if (!s) return null
-    const loc = await tx.stockLocation.findFirst({
-      where: {
-        OR: [{ id: s }, { code: s }, { name: { equals: s, mode: 'insensitive' } }]
-      }
-    })
-    return loc?.id || null
-  }
-
-  locationId = await resolveStr(fromStr)
-  if (locationId) return locationId
-  locationId = await resolveStr(toStr)
-  if (locationId) return locationId
-
-  const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
-  if (mainWarehouse) return mainWarehouse.id
-
-  const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
-  return anyLoc?.id || null
 }
 
 /**
@@ -58,7 +32,8 @@ async function applyInventoryReversalForRemovedMovementTx(tx, movement, id) {
     toLocationId: movement.toLocation || null,
     itemLocationId: master?.locationId || null,
     fromStr: movement.fromLocation || '',
-    toStr: movement.toLocation || ''
+    toStr: movement.toLocation || '',
+    quantity: movement.quantity
   })
 
   if (!locationId) {

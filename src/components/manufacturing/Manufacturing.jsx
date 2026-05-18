@@ -7233,6 +7233,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           toLocationId = defId;
         }
       }
+      if (moveType === 'adjustment') {
+        toLocationId = '';
+      }
       const fromIdResolved = fromLocationId || '';
       const toIdResolved = toLocationId || '';
       const fromLocObj = stockLocations.find((l) => l.id === fromIdResolved);
@@ -7340,11 +7343,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           return;
         }
       } else if (type === 'adjustment') {
-        if (!formData.fromLocationId && !formData.toLocationId) {
-          alert('Please select a location for the adjustment.');
+        const adjLocationId = formData.fromLocationId || formData.toLocationId;
+        if (!adjLocationId) {
+          alert('Please select the warehouse where this adjustment applies.');
           return;
         }
       }
+
+      const adjLocationId =
+        type === 'adjustment' ? formData.fromLocationId || formData.toLocationId : '';
+      const adjLocObj =
+        type === 'adjustment' ? stockLocations.find((l) => l.id === adjLocationId) : null;
 
       const movementData = {
         type,
@@ -7355,10 +7364,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         reference: (formData.reference || '').trim(),
         notes: (formData.notes || '').trim(),
         date: formData.date || new Date().toISOString().split('T')[0],
-        fromLocationId: formData.fromLocationId || undefined,
-        toLocationId: formData.toLocationId || undefined,
-        fromLocation: (formData.fromLocation || '').trim() || undefined,
-        toLocation: (formData.toLocation || '').trim() || undefined
+        fromLocationId:
+          type === 'adjustment' ? adjLocationId || undefined : formData.fromLocationId || undefined,
+        toLocationId: type === 'adjustment' ? undefined : formData.toLocationId || undefined,
+        fromLocation:
+          type === 'adjustment'
+            ? (adjLocObj ? adjLocObj.name : (formData.fromLocation || '').trim()) || undefined
+            : (formData.fromLocation || '').trim() || undefined,
+        toLocation:
+          type === 'adjustment' ? undefined : (formData.toLocation || '').trim() || undefined
       };
 
       
@@ -10045,7 +10059,37 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
                 {/* Locations: dropdowns so user selects from stock locations (IDs sent to API) */}
                 <div className="grid grid-cols-2 gap-4">
-                  {(formData.type === 'transfer' || formData.type === 'consumption' || formData.type === 'adjustment') && (
+                  {formData.type === 'adjustment' && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
+                      <select
+                        value={formData.fromLocationId || formData.toLocationId || ''}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const loc = stockLocations.find((l) => l.id === id);
+                          setFormData({
+                            ...formData,
+                            fromLocationId: id,
+                            toLocationId: '',
+                            fromLocation: loc ? loc.name : '',
+                            toLocation: ''
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select warehouse...</option>
+                        {stockLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.code} – {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Adjustments apply at one site only. To move stock between warehouses, use Transfer.
+                      </p>
+                    </div>
+                  )}
+                  {(formData.type === 'transfer' || formData.type === 'consumption') && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         From Location {formData.type === 'transfer' || formData.type === 'consumption' ? '*' : ''}
@@ -10054,7 +10098,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         value={formData.fromLocationId || ''}
                         onChange={(e) => {
                           const id = e.target.value;
-                          const loc = stockLocations.find(l => l.id === id);
+                          const loc = stockLocations.find((l) => l.id === id);
                           setFormData({
                             ...formData,
                             fromLocationId: id,
@@ -10064,8 +10108,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       >
                         <option value="">Select location...</option>
-                        {stockLocations.map(loc => (
-                          <option key={loc.id} value={loc.id}>{loc.code} – {loc.name}</option>
+                        {stockLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.code} – {loc.name}
+                          </option>
                         ))}
                       </select>
                     </div>
