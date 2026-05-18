@@ -1,10 +1,28 @@
 import { describe, test, expect, jest } from '@jest/globals';
-import { computeNextJobCardNumber } from '../../../../api/_lib/jobCardNumber.js';
+import {
+  computeNextJobCardNumber,
+  normalizeJobCardNumberToken,
+  jobCardLookupWhere
+} from '../../../../api/_lib/jobCardNumber.js';
 
 /**
  * Regression: aggregate COALESCE(MAX...,0) yields maxn===0 when no JC\d+ rows exist.
  * Must not treat that as “next is JC0001” without findFirst (caused unique P2002 loops).
  */
+describe('normalizeJobCardNumberToken', () => {
+  test('accepts spaced and short forms', () => {
+    expect(normalizeJobCardNumberToken('JC 30')).toBe('JC0030');
+    expect(normalizeJobCardNumberToken('jc30')).toBe('JC0030');
+    expect(normalizeJobCardNumberToken('JC0030')).toBe('JC0030');
+  });
+});
+
+describe('jobCardLookupWhere', () => {
+  test('maps human number to jobCardNumber field', () => {
+    expect(jobCardLookupWhere('JC 30')).toEqual({ jobCardNumber: 'JC0030' });
+  });
+});
+
 describe('computeNextJobCardNumber', () => {
   test('maxn 0 still consults findFirst and increments latest JC (legacy / non-matching aggregate rows)', async () => {
     const findFirst = jest.fn().mockResolvedValue({ jobCardNumber: 'JC0100' });

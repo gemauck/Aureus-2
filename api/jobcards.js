@@ -6,7 +6,11 @@ import { isAdminRole } from './_lib/authRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { insertJobCardActivityFromRequest } from './_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges, buildServiceFormInstanceChanges } from './_lib/jobCardActivityDiff.js'
-import { computeNextJobCardNumber } from './_lib/jobCardNumber.js'
+import {
+  computeNextJobCardNumber,
+  findJobCardByLookupParam,
+  normalizeJobCardNumberToken
+} from './_lib/jobCardNumber.js'
 import { syncJobCardStockMovements } from './_lib/jobCardStockMovements.js'
 import { sendEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
@@ -865,7 +869,14 @@ async function handler(req, res) {
         const clientName = url.searchParams.get('clientName')
         const callOutCategory = (url.searchParams.get('callOutCategory') || '').trim()
         const statusParam = url.searchParams.get('status')
-        const searchQ = (url.searchParams.get('q') || url.searchParams.get('search') || '').trim()
+        const jobCardNumberParam = normalizeJobCardNumberToken(
+          url.searchParams.get('jobCardNumber') || ''
+        )
+        let searchQ = (url.searchParams.get('q') || url.searchParams.get('search') || '').trim()
+        const normalizedSearchQ = normalizeJobCardNumberToken(searchQ)
+        if (normalizedSearchQ && /^JC\d{4}$/.test(normalizedSearchQ)) {
+          searchQ = normalizedSearchQ
+        }
         const sortFieldRaw = url.searchParams.get('sortField') || 'createdAt'
         const sortDirectionRaw =
           url.searchParams.get('sortDirection') === 'asc' ? 'asc' : 'desc'
@@ -926,6 +937,9 @@ async function handler(req, res) {
             equals: callOutCategory,
             mode: 'insensitive'
           }
+        }
+        if (jobCardNumberParam && /^JC\d{4}$/.test(jobCardNumberParam)) {
+          baseFilters.jobCardNumber = jobCardNumberParam
         }
         if (withStockUsedOnly) {
           baseFilters.stockUsed = { notIn: ['[]', ''] }
@@ -1125,11 +1139,12 @@ async function handler(req, res) {
           reqUrl.searchParams.get('omitPhotos') === '1' ||
           reqUrl.searchParams.get('omitPhotos') === 'true'
 
-        const row = await prisma.jobCard.findUnique({
-          where: { id },
-          select: omitPhotos ? JOB_CARD_GET_ONE_LITE_SELECT : JOB_CARD_GET_ONE_SELECT
-        })
-        
+        const row = await findJobCardByLookupParam(
+          prisma,
+          id,
+          omitPhotos ? JOB_CARD_GET_ONE_LITE_SELECT : JOB_CARD_GET_ONE_SELECT
+        )
+
         if (!row) {
           return notFound(res, 'Job card not found')
         }
@@ -1696,13 +1711,14 @@ async function handler(req, res) {
 
     if (req.method === 'GET' && !activitySub) {
       try {
-        const jc = await prisma.jobCard.findUnique({ where: { id } })
+        const jc = await findJobCardByLookupParam(prisma, id, { id: true })
         if (!jc) {
           return notFound(res, 'Job card not found')
         }
+        const jobCardId = jc.id
 
         try {
-          await ensureMinimumJobCardActivity(prisma, id)
+          await ensureMinimumJobCardActivity(prisma, jobCardId)
         } catch (baselineErr) {
           console.warn('ensureMinimumJobCardActivity (non-fatal):', baselineErr?.message || baselineErr)
         }
@@ -1717,7 +1733,7 @@ async function handler(req, res) {
         }
 
         const rows = await prisma.jobCardActivity.findMany({
-          where: { jobCardId: id },
+          where: { jobCardId },
           orderBy: { createdAt: orderDir },
           take: 500
         })
@@ -1754,10 +1770,11 @@ async function handler(req, res) {
     if (activitySub === 'sync' && req.method === 'POST') {
       const body = req.body || {}
       try {
-        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
+        const parentJob = await findJobCardByLookupParam(prisma, id)
         if (!parentJob) {
           return notFound(res, 'Job card not found')
         }
+        const jobCardId = parentJob.id
         if (!canMutateJobCard(parentJob, req.user)) {
           return forbidden(res, 'You do not have permission to sync activity for this job card')
         }
@@ -1767,7 +1784,7 @@ async function handler(req, res) {
         for (const ev of events.slice(0, 300)) {
           if (!ev || typeof ev.action !== 'string' || !ev.action.trim()) continue
           await insertJobCardActivity(prisma, {
-            jobCardId: id,
+            jobCardId,
             req,
             action: ev.action.trim(),
             metadata: ev.metadata,
@@ -1776,7 +1793,7 @@ async function handler(req, res) {
           n += 1
         }
 
-        auditManufacturing('sync', 'job-card-activity', id, {
+        auditManufacturing('sync', 'job-card-activity', jobCardId, {
           summary: `Synced ${n} job card activity event(s)`,
           count: n
         })
@@ -1797,8 +1814,13 @@ async function handler(req, res) {
     // LIST INSTANCES FOR A JOBCARD (GET /api/jobcards/:jobCardId/forms)
     if (req.method === 'GET' && id && !formInstanceId) {
       try {
+        const parentJob = await findJobCardByLookupParam(prisma, id, { id: true })
+        if (!parentJob) {
+          return notFound(res, 'Job card not found')
+        }
+        const jobCardId = parentJob.id
         const instances = await prisma.serviceFormInstance.findMany({
-          where: { jobCardId: id },
+          where: { jobCardId },
           orderBy: { createdAt: 'asc' },
           include: {
             template: {
@@ -1837,10 +1859,11 @@ async function handler(req, res) {
       }
 
       try {
-        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
+        const parentJob = await findJobCardByLookupParam(prisma, id)
         if (!parentJob) {
           return notFound(res, 'Job card not found')
         }
+        const jobCardId = parentJob.id
         if (!canMutateJobCard(parentJob, req.user)) {
           return forbidden(res, 'You do not have permission to attach forms to this job card')
         }
@@ -1855,7 +1878,7 @@ async function handler(req, res) {
 
         const instance = await prisma.serviceFormInstance.create({
           data: {
-            jobCardId: id,
+            jobCardId,
             templateId: template.id,
             templateName: template.name,
             templateVersion: template.version,
@@ -1865,7 +1888,7 @@ async function handler(req, res) {
         })
 
         await insertJobCardActivity(prisma, {
-          jobCardId: id,
+          jobCardId,
           req,
           action: 'service_form_attached',
           metadata: { templateId: template.id, instanceId: instance.id },
@@ -1873,7 +1896,7 @@ async function handler(req, res) {
         })
         auditManufacturing('create', 'job-card-service-form', instance.id, {
           summary: `Attached form ${template.name} to job card ${parentJob.jobCardNumber}`,
-          jobCardId: id
+          jobCardId
         })
 
         return created(res, {
@@ -1904,18 +1927,20 @@ async function handler(req, res) {
       const body = req.body || {}
 
       try {
+        const parentJob = await findJobCardByLookupParam(prisma, id)
+        if (!parentJob) {
+          return notFound(res, 'Job card not found')
+        }
+        const jobCardId = parentJob.id
+
         const existing = await prisma.serviceFormInstance.findUnique({
           where: { id: formInstanceId }
         })
 
-        if (!existing || existing.jobCardId !== id) {
+        if (!existing || existing.jobCardId !== jobCardId) {
           return notFound(res, 'Job card form not found')
         }
 
-        const parentJob = await prisma.jobCard.findUnique({ where: { id } })
-        if (!parentJob) {
-          return notFound(res, 'Job card not found')
-        }
         if (!canMutateJobCard(parentJob, req.user)) {
           return forbidden(res, 'You do not have permission to update forms on this job card')
         }
@@ -1939,7 +1964,7 @@ async function handler(req, res) {
 
         const formChanges = buildServiceFormInstanceChanges(existing, data)
         await insertJobCardActivity(prisma, {
-          jobCardId: id,
+          jobCardId,
           req,
           action: 'service_form_updated',
           metadata: {
@@ -1954,7 +1979,7 @@ async function handler(req, res) {
         })
         auditManufacturing('update', 'job-card-service-form', formInstanceId, {
           summary: `Updated service form on job card ${parentJob.jobCardNumber}`,
-          jobCardId: id
+          jobCardId
         })
 
         return ok(res, {
@@ -1989,15 +2014,12 @@ async function handler(req, res) {
       return badRequest(res, 'Method not allowed')
     }
     try {
-      const row = await prisma.jobCard.findUnique({
-        where: { id },
-        select: { id: true, photos: true }
-      })
+      const row = await findJobCardByLookupParam(prisma, id, { id: true, photos: true })
       if (!row) {
         return notFound(res, 'Job card not found')
       }
       return ok(res, {
-        jobCardId: id,
+        jobCardId: row.id,
         photos: parseJson(row.photos)
       })
     } catch (error) {

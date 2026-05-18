@@ -534,7 +534,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
-  const [sortField, setSortField] = useState('createdAt'); // jobCardNumber | client | technician | status | createdAt
+  const [sortField, setSortField] = useState('jobCardNumber'); // jobCardNumber | client | technician | status | createdAt
   const [sortDirection, setSortDirection] = useState('desc'); // asc | desc
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
@@ -874,8 +874,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         setSortDirection((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
         return prevField;
       }
-      // default to descending for createdAt, ascending for others
-      setSortDirection(field === 'createdAt' ? 'desc' : 'asc');
+      // default to descending for date/number columns, ascending for text columns
+      setSortDirection(
+        field === 'createdAt' || field === 'jobCardNumber' ? 'desc' : 'asc'
+      );
       return field;
     });
   };
