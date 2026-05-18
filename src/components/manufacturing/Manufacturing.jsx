@@ -724,7 +724,10 @@ try {
   }, [columnFilters]);
 
   useEffect(() => {
-    if (!showModal || modalType !== 'view_item' || !selectedItem) {
+    const modalItemView = showModal && modalType === 'view_item' && selectedItem;
+    const pageDetailView = viewingInventoryItemDetail;
+    const qrSourceItem = modalItemView ? selectedItem : pageDetailView || null;
+    if (!qrSourceItem) {
       setInventoryItemQrBlobUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
@@ -732,7 +735,7 @@ try {
       setInventoryItemQrLoading(false);
       return;
     }
-    const itemId = getInventoryItemId(selectedItem);
+    const itemId = getInventoryItemId(qrSourceItem);
     if (!itemId) return;
     let cancelled = false;
     setInventoryItemQrLoading(true);
@@ -767,7 +770,7 @@ try {
         return null;
       });
     };
-  }, [showModal, modalType, selectedItem]);
+  }, [showModal, modalType, selectedItem, viewingInventoryItemDetail]);
 
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -13643,7 +13646,21 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
           {/* Item Header Info */}
           <div className="flex items-start gap-4 pb-4 border-b border-gray-200">
-            {item.thumbnail ? (
+            {inventoryItemQrLoading ? (
+              <div
+                className="w-24 h-24 shrink-0 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400"
+                aria-label="Loading QR code"
+              >
+                <i className="fas fa-spinner fa-spin text-xl"></i>
+              </div>
+            ) : inventoryItemQrBlobUrl && getInventoryItemId(item) ? (
+              <img
+                src={inventoryItemQrBlobUrl}
+                alt={'QR code for ' + (item.sku || item.name || 'inventory item')}
+                className="w-24 h-24 shrink-0 object-contain rounded-lg border border-gray-200 bg-white p-1"
+                title="Stock-take QR — scan in Job Cards"
+              />
+            ) : item.thumbnail ? (
               <img 
                 src={item.thumbnail} 
                 alt={item.name} 
