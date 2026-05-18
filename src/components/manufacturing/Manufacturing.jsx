@@ -3581,7 +3581,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       const matchesCatalogReview = !showCatalogReviewOnly || item.needsCatalogReview;
-      const matchesStockView = inventoryStockView === 'all' || metrics.status === inventoryStockView;
+      const matchesStockView =
+        inventoryStockView === 'all' ||
+        (inventoryStockView === 'in_stock'
+          ? metrics.status === 'in_stock' || metrics.status === 'low_stock'
+          : metrics.status === inventoryStockView);
       const matchesLedgerMismatch =
         !showLedgerMismatchOnly ||
         (selectedLocationId === 'all'
