@@ -63,7 +63,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'activity'];
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'reports', 'activity'];
 const INVENTORY_AUTO_REFRESH_INTERVAL_MS = 15000;
 const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
 const normalizeInventoryStockView = (value = 'all') => {
@@ -14636,6 +14636,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
                 { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' },
+                { id: 'reports', label: 'Reports', icon: 'fa-file-alt' },
                 ...(isAdmin
                   ? [
                       { id: 'stock-count', label: 'Stock count', icon: 'fa-clipboard-check' },
@@ -14713,6 +14714,17 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   })
                 : (
                     <div className="p-4 text-gray-500">Loading stock count…</div>
+                  ))}
+            {activeTab === 'reports' &&
+              (window.ManufacturingReportsView
+                ? createElement(window.ManufacturingReportsView, {
+                    isDark,
+                    inventory,
+                    stockLocations,
+                    getLocationLabel
+                  })
+                : (
+                    <div className="p-4 text-gray-500">Loading reports…</div>
                   ))}
             {activeTab === 'activity' && <ManufacturingActivityView />}
           </div>

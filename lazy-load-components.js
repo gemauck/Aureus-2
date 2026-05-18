@@ -79,6 +79,7 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
         './src/utils/manufacturingInventoryValue.js',
         './src/components/manufacturing/locations/StockLocations.jsx',
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
+        './src/components/manufacturing/ManufacturingReportsView.jsx',
         './src/components/manufacturing/StockCountView.jsx',
         './src/components/manufacturing/jobCardActivityDisplay.js',
         './src/components/manufacturing/JobCards.jsx',

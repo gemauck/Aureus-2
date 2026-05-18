@@ -145,42 +145,49 @@
   function scrollStockTakeScannedSkuIntoView(sku) {
     const enc = encodeURIComponent(String(sku || '').trim());
     if (!enc) return;
+
+    const scrollTargetToTop = (el) => {
+      if (!el) return;
+      const main = document.getElementById('main-page-scroll');
+      const roots = [];
+      if (main) roots.push(main);
+      const docEl = document.scrollingElement;
+      if (docEl && !roots.includes(docEl)) roots.push(docEl);
+      for (const root of roots) {
+        if (!root || typeof root.scrollTo !== 'function') continue;
+        const rootRect = root.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const top = elRect.top - rootRect.top + root.scrollTop - 8;
+        root.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }
+      const panel = document.getElementById('erp-st-stock-lines-panel');
+      if (panel && panel.scrollHeight > panel.clientHeight + 4) {
+        const panelTop =
+          el.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop;
+        panel.scrollTo({ top: Math.max(0, panelTop), behavior: 'smooth' });
+      }
+    };
+
+    const focusQty = () => {
+      const qty = document.getElementById('erp-st-qty-' + enc);
+      if (!qty) return;
+      try {
+        qty.focus({ preventScroll: true });
+      } catch {
+        qty.focus();
+      }
+      if (typeof qty.select === 'function') qty.select();
+    };
+
+    const run = () => {
+      scrollTargetToTop(document.getElementById('erp-st-scanned-item-top'));
+      focusQty();
+    };
+
     window.requestAnimationFrame(() => {
-      window.setTimeout(() => {
-        const top = document.getElementById('erp-st-scanned-item-top');
-        if (top) {
-          let scrolled = false;
-          let parent = top.parentElement;
-          while (parent && parent !== document.body) {
-            const style = window.getComputedStyle(parent);
-            const oy = style.overflowY;
-            if (
-              (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
-              parent.scrollHeight > parent.clientHeight + 4
-            ) {
-              const offset =
-                top.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop;
-              parent.scrollTo({ top: Math.max(0, offset - 12), behavior: 'smooth' });
-              scrolled = true;
-              break;
-            }
-            parent = parent.parentElement;
-          }
-          if (!scrolled) {
-            top.scrollIntoView({ block: 'start', behavior: 'smooth' });
-          }
-        }
-        window.setTimeout(() => {
-          const qty = document.getElementById('erp-st-qty-' + enc);
-          if (!qty) return;
-          try {
-            qty.focus({ preventScroll: true });
-          } catch {
-            qty.focus();
-          }
-          if (typeof qty.select === 'function') qty.select();
-        }, 100);
-      }, 180);
+      run();
+      window.setTimeout(run, 120);
+      window.setTimeout(run, 400);
     });
   }
 
@@ -1449,6 +1456,13 @@
       return (stRows || []).find((row) => String(row?.sku || '').trim() === sku) || null;
     }, [stScanFilterSku, stRows]);
 
+    const stActiveLocationLabel = React.useMemo(() => {
+      if (!stLocationId) return '';
+      const loc = (stLocationOptions || []).find((l) => l.id === stLocationId);
+      if (!loc) return '';
+      return String(loc.name || loc.code || '').trim() || String(loc.code || '').trim();
+    }, [stLocationId, stLocationOptions]);
+
     React.useEffect(() => {
       const sku = String(stScanFilterSku || '').trim();
       if (!sku) return;
@@ -1767,71 +1781,58 @@
         {
           id: 'erp-st-scanned-item-top',
           className:
-            'border-b-2 px-3 py-3 ' +
-            (isDark ? 'border-blue-500 bg-blue-950/40' : 'border-blue-500 bg-blue-50') +
-            ' scroll-mt-2'
+            'sticky top-0 z-20 border-b-2 px-3 py-2 shadow-sm ' +
+            (isDark ? 'border-blue-500 bg-blue-950/95' : 'border-blue-500 bg-blue-50') +
+            ' scroll-mt-0'
         },
         React.createElement(
           'div',
-          { className: 'flex flex-wrap items-start justify-between gap-3' },
+          { className: 'flex flex-wrap items-center gap-2' },
           React.createElement(
             'div',
             { className: 'min-w-0 flex-1' },
             React.createElement(
               'p',
-              { className: 'text-xs font-semibold uppercase tracking-wide ' + (isDark ? 'text-blue-300' : 'text-blue-700') },
-              'Scanned item — enter count'
-            ),
-            React.createElement(
-              'p',
               {
-                className: 'mt-1 text-base font-bold leading-tight ' + text,
+                className: 'text-sm font-bold leading-tight ' + text,
                 style: { overflowWrap: 'anywhere', wordBreak: 'break-word' }
               },
               stScannedRow.name || stScannedRow.sku
             ),
             stScannedRow.sku
-              ? React.createElement('p', { className: 'mt-0.5 text-sm font-mono ' + muted }, stScannedRow.sku)
+              ? React.createElement('p', { className: 'text-[11px] font-mono ' + muted }, stScannedRow.sku)
               : null
           ),
+          React.createElement('input', {
+            id: 'erp-st-qty-' + skuEnc,
+            type: 'number',
+            step: '0.01',
+            inputMode: 'decimal',
+            className: qtyInputCls + ' w-[5.5rem] shrink-0',
+            placeholder: 'Qty',
+            'aria-label': 'Counted qty for ' + skuKey,
+            value: stCounts[skuKey] ?? '',
+            onFocus: () => {
+              stLocalEditSkusRef.current.add(skuKey);
+            },
+            onBlur: () => {
+              window.setTimeout(() => {
+                stLocalEditSkusRef.current.delete(skuKey);
+              }, 400);
+            },
+            onChange: (e) => handleStCountChange(skuKey, e.target.value)
+          }),
           React.createElement(
-            'div',
-            { className: 'shrink-0 w-full sm:w-auto sm:min-w-[7rem]' },
-            React.createElement(
-              'label',
-              { htmlFor: 'erp-st-qty-' + skuEnc, className: 'block text-xs font-semibold ' + muted + ' mb-1' },
-              'Counted qty'
-            ),
-            React.createElement('input', {
-              id: 'erp-st-qty-' + skuEnc,
-              type: 'number',
-              step: '0.01',
-              inputMode: 'decimal',
-              className: qtyInputCls + ' w-full max-w-none sm:w-full',
-              placeholder: 'Qty',
-              value: stCounts[skuKey] ?? '',
-              onFocus: () => {
-                stLocalEditSkusRef.current.add(skuKey);
-              },
-              onBlur: () => {
-                window.setTimeout(() => {
-                  stLocalEditSkusRef.current.delete(skuKey);
-                }, 400);
-              },
-              onChange: (e) => handleStCountChange(skuKey, e.target.value)
-            })
+            'button',
+            {
+              type: 'button',
+              className:
+                'shrink-0 text-[11px] font-semibold underline ' +
+                (isDark ? 'text-blue-300' : 'text-blue-800'),
+              onClick: clearStScanFilter
+            },
+            'All lines'
           )
-        ),
-        React.createElement(
-          'button',
-          {
-            type: 'button',
-            className:
-              'mt-3 text-xs font-semibold underline ' +
-              (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-800 hover:text-blue-900'),
-            onClick: clearStScanFilter
-          },
-          'Show all lines'
         )
       );
     };
@@ -2154,13 +2155,14 @@
               'div',
               {
                 id: 'erp-st-stock-lines-panel',
-                className: 'mt-4 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200')
+                className: 'mt-2 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200')
               },
+              renderStScannedTopCard(),
               React.createElement(
                 'div',
                 {
                   className:
-                    'px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 ' +
+                    'px-2 py-1.5 border-b flex flex-wrap items-center justify-between gap-2 ' +
                     (isDark ? 'border-gray-700 bg-gray-950/50' : 'border-gray-100 bg-gray-50')
                 },
                 React.createElement(
@@ -2222,7 +2224,6 @@
                   )
                 )
               ),
-              renderStScannedTopCard(),
               stRowsLoading
                 ? React.createElement('div', { className: 'px-3 py-6 text-sm ' + muted }, 'Loading inventory…')
                 : stRows.length === 0
