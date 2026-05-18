@@ -2836,46 +2836,86 @@ const Projects = () => {
         // Update ref so it can be accessed from other useEffects
         handleViewProjectRef.current = handleViewProject;
         
-        // BULLETPROOF: ALWAYS check if ProjectDetail is loaded AND initialized
-        // The lazy loader might say it's loaded, but initialization might still be waiting for dependencies
-        if (!window.ProjectDetail || typeof window.ProjectDetail !== 'function') {
-            
-            // Reset the flag if component isn't actually available
+        const normalizeProjectForView = (fullProject) => ({
+            ...fullProject,
+            client: fullProject.clientName || fullProject.client || '',
+            taskLists: Array.isArray(fullProject.taskLists) ? fullProject.taskLists : [],
+            tasks: Array.isArray(fullProject.tasksList) ? fullProject.tasksList : (Array.isArray(fullProject.tasks) ? fullProject.tasks : []),
+            customFieldDefinitions: Array.isArray(fullProject.customFieldDefinitions) ? fullProject.customFieldDefinitions : [],
+            documents: Array.isArray(fullProject.documents) ? fullProject.documents : [],
+            comments: Array.isArray(fullProject.comments) ? fullProject.comments : [],
+            activityLog: Array.isArray(fullProject.activityLog) ? fullProject.activityLog : [],
+            team: Array.isArray(fullProject.team) ? fullProject.team : [],
+            hasDocumentCollectionProcess: (() => {
+                const value = fullProject.hasDocumentCollectionProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            hasWeeklyFMSReviewProcess: (() => {
+                const value = fullProject.hasWeeklyFMSReviewProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            hasTimeProcess: (() => {
+                const value = fullProject.hasTimeProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            hasMonthlyFMSReviewProcess: (() => {
+                const value = fullProject.hasMonthlyFMSReviewProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            hasMonthlyDataReviewProcess: (() => {
+                const value = fullProject.hasMonthlyDataReviewProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            hasComplianceReviewProcess: (() => {
+                const value = fullProject.hasComplianceReviewProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
+            weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
+        });
+
+        const ensureProjectDetailReady = async () => {
+            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                if (!projectDetailAvailable) {
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                }
+                return true;
+            }
             if (projectDetailAvailable) {
                 console.warn('⚠️ projectDetailAvailable flag is true but component not loaded - resetting flag');
                 setProjectDetailAvailable(false);
             }
-            
             setWaitingForProjectDetail(true);
-            
-            // BULLETPROOF: Try multiple strategies to load ProjectDetail
-            // Strategy 1: Wait for initialization to complete (up to 5 seconds)
-            // ProjectDetail might be loading but waiting for dependencies
+
             let loaded = false;
             for (let i = 0; i < 50; i++) {
                 if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
                     loaded = true;
                     break;
                 }
-                // Check if it's still initializing
-                if (window._projectDetailInitializing) {
-                }
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            
-            // Strategy 2: Use the bulletproof loader
             if (!loaded) {
                 loaded = await loadProjectDetail();
             }
-            
-            // Strategy 3: Direct script injection as fallback
             if (!loaded && (!window.ProjectDetail || typeof window.ProjectDetail !== 'function')) {
                 loaded = await new Promise((resolve) => {
                     const script = document.createElement('script');
                     script.src = '/dist/src/components/projects/ProjectDetail.js';
                     script.async = true;
                     script.onload = () => {
-                        // Wait for initialization to complete (up to 5 seconds)
                         let initAttempts = 0;
                         const checkInit = setInterval(() => {
                             initAttempts++;
@@ -2883,43 +2923,26 @@ const Projects = () => {
                                 clearInterval(checkInit);
                                 resolve(true);
                             } else if (initAttempts >= 50) {
-                                console.warn('⚠️ Direct script loaded but ProjectDetail not initialized after 5s');
                                 clearInterval(checkInit);
                                 resolve(false);
                             }
                         }, 100);
                     };
-                    script.onerror = () => {
-                        console.error('❌ Direct script injection failed');
-                        resolve(false);
-                    };
+                    script.onerror = () => resolve(false);
                     document.body.appendChild(script);
                 });
             }
-            
             if (loaded && window.ProjectDetail && typeof window.ProjectDetail === 'function') {
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
                 setForceRender(prev => prev + 1);
-            } else {
-                console.error('❌ handleViewProject: ProjectDetail failed to load after all strategies');
-                console.error('🔍 Final check - window.ProjectDetail:', typeof window.ProjectDetail);
-                console.error('🔍 Initialization state:', window._projectDetailInitializing);
-                console.error('🔍 Available components:', Object.keys(window).filter(k => k.includes('Project')));
-                setWaitingForProjectDetail(false);
-                alert('Failed to load ProjectDetail component. Please refresh the page.');
-                return;
+                return true;
             }
-        } else {
-            // Component exists, ensure flag is set
-            if (!projectDetailAvailable) {
-                setProjectDetailAvailable(true);
-                setWaitingForProjectDetail(false);
-            }
-        }
-        
-        try {
-            // Fast path: load summary first (project + tasks only) so UI shows in ~2s
+            setWaitingForProjectDetail(false);
+            return false;
+        };
+
+        const fetchProjectSummary = async () => {
             let response;
             try {
                 if (window.DatabaseAPI?.getProject && typeof window.DatabaseAPI.getProject === 'function') {
@@ -2942,65 +2965,22 @@ const Projects = () => {
                 }
             }
             const fullProject = response?.data?.project || response?.project || response?.data;
-            
-            if (!fullProject) {
-                throw new Error('Failed to fetch project details');
+            if (!fullProject) throw new Error('Failed to fetch project details');
+            return normalizeProjectForView(fullProject);
+        };
+
+        try {
+            // Load ~444KB ProjectDetail.js and summary API in parallel (was sequential — slow on cold cache / slow networks)
+            const [detailReady, normalizedProject] = await Promise.all([
+                ensureProjectDetailReady(),
+                fetchProjectSummary()
+            ]);
+
+            if (!detailReady) {
+                console.error('❌ handleViewProject: ProjectDetail failed to load after all strategies');
+                alert('Failed to load ProjectDetail component. Please refresh the page.');
+                return;
             }
-            
-            // Parse JSON string fields from database before passing to ProjectDetail
-            const normalizedProject = {
-                ...fullProject,
-                client: fullProject.clientName || fullProject.client || '',
-                // All data now comes from tables via API, not JSON fields - use arrays directly
-                taskLists: Array.isArray(fullProject.taskLists) ? fullProject.taskLists : [],
-                tasks: Array.isArray(fullProject.tasksList) ? fullProject.tasksList : (Array.isArray(fullProject.tasks) ? fullProject.tasks : []),
-                customFieldDefinitions: Array.isArray(fullProject.customFieldDefinitions) ? fullProject.customFieldDefinitions : [],
-                documents: Array.isArray(fullProject.documents) ? fullProject.documents : [],
-                comments: Array.isArray(fullProject.comments) ? fullProject.comments : [],
-                activityLog: Array.isArray(fullProject.activityLog) ? fullProject.activityLog : [],
-                team: Array.isArray(fullProject.team) ? fullProject.team : [],
-                // Ensure hasDocumentCollectionProcess is properly included (boolean from database)
-                // Handle both boolean and string values from database - normalize to boolean
-                hasDocumentCollectionProcess: (() => {
-                    const value = fullProject.hasDocumentCollectionProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                // Ensure hasWeeklyFMSReviewProcess is properly included
-                hasWeeklyFMSReviewProcess: (() => {
-                    const value = fullProject.hasWeeklyFMSReviewProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                hasTimeProcess: (() => {
-                    const value = fullProject.hasTimeProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                hasMonthlyFMSReviewProcess: (() => {
-                    const value = fullProject.hasMonthlyFMSReviewProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                hasMonthlyDataReviewProcess: (() => {
-                    const value = fullProject.hasMonthlyDataReviewProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                hasComplianceReviewProcess: (() => {
-                    const value = fullProject.hasComplianceReviewProcess;
-                    if (value === true || value === 'true' || value === 1) return true;
-                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
-                    return false;
-                })(),
-                // API returns year-map object { "2024": [...], "2025": [...] }; preserve it so Weekly FMS comments/status survive refresh
-                weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
-            };
 
             // Load full project in background so tabs get full data (comments, document sections, etc.)
             if (window.DatabaseAPI?.getProject && typeof window.DatabaseAPI.getProject === 'function') {

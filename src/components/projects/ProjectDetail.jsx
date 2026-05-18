@@ -9657,10 +9657,32 @@ function initializeProjectDetail() {
         hasComplianceReviewProcess
     ]);
 
-    const activeSectionLabel = useMemo(() => {
-        const found = projectSectionNavItems.find((i) => i.id === activeSection);
-        return found ? found.label : 'Section';
-    }, [projectSectionNavItems, activeSection]);
+    const projectSectionTabIcon = (id) => {
+        const icons = {
+            overview: 'fa-chart-line',
+            tasks: 'fa-tasks',
+            time: 'fa-clock',
+            documentCollection: 'fa-folder-open',
+            weeklyFMSReview: 'fa-calendar-week',
+            monthlyFMSReview: 'fa-calendar-alt',
+            monthlyDataReview: 'fa-clipboard-check',
+            complianceReview: 'fa-clipboard-list',
+            notes: 'fa-sticky-note',
+            activity: 'fa-history'
+        };
+        return icons[id] || 'fa-circle';
+    };
+
+    const projectSectionTabShortLabel = (label) => {
+        const short = {
+            'Document Collection': 'Docs',
+            'Weekly FMS Review': 'Weekly',
+            'Monthly FMS Review': 'Monthly',
+            'Monthly Data Review': 'Data',
+            'Compliance Review': 'Compliance'
+        };
+        return short[label] || label;
+    };
 
     return (
         <div className="space-y-4">
@@ -9707,13 +9729,9 @@ function initializeProjectDetail() {
                     <div className="min-w-0">
                         <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">{project.name}</h1>
                         <p className="text-sm text-gray-500 truncate">{project.client} • {project.type}</p>
-                        <p className="lg:hidden mt-1.5 text-xs font-medium text-gray-700" aria-live="polite">
-                            <span className="text-gray-500 font-normal">Section: </span>
-                            {activeSectionLabel}
-                        </p>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="inline-flex flex-row flex-nowrap items-center gap-2 min-w-0 overflow-x-auto touch-pan-x w-full lg:w-auto">
                     <button
                         type="button"
                         onClick={() => requestAnimationFrame(() => switchSection('notes'))}
@@ -9755,155 +9773,34 @@ function initializeProjectDetail() {
                 </div>
             </div>
 
-            {/* Tab Navigation — native select on small screens; horizontal tabs from lg and up */}
+            {/* Tab Navigation — horizontal scroll on all screen sizes */}
             <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-1 min-w-0">
-                <div className="lg:hidden px-2 pt-2 pb-1 space-y-1">
-                    <label htmlFor="project-detail-section-nav" className="block text-xs font-medium text-gray-600">
-                        Jump to section
-                    </label>
-                    <select
-                        id="project-detail-section-nav"
-                        value={projectSectionNavItems.some((i) => i.id === activeSection) ? activeSection : 'overview'}
-                        onChange={(e) => {
-                            const v = e.target.value;
-                            requestAnimationFrame(() => switchSection(v));
-                        }}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 min-h-[44px]"
-                    >
-                        {projectSectionNavItems.map((item) => (
-                            <option key={item.id} value={item.id}>
-                                {item.label}
-                            </option>
-                        ))}
-                    </select>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-1 min-w-0">
+                <div
+                    className="inline-flex flex-row flex-nowrap flex-1 min-w-0 overflow-x-auto overflow-y-visible touch-pan-x scrollbar-hide gap-1 px-1 py-1 order-2 sm:order-1"
+                    role="tablist"
+                    aria-label="Project sections"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                >
+                    {projectSectionNavItems.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => requestAnimationFrame(() => switchSection(item.id))}
+                            className={`shrink-0 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+                                activeSection === item.id
+                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                            }`}
+                            aria-current={activeSection === item.id ? 'page' : undefined}
+                        >
+                            <i className={`fas ${projectSectionTabIcon(item.id)} mr-1 sm:mr-1.5`} aria-hidden="true"></i>
+                            <span className="hidden sm:inline">{item.label}</span>
+                            <span className="sm:hidden">{projectSectionTabShortLabel(item.label)}</span>
+                        </button>
+                    ))}
                 </div>
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-1 min-w-0">
-                <div className="min-w-0 flex-1 overflow-x-auto overflow-y-visible -mx-0.5 px-0.5 pb-0.5 hidden lg:block" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <div className="flex gap-1 flex-nowrap min-w-0">
-                    <button
-                        onClick={() => requestAnimationFrame(() => switchSection('overview'))}
-                        className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            activeSection === 'overview'
-                                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                        <i className="fas fa-chart-line mr-1.5"></i>
-                        Overview
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            requestAnimationFrame(() => {
-                                try {
-                                    if (typeof switchSection === 'function') {
-                                        switchSection('tasks');
-                                    } else {
-                                    console.error('❌ switchSection is not a function');
-                                        alert('Failed to switch to tasks: Handler not available.');
-                                    }
-                                } catch (error) {
-                                    console.error('❌ Error in Tasks button click handler:', error);
-                                    alert('An unexpected error occurred while trying to switch to tasks: ' + (error?.message || 'Unknown error'));
-                                }
-                            });
-                        }}
-                        className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                            activeSection === 'tasks'
-                                ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                    >
-                        <i className="fas fa-tasks mr-1.5"></i>
-                        Tasks
-                    </button>
-                    {hasTimeProcess && (
-                        <button
-                            onClick={() => requestAnimationFrame(() => switchSection('time'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'time'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-clock mr-1.5"></i>
-                            Time
-                        </button>
-                    )}
-                    {hasDocumentCollectionProcess && (
-                        <button
-                            type="button"
-                            onClick={() => requestAnimationFrame(() => switchSection('documentCollection'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'documentCollection'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-folder-open mr-1.5"></i>
-                            Document Collection
-                        </button>
-                    )}
-                    {hasWeeklyFMSReviewProcess && (
-                        <button
-                            type="button"
-                            onClick={() => requestAnimationFrame(() => switchSection('weeklyFMSReview'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'weeklyFMSReview'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-calendar-week mr-1.5"></i>
-                            Weekly FMS Review
-                        </button>
-                    )}
-                    {hasMonthlyFMSReviewProcess && (
-                        <button
-                            type="button"
-                            onClick={() => requestAnimationFrame(() => switchSection('monthlyFMSReview'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'monthlyFMSReview'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-calendar-alt mr-1.5"></i>
-                            Monthly FMS Review
-                        </button>
-                    )}
-                    {hasMonthlyDataReviewProcess && (
-                        <button
-                            type="button"
-                            onClick={() => requestAnimationFrame(() => switchSection('monthlyDataReview'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'monthlyDataReview'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-clipboard-check mr-1.5"></i>
-                            Monthly Data Review
-                        </button>
-                    )}
-                    {hasComplianceReviewProcess && (
-                        <button
-                            type="button"
-                            onClick={() => requestAnimationFrame(() => switchSection('complianceReview'))}
-                            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                activeSection === 'complianceReview'
-                                    ? 'bg-primary-600 text-white hover:bg-primary-700'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                            }`}
-                        >
-                            <i className="fas fa-clipboard-list mr-1.5"></i>
-                            Compliance Review
-                        </button>
-                    )}
-                </div>
-                </div>
-                    <div className="relative flex justify-end shrink-0 px-2 pb-2 lg:px-0 lg:pb-0 lg:self-center">
+                    <div className="relative flex justify-end shrink-0 px-2 pb-2 sm:px-0 sm:pb-0 sm:self-center order-1 sm:order-2">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
                             className="px-3 py-2 lg:px-2 lg:py-0.5 bg-primary-600 text-white text-xs font-medium rounded-lg lg:rounded hover:bg-primary-700 transition-colors flex items-center gap-1 whitespace-nowrap min-h-[44px] lg:min-h-0"
@@ -10433,10 +10330,10 @@ function initializeProjectDetail() {
             {activeSection === 'tasks' && (
                 <>
                     {/* Task View Controls */}
-                    <div className="flex justify-between items-center">
-                        <div className="flex gap-2">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center min-w-0">
+                        <div className="inline-flex flex-row flex-nowrap items-center gap-2 min-w-0 overflow-x-auto touch-pan-x w-full sm:w-auto">
                             {/* View Switcher */}
-                            <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+                            <div className="inline-flex flex-row flex-nowrap border border-gray-300 rounded-lg overflow-hidden shrink-0">
                                 <button
                                     onClick={() => setViewMode('list')}
                                     className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -10480,17 +10377,17 @@ function initializeProjectDetail() {
                             )}
                         </div>
                         
-                        <div className="flex gap-2">
+                        <div className="inline-flex flex-row flex-nowrap items-center gap-2 min-w-0 overflow-x-auto touch-pan-x w-full sm:w-auto sm:justify-end">
                             <button 
                                 onClick={() => setShowCustomFieldModal(true)}
-                                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center text-xs font-medium"
+                                className="shrink-0 px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors inline-flex items-center text-xs font-medium"
                             >
                                 <i className="fas fa-th mr-1.5"></i>
                                 Custom Fields
                             </button>
                             <button 
                                 onClick={handleAddList}
-                                className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-xs font-medium"
+                                className="shrink-0 bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors inline-flex items-center text-xs font-medium"
                             >
                                 <i className="fas fa-plus mr-1.5"></i>
                                 Add List
