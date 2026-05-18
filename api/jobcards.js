@@ -345,22 +345,25 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
     const gridTop = underlineY + 36
     const colW = contentW / 3
     drawBillingPdfMetaCell(doc, left, gridTop, colW - 6, 'Job card number', jobCard.jobCardNumber || jobCard.id || '—')
-    drawBillingPdfMetaCell(doc, left + colW, gridTop, colW - 6, 'Client / site', `${jobCard.clientName || '—'}${jobCard.siteName ? `\n${jobCard.siteName}` : ''}`)
-    drawBillingPdfMetaCell(doc, left + colW * 2, gridTop, colW - 6, 'Technician', jobCard.agentName || '—')
+    drawBillingPdfMetaCell(doc, left + colW, gridTop, colW - 6, 'Client', jobCard.clientName || '—')
+    drawBillingPdfMetaCell(doc, left + colW * 2, gridTop, colW - 6, 'Site', jobCard.siteName || '—')
 
     const gridRow2Y = gridTop + 44
-    drawBillingPdfMetaCell(doc, left, gridRow2Y, colW - 6, 'Status', String(jobCard.status || 'draft').toUpperCase())
+    drawBillingPdfMetaCell(doc, left, gridRow2Y, colW - 6, 'Technician', jobCard.agentName || '—')
+    drawBillingPdfMetaCell(doc, left + colW, gridRow2Y, colW - 6, 'Status', String(jobCard.status || 'draft').toUpperCase())
     drawBillingPdfMetaCell(
       doc,
-      left + colW,
+      left + colW * 2,
       gridRow2Y,
       colW - 6,
       'Created',
       formatPdfDateSast(jobCard.startedAt || jobCard.createdAt)
     )
-    drawBillingPdfMetaCell(doc, left + colW * 2, gridRow2Y, colW - 6, 'Printed', formatPdfDateSast(new Date()))
 
-    let contentY = gridRow2Y + 52
+    const gridRow3Y = gridRow2Y + 44
+    drawBillingPdfMetaCell(doc, left, gridRow3Y, colW - 6, 'Printed', formatPdfDateSast(new Date()))
+
+    let contentY = gridRow3Y + 52
     doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text('Visit narrative', left, contentY, { width: contentW })
     contentY += 16
     doc.font('Helvetica').fontSize(10)
@@ -483,9 +486,11 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
     doc.font('Helvetica-Bold').fontSize(11).text('Map', left, contentY, { width: contentW })
     contentY += 14
     doc.font('Helvetica').fontSize(10)
-    const locLine = jobCard.location || jobCard.siteName || jobCard.clientName || 'Not specified'
+    doc.font('Helvetica-Bold').text('Site: ', left, contentY, { continued: true })
+    doc.font('Helvetica').text(String(jobCard.siteName || '—'), { width: contentW })
+    contentY = doc.y + 4
     doc.font('Helvetica-Bold').text('Location: ', left, contentY, { continued: true })
-    doc.font('Helvetica').text(locLine, { width: contentW })
+    doc.font('Helvetica').text(String(jobCard.location || '—'), { width: contentW })
     contentY = doc.y + 4
     if (coords) {
       doc.font('Helvetica-Bold').text('Coordinates: ', left, contentY, { continued: true })

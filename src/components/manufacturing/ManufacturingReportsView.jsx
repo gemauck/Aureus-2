@@ -108,7 +108,16 @@
       Object.keys(row || {}).forEach((k) => keys.add(k));
     }
     return Array.from(keys).sort((a, b) => {
-      const pri = ['sourceType', 'recordSource', 'date', 'movement_date', 'order_orderNumber', 'jobCard_jobCardNumber'];
+      const pri = [
+        'sourceType',
+        'recordSource',
+        'date',
+        'movement_date',
+        'order_orderNumber',
+        'jobCard_jobCardNumber',
+        'jobCard_clientName',
+        'jobCard_siteName'
+      ];
       const ai = pri.indexOf(a);
       const bi = pri.indexOf(b);
       if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -209,6 +218,20 @@
     return '';
   }
 
+  function getSiteNameFromAllocationRow(row) {
+    const site = row.jobCard_siteName || '';
+    if (site && String(site).trim()) return String(site).trim();
+    return '';
+  }
+
+  /** QuickBooks journal "Name" — client, with site when present on job cards. */
+  function getJournalCustomerNameFromRow(row) {
+    const client = getClientNameFromAllocationRow(row);
+    const site = getSiteNameFromAllocationRow(row);
+    if (client && site) return `${client} — ${site}`;
+    return client || site;
+  }
+
   function getJournalClassFromRow(row) {
     const svc = row.jobCard_serviceCategory;
     if (svc && String(svc).trim()) return String(svc).trim();
@@ -237,7 +260,9 @@
     }
     if (row.sourceType === 'Job Card Consumption') {
       const jc = row.jobCard_jobCardNumber || '';
-      return `Job Card ${jc} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
+      const site = getSiteNameFromAllocationRow(row);
+      const sitePart = site ? ` — ${site}` : '';
+      return `Job Card ${jc}${sitePart} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
     }
     if (row.quickbooksMemo) return String(row.quickbooksMemo);
     return `Stock to client - ${client} - ${item}`.trim();
@@ -278,7 +303,7 @@
         buildJournalDebitDescription(row),
         formatJournalAmount(value),
         '',
-        getClientNameFromAllocationRow(row),
+        getJournalCustomerNameFromRow(row),
         getJournalClassFromRow(row)
       ]);
     }
@@ -553,7 +578,7 @@
               line_locationLabel: line.locationName || resolveLocationLabel(line.locationId),
               allocationDate: flattenValue(jcDate),
               jobCard_status: jc.status || '',
-              quickbooksMemo: `Stock to client: ${jc.clientName || ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
+              quickbooksMemo: `Stock to client: ${jc.clientName || ''}${jc.siteName ? ` @ ${jc.siteName}` : ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
             });
           });
         }

@@ -2439,11 +2439,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                           Job location
                         </div>
-                        <div className="text-sm text-slate-100">
-                          {selectedJobCard.location ||
-                            selectedJobCard.siteName ||
-                            selectedJobCard.clientName ||
-                            'Not specified'}
+                        <div className="text-sm text-slate-100 space-y-1">
+                          <div>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500">Site </span>
+                            {selectedJobCard.siteName || '—'}
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold uppercase text-slate-500">Location </span>
+                            {selectedJobCard.location || 'Not recorded'}
+                          </div>
                         </div>
                       </div>
                     </div>

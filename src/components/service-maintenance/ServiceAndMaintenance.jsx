@@ -1442,7 +1442,8 @@ const ServiceAndMaintenance = () => {
     <h2 class="doc-title">JOB CARD REPORT</h2>
     <div class="meta-grid">
       <div class="meta-card"><div class="label">Job card number</div><div class="value">${escapeHtml(jobCardForPdf.jobCardNumber || jobCardForPdf.id || '—')}</div></div>
-      <div class="meta-card"><div class="label">Client / site</div><div class="value">${escapeHtml(jobCardForPdf.clientName || '—')}${jobCardForPdf.siteName ? `\n${escapeHtml(jobCardForPdf.siteName)}` : ''}</div></div>
+      <div class="meta-card"><div class="label">Client</div><div class="value">${escapeHtml(jobCardForPdf.clientName || '—')}</div></div>
+      <div class="meta-card"><div class="label">Site</div><div class="value">${escapeHtml(jobCardForPdf.siteName || '—')}</div></div>
       <div class="meta-card"><div class="label">Technician</div><div class="value">${escapeHtml(jobCardForPdf.agentName || '—')}</div></div>
       <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(String(jobCardForPdf.status || 'draft').toUpperCase())}</div></div>
       <div class="meta-card"><div class="label">Created</div><div class="value">${escapeHtml(formatPdfDate(jobCardForPdf.startedAt || jobCardForPdf.createdAt))}</div></div>
@@ -1490,7 +1491,8 @@ const ServiceAndMaintenance = () => {
 
     <section class="section">
       <h3>Map</h3>
-      <p><strong>Location:</strong> ${escapeHtml(jobCardForPdf.location || jobCardForPdf.siteName || jobCardForPdf.clientName || 'Not specified')}</p>
+      <p><strong>Site:</strong> ${escapeHtml(jobCardForPdf.siteName || '—')}</p>
+      <p><strong>Location:</strong> ${escapeHtml(jobCardForPdf.location || '—')}</p>
       ${coords ? `<p><strong>Coordinates:</strong> ${escapeHtml(coords.lat.toFixed(6))}, ${escapeHtml(coords.lng.toFixed(6))}</p>` : '<p class="muted">No GPS coordinates recorded.</p>'}
       ${mapImageSrc ? `<div class="map-image"><img src="${escapeHtml(mapImageSrc)}" alt="Job location map" /></div>` : ''}
       ${
@@ -3057,11 +3059,15 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                           Job location
                         </div>
-                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                          {selectedJobCard.location ||
-                            selectedJobCard.siteName ||
-                            selectedJobCard.clientName ||
-                            'Not specified'}
+                        <div className={`text-sm space-y-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                          <div>
+                            <span className={`text-[10px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Site </span>
+                            {selectedJobCard.siteName || '—'}
+                          </div>
+                          <div>
+                            <span className={`text-[10px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Location </span>
+                            {selectedJobCard.location || 'Not recorded'}
+                          </div>
                         </div>
                       </div>
                     </div>
