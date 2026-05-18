@@ -220,9 +220,17 @@
     return Number.isFinite(v) && v > 0 ? v : 0;
   }
 
+  function formatJournalLineItemLabel(row) {
+    const item = row.line_itemName || row.line_sku || '';
+    const qty = parseFloat(row.line_quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return item;
+    const qtyLabel = Number.isInteger(qty) ? String(qty) : String(qty);
+    return item ? `${qtyLabel} x ${item}` : qtyLabel;
+  }
+
   function buildJournalDebitDescription(row) {
     const client = getClientNameFromAllocationRow(row);
-    const item = row.line_itemName || row.line_sku || '';
+    const item = formatJournalLineItemLabel(row);
     if (row.sourceType === 'Sales Order') {
       const so = row.order_orderNumber || '';
       return `Sales Order ${so} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
