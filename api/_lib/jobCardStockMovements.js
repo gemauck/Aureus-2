@@ -53,6 +53,34 @@ export function jobCardStockMovementReference(jobCard) {
   return num ? `JOB CARD: ${num}` : id ? `JOB CARD: ${id}` : 'JOB CARD'
 }
 
+/** Best date for ledger/reporting (visit completion preferred over save time). */
+export function resolveJobCardMovementDate(jobCard) {
+  const candidates = [
+    jobCard?.completedAt,
+    jobCard?.submittedAt,
+    jobCard?.startedAt,
+    jobCard?.createdAt,
+    jobCard?.updatedAt
+  ]
+  for (const raw of candidates) {
+    if (!raw) continue
+    const d = raw instanceof Date ? raw : new Date(raw)
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  return new Date()
+}
+
+function sameCalendarDay(a, b) {
+  const da = a instanceof Date ? a : new Date(a)
+  const db = b instanceof Date ? b : new Date(b)
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  )
+}
+
 async function resolveLocationIdTx(tx, locationIdOrCode) {
   const s = String(locationIdOrCode || '').trim()
   if (!s) return resolveDefaultStockLocationIdTx(tx)
@@ -124,17 +152,19 @@ async function reconcileInventoryMasterTx(tx, sku) {
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {{ jobCard: { id: string, jobCardNumber?: string|null, stockUsed?: unknown, location?: string|null, agentName?: string|null }, performedBy?: string, audit?: (action: string, movementId: string, details: object) => void }} opts
+ * @param {{ jobCard: object, performedBy?: string, applyJobCardDate?: boolean, audit?: (action: string, movementId: string, details: object) => void }} opts
  */
 export async function syncJobCardStockMovements(prisma, opts) {
   const jobCard = opts?.jobCard
-  if (!jobCard?.id) return { created: 0, updated: 0, skipped: 0, errors: [] }
+  if (!jobCard?.id) return { created: 0, updated: 0, skipped: 0, dateFixed: 0, errors: [] }
 
   const lines = parseJobCardStockUsed(jobCard.stockUsed)
   const performedBy = String(opts.performedBy || jobCard.agentName || 'System').trim()
   const reference = jobCardStockMovementReference(jobCard)
   const visitNote = jobCard.location ? ` — ${jobCard.location}` : ''
-  const result = { created: 0, updated: 0, skipped: 0, errors: [] }
+  const movementDate = resolveJobCardMovementDate(jobCard)
+  const applyJobCardDate = opts.applyJobCardDate !== false
+  const result = { created: 0, updated: 0, skipped: 0, dateFixed: 0, errors: [] }
 
   if (lines.length === 0) return result
 
@@ -165,7 +195,20 @@ export async function syncJobCardStockMovements(prisma, opts) {
           String(existing.fromLocation) === String(locationId) &&
           existing.quantity === targetQty
         ) {
-          result.skipped++
+          if (applyJobCardDate && !sameCalendarDay(existing.date, movementDate)) {
+            await tx.stockMovement.update({
+              where: { id: existing.id },
+              data: {
+                date: movementDate,
+                reference,
+                performedBy,
+                notes
+              }
+            })
+            result.dateFixed++
+          } else {
+            result.skipped++
+          }
           continue
         }
 
@@ -182,7 +225,7 @@ export async function syncJobCardStockMovements(prisma, opts) {
               reference,
               performedBy,
               notes,
-              date: new Date()
+              date: applyJobCardDate ? movementDate : new Date()
             }
           })
           if (liDelta !== 0) {
@@ -243,7 +286,7 @@ export async function syncJobCardStockMovements(prisma, opts) {
         const movement = await tx.stockMovement.create({
           data: {
             movementId: movementId || buildMovementId(),
-            date: new Date(),
+            date: applyJobCardDate ? movementDate : new Date(),
             type: 'consumption',
             itemName: line.itemName,
             sku: line.sku,

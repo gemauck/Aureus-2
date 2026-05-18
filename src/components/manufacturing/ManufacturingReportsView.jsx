@@ -14,6 +14,35 @@
     { id: 'receipts', label: 'Receipt of Stock Report', icon: 'fa-truck-loading' }
   ];
 
+  const DATE_PRESET_LAST_CALENDAR_MONTH = 'last-calendar-month';
+  const DATE_PRESET_CURRENT_CALENDAR_MONTH = 'current-calendar-month';
+  const DATE_PRESET_CUSTOM = 'custom';
+  const DATE_PRESET_ALL = 'all';
+
+  function formatYmd(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  /** First and last day of the calendar month before `refDate` (local time). */
+  function getLastCalendarMonthRange(refDate = new Date()) {
+    const anchor = refDate instanceof Date ? refDate : new Date();
+    const start = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1);
+    const end = new Date(anchor.getFullYear(), anchor.getMonth(), 0);
+    return { start: formatYmd(start), end: formatYmd(end) };
+  }
+
+  function getCurrentCalendarMonthRange(refDate = new Date()) {
+    const anchor = refDate instanceof Date ? refDate : new Date();
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    return { start: formatYmd(start), end: formatYmd(end) };
+  }
+
+  const DEFAULT_DATE_RANGE = getCurrentCalendarMonthRange();
+
   function parseJsonSafe(raw, fallback = []) {
     if (raw == null || raw === '') return fallback;
     if (Array.isArray(raw)) return raw;
@@ -223,8 +252,9 @@
     stockLocations = []
   }) {
     const [reportTab, setReportTab] = useState('stock-movements');
-    const [dateStart, setDateStart] = useState('');
-    const [dateEnd, setDateEnd] = useState('');
+    const [datePreset, setDatePreset] = useState(DATE_PRESET_CURRENT_CALENDAR_MONTH);
+    const [dateStart, setDateStart] = useState(DEFAULT_DATE_RANGE.start);
+    const [dateEnd, setDateEnd] = useState(DEFAULT_DATE_RANGE.end);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [rows, setRows] = useState([]);
@@ -464,6 +494,48 @@
       void loadReport();
     }, [loadReport]);
 
+    const applyDatePreset = useCallback((presetId) => {
+      if (presetId === DATE_PRESET_LAST_CALENDAR_MONTH) {
+        const range = getLastCalendarMonthRange();
+        setDatePreset(DATE_PRESET_LAST_CALENDAR_MONTH);
+        setDateStart(range.start);
+        setDateEnd(range.end);
+        return;
+      }
+      if (presetId === DATE_PRESET_CURRENT_CALENDAR_MONTH) {
+        const range = getCurrentCalendarMonthRange();
+        setDatePreset(DATE_PRESET_CURRENT_CALENDAR_MONTH);
+        setDateStart(range.start);
+        setDateEnd(range.end);
+        return;
+      }
+      if (presetId === DATE_PRESET_ALL) {
+        setDatePreset(DATE_PRESET_ALL);
+        setDateStart('');
+        setDateEnd('');
+        return;
+      }
+      setDatePreset(DATE_PRESET_CUSTOM);
+    }, []);
+
+    const handleDateStartChange = (value) => {
+      setDatePreset(DATE_PRESET_CUSTOM);
+      setDateStart(value);
+    };
+
+    const handleDateEndChange = (value) => {
+      setDatePreset(DATE_PRESET_CUSTOM);
+      setDateEnd(value);
+    };
+
+    const periodLabel = useMemo(() => {
+      if (datePreset === DATE_PRESET_ALL) return 'All dates';
+      if (dateStart && dateEnd) return `${dateStart} → ${dateEnd}`;
+      if (dateStart) return `From ${dateStart}`;
+      if (dateEnd) return `Until ${dateEnd}`;
+      return 'All dates';
+    }, [datePreset, dateStart, dateEnd]);
+
     const handleExport = async () => {
       setExporting(true);
       try {
@@ -502,25 +574,48 @@
             React.createElement(
               'p',
               { className: `text-xs mt-1 ${textMuted}` },
-              'Export full field sets to Excel for stock movements, client stock allocation (sales orders & job card consumption), and stock receipts.'
+              'Export full field sets to Excel for stock movements, client stock allocation (sales orders & job card consumption), and stock receipts. Default period: current calendar month.'
             )
           ),
           React.createElement(
             'div',
             { className: 'flex flex-wrap items-center gap-2' },
+            React.createElement(
+              'select',
+              {
+                value: datePreset,
+                onChange: (e) => applyDatePreset(e.target.value),
+                className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls}`,
+                'aria-label': 'Date period preset'
+              },
+              React.createElement(
+                'option',
+                { value: DATE_PRESET_CURRENT_CALENDAR_MONTH },
+                'Current calendar month'
+              ),
+              React.createElement(
+                'option',
+                { value: DATE_PRESET_LAST_CALENDAR_MONTH },
+                'Last calendar month'
+              ),
+              React.createElement('option', { value: DATE_PRESET_CUSTOM }, 'Custom range'),
+              React.createElement('option', { value: DATE_PRESET_ALL }, 'All time')
+            ),
             React.createElement('input', {
               type: 'date',
               value: dateStart,
-              onChange: (e) => setDateStart(e.target.value),
-              className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls}`,
+              onChange: (e) => handleDateStartChange(e.target.value),
+              disabled: datePreset === DATE_PRESET_ALL,
+              className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls} disabled:opacity-50`,
               'aria-label': 'From date'
             }),
             React.createElement('span', { className: `text-xs ${textMuted}` }, 'to'),
             React.createElement('input', {
               type: 'date',
               value: dateEnd,
-              onChange: (e) => setDateEnd(e.target.value),
-              className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls}`,
+              onChange: (e) => handleDateEndChange(e.target.value),
+              disabled: datePreset === DATE_PRESET_ALL,
+              className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls} disabled:opacity-50`,
               'aria-label': 'To date'
             }),
             React.createElement(
@@ -594,7 +689,9 @@
           React.createElement(
             'span',
             { className: `text-xs ${textMuted}` },
-            loading ? 'Loading…' : `${rows.length} row${rows.length === 1 ? '' : 's'} · ${columns.length} columns`
+            loading
+              ? 'Loading…'
+              : `${rows.length} row${rows.length === 1 ? '' : 's'} · ${columns.length} columns · ${periodLabel}`
           )
         ),
         React.createElement(

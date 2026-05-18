@@ -787,6 +787,7 @@ async function handler(req, res) {
     void syncJobCardStockMovements(prisma, {
       jobCard: jobCardRow,
       performedBy: actorName || jobCardRow.agentName || 'System',
+      applyJobCardDate: true,
       audit: (action, entityId, details) => {
         auditManufacturing(action, 'stock-movements', entityId, {
           source: 'job_card_sync',
