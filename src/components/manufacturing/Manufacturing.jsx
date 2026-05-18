@@ -46,6 +46,17 @@ const inventoryRowTotalValueForQuantity =
       ? (item, q) => window.inventoryRowTotalValueForQuantity(item, q)
       : inventoryRowTotalValueForQuantityInline;
 
+/** Excel .xlsx cell text limit (SheetJS enforces this on write). */
+const EXCEL_MAX_CELL_CHARS = 32767;
+const EXCEL_TRUNC_SUFFIX = '… [truncated for Excel]';
+
+function truncateForExcelCell(value) {
+  const s = value == null ? '' : String(value);
+  if (s.length <= EXCEL_MAX_CELL_CHARS) return s;
+  const maxBody = EXCEL_MAX_CELL_CHARS - EXCEL_TRUNC_SUFFIX.length;
+  return s.slice(0, Math.max(0, maxBody)) + EXCEL_TRUNC_SUFFIX;
+}
+
 // Use React from window
 
 // Safely access React hooks from the global window.React without throwing
@@ -1581,8 +1592,13 @@ try {
           return '';
         }
 
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          return value;
+        }
+
+        let text;
         if (Array.isArray(value)) {
-          return value
+          text = value
             .map((entry) => {
               if (entry === null || entry === undefined) {
                 return '';
@@ -1598,18 +1614,18 @@ try {
               return entry;
             })
             .join(' | ');
-        }
-
-        if (typeof value === 'object') {
+        } else if (typeof value === 'object') {
           try {
-            return JSON.stringify(value);
+            text = JSON.stringify(value);
           } catch (err) {
             console.warn('Failed to stringify value for export:', err, value);
-            return '[Object]';
+            text = '[Object]';
           }
+        } else {
+          text = String(value);
         }
 
-        return value;
+        return truncateForExcelCell(text);
       };
 
       const today = new Date().toISOString().split('T')[0];
@@ -1626,6 +1642,10 @@ try {
 
       const inventoryExportCell = (item, key) => {
         if (key === 'totalValue') return lineTotalForExport(item);
+        if (key === 'thumbnail') {
+          const thumb = item?.thumbnail;
+          return thumb && String(thumb).trim() ? '[thumbnail omitted from export]' : '';
+        }
         return key in item ? item[key] : '';
       };
 
