@@ -311,7 +311,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
     const userSelectedYearRef = useRef(false); // Track manual year selection to avoid auto-switching
     const autoScrolledWorkingMonthRef = useRef(null); // Prevent repeated forced scroll for same project/year/layout
-    
+    /** Compliance / Monthly Data Review: block autosave until GET has hydrated state (avoids stale parent prop overwriting server). */
+    const jsonTrackerServerHydratedRef = useRef(false);
+
     const getSnapshotKey = (projectId) => projectId
         ? (isMonthlyDataReview ? `monthlyDataReviewSnapshot_${projectId}` : isComplianceReview ? `complianceReviewSnapshot_${projectId}` : `documentCollectionSnapshot_${projectId}`)
         : null;
@@ -362,7 +364,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     useEffect(() => {
         userSelectedYearRef.current = false;
-    }, [project?.id]);
+        jsonTrackerServerHydratedRef.current = false;
+    }, [project?.id, dataSource]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
     /** `{ sectionId, sectionName }` — copy monthly statuses from one year into a range (same section + document IDs). */
@@ -1170,8 +1173,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             }
             setSectionsByYear(normalized);
             sectionsRef.current = normalized;
-            lastSavedDataRef.current = JSON.stringify(normalized);
-            setIsLoading(false);
+            if (isJsonOnlyTracker) {
+                // Show parent prop for fast paint but do not mark as saved — autosave must wait for API
+                // or we overwrite server truth (e.g. admin month-column moves) with stale list/detail cache.
+            } else {
+                lastSavedDataRef.current = JSON.stringify(normalized);
+                setIsLoading(false);
+            }
             // Still fetch from API in background to get latest (and emailRequestByMonth from blob), then update
             // Fall through to run the fetch below without blocking the UI
         } else {
@@ -1295,6 +1303,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 setSectionsByYear(normalized);
                 sectionsRef.current = normalized;
                 lastSavedDataRef.current = JSON.stringify(normalized);
+                if (isJsonOnlyTracker) {
+                    jsonTrackerServerHydratedRef.current = true;
+                    const snapshotKey = getSnapshotKey(project.id);
+                    if (snapshotKey && typeof window !== 'undefined' && window.localStorage) {
+                        try {
+                            window.localStorage.setItem(snapshotKey, lastSavedDataRef.current);
+                        } catch (storageError) {
+                            console.warn('⚠️ Failed to sync snapshot from server load:', storageError);
+                        }
+                    }
+                }
                 setIsLoading(false);
                 return;
             }
@@ -1375,6 +1394,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                 sectionsRef.current = {};
             }
         } finally {
+            if (isJsonOnlyTracker && !jsonTrackerServerHydratedRef.current) {
+                jsonTrackerServerHydratedRef.current = true;
+                if (yearMapHasSections(sectionsRef.current) && lastSavedDataRef.current == null) {
+                    lastSavedDataRef.current = JSON.stringify(sectionsRef.current);
+                }
+            }
             setIsLoading(false);
         }
     // Note: do not depend on selectedYear — API returns all years; reloading on year change was redundant
@@ -1703,6 +1728,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Simplified save function - clear and reliable
     async function saveToDatabase(options = {}) {
         const skipLoadingGuard = Boolean(options.skipLoadingGuard);
+        if (
+            isJsonOnlyTracker &&
+            !jsonTrackerServerHydratedRef.current &&
+            !skipLoadingGuard
+        ) {
+            console.warn(
+                '⏸️ Save skipped: compliance/data review still loading from server (avoids stale prop overwriting DB)'
+            );
+            return;
+        }
         if (isSavingRef.current || !project?.id || (!skipLoadingGuard && isLoading)) {
             if (project?.id && (isSavingRef.current || isLoading)) {
                 pendingSaveRef.current = true;
@@ -1849,6 +1884,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (!project?.id) return;
         
         const handleBeforeUnload = (event) => {
+            if (isJsonOnlyTracker && !jsonTrackerServerHydratedRef.current) return;
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save; we can't await during beforeunload
@@ -1869,13 +1905,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (!project?.id) return;
 
         return () => {
+            if (isJsonOnlyTracker && !jsonTrackerServerHydratedRef.current) return;
             const currentData = JSON.stringify(sectionsRef.current || sectionsByYear);
             if (currentData !== lastSavedDataRef.current && !isSavingRef.current) {
                 // Fire-and-forget save on unmount
                 saveToDatabase({ skipParentUpdate: true, skipLoadingGuard: true });
             }
         };
-    }, [project?.id]);
+    }, [project?.id, isJsonOnlyTracker]);
     
     // ============================================================
     // TEMPLATE MANAGEMENT - Database storage only
