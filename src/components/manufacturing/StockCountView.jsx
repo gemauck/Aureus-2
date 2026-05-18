@@ -29,13 +29,238 @@
   const STOCK_TAKE_DRAFT_KEY = 'erpStockCountView_stockTakeDraft_v1';
   const STOCK_TAKE_PAGE_SIZE = 50;
 
-  /** Maps to api/manufacturing/inventory/:id/qr?size= */
-  const QR_LABEL_PRESETS = {
-    small: { apiSize: 'sm', label: 'Small — 4 per row', cols: 4, qrDisplayPx: 72 },
-    medium: { apiSize: 'md', label: 'Medium — 3 per row', cols: 3, qrDisplayPx: 96 },
-    large: { apiSize: 'lg', label: 'Large — 2 per row', cols: 2, qrDisplayPx: 128 },
-    xlarge: { apiSize: 'xl', label: 'Extra large — full width', cols: 1, qrDisplayPx: 200 }
+  /**
+   * Label layout presets. `sheet` = fixed mm cells for precut A4 stickers (Tower / Avery).
+   * `flex` = responsive columns on plain A4. apiSize maps to GET .../inventory/:id/qr?size=
+   */
+  const QR_SHEET_PRESETS = {
+    w113: {
+      mode: 'sheet',
+      group: 'sheet',
+      label: 'Tower W113 / Avery L7163 — 14 per sheet (99.1×38.1 mm)',
+      cols: 2,
+      rows: 7,
+      labelWidthMm: 99.1,
+      labelHeightMm: 38.1,
+      marginTopMm: 15.14,
+      marginLeftMm: 4.65,
+      gapXmm: 2.5,
+      gapYmm: 0,
+      apiSize: 'md',
+      qrMaxMm: 30,
+      namePt: 7,
+      metaPt: 6
+    },
+    l7160: {
+      mode: 'sheet',
+      group: 'sheet',
+      label: 'Avery L7160 — 21 per sheet (63.5×38.1 mm)',
+      cols: 3,
+      rows: 7,
+      labelWidthMm: 63.5,
+      labelHeightMm: 38.1,
+      marginTopMm: 15.14,
+      marginLeftMm: 7.25,
+      gapXmm: 6.5,
+      gapYmm: 0,
+      apiSize: 'sm',
+      qrMaxMm: 26,
+      namePt: 6.5,
+      metaPt: 5.5
+    },
+    w107: {
+      mode: 'sheet',
+      group: 'sheet',
+      label: 'Tower W107 / Avery L6011 — 24 per sheet (38.1×21.2 mm)',
+      cols: 3,
+      rows: 8,
+      labelWidthMm: 38.1,
+      labelHeightMm: 21.2,
+      marginTopMm: 10.7,
+      marginLeftMm: 8.5,
+      gapXmm: 31.9,
+      gapYmm: 0,
+      apiSize: 'xs',
+      qrMaxMm: 16,
+      namePt: 5.5,
+      metaPt: 5
+    },
+    small: {
+      mode: 'flex',
+      group: 'flex',
+      apiSize: 'sm',
+      label: 'Plain A4 — small (4 per row)',
+      cols: 4,
+      qrDisplayPx: 72
+    },
+    medium: {
+      mode: 'flex',
+      group: 'flex',
+      apiSize: 'md',
+      label: 'Plain A4 — medium (3 per row)',
+      cols: 3,
+      qrDisplayPx: 96
+    },
+    large: {
+      mode: 'flex',
+      group: 'flex',
+      apiSize: 'lg',
+      label: 'Plain A4 — large (2 per row)',
+      cols: 2,
+      qrDisplayPx: 128
+    },
+    xlarge: {
+      mode: 'flex',
+      group: 'flex',
+      apiSize: 'xl',
+      label: 'Plain A4 — extra large (1 per row)',
+      cols: 1,
+      qrDisplayPx: 200
+    }
   };
+
+  const QR_PRESET_GROUPS = [
+    { id: 'sheet', label: 'Precut A4 stickers (SA)' },
+    { id: 'flex', label: 'Plain A4 (flexible grid)' }
+  ];
+
+  function getQrSheetPreset(key) {
+    return QR_SHEET_PRESETS[key] || QR_SHEET_PRESETS.w113;
+  }
+
+  function qrLabelsPerPage(preset) {
+    if (preset.mode === 'sheet') return preset.cols * preset.rows;
+    return null;
+  }
+
+  function chunkQrSheetItems(items, perPage) {
+    if (!perPage || perPage < 1) return [items];
+    const pages = [];
+    for (let i = 0; i < items.length; i += perPage) {
+      pages.push(items.slice(i, i + perPage));
+    }
+    return pages.length ? pages : [[]];
+  }
+
+  function buildQrLabelPrintCss(preset) {
+    const sheet = preset.mode === 'sheet';
+    const cellRule = sheet
+      ? [
+          '#erp-stock-qr-print-root .erp-qr-label-cell {',
+          '  width:' + preset.labelWidthMm + 'mm;',
+          '  height:' + preset.labelHeightMm + 'mm;',
+          '  box-sizing:border-box; overflow:hidden;',
+          '  padding:0.8mm 1mm; margin:0;',
+          '  border:none !important; border-radius:0 !important;',
+          '  box-shadow:none !important; background:#fff !important; color:#000 !important;',
+          '  break-inside:avoid; page-break-inside:avoid;',
+          '}',
+          '#erp-stock-qr-print-root .erp-qr-label-cell img {',
+          '  max-width:' + preset.qrMaxMm + 'mm; max-height:' + preset.qrMaxMm + 'mm;',
+          '  width:auto; height:auto; border:none !important; padding:0 !important;',
+          '}',
+          '#erp-stock-qr-print-root .erp-qr-sheet-page {',
+          '  width:210mm; min-height:297mm; box-sizing:border-box;',
+          '  padding:' + preset.marginTopMm + 'mm 0 0 ' + preset.marginLeftMm + 'mm;',
+          '  margin:0; page-break-after:always;',
+          '  display:grid;',
+          '  grid-template-columns:repeat(' + preset.cols + ',' + preset.labelWidthMm + 'mm);',
+          '  column-gap:' + preset.gapXmm + 'mm;',
+          '  row-gap:' + (preset.gapYmm || 0) + 'mm;',
+          '  background:#fff !important;',
+          '}',
+          '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; }'
+        ].join('\n')
+      : '';
+    return (
+      '@media print {' +
+      (sheet ? '@page { size:A4; margin:0; }' : '@page { size:A4; margin:10mm; }') +
+      'body * { visibility:hidden !important; }' +
+      '#erp-stock-qr-print-root, #erp-stock-qr-print-root * { visibility:visible !important; }' +
+      '#erp-stock-qr-print-root { position:absolute; left:0; top:0; box-sizing:border-box; padding:0; margin:0; background:#fff !important; ' +
+      (sheet ? 'width:210mm;' : 'width:100%;') +
+      '}' +
+      '#erp-stock-qr-print-root .erp-qr-preview-banner { display:none !important; }' +
+      '#erp-stock-qr-print-root .erp-qr-label-name, #erp-stock-qr-print-root .erp-qr-label-meta { color:#000 !important; }' +
+      cellRule +
+      '}'
+    );
+  }
+
+  function renderStockQrLabelCell(React, item, preset, opts) {
+    const text = opts.text || '';
+    const muted = opts.muted || '';
+    const isSheet = preset.mode === 'sheet';
+    const imgEl = React.createElement('img', {
+      src: item.qrSrc,
+      alt: 'QR ' + item.sku,
+      className: isSheet
+        ? 'shrink-0 object-contain bg-white'
+        : 'shrink-0 object-contain bg-white p-1 rounded border border-slate-200',
+      style: isSheet
+        ? { maxWidth: preset.qrMaxMm + 'mm', maxHeight: preset.qrMaxMm + 'mm', width: 'auto', height: 'auto' }
+        : { width: preset.qrDisplayPx, height: preset.qrDisplayPx }
+    });
+    const nameEl = React.createElement(
+      'p',
+      {
+        className:
+          'erp-qr-label-name font-semibold leading-tight line-clamp-2 ' + (isSheet ? '' : 'mt-2 text-xs ' + text),
+        style: isSheet
+          ? { fontSize: preset.namePt + 'pt', margin: 0, lineHeight: 1.15, overflow: 'hidden' }
+          : undefined
+      },
+      item.name
+    );
+    const skuEl = React.createElement(
+      'p',
+      {
+        className: 'erp-qr-label-meta font-mono ' + (isSheet ? '' : 'mt-0.5 text-[11px] ' + muted),
+        style: isSheet
+          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1 }
+          : undefined
+      },
+      item.sku
+    );
+    const qtyEl = React.createElement(
+      'p',
+      {
+        className: 'erp-qr-label-meta ' + (isSheet ? '' : 'mt-1 text-[10px] ' + muted),
+        style: isSheet
+          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1 }
+          : undefined
+      },
+      'Qty ' + item.quantity
+    );
+    if (isSheet) {
+      return React.createElement(
+        'div',
+        {
+          key: item.inventoryItemId,
+          className:
+            'erp-qr-label-cell flex flex-row items-center gap-[1mm] text-left overflow-hidden ' +
+            (opts.cellClass || ''),
+          style: opts.cellStyle
+        },
+        imgEl,
+        React.createElement('div', { className: 'min-w-0 flex-1 overflow-hidden' }, nameEl, skuEl, qtyEl)
+      );
+    }
+    return React.createElement(
+      'div',
+      {
+        key: item.inventoryItemId,
+        className:
+          'flex flex-col items-center justify-start text-center rounded-lg border p-3 break-inside-avoid shadow-sm erp-qr-label-cell ' +
+          (opts.cellClass || ''),
+        style: Object.assign({ pageBreakInside: 'avoid' }, opts.cellStyle || {})
+      },
+      imgEl,
+      nameEl,
+      skuEl,
+      qtyEl
+    );
+  }
 
   const QR_SHEET_MAX = 400;
   const STOCK_COUNT_PAGES = ['in-app', 'labels', 'excel'];
@@ -200,7 +425,7 @@
 
     const [qrLocationId, setQrLocationId] = React.useState('');
     const [qrOnlyInStock, setQrOnlyInStock] = React.useState(true);
-    const [qrSizePreset, setQrSizePreset] = React.useState('medium');
+    const [qrSizePreset, setQrSizePreset] = React.useState('w113');
     const [qrSheetItems, setQrSheetItems] = React.useState([]);
     const [qrSheetLoading, setQrSheetLoading] = React.useState(false);
     const [qrSheetNote, setQrSheetNote] = React.useState('');
@@ -761,7 +986,7 @@
         setError('Select a stock location for QR labels.');
         return;
       }
-      const preset = QR_LABEL_PRESETS[qrSizePreset] || QR_LABEL_PRESETS.medium;
+      const preset = getQrSheetPreset(qrSizePreset);
       setQrSheetLoading(true);
       setError(null);
       setQrSheetNote('');
@@ -1173,7 +1398,12 @@
       [stLocations]
     );
 
-    const qrPreset = QR_LABEL_PRESETS[qrSizePreset] || QR_LABEL_PRESETS.medium;
+    const qrPreset = getQrSheetPreset(qrSizePreset);
+    const qrSheetPages = React.useMemo(() => {
+      const perPage = qrLabelsPerPage(qrPreset);
+      return chunkQrSheetItems(qrSheetItems, perPage);
+    }, [qrSheetItems, qrPreset]);
+    const qrPrintCss = React.useMemo(() => buildQrLabelPrintCss(qrPreset), [qrPreset]);
     const qrLocationLabel = React.useMemo(() => {
       const loc = stLocationOptions.find((l) => l.id === qrLocationId);
       return loc ? String(loc.name || loc.code || '') + (loc.code ? ' (' + loc.code + ')' : '') : '';
@@ -2360,14 +2590,9 @@
         React.createElement(
           'p',
           { className: 'mt-1 text-sm ' + muted },
-          'Each stock line is tied to a catalog item. The QR encodes that item id (ABCO:INV:…) for Job Cards stock-take scanning. Build a sheet for this location, choose a label size, then print — only the label grid is sent to the printer.'
+          'Each stock line is tied to a catalog item. The QR encodes that item id (ABCO:INV:…) for Job Cards stock-take scanning. Choose a precut sticker sheet (Tower / Avery) or a plain A4 grid, build labels for a location, then print. Only the label area is sent to the printer.'
         ),
-        React.createElement('style', {
-          dangerouslySetInnerHTML: {
-            __html:
-              '@media print { @page { size: A4; margin: 10mm; } body * { visibility: hidden !important; } #erp-stock-qr-print-root, #erp-stock-qr-print-root * { visibility: visible !important; } #erp-stock-qr-print-root { position: absolute; left: 0; top: 0; width: 100%; box-sizing: border-box; padding: 0; background: #fff !important; } }'
-          }
-        }),
+        React.createElement('style', { dangerouslySetInnerHTML: { __html: qrPrintCss } }),
         React.createElement(
           'div',
           { className: 'mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3' },
@@ -2404,7 +2629,7 @@
             React.createElement(
               'label',
               { htmlFor: 'erp-qr-size', className: 'block text-xs font-semibold ' + muted + ' mb-1' },
-              'Label size on paper'
+              'Label layout'
             ),
             React.createElement(
               'select',
@@ -2414,16 +2639,36 @@
                 value: qrSizePreset,
                 onChange: (e) => setQrSizePreset(e.target.value)
               },
-              Object.keys(QR_LABEL_PRESETS).map((k) =>
+              QR_PRESET_GROUPS.map((grp) =>
                 React.createElement(
-                  'option',
-                  { key: k, value: k },
-                  QR_LABEL_PRESETS[k].label
+                  'optgroup',
+                  { key: grp.id, label: grp.label },
+                  Object.keys(QR_SHEET_PRESETS)
+                    .filter((k) => QR_SHEET_PRESETS[k].group === grp.id)
+                    .map((k) =>
+                      React.createElement(
+                        'option',
+                        { key: k, value: k },
+                        QR_SHEET_PRESETS[k].label
+                      )
+                    )
                 )
               )
             )
           )
         ),
+        qrPreset.mode === 'sheet'
+          ? React.createElement(
+              'p',
+              { className: 'mt-3 text-xs rounded-lg border px-3 py-2 ' + (isDark ? 'border-amber-700/50 bg-amber-950/30 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-900') },
+              React.createElement('i', { className: 'fas fa-print mr-1.5' }),
+              ' Precut stickers: load ',
+              React.createElement('strong', null, 'A4'),
+              ' in the printer and print at ',
+              React.createElement('strong', null, '100% (Actual size)'),
+              ' — turn off “Fit to page”. Margins are tuned for Tower W113 / Avery L7163, L7160, and W107 / L6011.'
+            )
+          : null,
         React.createElement(
           'label',
           { className: 'mt-3 flex items-center gap-2 cursor-pointer text-sm ' + muted },
@@ -2501,7 +2746,11 @@
               },
               React.createElement(
                 'div',
-                { className: 'mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 ' + (isDark ? 'border-slate-700' : 'border-slate-200') },
+                {
+                  className:
+                    'erp-qr-preview-banner mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 ' +
+                    (isDark ? 'border-slate-700' : 'border-slate-200')
+                },
                 React.createElement('p', { className: 'text-sm font-semibold ' + text }, 'Print preview'),
                 React.createElement(
                   'p',
@@ -2513,53 +2762,80 @@
                     qrSheetItems.length +
                     ' label' +
                     (qrSheetItems.length === 1 ? '' : 's') +
+                    (qrPreset.mode === 'sheet' && qrSheetPages.length > 1
+                      ? ' · ' + qrSheetPages.length + ' A4 sheets'
+                      : '') +
                     ' · ' +
                     new Date().toLocaleString()
                 )
               ),
-              React.createElement(
-                'div',
-                {
-                  className: 'grid gap-3',
-                  style: {
-                    gridTemplateColumns: 'repeat(' + qrPreset.cols + ', minmax(0, 1fr))'
-                  }
-                },
-                qrSheetItems.map((item) =>
-                  React.createElement(
+              qrPreset.mode === 'sheet'
+                ? React.createElement(
                     'div',
-                    {
-                      key: item.inventoryItemId,
-                      className:
-                        'flex flex-col items-center justify-start text-center rounded-lg border p-3 break-inside-avoid shadow-sm ' +
-                        (isDark ? 'border-slate-600 bg-gray-900' : 'border-slate-200 bg-white'),
-                      style: { pageBreakInside: 'avoid' }
-                    },
-                    React.createElement('img', {
-                      src: item.qrSrc,
-                      alt: 'QR ' + item.sku,
-                      width: qrPreset.qrDisplayPx,
-                      height: qrPreset.qrDisplayPx,
-                      className: 'shrink-0 object-contain bg-white p-1 rounded border border-slate-200'
-                    }),
-                    React.createElement(
-                      'p',
-                      { className: 'mt-2 text-xs font-semibold leading-tight line-clamp-2 ' + text },
-                      item.name
-                    ),
-                    React.createElement(
-                      'p',
-                      { className: 'mt-0.5 text-[11px] font-mono ' + muted },
-                      item.sku
-                    ),
-                    React.createElement(
-                      'p',
-                      { className: 'mt-1 text-[10px] ' + muted },
-                      'Qty ' + item.quantity
+                    { className: 'overflow-x-auto pb-2' },
+                    qrSheetPages.map((pageItems, pageIdx) =>
+                      React.createElement(
+                        'div',
+                        { key: 'qr-sheet-page-' + pageIdx, className: pageIdx > 0 ? 'mt-8' : '' },
+                        pageIdx > 0
+                          ? React.createElement(
+                              'p',
+                              { className: 'erp-qr-preview-banner text-xs font-medium mb-2 ' + muted },
+                              'A4 sheet ' + (pageIdx + 1) + ' of ' + qrSheetPages.length
+                            )
+                          : null,
+                        React.createElement(
+                          'div',
+                          {
+                            className:
+                              'erp-qr-sheet-page inline-block border border-dashed ' +
+                              (isDark ? 'border-slate-600' : 'border-slate-300'),
+                            style: {
+                              width: '210mm',
+                              minHeight: '297mm',
+                              boxSizing: 'border-box',
+                              paddingTop: qrPreset.marginTopMm + 'mm',
+                              paddingLeft: qrPreset.marginLeftMm + 'mm',
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'repeat(' + qrPreset.cols + ', ' + qrPreset.labelWidthMm + 'mm)',
+                              columnGap: qrPreset.gapXmm + 'mm',
+                              rowGap: (qrPreset.gapYmm || 0) + 'mm',
+                              background: '#fff',
+                              color: '#000'
+                            }
+                          },
+                          pageItems.map((item) =>
+                            renderStockQrLabelCell(React, item, qrPreset, {
+                              text: text,
+                              muted: muted,
+                              cellClass: 'border border-slate-200',
+                              cellStyle: {
+                                width: qrPreset.labelWidthMm + 'mm',
+                                height: qrPreset.labelHeightMm + 'mm'
+                              }
+                            })
+                          )
+                        )
+                      )
                     )
                   )
-                )
-              )
+                : React.createElement(
+                    'div',
+                    {
+                      className: 'grid gap-3',
+                      style: {
+                        gridTemplateColumns: 'repeat(' + qrPreset.cols + ', minmax(0, 1fr))'
+                      }
+                    },
+                    qrSheetItems.map((item) =>
+                      renderStockQrLabelCell(React, item, qrPreset, {
+                        text: text,
+                        muted: muted,
+                        cellClass: isDark ? 'border-slate-600 bg-gray-900' : 'border-slate-200 bg-white'
+                      })
+                    )
+                  )
             )
           : null
       )
