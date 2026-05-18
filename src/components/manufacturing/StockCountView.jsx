@@ -142,6 +142,48 @@
     return pages.length ? pages : [[]];
   }
 
+  function scrollStockTakeScannedSkuIntoView(sku) {
+    const enc = encodeURIComponent(String(sku || '').trim());
+    if (!enc) return;
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const top = document.getElementById('erp-st-scanned-item-top');
+        if (top) {
+          let scrolled = false;
+          let parent = top.parentElement;
+          while (parent && parent !== document.body) {
+            const style = window.getComputedStyle(parent);
+            const oy = style.overflowY;
+            if (
+              (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+              parent.scrollHeight > parent.clientHeight + 4
+            ) {
+              const offset =
+                top.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop;
+              parent.scrollTo({ top: Math.max(0, offset - 12), behavior: 'smooth' });
+              scrolled = true;
+              break;
+            }
+            parent = parent.parentElement;
+          }
+          if (!scrolled) {
+            top.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          }
+        }
+        window.setTimeout(() => {
+          const qty = document.getElementById('erp-st-qty-' + enc);
+          if (!qty) return;
+          try {
+            qty.focus({ preventScroll: true });
+          } catch {
+            qty.focus();
+          }
+          if (typeof qty.select === 'function') qty.select();
+        }, 100);
+      }, 180);
+    });
+  }
+
   function buildQrLabelPrintCss(preset) {
     const sheet = preset.mode === 'sheet';
     const cellRule = sheet
@@ -819,15 +861,7 @@
         setStHighlightSku(sku);
         setStScanOpen(false);
         setError(null);
-        window.setTimeout(() => {
-          const id = 'erp-st-qty-' + encodeURIComponent(sku);
-          const el = document.getElementById(id);
-          if (el) {
-            el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            el.focus();
-            if (typeof el.select === 'function') el.select();
-          }
-        }, 150);
+        scrollStockTakeScannedSkuIntoView(sku);
       };
 
       const stopLoop = () => {
@@ -1409,6 +1443,18 @@
       });
     }, [stRows, stLineSearch, stScanFilterSku]);
 
+    const stScannedRow = React.useMemo(() => {
+      const sku = String(stScanFilterSku || '').trim();
+      if (!sku) return null;
+      return (stRows || []).find((row) => String(row?.sku || '').trim() === sku) || null;
+    }, [stScanFilterSku, stRows]);
+
+    React.useEffect(() => {
+      const sku = String(stScanFilterSku || '').trim();
+      if (!sku) return;
+      scrollStockTakeScannedSkuIntoView(sku);
+    }, [stScanFilterSku, stScannedRow?.sku]);
+
     const stAllLineCount = stRows?.length ?? 0;
     const stLineCount = stFilteredRows.length;
     const stTotalPages = Math.max(1, Math.ceil(stLineCount / STOCK_TAKE_PAGE_SIZE));
@@ -1706,6 +1752,90 @@
       'w-full max-w-[5.5rem] rounded-md border px-2 py-1 text-xs shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 sm:ml-auto ' +
       (isDark ? 'border-gray-600 bg-gray-950 ' + text : 'border-gray-300 bg-white text-gray-900');
 
+    const clearStScanFilter = () => {
+      setStScanFilterSku('');
+      setStLineSearch('');
+      setStHighlightSku('');
+    };
+
+    const renderStScannedTopCard = () => {
+      if (!stScannedRow || !stScanFilterSku) return null;
+      const skuKey = String(stScannedRow.sku || '').trim();
+      const skuEnc = encodeURIComponent(skuKey);
+      return React.createElement(
+        'div',
+        {
+          id: 'erp-st-scanned-item-top',
+          className:
+            'border-b-2 px-3 py-3 ' +
+            (isDark ? 'border-blue-500 bg-blue-950/40' : 'border-blue-500 bg-blue-50') +
+            ' scroll-mt-2'
+        },
+        React.createElement(
+          'div',
+          { className: 'flex flex-wrap items-start justify-between gap-3' },
+          React.createElement(
+            'div',
+            { className: 'min-w-0 flex-1' },
+            React.createElement(
+              'p',
+              { className: 'text-xs font-semibold uppercase tracking-wide ' + (isDark ? 'text-blue-300' : 'text-blue-700') },
+              'Scanned item — enter count'
+            ),
+            React.createElement(
+              'p',
+              {
+                className: 'mt-1 text-base font-bold leading-tight ' + text,
+                style: { overflowWrap: 'anywhere', wordBreak: 'break-word' }
+              },
+              stScannedRow.name || stScannedRow.sku
+            ),
+            stScannedRow.sku
+              ? React.createElement('p', { className: 'mt-0.5 text-sm font-mono ' + muted }, stScannedRow.sku)
+              : null
+          ),
+          React.createElement(
+            'div',
+            { className: 'shrink-0 w-full sm:w-auto sm:min-w-[7rem]' },
+            React.createElement(
+              'label',
+              { htmlFor: 'erp-st-qty-' + skuEnc, className: 'block text-xs font-semibold ' + muted + ' mb-1' },
+              'Counted qty'
+            ),
+            React.createElement('input', {
+              id: 'erp-st-qty-' + skuEnc,
+              type: 'number',
+              step: '0.01',
+              inputMode: 'decimal',
+              className: qtyInputCls + ' w-full max-w-none sm:w-full',
+              placeholder: 'Qty',
+              value: stCounts[skuKey] ?? '',
+              onFocus: () => {
+                stLocalEditSkusRef.current.add(skuKey);
+              },
+              onBlur: () => {
+                window.setTimeout(() => {
+                  stLocalEditSkusRef.current.delete(skuKey);
+                }, 400);
+              },
+              onChange: (e) => handleStCountChange(skuKey, e.target.value)
+            })
+          )
+        ),
+        React.createElement(
+          'button',
+          {
+            type: 'button',
+            className:
+              'mt-3 text-xs font-semibold underline ' +
+              (isDark ? 'text-blue-300 hover:text-blue-200' : 'text-blue-800 hover:text-blue-900'),
+            onClick: clearStScanFilter
+          },
+          'Show all lines'
+        )
+      );
+    };
+
     return React.createElement(
       'div',
       { className: 'space-y-4 erp-module-root' },
@@ -1985,6 +2115,8 @@
                   const v = e.target.value;
                   setStLocationId(v);
                   setStLineSearch('');
+                  setStScanFilterSku('');
+                  setStHighlightSku('');
                   setStPage(1);
                   setStCounts({});
                   setStStartedLocal((prev) => prev || toDatetimeLocalValue(Date.now()));
@@ -2020,7 +2152,10 @@
         stSessionId
           ? React.createElement(
               'div',
-              { className: 'mt-4 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200') },
+              {
+                id: 'erp-st-stock-lines-panel',
+                className: 'mt-4 rounded-lg border overflow-hidden ' + (isDark ? 'border-gray-700' : 'border-gray-200')
+              },
               React.createElement(
                 'div',
                 {
@@ -2087,6 +2222,7 @@
                   )
                 )
               ),
+              renderStScannedTopCard(),
               stRowsLoading
                 ? React.createElement('div', { className: 'px-3 py-6 text-sm ' + muted }, 'Loading inventory…')
                 : stRows.length === 0
@@ -2146,7 +2282,13 @@
                             { className: 'px-3 py-6 text-sm ' + muted },
                             'No lines match your search.'
                           )
-                        : React.createElement(
+                        : stScanFilterSku && stScannedRow
+                          ? React.createElement(
+                              'div',
+                              { className: 'px-3 py-4 text-sm ' + muted },
+                              'Enter the count in the blue card above.'
+                            )
+                          : React.createElement(
                             React.Fragment,
                             null,
                             React.createElement(
