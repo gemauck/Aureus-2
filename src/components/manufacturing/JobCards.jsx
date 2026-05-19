@@ -1702,6 +1702,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   </button>
                 </th>
                 <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Site</span>
+                </th>
+                <th className="px-4 py-2 text-left">
                   <span className="font-semibold">Created by</span>
                 </th>
                 <th className="px-4 py-2 text-left">
@@ -1788,6 +1791,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
                       {jc.clientName || '–'}
+                    </td>
+                    <td className={`px-4 py-2 max-w-[12rem] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                      <span className="block truncate" title={jc.siteName || ''}>
+                        {jc.siteName || '–'}
+                      </span>
                     </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className={listTextClasses.small}>
