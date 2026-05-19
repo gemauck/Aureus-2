@@ -3058,6 +3058,16 @@ const JobCardFormPublic = () => {
     loadSitesForClient();
   }, [formData.clientId, clients, isOnline]);
 
+  // Keep siteName in sync when a site is selected (list/detail show siteName, not siteId).
+  useEffect(() => {
+    if (!formData.siteId || availableSites.length === 0) return;
+    const site = availableSites.find((s) => String(s.id) === String(formData.siteId));
+    if (!site?.name) return;
+    const nextName = String(site.name).trim();
+    if (String(formData.siteName || '').trim() === nextName) return;
+    setFormData((prev) => ({ ...prev, siteName: nextName }));
+  }, [formData.siteId, availableSites]);
+
   useEffect(() => {
     resizeSignatureCanvas();
 
@@ -3141,6 +3151,16 @@ const JobCardFormPublic = () => {
         clientId: value,
         siteId: '',
         siteName: ''
+      }));
+      return;
+    }
+
+    if (name === 'siteId') {
+      const site = availableSites.find((s) => String(s.id) === String(value));
+      setFormData((prev) => ({
+        ...prev,
+        siteId: value,
+        siteName: site?.name ? String(site.name).trim() : ''
       }));
       return;
     }
