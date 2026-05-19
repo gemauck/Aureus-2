@@ -12,6 +12,11 @@ import {
   normalizeJobCardNumberToken
 } from './_lib/jobCardNumber.js'
 import { syncJobCardStockMovements } from './_lib/jobCardStockMovements.js'
+import { buildJobCardListWhereClause } from './_lib/jobCardListSearch.js'
+import {
+  enrichJobCardRowsSiteNames,
+  resolveClientSiteName
+} from './_lib/jobCardSiteResolve.js'
 import { sendEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import PDFDocument from 'pdfkit'
@@ -892,12 +897,22 @@ async function handler(req, res) {
         const ownerIdParamRaw = (url.searchParams.get('ownerId') || '').trim()
         const createdFromRaw = (url.searchParams.get('createdFrom') || '').trim()
         const createdToRaw = (url.searchParams.get('createdTo') || '').trim()
+        const siteFilterRaw = (url.searchParams.get('site') || url.searchParams.get('siteName') || '').trim()
+        const locationFilterRaw = (url.searchParams.get('location') || '').trim()
+        const agentNameFilterRaw = (
+          url.searchParams.get('agentName') ||
+          url.searchParams.get('technician') ||
+          ''
+        ).trim()
         const includeStockUsed =
           url.searchParams.get('includeStockUsed') === '1' ||
           String(url.searchParams.get('includeStockUsed') || '').toLowerCase() === 'true'
         const withStockUsedOnly =
           url.searchParams.get('withStockUsedOnly') === '1' ||
           String(url.searchParams.get('withStockUsedOnly') || '').toLowerCase() === 'true'
+        const includeTotal =
+          url.searchParams.get('includeTotal') === '1' ||
+          String(url.searchParams.get('includeTotal') || '').toLowerCase() === 'true'
 
         function looksLikeJobCardOwnerId(value) {
           if (!value || typeof value !== 'string') return false
@@ -912,6 +927,9 @@ async function handler(req, res) {
           clientName ||
           callOutCategory ||
           searchQ ||
+          siteFilterRaw ||
+          locationFilterRaw ||
+          agentNameFilterRaw ||
           mineParam ||
           ownerIdParamRaw ||
           createdFromRaw ||
@@ -969,43 +987,12 @@ async function handler(req, res) {
           baseFilters.createdAt = createdRange
         }
 
-        let whereClause = {}
-        if (searchQ) {
-          // Match any substantive text on the job card (string columns + JSON-as-text fields)
-          const searchOr = {
-            OR: [
-              { jobCardNumber: { contains: searchQ, mode: 'insensitive' } },
-              { status: { contains: searchQ, mode: 'insensitive' } },
-              { agentName: { contains: searchQ, mode: 'insensitive' } },
-              { otherTechnicians: { contains: searchQ, mode: 'insensitive' } },
-              { clientId: { contains: searchQ, mode: 'insensitive' } },
-              { clientName: { contains: searchQ, mode: 'insensitive' } },
-              { siteId: { contains: searchQ, mode: 'insensitive' } },
-              { siteName: { contains: searchQ, mode: 'insensitive' } },
-              { location: { contains: searchQ, mode: 'insensitive' } },
-              { locationLatitude: { contains: searchQ, mode: 'insensitive' } },
-              { locationLongitude: { contains: searchQ, mode: 'insensitive' } },
-              { vehicleUsed: { contains: searchQ, mode: 'insensitive' } },
-              { reasonForVisit: { contains: searchQ, mode: 'insensitive' } },
-              { callOutCategory: { contains: searchQ, mode: 'insensitive' } },
-              { diagnosis: { contains: searchQ, mode: 'insensitive' } },
-              { futureWorkRequired: { contains: searchQ, mode: 'insensitive' } },
-              { actionsTaken: { contains: searchQ, mode: 'insensitive' } },
-              { otherComments: { contains: searchQ, mode: 'insensitive' } },
-              // Intentionally exclude `photos`: values are often huge (base64 JSON) and
-              // `contains` on that column makes list/search unusably slow on mobile.
-              { materialsBought: { contains: searchQ, mode: 'insensitive' } },
-              { stockUsed: { contains: searchQ, mode: 'insensitive' } }
-            ]
-          }
-          if (Object.keys(baseFilters).length === 0) {
-            whereClause = searchOr
-          } else {
-            whereClause = { AND: [baseFilters, searchOr] }
-          }
-        } else {
-          whereClause = baseFilters
-        }
+        const whereClause = buildJobCardListWhereClause(baseFilters, {
+          searchQ,
+          site: siteFilterRaw,
+          location: locationFilterRaw,
+          agentName: agentNameFilterRaw
+        })
 
         const sortField = LIST_SORT_WHITELIST[sortFieldRaw] ? sortFieldRaw : 'createdAt'
         const orderBy = { [sortField]: sortDirectionRaw }
@@ -1018,12 +1005,12 @@ async function handler(req, res) {
           agentName: true,
           clientId: true,
           clientName: true,
+          siteId: true,
           siteName: true,
           location: true,
           status: true,
           reasonForVisit: true,
           callOutCategory: true,
-          diagnosis: true,
           otherComments: true,
           ownerId: true,
           completedByUserId: true,
@@ -1047,12 +1034,16 @@ async function handler(req, res) {
           safetyCultureAuditId: true
         }
 
-        const totalItemsPromise = prisma.jobCard.count({ where: whereClause })
+        const totalItemsPromise = includeTotal
+          ? prisma.jobCard.count({ where: whereClause })
+          : null
 
         const listSelect = {
           ...listSelectBase,
           ...(includeStockUsed ? { stockUsed: true } : {})
         }
+
+        const findTake = includeTotal ? pageSize : pageSize + 1
 
         let jobCards
         try {
@@ -1066,7 +1057,7 @@ async function handler(req, res) {
             },
             orderBy,
             skip: (page - 1) * pageSize,
-            take: pageSize
+            take: findTake
           })
         } catch (err) {
           if (!isMissingServiceFormInstanceTables(err)) throw err
@@ -1075,7 +1066,7 @@ async function handler(req, res) {
             select: { ...listSelect },
             orderBy,
             skip: (page - 1) * pageSize,
-            take: pageSize
+            take: findTake
           })
           jobCards = jobCards.map((row) => ({
             ...row,
@@ -1083,7 +1074,13 @@ async function handler(req, res) {
           }))
         }
 
-        const totalItems = await totalItemsPromise
+        let hasMore = false
+        if (!includeTotal && jobCards.length > pageSize) {
+          hasMore = true
+          jobCards = jobCards.slice(0, pageSize)
+        }
+
+        const totalItems = totalItemsPromise ? await totalItemsPromise : null
 
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {
@@ -1097,7 +1094,6 @@ async function handler(req, res) {
             heading,
             serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
             reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
-            diagnosis: truncateJobCardListText(rest.diagnosis),
             location: truncateJobCardListText(rest.location),
             createdAt: formatDate(rest.createdAt),
             updatedAt: formatDate(rest.updatedAt),
@@ -1114,15 +1110,24 @@ async function handler(req, res) {
           }
           return row
         })
+
+        const enriched = await enrichJobCardRowsSiteNames(prisma, formatted)
         
-        return ok(res, { 
-          jobCards: formatted,
-          pagination: {
-            page,
-            pageSize,
-            totalItems,
-            totalPages: Math.max(1, Math.ceil(totalItems / pageSize))
-          }
+        const pagination = {
+          page,
+          pageSize,
+          hasMore: includeTotal
+            ? page * pageSize < (totalItems ?? 0)
+            : hasMore
+        }
+        if (includeTotal && typeof totalItems === 'number') {
+          pagination.totalItems = totalItems
+          pagination.totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
+        }
+
+        return ok(res, {
+          jobCards: enriched,
+          pagination
         })
       } catch (error) {
         console.error('❌ Failed to list job cards:', error)
@@ -1175,8 +1180,10 @@ async function handler(req, res) {
           }
         }
 
+        const [enrichedRow] = await enrichJobCardRowsSiteNames(prisma, [jobCard])
+
         const common = {
-          ...jobCard,
+          ...enrichedRow,
           recordedByName,
           recordedByEmail,
           otherTechnicians: parseJson(jobCard.otherTechnicians),
@@ -1303,6 +1310,12 @@ async function handler(req, res) {
         const clientStartedAt =
           parseOptionalDate(body.startedAt) || clientCreatedAt
 
+        let createSiteId = String(body.siteId || '').trim()
+        let createSiteName = String(body.siteName || '').trim()
+        if (createSiteId && !createSiteName) {
+          createSiteName = (await resolveClientSiteName(prisma, createSiteId)) || ''
+        }
+
         const buildCreateArgs = jobCardNumber => {
           const data = {
             jobCardNumber,
@@ -1310,8 +1323,8 @@ async function handler(req, res) {
             otherTechnicians,
             clientId: body.clientId || null,
             clientName: body.clientName || '',
-            siteId: body.siteId || '',
-            siteName: body.siteName || '',
+            siteId: createSiteId,
+            siteName: createSiteName,
             location: body.location || '',
             locationLatitude: lat,
             locationLongitude: lng,
@@ -1553,6 +1566,15 @@ async function handler(req, res) {
         if (isTerminalJobCardStatus(nextStatus) && !existing.completedByUserId) {
           updateData.completedByUserId = req.user?.sub ? String(req.user.sub) : null
           updateData.completedByName = await resolveActorDisplayName(prisma, req)
+        }
+
+        const nextSiteId =
+          updateData.siteId !== undefined ? updateData.siteId : existing.siteId
+        const nextSiteName =
+          updateData.siteName !== undefined ? updateData.siteName : existing.siteName
+        if (String(nextSiteId || '').trim() && !String(nextSiteName || '').trim()) {
+          const resolved = await resolveClientSiteName(prisma, nextSiteId)
+          if (resolved) updateData.siteName = resolved
         }
 
         if (Object.keys(updateData).length === 0) {

@@ -599,9 +599,14 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [mineOnly, setMineOnly] = useState(false);
   const [technicianOwnerId, setTechnicianOwnerId] = useState('');
   const [technicianFilter, setTechnicianFilter] = useState('');
+  const [siteFilter, setSiteFilter] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
   const [clientOptionSearch, setClientOptionSearch] = useState('');
   const [creatorOptionSearch, setCreatorOptionSearch] = useState('');
   const [technicianOptionSearch, setTechnicianOptionSearch] = useState('');
+  const [siteOptionSearch, setSiteOptionSearch] = useState('');
+  const [locationOptionSearch, setLocationOptionSearch] = useState('');
+  const [searchTipsOpen, setSearchTipsOpen] = useState(false);
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
 
@@ -637,6 +642,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   }, [attachmentParts, checklistFieldVoiceKeys]);
 
   const pageSize = 25;
+  const listTotalFetchRef = useRef(0);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -655,6 +661,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     mineOnly,
     technicianOwnerId,
     technicianFilter,
+    siteFilter,
+    locationFilter,
     createdFrom,
     createdTo
   ]);
@@ -714,10 +722,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   };
 
   const buildJobCardsListUrl = useCallback(
-    (pageNum) => {
+    (pageNum, { includeTotal = false } = {}) => {
       const params = new URLSearchParams();
       params.set('page', String(pageNum));
       params.set('pageSize', String(pageSize));
+      if (includeTotal) {
+        params.set('includeTotal', '1');
+      }
       if (statusFilter && statusFilter !== 'all') {
         params.set('status', statusFilter);
       }
@@ -733,6 +744,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       }
       if (debouncedSearch) {
         params.set('q', debouncedSearch);
+      }
+      if (siteFilter) {
+        params.set('site', siteFilter.trim());
+      }
+      if (locationFilter) {
+        params.set('location', locationFilter.trim());
+      }
+      if (technicianFilter) {
+        params.set('agentName', technicianFilter.trim());
       }
       if (mineOnly) {
         params.set('mine', '1');
@@ -771,6 +791,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       debouncedSearch,
       mineOnly,
       technicianOwnerId,
+      technicianFilter,
+      siteFilter,
+      locationFilter,
       createdFrom,
       createdTo
     ]
@@ -825,6 +848,32 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
         setJobCards(Array.isArray(data) ? data : []);
         setPagination(raw.pagination || raw.data?.pagination || null);
+
+        const fetchId = ++listTotalFetchRef.current;
+        const totalUrl = buildJobCardsListUrl(pageToLoad, { includeTotal: true });
+        void fetch(totalUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((totalRaw) => {
+            if (fetchId !== listTotalFetchRef.current || !totalRaw) return;
+            const tp = totalRaw.pagination || totalRaw.data?.pagination;
+            if (!tp || typeof tp.totalItems !== 'number') return;
+            setPagination((prev) => ({
+              ...(prev || {}),
+              page: tp.page ?? prev?.page ?? pageToLoad,
+              pageSize: tp.pageSize ?? prev?.pageSize ?? pageSize,
+              totalItems: tp.totalItems,
+              totalPages: tp.totalPages,
+              hasMore: tp.hasMore ?? prev?.hasMore,
+            }));
+          })
+          .catch(() => {
+            /* non-fatal — list is already shown */
+          });
       } catch (e) {
         console.error('❌ JobCards: Error loading job cards', e);
 
@@ -908,6 +957,42 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     setTechnicianOptionSearch(String(technicianFilter));
   }, [technicianFilter]);
 
+  useEffect(() => {
+    if (!siteFilter) {
+      setSiteOptionSearch('');
+      return;
+    }
+    setSiteOptionSearch(String(siteFilter));
+  }, [siteFilter]);
+
+  useEffect(() => {
+    if (!locationFilter) {
+      setLocationOptionSearch('');
+      return;
+    }
+    setLocationOptionSearch(String(locationFilter));
+  }, [locationFilter]);
+
+  const siteNameOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        jobCards
+          .map((jc) => String(jc.siteName || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [jobCards]);
+
+  const locationOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        jobCards
+          .map((jc) => String(jc.location || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [jobCards]);
+
   const categoryOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -918,14 +1003,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     ).sort((a, b) => a.localeCompare(b));
   }, [jobCards]);
 
-  /** Server applies main filters + sort; technician filter narrows current list client-side. */
-  const displayJobCards = useMemo(() => {
-    if (!technicianFilter) return jobCards;
-    const selected = technicianFilter.trim().toLowerCase();
-    return jobCards.filter((jc) =>
-      String(jc.agentName || '').trim().toLowerCase().includes(selected)
-    );
-  }, [jobCards, technicianFilter]);
+  const displayJobCards = jobCards;
 
   const handleSort = (field) => {
     setPage(1);
@@ -1129,11 +1207,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     setIsModalOpen(true);
   };
 
+  const canGoToNextPage = useMemo(() => {
+    if (!pagination) return false;
+    if (pagination.hasMore === true) return true;
+    if (typeof pagination.totalPages === 'number') {
+      return page < pagination.totalPages;
+    }
+    return false;
+  }, [pagination, page]);
+
   const handleNextPage = () => {
-    if (pagination && page < (pagination.totalPages || 1)) {
-      setPage((prev) =>
-        Math.min(prev + 1, pagination.totalPages || prev + 1)
-      );
+    if (canGoToNextPage) {
+      setPage((prev) => prev + 1);
     }
   };
 
@@ -1349,9 +1434,19 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`} htmlFor="jobcards-search-q">
-            Search job cards
-          </label>
+          <div className="flex items-center justify-between gap-2">
+            <label className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`} htmlFor="jobcards-search-q">
+              Deep search
+            </label>
+            <button
+              type="button"
+              onClick={() => setSearchTipsOpen((v) => !v)}
+              className={`text-[11px] font-medium underline-offset-2 hover:underline ${isDark ? 'text-primary-300' : 'text-primary-600'}`}
+              aria-expanded={searchTipsOpen}
+            >
+              {searchTipsOpen ? 'Hide tips' : 'Search tips'}
+            </button>
+          </div>
           <div className="relative">
             <i
               className={`fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
@@ -1362,11 +1457,20 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Job number, client, site, technician, summary…"
+              placeholder="e.g. Barberton, site:Sheba, location:pit, heading:consort, jc:JC0028"
               className={`w-full rounded-lg border py-2 pl-8 pr-3 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-800 placeholder:text-slate-400'}`}
               autoComplete="off"
             />
           </div>
+          {searchTipsOpen ? (
+            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Searches job number, client, site, location, GPS, heading, technician, visit reason, diagnosis, and notes.
+              Use scoped terms: <code className="text-[10px]">site:</code>, <code className="text-[10px]">location:</code>,{' '}
+              <code className="text-[10px]">heading:</code>, <code className="text-[10px]">client:</code>,{' '}
+              <code className="text-[10px]">technician:</code>, <code className="text-[10px]">jc:</code>.
+              Multiple words match all terms (e.g. <code className="text-[10px]">barberton sheba</code>).
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -1385,7 +1489,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-8">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-10">
           <select
             aria-label="Filter by status"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
@@ -1423,6 +1527,42 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           <datalist id="jobcards-client-filter-options">
             {clientOptions.map((c) => (
               <option key={c.id || c.name} value={c.name} />
+            ))}
+          </datalist>
+          <input
+            type="search"
+            list="jobcards-site-filter-options"
+            aria-label="Filter by site"
+            value={siteOptionSearch}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setSiteOptionSearch(raw);
+              setSiteFilter(raw.trim());
+            }}
+            placeholder="All sites"
+            className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+          />
+          <datalist id="jobcards-site-filter-options">
+            {siteNameOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          <input
+            type="search"
+            list="jobcards-location-filter-options"
+            aria-label="Filter by location"
+            value={locationOptionSearch}
+            onChange={(e) => {
+              const raw = e.target.value;
+              setLocationOptionSearch(raw);
+              setLocationFilter(raw.trim());
+            }}
+            placeholder="All locations"
+            className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}
+          />
+          <datalist id="jobcards-location-filter-options">
+            {locationOptions.map((name) => (
+              <option key={name} value={name} />
             ))}
           </datalist>
           <input
@@ -1514,9 +1654,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 setMineOnly(false);
                 setTechnicianOwnerId('');
                 setTechnicianFilter('');
+                setSiteFilter('');
+                setLocationFilter('');
                 setClientOptionSearch('');
                 setCreatorOptionSearch('');
                 setTechnicianOptionSearch('');
+                setSiteOptionSearch('');
+                setLocationOptionSearch('');
                 setCreatedFrom('');
                 setCreatedTo('');
                 setStatusFilter('all');
@@ -1610,6 +1754,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     <div className={`${listTextClasses.small} ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       {jc.clientName || '–'}
                       {jc.siteName ? ` · ${jc.siteName}` : ''}
+                      {jc.location ? ` · ${jc.location}` : ''}
                     </div>
                     <div className={`mt-1 ${listTextClasses.body} ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       {jc.reasonForVisit || jc.diagnosis || 'No summary'}
@@ -1705,6 +1850,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                   <span className="font-semibold">Site</span>
                 </th>
                 <th className="px-4 py-2 text-left">
+                  <span className="font-semibold">Location</span>
+                </th>
+                <th className="px-4 py-2 text-left">
                   <span className="font-semibold">Created by</span>
                 </th>
                 <th className="px-4 py-2 text-left">
@@ -1797,6 +1945,11 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         {jc.siteName || '–'}
                       </span>
                     </td>
+                    <td className={`px-4 py-2 max-w-[12rem] ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                      <span className="block truncate" title={jc.location || ''}>
+                        {jc.location || '–'}
+                      </span>
+                    </td>
                     <td className={`px-4 py-2 whitespace-nowrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                       <div className={listTextClasses.small}>
                         {createdByName || '–'}
@@ -1856,7 +2009,12 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <div className={`flex items-center justify-between px-4 py-3 border-t ${listTextClasses.small} ${isDark ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
               <div>
                 <span>
-                  Page {page} of {pagination.totalPages || 1}
+                  Page {page}
+                  {typeof pagination.totalPages === 'number'
+                    ? ` of ${pagination.totalPages}`
+                    : pagination.hasMore
+                      ? ' (more available)'
+                      : ''}
                 </span>
                 {typeof pagination.totalItems === 'number' && (
                   <span className="ml-2">
@@ -1882,15 +2040,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 <button
                   type="button"
                   onClick={handleNextPage}
-                  disabled={
-                    loading ||
-                    !pagination ||
-                    page >= (pagination.totalPages || 1)
-                  }
+                  disabled={loading || !canGoToNextPage}
                   className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${
-                    loading ||
-                    !pagination ||
-                    page >= (pagination.totalPages || 1)
+                    loading || !canGoToNextPage
                       ? isDark ? 'border-slate-700 text-slate-600 cursor-not-allowed' : 'border-slate-200 text-slate-300 cursor-not-allowed'
                       : isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                   }`}
