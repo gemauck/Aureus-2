@@ -187,16 +187,16 @@
   }
 
   const JOURNAL_CSV_HEADERS = [
-    'Journal No.',
-    'Journal Date',
-    'Account Name',
+    'Journal Code',
+    'Date',
+    'Account',
     'Description',
     'Debits',
     'Credits',
     'Name',
     'Class'
   ];
-  const JOURNAL_ACCOUNT_STOCK_ASSET = 'Stock Asset';
+  const JOURNAL_ACCOUNT_STOCK_ASSET = 'Stock on Hand';
   const JOURNAL_ACCOUNT_PARTS_COS = 'Parts & Components - COS';
   const JOURNAL_DEFAULT_CLASS = 'Technical';
 
@@ -876,7 +876,7 @@
                     !rows.some((row) => getAllocationLineValue(row) > 0),
                   className: 'px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50',
                   title:
-                    'Download QuickBooks journal CSV (Stock Asset credit, Parts & Components - COS debit per client line)'
+                    'Download QuickBooks journal CSV (Stock on Hand credit, Parts & Components - COS debit per client line)'
                 },
                 React.createElement('i', { className: 'fas fa-book text-xs' }),
                 journalExporting ? 'Exporting journal…' : 'Journal Export'
