@@ -967,8 +967,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const shouldExcludeFromMonthlyDataReviewPercent = (sectionName, docName) => {
         const section = String(sectionName || '').trim().toLowerCase();
         const doc = String(docName || '').trim().toLowerCase();
-        return /post\s*processing|post\s*process|prost\s*process/i.test(section) ||
-            /post\s*processing|post\s*process|prost\s*process/i.test(doc);
+        const postSectionPattern = /post\s*(?:processing|process|review)|prost\s*process/i;
+        return postSectionPattern.test(section) || postSectionPattern.test(doc);
     };
 
     const parsePercentValue = (rawValue) => {

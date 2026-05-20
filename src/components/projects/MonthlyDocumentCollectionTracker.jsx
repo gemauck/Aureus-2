@@ -2616,9 +2616,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         if (!isMonthlyDataReview) return false;
         const sectionName = String(section?.name || '').trim().toLowerCase();
         const docName = String(doc?.name || '').trim().toLowerCase();
-        // Requested: exclude Post/Prost Process(ing) from Monthly Data Review %.
-        return /post\s*processing|post\s*process|prost\s*process/i.test(sectionName) ||
-            /post\s*processing|post\s*process|prost\s*process/i.test(docName);
+        // Exclude Post Review / Post Process(ing) sections from Monthly Data Review %.
+        const postSectionPattern = /post\s*(?:processing|process|review)|prost\s*process/i;
+        return postSectionPattern.test(sectionName) || postSectionPattern.test(docName);
     }
 
     // Keep completion math aligned with the rendered grid rows (roots + their children).
