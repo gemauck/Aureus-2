@@ -4,6 +4,13 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
+import {
+  enrichContactsWithSiteIds,
+  fetchContactSiteIdsByClientId,
+  normalizeContactSiteIds,
+  syncContactSiteLinks,
+  contactWithSiteIds
+} from './_lib/contactSiteIds.js'
 
 function getContactsArray(rawContacts) {
   if (typeof rawContacts === 'string') {
@@ -47,20 +54,23 @@ async function handler(req, res) {
         })
         
         if (normalizedContacts.length > 0) {
-          // Convert to array format for backward compatibility (include siteId for site linking)
-          const contacts = normalizedContacts.map(c => ({
-            id: c.id,
-            name: c.name,
-            email: c.email || '',
-            phone: c.phone || '',
-            mobile: c.mobile || '',
-            role: c.role || '',
-            title: c.title || '',
-            isPrimary: c.isPrimary,
-            notes: c.notes || '',
-            siteId: c.siteId && c.siteId.trim() !== '' ? c.siteId : null,
-            createdAt: c.createdAt
-          }))
+          const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, clientId)
+          const contacts = enrichContactsWithSiteIds(
+            normalizedContacts.map(c => ({
+              id: c.id,
+              name: c.name,
+              email: c.email || '',
+              phone: c.phone || '',
+              mobile: c.mobile || '',
+              role: c.role || '',
+              title: c.title || '',
+              isPrimary: c.isPrimary,
+              notes: c.notes || '',
+              siteId: c.siteId && c.siteId.trim() !== '' ? c.siteId : null,
+              createdAt: c.createdAt
+            })),
+            siteIdsByContactId
+          )
           return ok(res, { contacts })
         }
         
@@ -108,7 +118,8 @@ async function handler(req, res) {
         if (!client) return notFound(res)
         
         // Phase 5: Create contact in normalized ClientContact table
-        const siteIdVal = (body.siteId && String(body.siteId).trim()) || null
+        const siteIds = normalizeContactSiteIds(body)
+        const siteIdVal = siteIds[0] || null
         const newContact = await prisma.clientContact.create({
           data: {
             id: body.id || undefined, // Use provided ID or let Prisma generate cuid()
@@ -124,11 +135,12 @@ async function handler(req, res) {
             siteId: siteIdVal
           }
         })
+        await syncContactSiteLinks(prisma, newContact.id, siteIds)
         
         // Normalized table is the source of truth - no JSON sync needed
         
         // Return in expected format
-        const contactResponse = {
+        const contactResponse = contactWithSiteIds({
           id: newContact.id,
           name: newContact.name,
           email: newContact.email || '',
@@ -137,9 +149,8 @@ async function handler(req, res) {
           role: newContact.role || '',
           title: newContact.title || '',
           isPrimary: newContact.isPrimary,
-          notes: newContact.notes || '',
-          siteId: newContact.siteId && newContact.siteId.trim() !== '' ? newContact.siteId : null
-        }
+          notes: newContact.notes || ''
+        }, siteIds)
         
         return created(res, { contact: contactResponse })
       } catch (dbError) {
@@ -182,17 +193,27 @@ async function handler(req, res) {
         if (body.department !== undefined) updateData.title = body.department || null // Map department to title
         if (body.isPrimary !== undefined) updateData.isPrimary = !!body.isPrimary
         if (body.notes !== undefined) updateData.notes = body.notes || ''
-        if (body.siteId !== undefined) updateData.siteId = (body.siteId && String(body.siteId).trim()) || null
+        const siteIdsPayload = body.siteIds !== undefined || body.siteId !== undefined
+          ? normalizeContactSiteIds(body)
+          : null
+        if (siteIdsPayload !== null) {
+          updateData.siteId = siteIdsPayload[0] || null
+        }
         
         const updatedContact = await prisma.clientContact.update({
           where: { id: contactId },
           data: updateData
         })
+        if (siteIdsPayload !== null) {
+          await syncContactSiteLinks(prisma, contactId, siteIdsPayload)
+        }
         
         // Normalized table is the source of truth - no JSON sync needed
+        const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, clientId)
+        const resolvedSiteIds = siteIdsByContactId.get(String(contactId)) || normalizeContactSiteIds(updatedContact)
         
         // Return in expected format
-        const contactResponse = {
+        const contactResponse = contactWithSiteIds({
           id: updatedContact.id,
           name: updatedContact.name,
           email: updatedContact.email || '',
@@ -201,9 +222,8 @@ async function handler(req, res) {
           role: updatedContact.role || '',
           title: updatedContact.title || '',
           isPrimary: updatedContact.isPrimary,
-          notes: updatedContact.notes || '',
-          siteId: updatedContact.siteId && updatedContact.siteId.trim() !== '' ? updatedContact.siteId : null
-        }
+          notes: updatedContact.notes || ''
+        }, resolvedSiteIds)
         
         return ok(res, { contact: contactResponse })
       } catch (dbError) {

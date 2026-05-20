@@ -12,6 +12,12 @@ import { notifyClientCreationStakeholders } from '../_lib/notifyClientCreationSt
 import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 import { notifyLeadProposalCirculationChanges } from '../_lib/notifyLeadProposalCirculationChanges.js'
+import {
+  enrichContactsWithSiteIds,
+  fetchContactSiteIdsByClientId,
+  normalizeContactSiteIds,
+  syncContactSiteLinks
+} from '../_lib/contactSiteIds.js'
 
 async function handler(req, res) {
   try {
@@ -271,6 +277,11 @@ async function handler(req, res) {
             return notFound(res)
           }
           
+          if (lead?.clientContacts?.length) {
+            const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, id)
+            lead.clientContacts = enrichContactsWithSiteIds(lead.clientContacts, siteIdsByContactId)
+          }
+
           // Phase 3: Use shared parseClientJsonFields which handles normalized tables, JSONB, and String fallback
           const parsedLead = parseClientJsonFields(lead)
           
@@ -601,8 +612,8 @@ async function handler(req, res) {
             for (const contact of contactsArray) {
               // Convert contact ID to string for consistency with Prisma (which uses string IDs)
               const contactId = contact.id ? String(contact.id) : null
-              
-              const siteIdVal = (contact.siteId && String(contact.siteId).trim()) || null
+              const siteIds = normalizeContactSiteIds(contact)
+              const siteIdVal = siteIds[0] || null
               const contactData = {
                 clientId: id,
                 name: contact.name || '',
@@ -616,6 +627,7 @@ async function handler(req, res) {
                 siteId: siteIdVal
               }
               
+              let savedContactId = null
               // Use individual create/update to support custom IDs (createMany doesn't support custom IDs)
               if (contactId && existingContactIds.has(contactId)) {
                 // Update existing contact
@@ -623,6 +635,7 @@ async function handler(req, res) {
                   where: { id: contactId },
                   data: contactData
                 })
+                savedContactId = contactId
                 contactsToKeep.add(contactId)
               } else if (contactId) {
                 // Create with specific ID (converted to string)
@@ -633,6 +646,7 @@ async function handler(req, res) {
                       ...contactData
                     }
                   })
+                  savedContactId = contactId
                   contactsToKeep.add(contactId)
                 } catch (createError) {
                   // If ID conflict, update instead
@@ -641,6 +655,7 @@ async function handler(req, res) {
                       where: { id: contactId },
                       data: contactData
                     })
+                    savedContactId = contactId
                     contactsToKeep.add(contactId)
                   } else {
                     throw createError
@@ -651,7 +666,11 @@ async function handler(req, res) {
                 const created = await prisma.clientContact.create({
                   data: contactData
                 })
-                contactsToKeep.add(String(created.id))
+                savedContactId = String(created.id)
+                contactsToKeep.add(savedContactId)
+              }
+              if (savedContactId) {
+                await syncContactSiteLinks(prisma, savedContactId, siteIds)
               }
             }
             

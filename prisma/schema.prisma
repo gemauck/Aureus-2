@@ -301,12 +301,13 @@ model ClientContact {
   title     String?
   isPrimary Boolean  @default(false)
   notes     String   @default("")
-  siteId    String?  // Link contact to a specific ClientSite (null = not linked)
+  siteId    String?  // Legacy single-site link; kept in sync with first siteIds entry for backward compatibility
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  site   ClientSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  client     Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  site       ClientSite?         @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  siteLinks  ClientContactSite[]
 
   @@index([clientId])
   @@index([siteId])
@@ -314,6 +315,21 @@ model ClientContact {
   @@index([phone])
   @@index([mobile])
   @@index([isPrimary])
+}
+
+// Many-to-many: contacts can be linked to multiple sites, sites can have multiple contacts
+model ClientContactSite {
+  id        String   @id @default(cuid())
+  contactId String
+  siteId    String
+  createdAt DateTime @default(now())
+
+  contact ClientContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  site    ClientSite    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, siteId])
+  @@index([contactId])
+  @@index([siteId])
 }
 
 // Phase 3: Normalized Comment table
@@ -393,8 +409,9 @@ model ClientSite {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client    Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  contacts  ClientContact[]
+  client       Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contacts     ClientContact[]
+  contactLinks ClientContactSite[]
 
   @@index([clientId])
   @@index([contactEmail])

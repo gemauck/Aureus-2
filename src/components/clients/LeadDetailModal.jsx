@@ -3,6 +3,32 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const ReactDOM = window.ReactDOM || (window.React && window.React.DOM) || null;
 
+function getContactSiteIds(contact) {
+    if (!contact) return [];
+    if (Array.isArray(contact.siteIds)) {
+        return [...new Set(contact.siteIds.map((id) => String(id).trim()).filter(Boolean))];
+    }
+    const legacy = contact.siteId && String(contact.siteId).trim();
+    return legacy ? [legacy] : [];
+}
+
+function contactIsLinkedToSite(contact, siteId) {
+    return getContactSiteIds(contact).includes(String(siteId));
+}
+
+function addSiteIdToContact(contact, siteId) {
+    const ids = getContactSiteIds(contact);
+    const sid = String(siteId);
+    if (ids.includes(sid)) return contact;
+    const next = [...ids, sid];
+    return { ...contact, siteIds: next, siteId: next[0] || null };
+}
+
+function removeSiteIdFromContact(contact, siteId) {
+    const next = getContactSiteIds(contact).filter((id) => id !== String(siteId));
+    return { ...contact, siteIds: next, siteId: next[0] || null };
+}
+
 const LeadDetailModal = ({
     leadId,
     initialLead = null,
@@ -2384,7 +2410,7 @@ const LeadDetailModal = ({
     const handleLinkContactToSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
         const contacts = formData.contacts || [];
-        const updatedContacts = contacts.map(c => c.id === contactId ? { ...c, siteId: editingSite.id } : c);
+        const updatedContacts = contacts.map(c => c.id === contactId ? addSiteIdToContact(c, editingSite.id) : c);
         const updatedFormData = { ...formData, contacts: updatedContacts };
         setFormData(updatedFormData);
         const finalFormData = logActivity('Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`, null, false, updatedFormData);
@@ -2393,7 +2419,7 @@ const LeadDetailModal = ({
     const handleUnlinkContactFromSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
         const contacts = formData.contacts || [];
-        const updatedContacts = contacts.map(c => c.id === contactId ? { ...c, siteId: null } : c);
+        const updatedContacts = contacts.map(c => c.id === contactId ? removeSiteIdFromContact(c, editingSite.id) : c);
         const updatedFormData = { ...formData, contacts: updatedContacts };
         setFormData(updatedFormData);
         const finalFormData = logActivity('Contact unlinked from site', 'Contact unlinked from this site', null, false, updatedFormData);
@@ -4021,8 +4047,8 @@ const LeadDetailModal = ({
                                                     <h5 className={sectionHeadingCls}>Linked contacts</h5>
                                                     {(() => {
                                                         const allC = formData.contacts || [];
-                                                        const linkedToThisSite = allC.filter(c => c.siteId === editingSite.id);
-                                                        const availableToLink = allC.filter(c => !c.siteId || c.siteId !== editingSite.id);
+                                                        const linkedToThisSite = allC.filter(c => contactIsLinkedToSite(c, editingSite.id));
+                                                        const availableToLink = allC.filter(c => !contactIsLinkedToSite(c, editingSite.id));
                                                         return (
                                                             <div className="space-y-3">
                                                                 {linkedToThisSite.length > 0 ? (
@@ -4088,8 +4114,8 @@ const LeadDetailModal = ({
                                         ) : (() => {
                                             const allContactsForSiteCards = formData.contacts || [];
                                             const getSiteContactDisplay = (s) => {
-                                                const linked = allContactsForSiteCards.find(c => c.siteId === s.id);
-                                                if (linked) return linked.name;
+                                                const linked = allContactsForSiteCards.filter(c => contactIsLinkedToSite(c, s.id));
+                                                if (linked.length > 0) return linked.map(c => c.name).join(', ');
                                                 if (s.contactPerson && String(s.contactPerson).trim()) return s.contactPerson;
                                                 return null;
                                             };

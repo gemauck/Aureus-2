@@ -12,6 +12,12 @@ import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { isAdminRole } from '../_lib/authRoles.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 import { cascadeClientNameToRelatedRecords } from '../_lib/syncClientNameCascade.js'
+import {
+  enrichContactsWithSiteIds,
+  fetchContactSiteIdsByClientId,
+  normalizeContactSiteIds,
+  syncContactSiteLinks
+} from '../_lib/contactSiteIds.js'
 
 async function handler(req, res) {
   try {
@@ -187,20 +193,24 @@ async function handler(req, res) {
           console.warn(`⚠️ Could not fetch normalized data (may not exist yet):`, normError.message)
         }
         
-        // Add normalized data to client object for parsing (include siteId for site linking)
-        clientBasic.clientContacts = normalizedContacts.map(c => ({
-          id: c.id,
-          name: c.name,
-          email: c.email,
-          phone: c.phone,
-          mobile: c.mobile,
-          role: c.role,
-          title: c.title,
-          isPrimary: c.isPrimary,
-          notes: c.notes,
-          siteId: c.siteId && String(c.siteId).trim() !== '' ? c.siteId : null,
-          createdAt: c.createdAt
-        }))
+        const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, id)
+        // Add normalized data to client object for parsing (siteIds + legacy siteId)
+        clientBasic.clientContacts = enrichContactsWithSiteIds(
+          normalizedContacts.map(c => ({
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            phone: c.phone,
+            mobile: c.mobile,
+            role: c.role,
+            title: c.title,
+            isPrimary: c.isPrimary,
+            notes: c.notes,
+            siteId: c.siteId && String(c.siteId).trim() !== '' ? c.siteId : null,
+            createdAt: c.createdAt
+          })),
+          siteIdsByContactId
+        )
         clientBasic.clientComments = normalizedComments.map(c => ({
           id: c.id,
           text: c.text,
@@ -534,7 +544,8 @@ async function handler(req, res) {
             const contactsToKeep = new Set()
             
             for (const contact of contactsArray) {
-              const siteIdVal = (contact.siteId && String(contact.siteId).trim()) || null
+              const siteIds = normalizeContactSiteIds(contact)
+              const siteIdVal = siteIds[0] || null
               const contactData = {
                   clientId: id,
                   name: contact.name || '',
@@ -548,6 +559,7 @@ async function handler(req, res) {
                   siteId: siteIdVal
               }
               
+              let savedContactId = null
               // Use upsert to handle both create and update
               if (contact.id && existingContactIds.has(contact.id)) {
                 // Update existing contact
@@ -555,6 +567,7 @@ async function handler(req, res) {
                   where: { id: contact.id },
                   data: contactData
                 })
+                savedContactId = contact.id
                 contactsToKeep.add(contact.id)
               } else if (contact.id) {
                 // Create with specific ID
@@ -565,6 +578,7 @@ async function handler(req, res) {
                       ...contactData
                     }
                   })
+                  savedContactId = contact.id
                   contactsToKeep.add(contact.id)
                 } catch (createError) {
                   // If ID conflict, update instead
@@ -573,6 +587,7 @@ async function handler(req, res) {
                       where: { id: contact.id },
                       data: contactData
                     })
+                    savedContactId = contact.id
                     contactsToKeep.add(contact.id)
                   } else {
                     throw createError
@@ -583,7 +598,11 @@ async function handler(req, res) {
                 const created = await prisma.clientContact.create({
                   data: contactData
                 })
+                savedContactId = created.id
                 contactsToKeep.add(created.id)
+              }
+              if (savedContactId) {
+                await syncContactSiteLinks(prisma, savedContactId, siteIds)
               }
             }
             

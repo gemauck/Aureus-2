@@ -5,6 +5,32 @@
 // FIX: formData initialization moved to top to prevent TDZ errors
 const { useState, useEffect, useRef, useCallback } = React;
 
+function getContactSiteIds(contact) {
+    if (!contact) return [];
+    if (Array.isArray(contact.siteIds)) {
+        return [...new Set(contact.siteIds.map((id) => String(id).trim()).filter(Boolean))];
+    }
+    const legacy = contact.siteId && String(contact.siteId).trim();
+    return legacy ? [legacy] : [];
+}
+
+function contactIsLinkedToSite(contact, siteId) {
+    return getContactSiteIds(contact).includes(String(siteId));
+}
+
+function addSiteIdToContact(contact, siteId) {
+    const ids = getContactSiteIds(contact);
+    const sid = String(siteId);
+    if (ids.includes(sid)) return contact;
+    const next = [...ids, sid];
+    return { ...contact, siteIds: next, siteId: next[0] || null };
+}
+
+function removeSiteIdFromContact(contact, siteId) {
+    const next = getContactSiteIds(contact).filter((id) => id !== String(siteId));
+    return { ...contact, siteIds: next, siteId: next[0] || null };
+}
+
 const LEAD_PROPOSAL_PROCESS_STEPS = [
     { step: 1, label: 'Customer Engagement Mandate' },
     { step: 2, label: 'Proposal Drafting' },
@@ -2871,7 +2897,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         phone: '',
         town: '',
         isPrimary: false,
-        siteId: null
+        siteId: null,
+        siteIds: []
     });
     
     const [newFollowUp, setNewFollowUp] = useState({
@@ -3970,7 +3997,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     phone: '',
                     town: '',
                     isPrimary: false,
-                    siteId: null
+                    siteId: null,
+                    siteIds: []
                 });
                 setShowContactForm(false);
                 
@@ -3996,7 +4024,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleEditContact = (contact) => {
         setEditingContact(contact);
-        setNewContact(contact);
+        const siteIds = getContactSiteIds(contact);
+        setNewContact({ ...contact, siteIds, siteId: siteIds[0] || null });
         setShowContactForm(true);
     };
 
@@ -4029,7 +4058,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             phone: '',
             town: '',
             isPrimary: false,
-            siteId: null
+            siteId: null,
+            siteIds: []
         });
         setShowContactForm(false);
         // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
@@ -4072,7 +4102,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleLinkContactToSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
         const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
-        const updatedContacts = allContacts.map(c => c.id === contactId ? { ...c, siteId: editingSite.id } : c);
+        const updatedContacts = allContacts.map(c => c.id === contactId ? addSiteIdToContact(c, editingSite.id) : c);
         const updatedFormData = { ...formData, contacts: updatedContacts };
         setFormData(updatedFormData);
         formDataRef.current = updatedFormData;
@@ -4086,7 +4116,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const handleUnlinkContactFromSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
         const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
-        const updatedContacts = allContacts.map(c => c.id === contactId ? { ...c, siteId: null } : c);
+        const updatedContacts = allContacts.map(c => c.id === contactId ? removeSiteIdFromContact(c, editingSite.id) : c);
         const updatedFormData = { ...formData, contacts: updatedContacts };
         setFormData(updatedFormData);
         formDataRef.current = updatedFormData;
@@ -6802,20 +6832,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Linked Site</label>
-                                                <select
-                                                    value={newContact.siteId || ''}
-                                                    onChange={(e) => setNewContact({...newContact, siteId: e.target.value || null})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                >
-                                                    <option value="">No specific site</option>
-                                                    {(formData.sites || []).map(site => (
-                                                        <option key={site.id} value={site.id}>
-                                                            {site.name} {site.address && `(${site.address})`}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Linked Sites</label>
+                                                {(formData.sites || []).length === 0 ? (
+                                                    <p className="text-xs text-gray-500">Add sites on the Sites tab to link this contact.</p>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                                                        {(formData.sites || []).map(site => {
+                                                            const checked = getContactSiteIds(newContact).includes(String(site.id));
+                                                            return (
+                                                                <label key={site.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={checked}
+                                                                        onChange={(e) => {
+                                                                            const siteIds = getContactSiteIds(newContact);
+                                                                            const next = e.target.checked
+                                                                                ? [...siteIds, String(site.id)]
+                                                                                : siteIds.filter((id) => id !== String(site.id));
+                                                                            setNewContact({ ...newContact, siteIds: next, siteId: next[0] || null });
+                                                                        }}
+                                                                    />
+                                                                    <span>{site.name}</span>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center">
                                                 <label className="flex items-center cursor-pointer">
@@ -6908,16 +6951,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             {contact.town && (
                                                                 <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{contact.town}</div>
                                                             )}
-                                                            {contact.siteId && (() => {
-                                                                const linkedSite = (formData.sites || []).find(s => s.id === contact.siteId);
-                                                                return linkedSite ? (
+                                                            {getContactSiteIds(contact).length > 0 && (() => {
+                                                                const linkedNames = getContactSiteIds(contact)
+                                                                    .map((sid) => (formData.sites || []).find(s => String(s.id) === String(sid))?.name)
+                                                                    .filter(Boolean);
+                                                                return linkedNames.length > 0 ? (
                                                                     <div className="col-span-2">
                                                                         <i className="fas fa-map-marker-alt mr-1.5 w-4 text-primary-600"></i>
                                                                         <span className="text-primary-600 font-medium">Linked to: </span>
-                                                                        <span className="text-gray-600">{linkedSite.name}</span>
-                                                                        {linkedSite.address && (
-                                                                            <span className="text-gray-500 ml-1">({linkedSite.address})</span>
-                                                                        )}
+                                                                        <span className="text-gray-600">{linkedNames.join(', ')}</span>
                                                                     </div>
                                                                 ) : null;
                                                             })()}
@@ -7150,8 +7192,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <h5 className={sectionHeadingCls}>Linked contacts</h5>
                                                     {(() => {
                                                         const allContactsForSite = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
-                                                        const linkedToThisSite = allContactsForSite.filter(c => c.siteId === editingSite.id);
-                                                        const availableToLink = allContactsForSite.filter(c => !c.siteId || c.siteId !== editingSite.id);
+                                                        const linkedToThisSite = allContactsForSite.filter(c => contactIsLinkedToSite(c, editingSite.id));
+                                                        const availableToLink = allContactsForSite.filter(c => !contactIsLinkedToSite(c, editingSite.id));
                                                         return (
                                                             <div className="space-y-3">
                                                                 {linkedToThisSite.length > 0 ? (
@@ -7256,8 +7298,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         }
                                         const allContactsForTable = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
                                         const getSiteContactDisplay = (site) => {
-                                            const linked = allContactsForTable.find(c => c.siteId === site.id);
-                                            if (linked) return linked.name;
+                                            const linked = allContactsForTable.filter(c => contactIsLinkedToSite(c, site.id));
+                                            if (linked.length > 0) return linked.map(c => c.name).join(', ');
                                             if (site.contactPerson && String(site.contactPerson).trim()) return site.contactPerson;
                                             return '—';
                                         };

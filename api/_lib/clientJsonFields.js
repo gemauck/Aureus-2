@@ -2,6 +2,7 @@
 // Phase 2: Dual-read/write support (JSONB + String fallback)
 
 import { sanitizeLeadProposalWorkflow } from './leadProposalWorkflow.js'
+import { contactWithSiteIds, normalizeContactSiteIds } from './contactSiteIds.js'
 
 const DEFAULT_BILLING_TERMS = {
   paymentTerms: 'Net 30',
@@ -57,18 +58,20 @@ export function parseClientJsonFields(client) {
     // Phase 3: Contacts - Use normalized table first, fallback to JSON
     if (client.clientContacts && Array.isArray(client.clientContacts) && client.clientContacts.length > 0) {
       // Convert normalized ClientContact records to array format
-      parsed.contacts = client.clientContacts.map(contact => ({
-        id: contact.id,
-        name: contact.name,
-        email: contact.email,
-        phone: contact.phone || contact.mobile,
-        mobile: contact.mobile || contact.phone,
-        role: contact.role || contact.title,
-        title: contact.title || contact.role,
-        isPrimary: contact.isPrimary || false,
-        notes: contact.notes || '',
-        siteId: contact.siteId && String(contact.siteId).trim() !== '' ? contact.siteId : null
-      }))
+      parsed.contacts = client.clientContacts.map(contact => {
+        const ids = normalizeContactSiteIds(contact)
+        return contactWithSiteIds({
+          id: contact.id,
+          name: contact.name,
+          email: contact.email,
+          phone: contact.phone || contact.mobile,
+          mobile: contact.mobile || contact.phone,
+          role: contact.role || contact.title,
+          title: contact.title || contact.role,
+          isPrimary: contact.isPrimary || false,
+          notes: contact.notes || ''
+        }, ids)
+      })
     } else {
       // Fallback: Try JSONB field (Phase 2)
       let value = client.contactsJsonb

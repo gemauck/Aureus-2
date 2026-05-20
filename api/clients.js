@@ -9,6 +9,7 @@ import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValida
 import { parseClientJsonFields, prepareJsonFieldsForDualWrite, DEFAULT_BILLING_TERMS } from './_lib/clientJsonFields.js'
 import { notifyClientCreationStakeholders } from './_lib/notifyClientCreationStakeholders.js'
 import { workflowJsonForPrisma } from './_lib/leadProposalWorkflow.js'
+import { normalizeContactSiteIds, syncContactSiteLinks } from './_lib/contactSiteIds.js'
 
 // Phase 2: JSON field parsing and dual-write utilities moved to shared module
 // See: api/_lib/clientJsonFields.js
@@ -1057,6 +1058,7 @@ async function handler(req, res) {
           // Sync contacts if provided - use upsert to handle duplicates (siteId valid after sites created)
           if (contactsToSync.length > 0) {
             for (const contact of contactsToSync) {
+              const siteIds = normalizeContactSiteIds(contact)
               const contactData = {
                 clientId: client.id,
                 name: contact.name || '',
@@ -1067,9 +1069,10 @@ async function handler(req, res) {
                 title: contact.title || contact.department || null,
                 isPrimary: !!contact.isPrimary,
                 notes: contact.notes || '',
-                siteId: (contact.siteId && String(contact.siteId).trim() !== '') ? contact.siteId : null
+                siteId: siteIds[0] || null
               }
               
+              let savedContactId = null
               if (contact.id) {
                 // Use upsert for contacts with IDs to handle duplicates
                 try {
@@ -1079,6 +1082,7 @@ async function handler(req, res) {
                       ...contactData
                     }
                   })
+                  savedContactId = contact.id
                 } catch (createError) {
                   // If ID conflict, update instead
                   if (createError.code === 'P2002') {
@@ -1086,15 +1090,20 @@ async function handler(req, res) {
                       where: { id: contact.id },
                       data: contactData
                     })
+                    savedContactId = contact.id
                   } else {
                     throw createError
                   }
                 }
               } else {
                 // Create without ID (Prisma generates one)
-                await prisma.clientContact.create({
+                const created = await prisma.clientContact.create({
                   data: contactData
                 })
+                savedContactId = created.id
+              }
+              if (savedContactId) {
+                await syncContactSiteLinks(prisma, savedContactId, siteIds)
               }
             }
           }
