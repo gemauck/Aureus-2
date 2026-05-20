@@ -965,14 +965,25 @@ const MainLayout = () => {
     
     const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
     // When true, full Projects.jsx (with per-client view) has loaded; re-resolve to use it
-    const [projectsFullComponentReady, setProjectsFullComponentReady] = React.useState(!!(typeof window !== 'undefined' && window.Projects));
+    const isFullProjectsComponent = (fn) =>
+        fn && typeof fn === 'function' && (fn._hasListView || fn._version);
+    const resolveProjectsComponent = () => {
+        if (isFullProjectsComponent(window.Projects)) return window.Projects;
+        if (window.ProjectsDatabaseFirst && typeof window.ProjectsDatabaseFirst === 'function') {
+            return window.ProjectsDatabaseFirst;
+        }
+        return null;
+    };
+    const [projectsFullComponentReady, setProjectsFullComponentReady] = React.useState(
+        !!(typeof window !== 'undefined' && isFullProjectsComponent(window.Projects))
+    );
 
     React.useEffect(() => {
         const checkProjects = () => {
-            const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
-            if (ProjectsComponent && typeof ProjectsComponent === 'function') {
+            const ProjectsComponent = resolveProjectsComponent();
+            if (ProjectsComponent) {
                 setProjectsComponentReady(true);
-                if (window.Projects && typeof window.Projects === 'function') {
+                if (isFullProjectsComponent(window.Projects)) {
                     setProjectsFullComponentReady(true);
                 }
                 return true;
@@ -1021,9 +1032,7 @@ const MainLayout = () => {
     }, []);
     
     const Projects = React.useMemo(() => {
-        // Prefer window.Projects (main component with per-client view), then fallbacks
-        const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
-        
+        const ProjectsComponent = resolveProjectsComponent();
         if (ProjectsComponent) {
             return ProjectsComponent;
         }

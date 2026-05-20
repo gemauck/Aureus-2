@@ -43,7 +43,6 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
         // here blocked every earlier batch from completing. Projects.jsx + loadProjectDetail() fetch it when needed.
         './src/components/projects/Projects.jsx',
         './src/components/projects/ProjectsDatabaseFirst.jsx',
-        './src/components/projects/ProjectsSimple.jsx',
         
         // Time tracking
         './src/components/time/TimeModal.jsx',
@@ -186,8 +185,10 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
             // CRITICAL: Check if Vite components are already available
             // Vite Projects module loads before lazy-loader, so check first
             if (src.includes('Projects.jsx') || src.includes('Projects.js')) {
-                if (window.Projects && typeof window.Projects === 'function') {
-                    console.log('✅ Projects component already available from Vite module - skipping lazy load');
+                const fullProjects = window.Projects && typeof window.Projects === 'function'
+                    && (window.Projects._hasListView || window.Projects._version);
+                if (fullProjects) {
+                    console.log('✅ Full Projects component already available - skipping lazy load');
                     resolve();
                     return;
                 }

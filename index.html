@@ -1681,8 +1681,8 @@
                     }
                 }
             }, 3000); // Check after lazy loading has started
-            // Use the main Projects component (has latest fixes) with fallback
-            window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+            // Do not alias ProjectsSimple/ProjectsDatabaseFirst onto window.Projects — that makes
+            // lazy-load-components.js skip loading full Projects.jsx (_hasListView).
             // Use main Teams component, fallback to TeamsSimple only if main fails
             window.Teams = window.Teams || window.TeamsSimple;
             window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;

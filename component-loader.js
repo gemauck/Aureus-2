@@ -94,8 +94,7 @@
         'components/common/DataContext.jsx',
         'components/common/AdvancedSearch.jsx',
         
-        // Projects shell (early so Projects list can render before heavy modals/trackers)
-        'components/projects/ProjectsSimple.jsx',
+        // ProjectsDatabaseFirst optional fallback until Projects.jsx lazy-loads (not ProjectsSimple)
         'components/projects/ProjectsDatabaseFirst.jsx',
         
         // Theme
