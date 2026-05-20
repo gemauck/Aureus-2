@@ -1,3 +1,8 @@
+import {
+    htmlToExcelRichTextValue,
+    appendPlainTextToRichValue
+} from '../../utils/htmlToExcelRichText.js';
+
 // Get React hooks from window
 const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
 const storage = window.storage;
@@ -2744,52 +2749,139 @@ const getAssigneeColor = (identifier, users) => {
     // EXCEL EXPORT
     // ============================================================
     
+    const buildWeeklyNotesExportValue = (doc, week) => {
+        const notesHtml = getNotesForYear(doc.notesByWeek, week, selectedYear) || '';
+        let value = htmlToExcelRichTextValue(notesHtml);
+        const notesRev = getNotesReviewForYear(doc.notesReviewByWeek, week, selectedYear);
+        if (notesRev && notesRev.reviewedAt) {
+            const rd = new Date(notesRev.reviewedAt);
+            const stamp = Number.isNaN(rd.getTime())
+                ? notesRev.reviewedAt
+                : rd.toLocaleString('en-ZA', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            value = appendPlainTextToRichValue(value, `[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`);
+        }
+        return value;
+    };
+
     const handleExportToExcel = async () => {
         setIsExporting(true);
         try {
+            let ExcelJSLib = window.ExcelJS;
             let XLSX = window.XLSX;
-            
-            // Wait for XLSX to load
+
+            for (let i = 0; i < 30 && !ExcelJSLib; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                ExcelJSLib = window.ExcelJS;
+            }
             if (!XLSX || !XLSX.utils) {
                 for (let i = 0; i < 30 && (!XLSX || !XLSX.utils); i++) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise((resolve) => setTimeout(resolve, 100));
                     XLSX = window.XLSX;
                 }
             }
-            
-            if (!XLSX || !XLSX.utils) {
-                throw new Error('XLSX library not available. Please refresh the page.');
-            }
-            
-            // Prepare data
-            const excelData = [];
-            const headerRow1 = ['Section / Document'];
-            const headerRow2 = [''];
+
             const exportFileTag = 'Weekly_FMS_Review';
             const sheetTitle = `Weekly FMS Review ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
-            
-            weeks.forEach(week => {
+            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+            const headerRow1 = ['Section / Document'];
+            const headerRow2 = [''];
+            weeks.forEach((week) => {
                 headerRow1.push(week.label, '', '');
                 headerRow2.push('Status', 'Comments', 'Notes');
             });
-            
-            excelData.push(headerRow1, headerRow2);
-            
-            sections.forEach(section => {
+            const notesColIndexes = weeks.map((_, wi) => 4 + wi * 3);
+
+            if (ExcelJSLib) {
+                try {
+                    const workbook = new ExcelJSLib.Workbook();
+                    const ws = workbook.addWorksheet(sheetTitle);
+                    const header1 = ws.addRow(headerRow1);
+                    const header2 = ws.addRow(headerRow2);
+                    header1.font = { bold: true };
+                    header2.font = { bold: true };
+                    ws.getColumn(1).width = 40;
+                    for (let i = 0; i < weeks.length; i++) {
+                        ws.getColumn(2 + i * 3).width = 18;
+                        ws.getColumn(3 + i * 3).width = 50;
+                        ws.getColumn(4 + i * 3).width = 40;
+                    }
+
+                    sections.forEach((section) => {
+                        const sectionRow = [section.name];
+                        for (let i = 0; i < weeks.length * 3; i++) sectionRow.push('');
+                        ws.addRow(sectionRow);
+
+                        section.documents.forEach((doc) => {
+                            const rowValues = [`  ${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
+                            weeks.forEach((week) => {
+                                const status = getStatusForYear(doc.collectionStatus, week, selectedYear);
+                                const statusLabel = status ? statusOptions.find((s) => s.value === status)?.label : '';
+                                rowValues.push(statusLabel || '');
+                                const comments = getCommentsForYear(doc.comments, week, selectedYear);
+                                const commentsText = comments.map((c) => {
+                                    const date = new Date(c.date).toLocaleString('en-ZA', {
+                                        year: 'numeric', month: 'short', day: '2-digit',
+                                        hour: '2-digit', minute: '2-digit'
+                                    });
+                                    return `[${date}] ${c.author}: ${c.text}`;
+                                }).join('\n\n');
+                                rowValues.push(commentsText, '');
+                            });
+                            const row = ws.addRow(rowValues);
+                            weeks.forEach((week, wi) => {
+                                const notesValue = buildWeeklyNotesExportValue(doc, week);
+                                if (notesValue !== '' && notesValue != null) {
+                                    const cell = row.getCell(notesColIndexes[wi]);
+                                    cell.value = notesValue;
+                                    cell.alignment = { wrapText: true, vertical: 'top' };
+                                }
+                            });
+                        });
+                    });
+
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], {
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    return;
+                } catch (excelJsErr) {
+                    console.warn('ExcelJS export failed, falling back to XLSX:', excelJsErr);
+                }
+            }
+
+            if (!XLSX || !XLSX.utils) {
+                throw new Error('Excel export libraries not available. Please refresh the page.');
+            }
+
+            const excelData = [headerRow1, headerRow2];
+            sections.forEach((section) => {
                 const sectionRow = [section.name];
                 for (let i = 0; i < weeks.length * 3; i++) sectionRow.push('');
                 excelData.push(sectionRow);
-                
-                section.documents.forEach(doc => {
+
+                section.documents.forEach((doc) => {
                     const row = [`  ${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
-                    
-                    weeks.forEach(week => {
+                    weeks.forEach((week) => {
                         const status = getStatusForYear(doc.collectionStatus, week, selectedYear);
-                        const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
+                        const statusLabel = status ? statusOptions.find((s) => s.value === status)?.label : '';
                         row.push(statusLabel || '');
-                        
                         const comments = getCommentsForYear(doc.comments, week, selectedYear);
-                        const commentsText = comments.map(c => {
+                        const commentsText = comments.map((c) => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
                                 hour: '2-digit', minute: '2-digit'
@@ -2797,43 +2889,26 @@ const getAssigneeColor = (identifier, users) => {
                             return `[${date}] ${c.author}: ${c.text}`;
                         }).join('\n\n');
                         row.push(commentsText);
-                        
-                        let notesExport = getNotesForYear(doc.notesByWeek, week, selectedYear) || '';
-                        const notesRev = getNotesReviewForYear(doc.notesReviewByWeek, week, selectedYear);
-                        if (notesRev && notesRev.reviewedAt) {
-                            const rd = new Date(notesRev.reviewedAt);
-                            const stamp = Number.isNaN(rd.getTime())
-                                ? notesRev.reviewedAt
-                                : rd.toLocaleString('en-ZA', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                            notesExport = `${notesExport}${notesExport ? '\n' : ''}[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`;
-                        }
-                        row.push(notesExport);
+                        const notesVal = buildWeeklyNotesExportValue(doc, week);
+                        row.push(
+                            typeof notesVal === 'string'
+                                ? notesVal
+                                : (notesVal?.richText || []).map((r) => r.text || '').join('')
+                        );
                     });
-                    
                     excelData.push(row);
                 });
             });
-            
+
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(excelData);
-            
             const colWidths = [{ wch: 40 }];
             for (let i = 0; i < weeks.length; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 }, { wch: 40 });
             }
             ws['!cols'] = colWidths;
-            
             XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-            
-            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
-            
         } catch (error) {
             console.error('Error exporting:', error);
             alert('Failed to export: ' + error.message);

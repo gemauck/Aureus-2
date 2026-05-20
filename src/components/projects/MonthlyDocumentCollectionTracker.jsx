@@ -1,3 +1,8 @@
+import {
+    htmlToExcelRichTextValue,
+    appendPlainTextToRichValue
+} from '../../utils/htmlToExcelRichText.js';
+
 // Get React hooks from window
 const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
 const storage = window.storage;
@@ -4328,57 +4333,171 @@ const getAssigneeColor = (identifier, users) => {
     // EXCEL EXPORT
     // ============================================================
     
+    const buildNotesExportValue = (doc, month) => {
+        const notesHtml = getNotesForYear(doc.notesByMonth, month, selectedYear) || '';
+        let value = htmlToExcelRichTextValue(notesHtml);
+        const notesRev = getNotesReviewForYear(doc.notesReviewByMonth, month, selectedYear);
+        if (notesRev && notesRev.reviewedAt) {
+            const rd = new Date(notesRev.reviewedAt);
+            const stamp = Number.isNaN(rd.getTime())
+                ? notesRev.reviewedAt
+                : rd.toLocaleString('en-ZA', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            const suffix = `[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`;
+            value = appendPlainTextToRichValue(value, suffix);
+        }
+        return value;
+    };
+
+    const buildNotesPlainForXlsx = (doc, month) => {
+        const raw = buildNotesExportValue(doc, month);
+        if (raw == null || raw === '') return '';
+        if (typeof raw === 'string') return raw;
+        if (raw.richText) return raw.richText.map((r) => r.text || '').join('');
+        return '';
+    };
+
     const handleExportToExcel = async () => {
         setIsExporting(true);
         try {
+            let ExcelJSLib = window.ExcelJS;
             let XLSX = window.XLSX;
-            
-            // Wait for XLSX to load
+
+            for (let i = 0; i < 30 && !ExcelJSLib; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                ExcelJSLib = window.ExcelJS;
+            }
             if (!XLSX || !XLSX.utils) {
                 for (let i = 0; i < 30 && (!XLSX || !XLSX.utils); i++) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise((resolve) => setTimeout(resolve, 100));
                     XLSX = window.XLSX;
                 }
             }
-            
-            if (!XLSX || !XLSX.utils) {
-                throw new Error('XLSX library not available. Please refresh the page.');
-            }
-            
-            // Prepare data
-            const excelData = [];
-            const headerRow1 = ['Section / Document'];
-            const headerRow2 = [''];
+
             const exportFileTag = isMonthlyDataReview ? 'Monthly_Data_Review' : isComplianceReview ? 'Compliance_Review' : 'Document_Collection';
             const sheetTitle = `${trackerContextTitlePrefix} ${selectedYear}`.replace(/[:\\/?*[\]]/g, '-').slice(0, 31);
-            
-            months.forEach(month => {
+            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+            const headerRow1 = ['Section / Document'];
+            const headerRow2 = [''];
+            months.forEach((month) => {
                 const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
                 headerRow1.push(monthYear, '', '');
                 headerRow2.push('Status', 'Comments', 'Notes');
             });
-            
-            excelData.push(headerRow1, headerRow2);
-            
-            sections.forEach(section => {
+
+            const notesColIndexes = months.map((_, mi) => 4 + mi * 3);
+
+            if (ExcelJSLib) {
+                try {
+                    const workbook = new ExcelJSLib.Workbook();
+                    const ws = workbook.addWorksheet(sheetTitle);
+
+                    const header1 = ws.addRow(headerRow1);
+                    const header2 = ws.addRow(headerRow2);
+                    header1.font = { bold: true };
+                    header2.font = { bold: true };
+
+                    ws.getColumn(1).width = 40;
+                    for (let i = 0; i < months.length; i++) {
+                        ws.getColumn(2 + i * 3).width = 18;
+                        ws.getColumn(3 + i * 3).width = 50;
+                        ws.getColumn(4 + i * 3).width = 40;
+                    }
+
+                    sections.forEach((section) => {
+                        const sectionRow = [section.name];
+                        for (let i = 0; i < months.length * 3; i++) sectionRow.push('');
+                        ws.addRow(sectionRow);
+
+                        getOrderedDocumentRows(section).forEach(({ doc, isSubRow }) => {
+                            const indent = isSubRow ? '    ' : '  ';
+                            const rowValues = [`${indent}${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
+
+                            months.forEach((month) => {
+                                const rawStatus = getStatusForYear(doc.collectionStatus, month, selectedYear);
+                                const exportKey = isMonthlyDataReview && rawStatus
+                                    ? resolveMonthlyDataReviewStatusKey(rawStatus)
+                                    : rawStatus;
+                                const statusLabel = exportKey ? statusOptions.find((s) => s.value === exportKey)?.label : '';
+                                rowValues.push(statusLabel || '');
+
+                                const comments = getCommentsForYear(doc.comments, month, selectedYear);
+                                const commentsText = comments.map((c) => {
+                                    try {
+                                        const dateValue = c.date || c.createdAt;
+                                        if (!dateValue) return `${c.author}: ${c.text}`;
+                                        const date = new Date(dateValue);
+                                        if (isNaN(date.getTime())) return `${c.author}: ${c.text}`;
+                                        const formattedDate = formatDateTime(dateValue);
+                                        return `[${formattedDate}] ${c.author}: ${c.text}`;
+                                    } catch (e) {
+                                        return `${c.author}: ${c.text}`;
+                                    }
+                                }).join('\n\n');
+                                rowValues.push(commentsText, '');
+                            });
+
+                            const row = ws.addRow(rowValues);
+                            months.forEach((month, mi) => {
+                                const notesValue = buildNotesExportValue(doc, month);
+                                if (notesValue !== '' && notesValue != null) {
+                                    const cell = row.getCell(notesColIndexes[mi]);
+                                    cell.value = notesValue;
+                                    cell.alignment = { wrapText: true, vertical: 'top' };
+                                }
+                            });
+                        });
+                    });
+
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], {
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    return;
+                } catch (excelJsErr) {
+                    console.warn('ExcelJS export failed, falling back to XLSX:', excelJsErr);
+                }
+            }
+
+            if (!XLSX || !XLSX.utils) {
+                throw new Error('Excel export libraries not available. Please refresh the page.');
+            }
+
+            const excelData = [headerRow1, headerRow2];
+
+            sections.forEach((section) => {
                 const sectionRow = [section.name];
                 for (let i = 0; i < months.length * 3; i++) sectionRow.push('');
                 excelData.push(sectionRow);
-                
+
                 getOrderedDocumentRows(section).forEach(({ doc, isSubRow }) => {
                     const indent = isSubRow ? '    ' : '  ';
                     const row = [`${indent}${doc.name}${doc.description ? ' - ' + doc.description : ''}`];
-                    
-                    months.forEach(month => {
+
+                    months.forEach((month) => {
                         const rawStatus = getStatusForYear(doc.collectionStatus, month, selectedYear);
                         const exportKey = isMonthlyDataReview && rawStatus
                             ? resolveMonthlyDataReviewStatusKey(rawStatus)
                             : rawStatus;
-                        const statusLabel = exportKey ? statusOptions.find(s => s.value === exportKey)?.label : '';
+                        const statusLabel = exportKey ? statusOptions.find((s) => s.value === exportKey)?.label : '';
                         row.push(statusLabel || '');
-                        
+
                         const comments = getCommentsForYear(doc.comments, month, selectedYear);
-                        const commentsText = comments.map(c => {
+                        const commentsText = comments.map((c) => {
                             try {
                                 const dateValue = c.date || c.createdAt;
                                 if (!dateValue) return `${c.author}: ${c.text}`;
@@ -4391,43 +4510,22 @@ const getAssigneeColor = (identifier, users) => {
                             }
                         }).join('\n\n');
                         row.push(commentsText);
-                        
-                        let notesExport = getNotesForYear(doc.notesByMonth, month, selectedYear) || '';
-                        const notesRev = getNotesReviewForYear(doc.notesReviewByMonth, month, selectedYear);
-                        if (notesRev && notesRev.reviewedAt) {
-                            const rd = new Date(notesRev.reviewedAt);
-                            const stamp = Number.isNaN(rd.getTime())
-                                ? notesRev.reviewedAt
-                                : rd.toLocaleString('en-ZA', {
-                                    year: 'numeric',
-                                    month: 'short',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                            notesExport = `${notesExport}${notesExport ? '\n' : ''}[Reviewed ${stamp} by ${notesRev.reviewedByName || '?'}]`;
-                        }
-                        row.push(notesExport);
+                        row.push(buildNotesPlainForXlsx(doc, month));
                     });
-                    
+
                     excelData.push(row);
                 });
             });
-            
+
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(excelData);
-            
             const colWidths = [{ wch: 40 }];
             for (let i = 0; i < months.length; i++) {
                 colWidths.push({ wch: 18 }, { wch: 50 }, { wch: 40 });
             }
             ws['!cols'] = colWidths;
-            
             XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-            
-            const filename = `${project.name}_${exportFileTag}_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
-            
         } catch (error) {
             console.error('Error exporting:', error);
             alert('Failed to export: ' + error.message);
