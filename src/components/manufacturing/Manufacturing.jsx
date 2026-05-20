@@ -447,6 +447,8 @@ try {
   const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
   const [inventory, setInventory] = useState([]);
   const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
+  /** Lightweight KPIs for dashboard (GET …/inventory?summary=dashboard) — avoids full SKU list on first paint. */
+  const [dashboardInventorySummary, setDashboardInventorySummary] = useState(null);
   const [manufacturingServiceWarning, setManufacturingServiceWarning] = useState('');
   /** Per stock location: value & units (GET …/inventory/location-value-summary). Independent of inventory tab filter. */
   const [inventoryValueByLocationSummary, setInventoryValueByLocationSummary] = useState(null);
@@ -593,7 +595,10 @@ try {
       const inputPlaceholder = wasInputFocused ? focusedElement.placeholder : null;
 
       const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-      const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, { forceRefresh: options.forceRefresh });
+      const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, {
+        forceRefresh: options.forceRefresh,
+        includeLedger: activeTab === 'inventory' || showLedgerMismatchOnly
+      });
       const invData = invResponse?.data?.inventory || [];
       const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
 
@@ -637,7 +642,7 @@ try {
     } catch (error) {
       console.error('Error loading inventory for location:', error);
     }
-  }, [selectedLocationId, loadInventoryValueByLocationSummary]);
+  }, [selectedLocationId, loadInventoryValueByLocationSummary, activeTab, showLedgerMismatchOnly]);
 
   /** Keep `?location=` / `?locationId=` aligned with the inventory warehouse dropdown (shareable links). */
   const applyInventoryListLocationInUrl = useCallback((nextLocationId) => {
@@ -1012,6 +1017,8 @@ try {
         }
 
         const startTime = performance.now();
+        const initialTab = getInitialTabFromURL();
+        const dashboardFirstPaint = initialTab === 'dashboard';
 
         // Split into high-priority calls for initial paint and deferred background calls.
         const primaryApiCalls = [];
@@ -1046,11 +1053,11 @@ try {
           );
         }
 
-        // Inventory - Load based on selected location
+        // Inventory — dashboard uses lightweight summary first; full list loads when opening Inventory tab.
         if (typeof window.DatabaseAPI.getInventory === 'function') {
           const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-          primaryApiCalls.push(
-            window.DatabaseAPI.getInventory(locationIdToLoad)
+          const loadFullInventory = () =>
+            window.DatabaseAPI.getInventory(locationIdToLoad, { includeLedger: initialTab === 'inventory' })
               .then(invResponse => {
                 const invData = invResponse?.data?.inventory || [];
                 const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
@@ -1062,8 +1069,27 @@ try {
               .catch(error => {
                 console.error('Error loading inventory:', error);
                 return { type: 'inventory', error };
-              })
-          );
+              });
+
+          if (dashboardFirstPaint) {
+            primaryApiCalls.push(
+              window.DatabaseAPI.getInventory(null, { summary: 'dashboard' })
+                .then((res) => {
+                  const summary = res?.data?.dashboard;
+                  if (summary && typeof summary === 'object') {
+                    setDashboardInventorySummary(summary);
+                  }
+                  return { type: 'inventoryDashboard', data: summary };
+                })
+                .catch((error) => {
+                  console.error('Error loading dashboard inventory summary:', error);
+                  return { type: 'inventoryDashboard', error };
+                })
+            );
+            deferredApiCalls.push(loadFullInventory());
+          } else {
+            primaryApiCalls.push(loadFullInventory());
+          }
         }
 
         if (typeof window.DatabaseAPI.getManufacturingInventoryLocationValueSummary === 'function') {
@@ -1121,9 +1147,9 @@ try {
           );
         }
 
-        // Production Orders
+        // Production Orders — needed on dashboard KPIs; load early when landing on dashboard.
         if (typeof window.DatabaseAPI.getProductionOrders === 'function') {
-          deferredApiCalls.push(
+          const loadProductionOrders = () =>
             window.DatabaseAPI.getProductionOrders()
               .then(ordersResponse => {
                 const ordersData = ordersResponse?.data?.productionOrders || [];
@@ -1135,8 +1161,12 @@ try {
               .catch(error => {
                 console.error('Error loading production orders:', error);
                 return { type: 'productionOrders', error };
-              })
-          );
+              });
+          if (dashboardFirstPaint) {
+            primaryApiCalls.push(loadProductionOrders());
+          } else {
+            deferredApiCalls.push(loadProductionOrders());
+          }
         }
 
         // Sales Orders
@@ -1298,6 +1328,29 @@ try {
 
     loadData();
   }, []);
+
+  // Inventory tab needs the full SKU list; dashboard only loads a lightweight summary first.
+  useEffect(() => {
+    if (activeTab !== 'inventory' || inventoryLoadedFromAPI) {
+      return;
+    }
+    if (!window.DatabaseAPI?.getInventory) {
+      return;
+    }
+    const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+    void window.DatabaseAPI.getInventory(locationIdToLoad, { includeLedger: true, forceRefresh: true })
+      .then((invResponse) => {
+        const invData = invResponse?.data?.inventory || [];
+        const processed = normalizeInventoryRows(invData.map((item) => ({ ...item, id: item.id })));
+        setInventory(processed);
+        setInventoryLoadedFromAPI(true);
+        safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+        void loadInventoryValueByLocationSummary({ forceRefresh: true });
+      })
+      .catch((error) => {
+        console.error('Manufacturing: failed to load full inventory for tab', error);
+      });
+  }, [activeTab, inventoryLoadedFromAPI, selectedLocationId, loadInventoryValueByLocationSummary]);
 
   useEffect(() => {
     // Clients are needed by both production flows and sales-order creation.
@@ -2600,6 +2653,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
   };
 
   const getInventoryStats = () => {
+    if (!inventoryLoadedFromAPI && dashboardInventorySummary) {
+      return {
+        totalValue: toSafeNumber(dashboardInventorySummary.totalValue),
+        lowStockItems: toSafeNumber(dashboardInventorySummary.lowStockCount),
+        totalItems: toSafeNumber(dashboardInventorySummary.totalUnits),
+        categories: 0,
+        needsCatalogReviewCount: toSafeNumber(dashboardInventorySummary.needsCatalogReviewCount)
+      };
+    }
     const totalValue = inventory.reduce(
       (sum, item) => sum + (normalizeInventoryItemRow(item).totalValue || 0),
       0
@@ -2947,6 +3009,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const prodStats = getProductionStats();
     const showInventoryByLocation =
       inventoryValueByLocationSummaryLoaded && inventoryValueByLocationSummary != null;
+    const dashboardLowStockRows = useMemo(() => {
+      if (inventoryLoadedFromAPI) {
+        return inventory.filter(isLowStockInventoryItem).slice(0, 5);
+      }
+      const preview = dashboardInventorySummary?.lowStockPreview;
+      return Array.isArray(preview) ? preview.slice(0, 5) : [];
+    }, [inventory, inventoryLoadedFromAPI, dashboardInventorySummary]);
+    const dashboardCatalogReviewRows = useMemo(() => {
+      if (inventoryLoadedFromAPI) {
+        return inventory.filter((row) => row.needsCatalogReview).slice(0, 8);
+      }
+      const preview = dashboardInventorySummary?.needsCatalogReviewPreview;
+      return Array.isArray(preview) ? preview.slice(0, 8) : [];
+    }, [inventory, inventoryLoadedFromAPI, dashboardInventorySummary]);
 
     const inventoryLocationValueRows = useMemo(() => {
       if (!inventoryValueByLocationSummary?.locations?.length) return [];
@@ -3159,10 +3235,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </button>
             </div>
             <ul className={`mt-3 space-y-1 text-xs max-h-28 overflow-y-auto ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-              {inventory
-                .filter((row) => row.needsCatalogReview)
-                .slice(0, 8)
-                .map((row) => (
+              {dashboardCatalogReviewRows.map((row) => (
                   <li key={row.sku || row.id} className="truncate">
                     <span className="font-medium">{row.sku}</span>
                     {': '}
@@ -3185,24 +3258,35 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             </div>
             <div className="p-4">
               <div className="space-y-2">
-                {inventory.filter(isLowStockInventoryItem).slice(0, 5).map(item => {
-                  const availableQty = getAvailableInventoryQuantity(item);
+                {dashboardLowStockRows.length === 0 ? (
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {inventoryLoadedFromAPI || dashboardInventorySummary ? 'No low stock items.' : 'Loading stock alerts…'}
+                  </p>
+                ) : (
+                  dashboardLowStockRows.map((item) => {
+                  const availableQty = inventoryLoadedFromAPI
+                    ? getAvailableInventoryQuantity(item)
+                    : toSafeNumber(item.quantity) - toSafeNumber(item.allocatedQuantity);
+                  const reorderPoint = inventoryLoadedFromAPI
+                    ? getItemReorderPoint(item)
+                    : toSafeNumber(item.reorderPoint);
                   return (
-                    <div key={item.id} className={`${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'} flex items-center justify-between p-3 rounded-lg border`}>
+                    <div key={item.id || item.sku} className={`${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'} flex items-center justify-between p-3 rounded-lg border`}>
                       <div className="flex-1">
                         <p className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.name}</p>
                         <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.sku} • {item.location}</p>
                       </div>
                       <div className="text-right">
                         <p className={`text-sm font-semibold ${isDark ? 'text-yellow-200' : 'text-yellow-700'}`}>{availableQty} / {item.quantity} {item.unit}</p>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reorder: {getItemReorderPoint(item)}</p>
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Reorder: {reorderPoint}</p>
                         {(item.allocatedQuantity || 0) > 0 && (
                           <p className={`text-xs ${isDark ? 'text-orange-300' : 'text-orange-600'}`}>Allocated: {item.allocatedQuantity}</p>
                         )}
                       </div>
                     </div>
                   );
-                })}
+                })
+                )}
               </div>
             </div>
           </div>

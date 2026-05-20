@@ -708,7 +708,8 @@ async function buildLocationInventoryResponse(locationId) {
  * Used when no location filter is applied so the UI shows a single entry per stock item.
  * Includes items that have no LocationInventory yet (templates with 0 stock everywhere).
  */
-async function buildAllLocationsInventoryResponse() {
+async function buildAllLocationsInventoryResponse(options = {}) {
+  const includeLedger = options.includeLedger === true
   const [locationInventoryRecords, allTemplates, stockLocations, movements] = await Promise.all([
     prisma.locationInventory.findMany({
       include: { location: true },
@@ -720,9 +721,11 @@ async function buildAllLocationsInventoryResponse() {
     prisma.stockLocation.findMany({
       select: { id: true, code: true }
     }),
-    prisma.stockMovement.findMany({
-      select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
-    })
+    includeLedger
+      ? prisma.stockMovement.findMany({
+          select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
+        })
+      : Promise.resolve(null)
   ])
 
   // One template per SKU (prefer row with null locationId, else first by order)
@@ -812,14 +815,16 @@ async function buildAllLocationsInventoryResponse() {
     else row.location = 'Multiple locations'
   }
 
-  const movementNetBySku = buildCombinedMovementNetBySkuFromMovementRows(movements)
-  annotateInventoryRowsWithCompanyWideLedger(result, movementNetBySku)
-  const liMinimal = locationInventoryRecords.map((r) => ({
-    sku: r.sku,
-    locationId: r.locationId,
-    quantity: r.quantity
-  }))
-  annotateInventoryRowsWithPerWarehouseLedgerMismatch(result, movements, stockLocations, liMinimal)
+  if (includeLedger && Array.isArray(movements)) {
+    const movementNetBySku = buildCombinedMovementNetBySkuFromMovementRows(movements)
+    annotateInventoryRowsWithCompanyWideLedger(result, movementNetBySku)
+    const liMinimal = locationInventoryRecords.map((r) => ({
+      sku: r.sku,
+      locationId: r.locationId,
+      quantity: r.quantity
+    }))
+    annotateInventoryRowsWithPerWarehouseLedgerMismatch(result, movements, stockLocations, liMinimal)
+  }
 
   return result
 }
@@ -827,42 +832,124 @@ async function buildAllLocationsInventoryResponse() {
 /**
  * Per stock location: total value and units on hand (for dashboard).
  * Valuation uses catalog unit cost per SKU (not per-location stored cost).
+ * Aggregates in one pass — avoids N × full location inventory builds.
  */
 async function buildInventoryLocationValueSummary() {
-  // Keep summary valuation aligned with inventory list rows by applying the
-  // same final-product BOM-based unit cost enrichment.
-  const stockLocations = await prisma.stockLocation.findMany({
-    orderBy: [{ code: 'asc' }]
+  const [stockLocations, locationInventoryRecords, allTemplates] = await Promise.all([
+    prisma.stockLocation.findMany({
+      orderBy: [{ code: 'asc' }]
+    }),
+    prisma.locationInventory.findMany({
+      select: { locationId: true, sku: true, quantity: true, unitCost: true }
+    }),
+    prisma.inventoryItem.findMany({
+      orderBy: [{ updatedAt: 'desc' }],
+      select: {
+        sku: true,
+        unitCost: true,
+        type: true,
+        locationId: true
+      }
+    })
+  ])
+
+  const templateBySku = new Map()
+  for (const meta of allTemplates) {
+    if (!templateBySku.has(meta.sku)) {
+      templateBySku.set(meta.sku, meta)
+    }
+  }
+
+  const skuSet = new Set(locationInventoryRecords.map((record) => record.sku).filter(Boolean))
+  const pseudoItems = Array.from(skuSet).map((sku) => {
+    const template = templateBySku.get(sku) || { sku }
+    return {
+      sku,
+      type: template.type,
+      unitCost: template.unitCost
+    }
   })
+  const enrichedCosts = await applyFinalProductBomUnitCost(pseudoItems)
+  const unitCostBySku = new Map(
+    enrichedCosts.map((row) => [row.sku, parseFiniteNumber(row.unitCost, 0)])
+  )
+
+  const totalsByLocationId = new Map(
+    stockLocations.map((loc) => [
+      loc.id,
+      { locationId: loc.id, code: loc.code || '', name: loc.name || '', totalValue: 0 }
+    ])
+  )
 
   let grandTotal = 0
   let totalUnitsOnHand = 0
-  const locations = []
 
-  for (const loc of stockLocations) {
-    const locationRows = await buildLocationInventoryResponse(loc.id)
-    const transformedRows = await applyFinalProductBomUnitCost(locationRows)
-
-    let locationTotalValue = 0
-    let locationTotalUnits = 0
-    for (const row of transformedRows) {
-      const quantity = parseFiniteNumber(row?.quantity, 0)
-      const unitCost = parseFiniteNumber(row?.unitCost, 0)
-      locationTotalUnits += quantity
-      locationTotalValue += computedInventoryTotalValue(quantity, unitCost)
+  for (const record of locationInventoryRecords) {
+    const sku = record.sku
+    if (!sku) continue
+    const template = templateBySku.get(sku) || {}
+    const unitCost =
+      unitCostBySku.get(sku) ?? inventoryCatalogUnitCostForSku(template, record)
+    const quantity = parseFiniteNumber(record.quantity, 0)
+    const lineValue = computedInventoryTotalValue(quantity, unitCost)
+    totalUnitsOnHand += quantity
+    grandTotal += lineValue
+    const bucket = totalsByLocationId.get(record.locationId)
+    if (bucket) {
+      bucket.totalValue += lineValue
     }
+  }
 
-    grandTotal += locationTotalValue
-    totalUnitsOnHand += locationTotalUnits
-    locations.push({
+  const locations = stockLocations.map((loc) => {
+    const bucket = totalsByLocationId.get(loc.id)
+    return {
       locationId: loc.id,
       code: loc.code || '',
       name: loc.name || '',
-      totalValue: locationTotalValue
-    })
-  }
+      totalValue: bucket?.totalValue ?? 0
+    }
+  })
 
   return { locations, grandTotal, totalUnitsOnHand }
+}
+
+/** Lightweight dashboard payload (no full SKU list, no stock-movement scan). */
+async function buildInventoryDashboardSummary() {
+  const items = await buildAllLocationsInventoryResponse({ includeLedger: false })
+  const rows = await applyFinalProductBomUnitCost(items)
+
+  const lowStock = rows.filter((item) => {
+    const quantity = parseFiniteNumber(item.quantity, 0)
+    const allocated = parseFiniteNumber(item.allocatedQuantity, 0)
+    const available = quantity - allocated
+    const reorderPoint = parseFiniteNumber(item.reorderPoint, 0)
+    return available <= reorderPoint
+  })
+
+  const needsCatalogReview = rows.filter((item) => Boolean(item.needsCatalogReview))
+
+  const mapPreview = (item) => ({
+    id: item.id,
+    sku: item.sku,
+    name: item.name,
+    quantity: parseFiniteNumber(item.quantity, 0),
+    allocatedQuantity: parseFiniteNumber(item.allocatedQuantity, 0),
+    unit: item.unit || 'pcs',
+    location: item.location || '',
+    reorderPoint: parseFiniteNumber(item.reorderPoint, 0)
+  })
+
+  return {
+    lowStockCount: lowStock.length,
+    lowStockPreview: lowStock.slice(0, 8).map(mapPreview),
+    needsCatalogReviewCount: needsCatalogReview.length,
+    needsCatalogReviewPreview: needsCatalogReview.slice(0, 8).map(mapPreview),
+    totalValue: rows.reduce(
+      (sum, item) => sum + computedInventoryTotalValue(item.quantity, item.unitCost),
+      0
+    ),
+    totalUnits: rows.reduce((sum, item) => sum + parseFiniteNumber(item.quantity, 0), 0)
+  }
 }
 
 /** GET …/inventory/location-value-summary — must not fall through to GET-by-id (would 404 as fake UUID). */
@@ -2624,21 +2711,42 @@ async function handler(req, res) {
         
         // Parse query parameters from URL - use safe parsing method
         let locationId = null
+        let summaryMode = null
+        let includeLedger = false
         try {
           // Try req.query first (if available from framework)
           locationId = req.query?.locationId || req.query?.location
+          summaryMode = req.query?.summary
+          includeLedger =
+            req.query?.includeLedger === '1' ||
+            req.query?.includeLedger === 'true' ||
+            req.query?.includeLedger === true
           
           // If not in req.query, parse from URL manually
-          if (!locationId && req.url) {
+          if (req.url) {
             const queryString = req.url.split('?')[1]
             if (queryString) {
               const params = new URLSearchParams(queryString)
-              locationId = params.get('locationId') || params.get('location')
+              if (!locationId) {
+                locationId = params.get('locationId') || params.get('location')
+              }
+              if (!summaryMode) {
+                summaryMode = params.get('summary')
+              }
+              if (!includeLedger) {
+                const ledgerParam = params.get('includeLedger')
+                includeLedger = ledgerParam === '1' || ledgerParam === 'true'
+              }
             }
           }
         } catch (parseError) {
           console.warn('⚠️ Failed to parse query parameters:', parseError.message)
           // Continue with locationId = null (will show all locations)
+        }
+
+        if (summaryMode === 'dashboard') {
+          const dashboard = await buildInventoryDashboardSummary()
+          return ok(res, { dashboard })
         }
         
         const locationFilterActive = locationId && locationId !== 'all' && locationId !== ''
@@ -2646,44 +2754,46 @@ async function handler(req, res) {
 
         if (locationFilterActive) {
           items = await buildLocationInventoryResponse(locationId)
-          const locationMeta = await prisma.stockLocation.findUnique({
-            where: { id: locationId },
-            select: { code: true }
-          })
-          const locationCodeTrim = String(locationMeta?.code || '').trim()
-          const siteSkus = [
-            ...new Set(
-              (items || [])
-                .map((it) => String(it?.sku || '').trim())
-                .filter(Boolean)
-            )
-          ]
-          let movementsForSiteLedger = []
-          if (siteSkus.length > 0) {
-            const locationOr = [
-              { fromLocation: locationId },
-              { toLocation: locationId }
-            ]
-            if (locationCodeTrim) {
-              locationOr.push({ fromLocation: locationCodeTrim }, { toLocation: locationCodeTrim })
-            }
-            movementsForSiteLedger = await prisma.stockMovement.findMany({
-              where: {
-                sku: { in: siteSkus },
-                OR: locationOr
-              },
-              select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
+          if (includeLedger) {
+            const locationMeta = await prisma.stockLocation.findUnique({
+              where: { id: locationId },
+              select: { code: true }
             })
+            const locationCodeTrim = String(locationMeta?.code || '').trim()
+            const siteSkus = [
+              ...new Set(
+                (items || [])
+                  .map((it) => String(it?.sku || '').trim())
+                  .filter(Boolean)
+              )
+            ]
+            let movementsForSiteLedger = []
+            if (siteSkus.length > 0) {
+              const locationOr = [
+                { fromLocation: locationId },
+                { toLocation: locationId }
+              ]
+              if (locationCodeTrim) {
+                locationOr.push({ fromLocation: locationCodeTrim }, { toLocation: locationCodeTrim })
+              }
+              movementsForSiteLedger = await prisma.stockMovement.findMany({
+                where: {
+                  sku: { in: siteSkus },
+                  OR: locationOr
+                },
+                select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
+              })
+            }
+            annotateInventoryRowsWithWarehouseSiteLedger(
+              items,
+              movementsForSiteLedger,
+              locationId,
+              locationCodeTrim
+            )
           }
-          annotateInventoryRowsWithWarehouseSiteLedger(
-            items,
-            movementsForSiteLedger,
-            locationId,
-            locationCodeTrim
-          )
         } else {
           // One row per SKU (aggregated across locations); no per-location duplicate rows
-          items = await buildAllLocationsInventoryResponse()
+          items = await buildAllLocationsInventoryResponse({ includeLedger })
         }
 
         items = await applyFinalProductBomUnitCost(items)

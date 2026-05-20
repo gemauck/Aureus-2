@@ -1811,8 +1811,23 @@ const DatabaseAPI = {
     },
 
     async getInventory(locationId = null, options = {}) {
-        const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
+        const params = new URLSearchParams();
+        if (locationId && locationId !== 'all') {
+            params.set('locationId', String(locationId));
+        }
+        if (options.summary === 'dashboard') {
+            params.set('summary', 'dashboard');
+        }
+        if (options.includeLedger) {
+            params.set('includeLedger', '1');
+        }
+        const qs = params.toString();
+        const endpoint = `/manufacturing/inventory${qs ? `?${qs}` : ''}`;
         const raw = await this.makeRequest(endpoint, options);
+        if (options.summary === 'dashboard') {
+            const dashboard = raw?.data?.dashboard ?? raw?.dashboard ?? null;
+            return { data: { dashboard } };
+        }
         const list = Array.isArray(raw?.data?.inventory)
             ? raw.data.inventory
             : Array.isArray(raw?.inventory)
