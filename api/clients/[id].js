@@ -11,6 +11,7 @@ import { notifyCommentParticipants } from '../_lib/notifyCommentParticipants.js'
 import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { isAdminRole } from '../_lib/authRoles.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
+import { cascadeClientNameToRelatedRecords } from '../_lib/syncClientNameCascade.js'
 
 async function handler(req, res) {
   try {
@@ -1282,6 +1283,22 @@ async function handler(req, res) {
           }
         })
         
+        // Keep denormalized clientName in sync (job cards, sales orders, manufacturing reports/journal)
+        if (updateData.name !== undefined && client.name) {
+          try {
+            const synced = await cascadeClientNameToRelatedRecords(prisma, id, client.name)
+            const total =
+              synced.jobCards + synced.salesOrders + synced.projects + synced.invoices
+            if (total > 0) {
+              console.log(
+                `✅ Synced client name "${client.name}" to ${total} related record(s) for client ${id}`
+              )
+            }
+          } catch (syncErr) {
+            console.error('❌ Failed to cascade client name to related records:', syncErr)
+          }
+        }
+
         // If name changed, trigger RSS feed update (async, don't wait)
         if (updateData.name !== undefined && oldName && oldName !== client.name) {
           searchAndSaveNewsForClient(client.id, client.name, client.website || oldWebsite || '').catch(error => {

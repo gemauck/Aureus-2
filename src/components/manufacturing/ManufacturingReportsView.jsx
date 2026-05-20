@@ -214,6 +214,28 @@
     return Number.isInteger(n) ? String(n) : String(n);
   }
 
+  async function fetchClientNameByIdMap() {
+    const map = new Map();
+    if (!window.DatabaseAPI?.getClients) return map;
+    try {
+      const res = await window.DatabaseAPI.getClients(true);
+      const clients = res?.data?.clients || res?.clients || [];
+      for (const c of clients) {
+        if (c?.id && c?.name) map.set(String(c.id), String(c.name).trim());
+      }
+    } catch (err) {
+      console.warn('ManufacturingReportsView: failed to load clients for name resolution', err);
+    }
+    return map;
+  }
+
+  function resolveClientDisplayName(storedName, clientId, nameById) {
+    const id = clientId != null ? String(clientId).trim() : '';
+    if (id && nameById?.has(id)) return nameById.get(id);
+    const stored = storedName != null ? String(storedName).trim() : '';
+    return stored;
+  }
+
   function getClientNameFromAllocationRow(row) {
     const name = row.jobCard_clientName || row.order_clientName || '';
     if (name && String(name).trim()) return String(name).trim();
@@ -501,6 +523,7 @@
         const out = [];
         const masterFromApi = await fetchMasterInventoryCostMap();
         const costMap = mergeMasterCostMaps(masterFromApi, inventoryCostMap);
+        const clientNameById = await fetchClientNameByIdMap();
 
         if (window.DatabaseAPI?.getSalesOrders) {
           const soRes = await window.DatabaseAPI.getSalesOrders();
@@ -510,7 +533,13 @@
             if (!inDateRange(orderDate, dateStart, dateEnd)) continue;
 
             const items = parseJsonSafe(order.items, []);
-            const orderFields = prefixKeys(order, 'order');
+            const resolvedClientName = resolveClientDisplayName(
+              order.clientName,
+              order.clientId,
+              clientNameById
+            );
+            const orderForRow = { ...order, clientName: resolvedClientName };
+            const orderFields = prefixKeys(orderForRow, 'order');
 
             if (!items.length) {
               out.push({
@@ -550,7 +579,7 @@
                 line_locationId: item.locationId || '',
                 line_locationLabel: resolveLocationLabel(item.locationId),
                 allocationDate: flattenValue(orderDate),
-                quickbooksMemo: `Stock to client: ${order.clientName || ''} — SO ${order.orderNumber || ''} — ${item.sku || item.name || ''}`
+                quickbooksMemo: `Stock to client: ${resolvedClientName || ''} — SO ${order.orderNumber || ''} — ${item.sku || item.name || ''}`
               });
             });
           }
@@ -565,7 +594,13 @@
             jc.completedAt || jc.submittedAt || jc.startedAt || jc.updatedAt || jc.createdAt;
           if (!inDateRange(jcDate, dateStart, dateEnd)) continue;
 
-          const jcFields = prefixKeys(jc, 'jobCard');
+          const resolvedJcClientName = resolveClientDisplayName(
+            jc.clientName,
+            jc.clientId,
+            clientNameById
+          );
+          const jcForRow = { ...jc, clientName: resolvedJcClientName };
+          const jcFields = prefixKeys(jcForRow, 'jobCard');
 
           stockUsed.forEach((line, idx) => {
             const qty = parseFloat(line.quantity) || 0;
@@ -587,7 +622,7 @@
               line_locationLabel: line.locationName || resolveLocationLabel(line.locationId),
               allocationDate: flattenValue(jcDate),
               jobCard_status: jc.status || '',
-              quickbooksMemo: `Stock to client: ${jc.clientName || ''}${jc.siteName ? ` @ ${jc.siteName}` : ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
+              quickbooksMemo: `Stock to client: ${resolvedJcClientName || ''}${jc.siteName ? ` @ ${jc.siteName}` : ''} — JC ${jc.jobCardNumber || ''} — ${line.itemName || line.sku || ''}`
             });
           });
         }
