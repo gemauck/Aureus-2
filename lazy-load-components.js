@@ -42,7 +42,6 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
         // ProjectDetail is deferred to end of this list (~445KB+): batches use Promise.all, so keeping it
         // here blocked every earlier batch from completing. Projects.jsx + loadProjectDetail() fetch it when needed.
         './src/components/projects/Projects.jsx',
-        './src/components/projects/ProjectsDatabaseFirst.jsx',
         
         // Time tracking
         './src/components/time/TimeModal.jsx',

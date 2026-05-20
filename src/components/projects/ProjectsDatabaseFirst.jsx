@@ -1610,8 +1610,4 @@ const ProjectsDatabaseFirst = () => {
     );
 };
 
-// Make available globally
-window.ProjectsDatabaseFirst = ProjectsDatabaseFirst;
-if (typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent('projectsComponentReady'));
-}
+// Legacy fallback — do not register globally; MainLayout only mounts full Projects.jsx

@@ -963,29 +963,20 @@ const MainLayout = () => {
         return window.Pipeline;
     }, []);
     
-    const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
-    // When true, full Projects.jsx (with per-client view) has loaded; re-resolve to use it
     const isFullProjectsComponent = (fn) =>
         fn && typeof fn === 'function' && (fn._hasListView || fn._version);
     const resolveProjectsComponent = () => {
         if (isFullProjectsComponent(window.Projects)) return window.Projects;
-        if (window.ProjectsDatabaseFirst && typeof window.ProjectsDatabaseFirst === 'function') {
-            return window.ProjectsDatabaseFirst;
-        }
         return null;
     };
-    const [projectsFullComponentReady, setProjectsFullComponentReady] = React.useState(
+    const [projectsComponentReady, setProjectsComponentReady] = React.useState(
         !!(typeof window !== 'undefined' && isFullProjectsComponent(window.Projects))
     );
 
     React.useEffect(() => {
         const checkProjects = () => {
-            const ProjectsComponent = resolveProjectsComponent();
-            if (ProjectsComponent) {
+            if (resolveProjectsComponent()) {
                 setProjectsComponentReady(true);
-                if (isFullProjectsComponent(window.Projects)) {
-                    setProjectsFullComponentReady(true);
-                }
                 return true;
             }
             return false;
@@ -993,40 +984,32 @@ const MainLayout = () => {
 
         if (checkProjects()) return;
 
-        const handleReady = () => {
+        const handleFullReady = () => {
             if (checkProjects()) {
-                window.removeEventListener('projectsComponentReady', handleReady);
+                window.removeEventListener('projectsFullComponentReady', handleFullReady);
             }
         };
-        const handleFullReady = () => {
-            setProjectsFullComponentReady(true);
-            window.removeEventListener('projectsFullComponentReady', handleFullReady);
-        };
-        window.addEventListener('projectsComponentReady', handleReady);
         window.addEventListener('projectsFullComponentReady', handleFullReady);
 
         let intervalId = null;
-        const maxAttempts = 20;
+        const maxAttempts = 30;
         let attempts = 0;
         intervalId = setInterval(() => {
             attempts++;
             if (checkProjects() || attempts >= maxAttempts) {
                 clearInterval(intervalId);
-                window.removeEventListener('projectsComponentReady', handleReady);
                 window.removeEventListener('projectsFullComponentReady', handleFullReady);
             }
         }, 1000);
 
         const timeout = setTimeout(() => {
             if (intervalId) clearInterval(intervalId);
-            window.removeEventListener('projectsComponentReady', handleReady);
             window.removeEventListener('projectsFullComponentReady', handleFullReady);
-        }, 21000);
+        }, 31000);
 
         return () => {
             if (intervalId) clearInterval(intervalId);
             clearTimeout(timeout);
-            window.removeEventListener('projectsComponentReady', handleReady);
             window.removeEventListener('projectsFullComponentReady', handleFullReady);
         };
     }, []);
@@ -1037,7 +1020,7 @@ const MainLayout = () => {
             return ProjectsComponent;
         }
         return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
-    }, [projectsComponentReady, projectsFullComponentReady]);
+    }, [projectsComponentReady]);
     
     // Users component loading state
     const [usersComponentReady, setUsersComponentReady] = React.useState(

@@ -420,6 +420,15 @@ const Projects = () => {
                 const trimmed = hash.startsWith('#') ? hash.substring(1) : hash;
                 const [pathPart = '', queryString = ''] = trimmed.split('?');
                 const normalizedPath = (pathPart || '').replace(/^\/+/, '');
+
+                // Legacy: #/projects/progress-tracker/:projectId → ?progressTracker=1&projectId=…
+                const legacyTrackerMatch = normalizedPath.match(/^projects\/progress-tracker(?:\/([^/?#]+))?$/);
+                if (legacyTrackerMatch) {
+                    const legacyProjectId = legacyTrackerMatch[1] || null;
+                    openProgressTrackerHash(legacyProjectId ? { projectId: legacyProjectId } : {});
+                    return;
+                }
+
                 if (normalizedPath !== 'projects') {
                     return;
                 }
