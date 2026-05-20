@@ -1,7 +1,28 @@
-import {
-    htmlToExcelRichTextValue,
-    appendPlainTextToRichValue
-} from '../../utils/htmlToExcelRichText.js';
+// Browser require() is a stub; util loads via script tag and exposes window.* (lazy-load-components.js).
+const htmlToExcelRichTextValue = (html, fontSize) => {
+    if (typeof window !== 'undefined' && typeof window.htmlToExcelRichTextValue === 'function') {
+        return window.htmlToExcelRichTextValue(html, fontSize);
+    }
+    if (!html || typeof html !== 'string') return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(html)
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(div|p|li|tr|h[1-6])\s*>/gi, '\n');
+    return (tmp.textContent || tmp.innerText || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+};
+const appendPlainTextToRichValue = (value, plainSuffix) => {
+    if (typeof window !== 'undefined' && typeof window.appendPlainTextToRichValue === 'function') {
+        return window.appendPlainTextToRichValue(value, plainSuffix);
+    }
+    const suffix = plainSuffix == null ? '' : String(plainSuffix);
+    if (!suffix) return value == null ? '' : value;
+    if (!value || value === '') return suffix;
+    if (typeof value === 'string') return `${value}${value ? '\n' : ''}${suffix}`;
+    return suffix;
+};
 
 // Get React hooks from window
 const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
