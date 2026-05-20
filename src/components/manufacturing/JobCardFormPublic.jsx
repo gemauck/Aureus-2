@@ -388,6 +388,39 @@ async function buildJobCardImageThumbnailDataUrl(imageDataUrl) {
   }
 }
 
+function extractSignatureUrlFromPhotosValue(photosValue) {
+  const photosRaw = parseStoredJsonArray(photosValue, []);
+  const hit = photosRaw.find(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      p.kind === 'signature' &&
+      typeof p.url === 'string' &&
+      p.url.trim()
+  );
+  return hit ? hit.url.trim() : '';
+}
+
+function photosArrayWithoutSignature(photos) {
+  return (Array.isArray(photos) ? photos : []).filter((p) => {
+    if (!p || typeof p !== 'object') return true;
+    return p.kind !== 'signature';
+  });
+}
+
+function buildJobCardPhotosPayload({ formPhotos, signatureDataUrl, sectionPhotoEntries, voicePhotoEntries }) {
+  const sig =
+    typeof signatureDataUrl === 'string' && signatureDataUrl.trim().startsWith('data:image')
+      ? [{ kind: 'signature', url: signatureDataUrl.trim() }]
+      : [];
+  return [
+    ...photosArrayWithoutSignature(formPhotos),
+    ...sig,
+    ...(sectionPhotoEntries || []),
+    ...(voicePhotoEntries || [])
+  ];
+}
+
 function extractVisualPhotoEntries(photosValue) {
   const photosRaw = parseStoredJsonArray(photosValue, []);
   const visualEntries = [];
@@ -403,7 +436,7 @@ function extractVisualPhotoEntries(photosValue) {
       return;
     }
     if (!p || typeof p !== 'object') return;
-    if (p.kind === 'voice' || p.kind === 'sectionMedia') return;
+    if (p.kind === 'voice' || p.kind === 'sectionMedia' || p.kind === 'signature') return;
     if (p.kind === 'safetyCultureMedia' && p.mediaId && p.token) {
       visualEntries.push({
         stored: p,
@@ -4295,7 +4328,10 @@ const JobCardFormPublic = () => {
       customerSignDate: full.customerSignDate
         ? String(full.customerSignDate).slice(0, 10)
         : '',
-      customerSignature: full.customerSignature || ''
+      customerSignature:
+        (typeof full.customerSignature === 'string' && full.customerSignature.trim()) ||
+        extractSignatureUrlFromPhotosValue(full.photos) ||
+        ''
     }));
 
     setTechnicianInput('');
@@ -4671,9 +4707,17 @@ const JobCardFormPublic = () => {
       releaseSaveLock();
       return;
     }
-    const signatureForSave =
+    let signatureForSave =
+      (signatureLocked && formData.customerSignature
+        ? String(formData.customerSignature).trim()
+        : '') ||
       exportSignature() ||
       (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
+    if (signatureForSave && !signatureLocked) {
+      setFormData(prev => ({ ...prev, customerSignature: signatureForSave }));
+      setSignatureLocked(true);
+      lastSignatureRestoreRef.current = signatureForSave;
+    }
     if (normalizedStatus === 'completed' && !signatureForSave) {
       setStepError('A customer signature is required when the job status is Completed.');
       setCurrentStep(STEP_IDS.length - 1);
@@ -4761,7 +4805,12 @@ const JobCardFormPublic = () => {
           thumbUrl: item.thumbUrl || ''
         }))
       );
-      jobCardData.photos = [...(formData.photos || []), ...sectionPhotoEntries, ...voicePhotoEntries];
+      jobCardData.photos = buildJobCardPhotosPayload({
+        formPhotos: formData.photos,
+        signatureDataUrl: signatureForSave,
+        sectionPhotoEntries,
+        voicePhotoEntries
+      });
 
       jobCardData.status = normalizedStatus;
       if (normalizedStatus === 'draft') {
@@ -5047,8 +5096,13 @@ const JobCardFormPublic = () => {
       const prevPending = readLocalPendingJobCards().find(
         c => c && String(c.id) === String(draftLocalId)
       );
+      const draftSignature =
+        (signatureLocked && formData.customerSignature) ||
+        exportSignature() ||
+        (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
       const autoDraft = {
         ...formData,
+        customerSignature: draftSignature,
         id: draftLocalId,
         startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
         createdAt: editingMeta?.createdAt ?? nowIso,
@@ -5064,6 +5118,25 @@ const JobCardFormPublic = () => {
           0,
           (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
         ),
+        photos: buildJobCardPhotosPayload({
+          formPhotos: formData.photos,
+          signatureDataUrl: draftSignature,
+          sectionPhotoEntries: SECTION_WORK_MEDIA_KEYS.flatMap(sec =>
+            (sectionWorkMedia[sec] || []).map(item => ({
+              kind: 'sectionMedia',
+              section: sec,
+              url: item.url,
+              name: item.name || '',
+              thumbUrl: item.thumbUrl || ''
+            }))
+          ),
+          voicePhotoEntries: voiceAttachments.map(v => ({
+            kind: 'voice',
+            section: v.section,
+            url: v.dataUrl,
+            mimeType: v.mimeType || 'audio/webm'
+          }))
+        }),
         activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
       };
       upsertLocalPendingJobCard(autoDraft);
