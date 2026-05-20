@@ -6,6 +6,8 @@ import {
   mergeCustomerSignoffIntoOtherComments,
   mergeHeadingIntoOtherComments,
   parseCustomerSignoffFromOtherComments,
+  resolveCustomerSignoffFields,
+  hasCustomerSignoffContent,
   stripCustomerSignoffLinesFromComments,
   withComputedJobCardHeading
 } from '../../../../api/_lib/jobCardOtherComments.js'
@@ -114,5 +116,31 @@ describe('jobCardOtherComments', () => {
     })
     expect(row.customerName).toBe('Sam')
     expect(row.customerSignature).toBe('data:image/png;base64,x')
+  })
+
+  test('resolveCustomerSignoffFields merges API fields and otherComments', () => {
+    expect(
+      resolveCustomerSignoffFields({
+        customerName: 'API Name',
+        otherComments: 'Customer: Comment Name\nPosition: Engineer\nFeedback: OK\nSignature: [Captured]',
+        photos: [{ kind: 'signature', url: 'data:image/png;base64,abc' }]
+      })
+    ).toEqual({
+      name: 'API Name',
+      position: 'Engineer',
+      feedback: 'OK',
+      signatureLabel: '[Captured]',
+      signatureDataUrl: 'data:image/png;base64,abc'
+    })
+  })
+
+  test('hasCustomerSignoffContent is true when only signature image exists', () => {
+    expect(
+      hasCustomerSignoffContent(
+        resolveCustomerSignoffFields({
+          photos: [{ kind: 'signature', url: 'data:image/png;base64,x' }]
+        })
+      )
+    ).toBe(true)
   })
 })

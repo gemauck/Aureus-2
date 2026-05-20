@@ -162,6 +162,40 @@ export function mergeCustomerSignoffIntoOtherComments({
     .join('\n')
 }
 
+/**
+ * Resolved customer sign-off for display/PDF (API fields + merged `otherComments` lines + photos).
+ * @param {Record<string, unknown>|null|undefined} jobCard
+ */
+export function resolveCustomerSignoffFields(jobCard) {
+  const parsed = parseCustomerSignoffFromOtherComments(jobCard?.otherComments)
+  const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : '')
+  const signatureFromPhotos = extractSignatureDataUrlFromPhotos(jobCard?.photos)
+  const signatureFromField =
+    typeof jobCard?.customerSignature === 'string' &&
+    jobCard.customerSignature.trim().startsWith('data:image')
+      ? jobCard.customerSignature.trim()
+      : ''
+  return {
+    name: trim(jobCard?.customerName) || parsed.name,
+    position: trim(jobCard?.customerTitle) || trim(jobCard?.customerPosition) || parsed.position,
+    feedback: trim(jobCard?.customerFeedback) || parsed.feedback,
+    signatureLabel: parsed.signatureLabel,
+    signatureDataUrl: signatureFromField || signatureFromPhotos
+  }
+}
+
+/** @param {ReturnType<typeof resolveCustomerSignoffFields>} signoff */
+export function hasCustomerSignoffContent(signoff) {
+  if (!signoff) return false
+  return !!(
+    signoff.name ||
+    signoff.position ||
+    signoff.feedback ||
+    signoff.signatureLabel ||
+    signoff.signatureDataUrl
+  )
+}
+
 /** Attach `heading` and parsed customer sign-off for API responses (list/detail/create/update). */
 export function withComputedJobCardHeading(jobCard) {
   if (!jobCard || typeof jobCard !== 'object') return jobCard

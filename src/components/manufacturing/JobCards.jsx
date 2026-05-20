@@ -127,6 +127,63 @@ function getHeadingFromJobCard(jobCard) {
   return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 }
 
+function parseCustomerSignoffFromJobCardComments(rawComments) {
+  const customer = { name: '', position: '', feedback: '', signatureLabel: '' };
+  for (const line of String(rawComments || '').split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith('Customer:')) {
+      customer.name = t.slice('Customer:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Position:')) {
+      customer.position = t.slice('Position:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Feedback:')) {
+      customer.feedback = t.slice('Feedback:'.length).trim();
+      continue;
+    }
+    if (t.startsWith('Signature:')) {
+      customer.signatureLabel = t.slice('Signature:'.length).trim();
+      continue;
+    }
+  }
+  return customer;
+}
+
+function resolveCustomerSignoffForJobCard(jobCard) {
+  const parsed = parseCustomerSignoffFromJobCardComments(jobCard?.otherComments);
+  const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : '');
+  return {
+    name: trim(jobCard?.customerName) || parsed.name || '',
+    position: trim(jobCard?.customerTitle) || trim(jobCard?.customerPosition) || parsed.position || '',
+    feedback: trim(jobCard?.customerFeedback) || parsed.feedback || '',
+    signatureLabel: parsed.signatureLabel || ''
+  };
+}
+
+function extractSignatureUrlFromJobCardPhotos(photos) {
+  let arr = photos;
+  if (typeof photos === 'string' && photos.trim()) {
+    try {
+      arr = JSON.parse(photos);
+    } catch {
+      return '';
+    }
+  }
+  if (!Array.isArray(arr)) return '';
+  const hit = arr.find(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      p.kind === 'signature' &&
+      typeof p.url === 'string' &&
+      p.url.trim()
+  );
+  return hit ? hit.url.trim() : '';
+}
+
 /** Resolve a human label for `form_<id>_<fieldId>` voice keys (wizard id may not match server instance id). */
 function labelOrphanFormVoiceKey(forms, key) {
   if (!key || typeof key !== 'string' || !key.startsWith('form_')) return key;
@@ -707,6 +764,23 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       }),
     [selectedJobCard?.photos, selectedJobCard?.safetyCultureIssueId]
   );
+
+  const customerSignoff = useMemo(
+    () => resolveCustomerSignoffForJobCard(selectedJobCard),
+    [selectedJobCard]
+  );
+  const customerSignatureImageUrl = useMemo(() => {
+    const fromPhotos = extractSignatureUrlFromJobCardPhotos(selectedJobCard?.photos);
+    if (fromPhotos) return fromPhotos;
+    const direct = selectedJobCard?.customerSignature;
+    return typeof direct === 'string' && direct.trim().startsWith('data:image') ? direct.trim() : '';
+  }, [selectedJobCard?.photos, selectedJobCard?.customerSignature]);
+  const hasCustomerSignoffBlock =
+    customerSignoff.name ||
+    customerSignoff.position ||
+    customerSignoff.feedback ||
+    customerSignoff.signatureLabel ||
+    customerSignatureImageUrl;
 
   /** Detail shell vs heavy `photos` JSON (loaded in a follow-up request when using omitPhotos=1). */
   const detailAttachmentsLoading =
@@ -2555,11 +2629,54 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   ) : null}
 
+                  {hasCustomerSignoffBlock ? (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                      <div className="text-[11px] font-semibold uppercase text-amber-200/90">
+                        Customer sign-off
+                      </div>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                        <dl className="grid flex-1 gap-3 text-sm text-slate-100 sm:grid-cols-2">
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase text-slate-500">Signatory name</dt>
+                            <dd className="mt-1 font-medium">{customerSignoff.name || '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase text-slate-500">Role / title</dt>
+                            <dd className="mt-1">{customerSignoff.position || '—'}</dd>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <dt className="text-[11px] font-semibold uppercase text-slate-500">Customer feedback</dt>
+                            <dd className={`mt-1 whitespace-pre-wrap leading-relaxed ${customerSignoff.feedback ? '' : 'text-slate-500'}`}>
+                              {customerSignoff.feedback || '—'}
+                            </dd>
+                          </div>
+                          {customerSignoff.signatureLabel ? (
+                            <div className="sm:col-span-2">
+                              <dt className="text-[11px] font-semibold uppercase text-slate-500">Signature status</dt>
+                              <dd className="mt-1">{customerSignoff.signatureLabel}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        {customerSignatureImageUrl ? (
+                          <figure className="shrink-0 overflow-hidden rounded-xl border border-slate-700 bg-white lg:max-w-xs">
+                            <img
+                              src={customerSignatureImageUrl}
+                              alt={`Signature of ${customerSignoff.name || 'customer'}`}
+                              className="max-h-44 w-auto max-w-full object-contain px-2 py-2"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </figure>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
                   {attachmentParts.voicesBySection.customerFeedback &&
                   attachmentParts.voicesBySection.customerFeedback.length > 0 ? (
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
-                        Customer feedback
+                        Customer feedback (voice)
                       </div>
                       <JobCardVoiceClips
                         tone="dark"

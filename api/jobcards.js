@@ -22,7 +22,8 @@ import {
   extractSignatureDataUrlFromPhotos,
   finalizeJobCardOtherCommentsForSave,
   mergeCustomerSignoffIntoOtherComments,
-  parseCustomerSignoffFromOtherComments,
+  resolveCustomerSignoffFields,
+  hasCustomerSignoffContent,
   withComputedJobCardHeading
 } from './_lib/jobCardOtherComments.js'
 import { findJobCardByClientDraftId } from './_lib/jobCardIdempotency.js'
@@ -283,8 +284,12 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
   const stockRows = stockRowsForBillingPdf(jobCard)
   const materialRows = materialsRowsForBillingPdf(jobCard)
   const coords = parseJobCardLatLng(jobCard)
-  const customerSignoff = parseCustomerSignoffFromOtherComments(jobCard.otherComments)
-  const signatureBuffer = await loadBillingPdfSignatureBuffer(jobCard.photos)
+  const customerSignoff = resolveCustomerSignoffFields(jobCard)
+  const signatureBuffer = customerSignoff.signatureDataUrl
+    ? await loadBillingPdfSignatureBuffer([
+        { kind: 'signature', url: customerSignoff.signatureDataUrl }
+      ])
+    : await loadBillingPdfSignatureBuffer(jobCard.photos)
   const imageBuffers = await loadBillingPdfImageBuffers(jobCard.photos, { maxImages: 12 })
 
   return new Promise((resolve, reject) => {
@@ -398,13 +403,7 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
       contentY = doc.y + 4
     }
 
-    const hasSignoffBlock =
-      customerSignoff.name ||
-      customerSignoff.position ||
-      customerSignoff.feedback ||
-      signatureBuffer ||
-      customerSignoff.signatureLabel
-    if (hasSignoffBlock) {
+    if (hasCustomerSignoffContent(customerSignoff)) {
       contentY += 8
       if (contentY > doc.page.height - 160) {
         doc.addPage()
@@ -420,9 +419,12 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
         doc.font('Helvetica').text(String(v || '—'), { width: contentW })
         contentY = doc.y + 2
       }
-      if (customerSignoff.name) signKv('Customer name', customerSignoff.name)
-      if (customerSignoff.position) signKv('Role / title', customerSignoff.position)
-      if (customerSignoff.feedback) signKv('Feedback', customerSignoff.feedback)
+      signKv('Signatory name', customerSignoff.name || '—')
+      signKv('Role / title', customerSignoff.position || '—')
+      signKv('Customer feedback', customerSignoff.feedback || '—')
+      if (customerSignoff.signatureLabel) {
+        signKv('Signature status', customerSignoff.signatureLabel)
+      }
       if (signatureBuffer) {
         try {
           if (contentY > doc.page.height - 100) {

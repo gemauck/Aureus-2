@@ -105,6 +105,18 @@ function splitJobCardOtherCommentsForReport(rawComments) {
   };
 }
 
+/** Name, role, feedback from API fields and merged Customer:/Position:/Feedback: lines. */
+function resolveJobCardCustomerSignoff(jobCard, commentsReport) {
+  const parsed = commentsReport?.customer || { name: '', position: '', feedback: '', signatureLabel: '' };
+  const trim = (v) => (v != null && String(v).trim() !== '' ? String(v).trim() : '');
+  return {
+    name: trim(jobCard?.customerName) || parsed.name || '',
+    position: trim(jobCard?.customerTitle) || trim(jobCard?.customerPosition) || parsed.position || '',
+    feedback: trim(jobCard?.customerFeedback) || parsed.feedback || '',
+    signatureLabel: parsed.signatureLabel || ''
+  };
+}
+
 function parseHeadingFromComments(rawComments) {
   if (!rawComments || typeof rawComments !== 'string') return '';
   const headingLine = rawComments
@@ -1275,15 +1287,15 @@ const ServiceAndMaintenance = () => {
     return source ? String(source) : '';
   };
 
-  const resolvedCustomerName =
-    (selectedJobCard?.customerName && String(selectedJobCard.customerName).trim()) ||
-    otherCommentsReport.customer.name ||
-    '';
+  const customerSignoff = useMemo(
+    () => resolveJobCardCustomerSignoff(selectedJobCard, otherCommentsReport),
+    [selectedJobCard, otherCommentsReport]
+  );
   const hasCustomerSignoffBlock =
-    resolvedCustomerName ||
-    otherCommentsReport.customer.position ||
-    otherCommentsReport.customer.feedback ||
-    otherCommentsReport.customer.signatureLabel ||
+    customerSignoff.name ||
+    customerSignoff.position ||
+    customerSignoff.feedback ||
+    customerSignoff.signatureLabel ||
     signatureAttachmentItems.length > 0;
 
   const jobCardAttachmentsLoading =
@@ -1292,8 +1304,7 @@ const ServiceAndMaintenance = () => {
 
   const signatureImageUrl = signatureAttachmentItems[0]?.url || '';
   const signatureMarkedCaptured = Boolean(
-    otherCommentsReport.customer.signatureLabel &&
-      /captured/i.test(otherCommentsReport.customer.signatureLabel)
+    customerSignoff.signatureLabel && /captured/i.test(customerSignoff.signatureLabel)
   );
   const signatureImageLoading =
     Boolean(signatureMarkedCaptured || selectedJobCard?.attachmentsPending) &&
@@ -1578,10 +1589,7 @@ const ServiceAndMaintenance = () => {
           : '<p class="muted">No images were available for this job card.</p>';
 
       const pdfCustomerReport = splitJobCardOtherCommentsForReport(jobCardForPdf.otherComments || '');
-      const pdfCustomerName =
-        (jobCardForPdf.customerName && String(jobCardForPdf.customerName).trim()) ||
-        pdfCustomerReport.customer.name ||
-        '';
+      const pdfSignoff = resolveJobCardCustomerSignoff(jobCardForPdf, pdfCustomerReport);
       const pdfSigUrl =
         (signatureImageUrl && signatureImageUrl.startsWith('data:image') ? signatureImageUrl : '') ||
         extractSignatureUrlFromJobCardPhotos(jobCardForPdf.photos) ||
@@ -1589,26 +1597,37 @@ const ServiceAndMaintenance = () => {
         jobCardForPdf.customerSignature.trim().startsWith('data:image')
           ? jobCardForPdf.customerSignature.trim()
           : '');
-      const pdfSignoffSection =
-        pdfCustomerName ||
-        pdfCustomerReport.customer.position ||
-        pdfCustomerReport.customer.feedback ||
+      const pdfHasSignoff =
+        pdfSignoff.name ||
+        pdfSignoff.position ||
+        pdfSignoff.feedback ||
         pdfSigUrl ||
-        pdfCustomerReport.customer.signatureLabel
-          ? `<section class="section">
+        pdfSignoff.signatureLabel;
+      const pdfSignatoryDetails = `
+      <dl class="signoff-meta">
+        <dt>Signatory name</dt><dd>${escapeHtml(pdfSignoff.name || '—')}</dd>
+        <dt>Role / title</dt><dd>${escapeHtml(pdfSignoff.position || '—')}</dd>
+        <dt>Customer feedback</dt><dd>${escapeHtml(pdfSignoff.feedback || '—')}</dd>
+        ${
+          pdfSignoff.signatureLabel
+            ? `<dt>Signature status</dt><dd>${escapeHtml(pdfSignoff.signatureLabel)}</dd>`
+            : ''
+        }
+      </dl>`;
+      const pdfSignatureMarkup = pdfSigUrl
+        ? `<div class="signature-box"><img src="${escapeHtmlAttr(pdfSigUrl)}" alt="Signature of ${escapeHtmlAttr(pdfSignoff.name || 'customer')}" /></div>`
+        : pdfSignoff.signatureLabel
+          ? `<p class="muted">Signature marked ${escapeHtml(pdfSignoff.signatureLabel)} but image not on file.</p>`
+          : '<p class="muted">No signature image on file.</p>';
+      const pdfSignoffSection = pdfHasSignoff
+        ? `<section class="section">
       <h3>Customer sign-off</h3>
-      ${pdfCustomerName ? `<p><strong>Customer name:</strong> ${escapeHtml(pdfCustomerName)}</p>` : ''}
-      ${pdfCustomerReport.customer.position ? `<p><strong>Role / title:</strong> ${escapeHtml(pdfCustomerReport.customer.position)}</p>` : ''}
-      ${pdfCustomerReport.customer.feedback ? `<p><strong>Feedback:</strong> ${escapeHtml(pdfCustomerReport.customer.feedback)}</p>` : ''}
-      ${
-        pdfSigUrl
-          ? `<div class="signature-box"><img src="${escapeHtmlAttr(pdfSigUrl)}" alt="Customer signature" /></div>`
-          : pdfCustomerReport.customer.signatureLabel
-            ? `<p class="muted">Signature marked ${escapeHtml(pdfCustomerReport.customer.signatureLabel)} but image not on file.</p>`
-            : '<p class="muted">No customer signature recorded.</p>'
-      }
+      <div class="signoff-panel">
+        <div class="signoff-details">${pdfSignatoryDetails}</div>
+        <div class="signoff-signature">${pdfSignatureMarkup}</div>
+      </div>
     </section>`
-          : '';
+        : '';
 
       const html = `<!DOCTYPE html>
 <html>
@@ -1641,7 +1660,14 @@ const ServiceAndMaintenance = () => {
     .image-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .image-grid figure { margin: 0; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
     .image-grid img { width: 100%; height: 180px; object-fit: cover; display: block; }
-    .signature-box { margin-top: 8px; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; background: #fff; display: inline-block; max-width: 100%; }
+    .signoff-panel { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-top: 6px; }
+    .signoff-details { flex: 1 1 220px; min-width: 200px; }
+    .signoff-signature { flex: 0 1 auto; }
+    .signoff-meta { margin: 0; }
+    .signoff-meta dt { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.35px; margin-top: 6px; }
+    .signoff-meta dt:first-child { margin-top: 0; }
+    .signoff-meta dd { margin: 2px 0 0; font-size: 12px; font-weight: 600; color: #111827; white-space: pre-wrap; }
+    .signature-box { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; background: #fff; display: inline-block; max-width: 100%; }
     .signature-box img { display: block; max-height: 140px; max-width: 320px; object-fit: contain; }
     .footer { margin-top: 10px; font-size: 10px; color: #6b7280; text-align: center; }
   </style>
@@ -2988,7 +3014,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
 
                 {hasCustomerSignoffBlock ? (
                   <section
-                    className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-3`}
+                    className={`${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} rounded-xl border p-5 space-y-4`}
                   >
                     <header className="flex items-center gap-2">
                       <span
@@ -3003,91 +3029,92 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                           Customer sign-off
                         </div>
                         <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                          Name, role, feedback, and signature from the capture form
+                          Signatory details and captured signature
                         </div>
                       </div>
                     </header>
 
-                    {(signatureImageUrl ||
-                      signatureImageLoading ||
-                      signatureImageMissing ||
-                      signatureMarkedCaptured) && (
-                      <div
-                        className={`rounded-xl border p-4 ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                      <dl
+                        className={`grid flex-1 gap-3 text-sm sm:grid-cols-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
                       >
-                        <div className={`text-[11px] font-semibold uppercase mb-3 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
-                          Customer signature
-                          {resolvedCustomerName ? (
-                            <span className={`ml-2 font-normal normal-case ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                              — {resolvedCustomerName}
-                            </span>
-                          ) : null}
-                        </div>
-                        {signatureImageUrl ? (
-                          <figure
-                            className={`inline-block overflow-hidden rounded-xl border shadow-sm ${isDark ? 'border-gray-700 bg-white' : 'border-gray-200 bg-white'}`}
-                          >
-                            <img
-                              src={signatureImageUrl}
-                              alt={`Signature of ${resolvedCustomerName || 'customer'}`}
-                              className="block max-h-48 min-h-[80px] w-auto max-w-full object-contain px-2 py-2"
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          </figure>
-                        ) : signatureImageLoading ? (
-                          <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-                            Loading signature image…
-                          </div>
-                        ) : (
-                          <div className={`space-y-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            <p>
-                              This job card is marked as signed, but the signature image is not stored on the
-                              record. Ask the technician to edit the job card, re-sign, and tap{' '}
-                              <strong>Save signature</strong> before submitting.
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => void handleLoadAttachments()}
-                              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                            >
-                              <i className="fa-solid fa-rotate" aria-hidden />
-                              Retry loading attachments
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className={`grid gap-4 sm:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                      {resolvedCustomerName ? (
                         <div>
-                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                            Customer name
-                          </div>
-                          <div className="mt-1 font-medium">{resolvedCustomerName}</div>
+                          <dt className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Signatory name
+                          </dt>
+                          <dd className="mt-1 font-medium">{customerSignoff.name || '—'}</dd>
                         </div>
-                      ) : null}
-                      {otherCommentsReport.customer.position ? (
                         <div>
-                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          <dt className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                             Role / title
+                          </dt>
+                          <dd className="mt-1">{customerSignoff.position || '—'}</dd>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <dt className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Customer feedback
+                          </dt>
+                          <dd className={`mt-1 leading-relaxed whitespace-pre-wrap ${customerSignoff.feedback ? '' : isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            {customerSignoff.feedback || '—'}
+                          </dd>
+                        </div>
+                        {customerSignoff.signatureLabel ? (
+                          <div className="sm:col-span-2">
+                            <dt className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                              Signature status
+                            </dt>
+                            <dd className="mt-1">{customerSignoff.signatureLabel}</dd>
                           </div>
-                          <div className="mt-1">{otherCommentsReport.customer.position}</div>
+                        ) : null}
+                      </dl>
+
+                      {(signatureImageUrl ||
+                        signatureImageLoading ||
+                        signatureImageMissing ||
+                        signatureMarkedCaptured) && (
+                        <div
+                          className={`shrink-0 rounded-xl border p-4 lg:max-w-sm ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}
+                        >
+                          <div className={`text-[11px] font-semibold uppercase mb-3 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                            Signature
+                          </div>
+                          {signatureImageUrl ? (
+                            <figure
+                              className={`inline-block overflow-hidden rounded-xl border shadow-sm ${isDark ? 'border-gray-700 bg-white' : 'border-gray-200 bg-white'}`}
+                            >
+                              <img
+                                src={signatureImageUrl}
+                                alt={`Signature of ${customerSignoff.name || 'customer'}`}
+                                className="block max-h-48 min-h-[80px] w-auto max-w-full object-contain px-2 py-2"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            </figure>
+                          ) : signatureImageLoading ? (
+                            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                              <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+                              Loading signature image…
+                            </div>
+                          ) : (
+                            <div className={`space-y-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                              <p>
+                                Marked as signed but the image is not on file. Re-sign and tap{' '}
+                                <strong>Save signature</strong> before submitting.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void handleLoadAttachments()}
+                                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                              >
+                                <i className="fa-solid fa-rotate" aria-hidden />
+                                Retry loading attachments
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      ) : null}
+                      )}
                     </div>
-                    {otherCommentsReport.customer.feedback ? (
-                      <div>
-                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                          Customer feedback (text)
-                        </div>
-                        <p className={`mt-1 leading-relaxed whitespace-pre-wrap ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                          {otherCommentsReport.customer.feedback}
-                        </p>
-                      </div>
-                    ) : null}
+
                     {signatureAttachmentItems.length > 1 ? (
                       <div>
                         <div className={`text-[11px] font-semibold uppercase mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -3101,7 +3128,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                             >
                               <img
                                 src={s.url}
-                                alt="Customer signature"
+                                alt={`Signature of ${customerSignoff.name || 'customer'}`}
                                 className="max-h-40 max-w-full object-contain"
                                 loading="lazy"
                                 decoding="async"
