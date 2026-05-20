@@ -1576,9 +1576,12 @@ function buildMergedWizardJobCardRows(serverList) {
   }));
   const rows = [...localRows, ...serverRows];
   rows.sort((a, b) => {
-    const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
-    const ta = new Date(a.updatedAt || a.createdAt || 0).getTime();
-    return tb - ta;
+    const tb = new Date(b.createdAt || 0).getTime();
+    const ta = new Date(a.createdAt || 0).getTime();
+    if (tb !== ta) return tb - ta;
+    const nb = String(b.jobCardNumber || '');
+    const na = String(a.jobCardNumber || '');
+    return nb.localeCompare(na, undefined, { numeric: true });
   });
   return rows;
 }
@@ -2605,7 +2608,7 @@ const JobCardFormPublic = () => {
             page: '1',
             // Server caps list size; smaller batches keep the prior-card picker fast on phones.
             pageSize: '120',
-            sortField: 'updatedAt',
+            sortField: 'createdAt',
             sortDirection: 'desc'
           });
           if (priorSearchDebounced) params.set('q', priorSearchDebounced);
@@ -6845,7 +6848,7 @@ const JobCardFormPublic = () => {
           ) : (
             <ul className="max-w-2xl mx-auto space-y-2">
               {mergedPriorJobCards.map(jc => {
-                const when = jc.updatedAt || jc.startedAt || jc.createdAt;
+                const when = jc.createdAt;
                 const whenLabel = when
                   ? new Date(when).toLocaleString(undefined, {
                       dateStyle: 'medium',
