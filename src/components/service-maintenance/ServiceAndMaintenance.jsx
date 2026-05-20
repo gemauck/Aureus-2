@@ -113,6 +113,27 @@ function parseHeadingFromComments(rawComments) {
   return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 }
 
+function extractSignatureUrlFromJobCardPhotos(photos) {
+  let arr = photos;
+  if (typeof photos === 'string' && photos.trim()) {
+    try {
+      arr = JSON.parse(photos);
+    } catch {
+      return '';
+    }
+  }
+  if (!Array.isArray(arr)) return '';
+  const hit = arr.find(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      p.kind === 'signature' &&
+      typeof p.url === 'string' &&
+      p.url.trim()
+  );
+  return hit ? hit.url.trim() : '';
+}
+
 /** Same as manufacturing JobCards: SC media via authenticated fetch (img/video cannot send Bearer headers). */
 function JobCardSafetyCultureThumbnailService({
   mediaId,
@@ -877,9 +898,22 @@ const ServiceAndMaintenance = () => {
       }
       const pd = await pr.json();
       const photos = pd?.data?.photos ?? pd?.photos;
+      const photoList = Array.isArray(photos) ? photos : [];
+      const sigFromPhotos = extractSignatureUrlFromJobCardPhotos(photoList);
+      const sigFromPayload =
+        typeof (pd?.data?.customerSignature ?? pd?.customerSignature) === 'string'
+          ? String(pd.data?.customerSignature ?? pd.customerSignature).trim()
+          : '';
+      const customerSignature =
+        sigFromPhotos || (sigFromPayload.startsWith('data:image') ? sigFromPayload : '');
       setSelectedJobCard((prev) =>
         prev?.id === jobCardId
-          ? { ...prev, photos: Array.isArray(photos) ? photos : [], attachmentsPending: false }
+          ? {
+              ...prev,
+              photos: photoList,
+              customerSignature: customerSignature || prev?.customerSignature || '',
+              attachmentsPending: false
+            }
           : prev
       );
     } catch {
@@ -938,9 +972,7 @@ const ServiceAndMaintenance = () => {
         if (full && full.id) {
           setSelectedJobCard(full);
           setJobCardActivities(activities);
-          if (full.attachmentsPending === true) {
-            void fetchJobCardPhotosAndMerge(full.id);
-          }
+          void fetchJobCardPhotosAndMerge(full.id);
         }
       }
     } catch (e) {
@@ -998,9 +1030,7 @@ const ServiceAndMaintenance = () => {
         const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
         if (full && full.id) {
           setSelectedJobCard(full);
-          if (full.attachmentsPending === true) {
-            void fetchJobCardPhotosAndMerge(full.id);
-          }
+          void fetchJobCardPhotosAndMerge(full.id);
         }
       }
       if (ar.ok) {
@@ -1196,6 +1226,8 @@ const ServiceAndMaintenance = () => {
       });
     }
     if (fromPhotos.length > 0) return fromPhotos;
+    const fromParsed = extractSignatureUrlFromJobCardPhotos(photos);
+    if (fromParsed) return [{ url: fromParsed, idx: 0 }];
     const direct = selectedJobCard?.customerSignature;
     if (typeof direct === 'string' && direct.trim().startsWith('data:image')) {
       return [{ url: direct.trim(), idx: 0 }];
@@ -1250,6 +1282,18 @@ const ServiceAndMaintenance = () => {
   const jobCardAttachmentsLoading =
     (loadingJobCard && !Array.isArray(selectedJobCard?.photos)) ||
     loadingAttachments;
+
+  const signatureImageUrl = signatureAttachmentItems[0]?.url || '';
+  const signatureMarkedCaptured = Boolean(
+    otherCommentsReport.customer.signatureLabel &&
+      /captured/i.test(otherCommentsReport.customer.signatureLabel)
+  );
+  const signatureImageLoading =
+    Boolean(signatureMarkedCaptured || selectedJobCard?.attachmentsPending) &&
+    !signatureImageUrl &&
+    (loadingAttachments || jobCardAttachmentsLoading);
+  const signatureImageMissing =
+    signatureMarkedCaptured && !signatureImageUrl && !signatureImageLoading;
 
   const closePhotoLightbox = useCallback(() => {
     setPhotoLightboxUrl('');
@@ -1374,10 +1418,27 @@ const ServiceAndMaintenance = () => {
             const pd = await pr.json();
             const photos = pd?.data?.photos ?? pd?.photos;
             if (Array.isArray(photos)) {
-              jobCardForPdf = { ...jobCardForPdf, photos, attachmentsPending: false };
+              const sigUrl = extractSignatureUrlFromJobCardPhotos(photos);
+              const sigPayload =
+                typeof (pd?.data?.customerSignature ?? pd?.customerSignature) === 'string'
+                  ? String(pd.data?.customerSignature ?? pd.customerSignature).trim()
+                  : '';
+              const customerSignature =
+                sigUrl || (sigPayload.startsWith('data:image') ? sigPayload : '');
+              jobCardForPdf = {
+                ...jobCardForPdf,
+                photos,
+                customerSignature: customerSignature || jobCardForPdf.customerSignature,
+                attachmentsPending: false
+              };
               setSelectedJobCard((prev) =>
                 prev?.id === jobCardForPdf.id
-                  ? { ...prev, photos, attachmentsPending: false }
+                  ? {
+                      ...prev,
+                      photos,
+                      customerSignature: customerSignature || prev?.customerSignature,
+                      attachmentsPending: false
+                    }
                   : prev
               );
             }
@@ -1506,6 +1567,38 @@ const ServiceAndMaintenance = () => {
             </div>`
           : '<p class="muted">No images were available for this job card.</p>';
 
+      const pdfCustomerReport = splitJobCardOtherCommentsForReport(jobCardForPdf.otherComments || '');
+      const pdfCustomerName =
+        (jobCardForPdf.customerName && String(jobCardForPdf.customerName).trim()) ||
+        pdfCustomerReport.customer.name ||
+        '';
+      const pdfSigUrl =
+        extractSignatureUrlFromJobCardPhotos(jobCardForPdf.photos) ||
+        (typeof jobCardForPdf.customerSignature === 'string' &&
+        jobCardForPdf.customerSignature.trim().startsWith('data:image')
+          ? jobCardForPdf.customerSignature.trim()
+          : '');
+      const pdfSignoffSection =
+        pdfCustomerName ||
+        pdfCustomerReport.customer.position ||
+        pdfCustomerReport.customer.feedback ||
+        pdfSigUrl ||
+        pdfCustomerReport.customer.signatureLabel
+          ? `<section class="section">
+      <h3>Customer sign-off</h3>
+      ${pdfCustomerName ? `<p><strong>Customer name:</strong> ${escapeHtml(pdfCustomerName)}</p>` : ''}
+      ${pdfCustomerReport.customer.position ? `<p><strong>Role / title:</strong> ${escapeHtml(pdfCustomerReport.customer.position)}</p>` : ''}
+      ${pdfCustomerReport.customer.feedback ? `<p><strong>Feedback:</strong> ${escapeHtml(pdfCustomerReport.customer.feedback)}</p>` : ''}
+      ${
+        pdfSigUrl
+          ? `<div class="signature-box"><img src="${escapeHtml(pdfSigUrl)}" alt="Customer signature" /></div>`
+          : pdfCustomerReport.customer.signatureLabel
+            ? `<p class="muted">Signature marked ${escapeHtml(pdfCustomerReport.customer.signatureLabel)} but image not on file.</p>`
+            : '<p class="muted">No customer signature recorded.</p>'
+      }
+    </section>`
+          : '';
+
       const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1537,6 +1630,8 @@ const ServiceAndMaintenance = () => {
     .image-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .image-grid figure { margin: 0; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; }
     .image-grid img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    .signature-box { margin-top: 8px; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; background: #fff; display: inline-block; max-width: 100%; }
+    .signature-box img { display: block; max-height: 140px; max-width: 320px; object-fit: contain; }
     .footer { margin-top: 10px; font-size: 10px; color: #6b7280; text-align: center; }
   </style>
 </head>
@@ -1579,6 +1674,8 @@ const ServiceAndMaintenance = () => {
           : ''
       }
     </section>
+
+    ${pdfSignoffSection}
 
     <section class="section">
       <h3>Travel and costs</h3>
@@ -2898,66 +2995,74 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         </div>
                       </div>
                     </header>
-                    <div className={`grid gap-4 sm:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                      {resolvedCustomerName || otherCommentsReport.customer.position ? (
-                        <div
-                          className={
-                            signatureAttachmentItems.length > 0
-                              ? 'sm:col-span-1 flex flex-col sm:flex-row sm:items-start sm:gap-4'
-                              : ''
-                          }
-                        >
-                          <div className="min-w-0 flex-1">
-                            {resolvedCustomerName ? (
-                              <div>
-                                <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                  Customer name
-                                </div>
-                                <div className="mt-1 font-medium">{resolvedCustomerName}</div>
-                              </div>
-                            ) : null}
-                            {otherCommentsReport.customer.position ? (
-                              <div className={resolvedCustomerName ? 'mt-3' : ''}>
-                                <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                  Role / title
-                                </div>
-                                <div className="mt-1">{otherCommentsReport.customer.position}</div>
-                              </div>
-                            ) : null}
-                          </div>
-                          {signatureAttachmentItems.length > 0 ? (
-                            <figure
-                              className={`shrink-0 overflow-hidden rounded-xl border ${isDark ? 'border-gray-700 bg-gray-950' : 'border-gray-200 bg-white'}`}
-                            >
-                              <img
-                                src={signatureAttachmentItems[0].url}
-                                alt={`Signature of ${resolvedCustomerName || 'customer'}`}
-                                className="h-24 max-w-[220px] object-contain sm:h-28"
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            </figure>
+
+                    {(signatureImageUrl ||
+                      signatureImageLoading ||
+                      signatureImageMissing ||
+                      signatureMarkedCaptured) && (
+                      <div
+                        className={`rounded-xl border p-4 ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}
+                      >
+                        <div className={`text-[11px] font-semibold uppercase mb-3 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                          Customer signature
+                          {resolvedCustomerName ? (
+                            <span className={`ml-2 font-normal normal-case ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                              — {resolvedCustomerName}
+                            </span>
                           ) : null}
                         </div>
-                      ) : null}
-                      {signatureAttachmentItems.length > 0 &&
-                      !resolvedCustomerName &&
-                      !otherCommentsReport.customer.position ? (
-                        <div>
-                          <div className={`text-[11px] font-semibold uppercase mb-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                            Signature
-                          </div>
+                        {signatureImageUrl ? (
                           <figure
-                            className={`inline-block overflow-hidden rounded-xl border ${isDark ? 'border-gray-700 bg-gray-950' : 'border-gray-200 bg-white'}`}
+                            className={`inline-block overflow-hidden rounded-xl border shadow-sm ${isDark ? 'border-gray-700 bg-white' : 'border-gray-200 bg-white'}`}
                           >
                             <img
-                              src={signatureAttachmentItems[0].url}
-                              alt="Customer signature"
-                              className="max-h-40 max-w-full object-contain"
+                              src={signatureImageUrl}
+                              alt={`Signature of ${resolvedCustomerName || 'customer'}`}
+                              className="block max-h-48 min-h-[80px] w-auto max-w-full object-contain px-2 py-2"
                               loading="lazy"
                               decoding="async"
                             />
                           </figure>
+                        ) : signatureImageLoading ? (
+                          <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+                            Loading signature image…
+                          </div>
+                        ) : (
+                          <div className={`space-y-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <p>
+                              This job card is marked as signed, but the signature image is not stored on the
+                              record. Ask the technician to edit the job card, re-sign, and tap{' '}
+                              <strong>Save signature</strong> before submitting.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleLoadAttachments()}
+                              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              <i className="fa-solid fa-rotate" aria-hidden />
+                              Retry loading attachments
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className={`grid gap-4 sm:grid-cols-2 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                      {resolvedCustomerName ? (
+                        <div>
+                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Customer name
+                          </div>
+                          <div className="mt-1 font-medium">{resolvedCustomerName}</div>
+                        </div>
+                      ) : null}
+                      {otherCommentsReport.customer.position ? (
+                        <div>
+                          <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Role / title
+                          </div>
+                          <div className="mt-1">{otherCommentsReport.customer.position}</div>
                         </div>
                       ) : null}
                     </div>
@@ -2969,14 +3074,6 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         <p className={`mt-1 leading-relaxed whitespace-pre-wrap ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                           {otherCommentsReport.customer.feedback}
                         </p>
-                      </div>
-                    ) : null}
-                    {otherCommentsReport.customer.signatureLabel && signatureAttachmentItems.length === 0 ? (
-                      <div>
-                        <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                          Signature status
-                        </div>
-                        <div className="mt-1">{otherCommentsReport.customer.signatureLabel}</div>
                       </div>
                     ) : null}
                     {signatureAttachmentItems.length > 1 ? (

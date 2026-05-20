@@ -19,10 +19,12 @@ import {
 } from './_lib/jobCardSiteResolve.js'
 import {
   extractHeadingFromOtherComments,
+  extractSignatureDataUrlFromPhotos,
   finalizeJobCardOtherCommentsForSave,
   mergeCustomerSignoffIntoOtherComments,
   withComputedJobCardHeading
 } from './_lib/jobCardOtherComments.js'
+import { findJobCardByClientDraftId } from './_lib/jobCardIdempotency.js'
 import { sendEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import PDFDocument from 'pdfkit'
@@ -1189,9 +1191,20 @@ async function handler(req, res) {
         })
 
         if (omitPhotos) {
+          let customerSignature = common.customerSignature || ''
+          try {
+            const photoRow = await findJobCardByLookupParam(prisma, jobCard.id, { photos: true })
+            if (photoRow?.photos) {
+              customerSignature =
+                extractSignatureDataUrlFromPhotos(parseJson(photoRow.photos)) || customerSignature
+            }
+          } catch {
+            /* non-fatal — detail shell still loads */
+          }
           return ok(res, {
             jobCard: {
               ...common,
+              customerSignature,
               attachmentsPending: true
             }
           })
@@ -1220,6 +1233,30 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
+        const clientDraftId = String(body.clientDraftId || '').trim()
+        if (clientDraftId) {
+          const existingDraft = await findJobCardByClientDraftId(prisma, clientDraftId)
+          if (existingDraft) {
+            return created(res, {
+              jobCard: withComputedJobCardHeading({
+                ...existingDraft,
+                otherTechnicians: parseJson(existingDraft.otherTechnicians),
+                photos: parseJson(existingDraft.photos),
+                stockUsed: parseJson(existingDraft.stockUsed || '[]'),
+                materialsBought: parseJson(existingDraft.materialsBought || '[]'),
+                futureWorkScheduledAt: formatDate(existingDraft.futureWorkScheduledAt),
+                timeOfDeparture: formatDate(existingDraft.timeOfDeparture),
+                timeOfArrival: formatDate(existingDraft.timeOfArrival),
+                submittedAt: formatDate(existingDraft.submittedAt),
+                completedAt: formatDate(existingDraft.completedAt),
+                createdAt: formatDate(existingDraft.createdAt),
+                updatedAt: formatDate(existingDraft.updatedAt)
+              }),
+              idempotentReplay: true
+            })
+          }
+        }
+
         // Parse JSON fields
         const otherTechnicians = Array.isArray(body.otherTechnicians) 
           ? JSON.stringify(body.otherTechnicians) 
@@ -1371,7 +1408,8 @@ async function handler(req, res) {
             status: jobCard.status,
             jobCardNumber: jobCard.jobCardNumber,
             clientName: jobCard.clientName || '',
-            siteName: jobCard.siteName || ''
+            siteName: jobCard.siteName || '',
+            ...(clientDraftId ? { clientDraftId } : {})
           },
           source: 'web'
         })
@@ -2025,9 +2063,11 @@ async function handler(req, res) {
       if (!row) {
         return notFound(res, 'Job card not found')
       }
+      const photos = parseJson(row.photos)
       return ok(res, {
         jobCardId: row.id,
-        photos: parseJson(row.photos)
+        photos,
+        customerSignature: extractSignatureDataUrlFromPhotos(photos)
       })
     } catch (error) {
       console.error('❌ Failed to get job card photos:', error)
