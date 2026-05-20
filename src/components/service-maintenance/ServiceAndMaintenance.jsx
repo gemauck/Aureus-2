@@ -412,6 +412,87 @@ const ServiceAndMaintenance = () => {
   const [adminExtrasOpen, setAdminExtrasOpen] = useState(false);
   const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
   const createJobCardMenuRef = useRef(null);
+  const jobCardsListScrollRestoreFrameRef = useRef(null);
+
+  const JOB_CARDS_LIST_SCROLL_KEY = 'serviceMaintenance.jobCardsListScroll';
+  const JOB_CARDS_LIST_SCROLL_RESTORE_KEY = 'serviceMaintenance.jobCardsListScrollRestorePending';
+
+  const getJobCardsListScrollContainer = useCallback(() => {
+    const mainContainer = document.getElementById('main-page-scroll');
+    if (mainContainer && typeof mainContainer.scrollTop === 'number') {
+      return mainContainer;
+    }
+    return document.scrollingElement || document.documentElement || document.body;
+  }, []);
+
+  const saveJobCardsListScrollPosition = useCallback(
+    (jobCardId) => {
+      try {
+        const scrollContainer = getJobCardsListScrollContainer();
+        const scrollTop = Number(scrollContainer?.scrollTop || 0);
+        sessionStorage.setItem(
+          JOB_CARDS_LIST_SCROLL_KEY,
+          JSON.stringify({ scrollTop, jobCardId: jobCardId || null, savedAt: Date.now() })
+        );
+        sessionStorage.setItem(JOB_CARDS_LIST_SCROLL_RESTORE_KEY, '1');
+      } catch (error) {
+        console.warn('ServiceAndMaintenance: Failed to save job cards list scroll position', error);
+      }
+    },
+    [getJobCardsListScrollContainer]
+  );
+
+  const scrollJobCardListRowIntoView = useCallback((jobCardId) => {
+    if (!jobCardId) return;
+    const row = document.querySelector(`[data-job-card-row-id="${String(jobCardId)}"]`);
+    if (!row) return;
+    const main = document.getElementById('main-page-scroll');
+    const roots = [];
+    if (main) roots.push(main);
+    const docEl = document.scrollingElement;
+    if (docEl && !roots.includes(docEl)) roots.push(docEl);
+    for (const root of roots) {
+      if (!root || typeof root.scrollTo !== 'function') continue;
+      const rootRect = root.getBoundingClientRect();
+      const elRect = row.getBoundingClientRect();
+      const top = elRect.top - rootRect.top + root.scrollTop - 24;
+      root.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    }
+  }, []);
+
+  const restoreJobCardsListScrollPosition = useCallback(() => {
+    let savedScrollTop = 0;
+    let jobCardId = null;
+    try {
+      if (sessionStorage.getItem(JOB_CARDS_LIST_SCROLL_RESTORE_KEY) !== '1') return;
+      const rawSaved = sessionStorage.getItem(JOB_CARDS_LIST_SCROLL_KEY);
+      if (!rawSaved) {
+        sessionStorage.removeItem(JOB_CARDS_LIST_SCROLL_RESTORE_KEY);
+        return;
+      }
+      const parsed = JSON.parse(rawSaved);
+      savedScrollTop = Number(parsed?.scrollTop || 0);
+      jobCardId = parsed?.jobCardId || null;
+    } catch (error) {
+      console.warn('ServiceAndMaintenance: Failed to parse saved list scroll position', error);
+      sessionStorage.removeItem(JOB_CARDS_LIST_SCROLL_RESTORE_KEY);
+      return;
+    }
+
+    const apply = () => {
+      const scrollContainer = getJobCardsListScrollContainer();
+      if (scrollContainer && typeof scrollContainer.scrollTop === 'number') {
+        scrollContainer.scrollTop = savedScrollTop;
+      }
+      scrollJobCardListRowIntoView(jobCardId);
+    };
+
+    apply();
+    window.requestAnimationFrame(apply);
+    window.setTimeout(apply, 0);
+    window.setTimeout(apply, 120);
+    sessionStorage.removeItem(JOB_CARDS_LIST_SCROLL_RESTORE_KEY);
+  }, [getJobCardsListScrollContainer, scrollJobCardListRowIntoView]);
 
   // Load clients and users for JobCards (parallel — was sequential and added ~1–2× latency)
   useEffect(() => {
@@ -820,6 +901,7 @@ const ServiceAndMaintenance = () => {
   }, [selectedJobCard?.id, fetchJobCardPhotosAndMerge]);
 
   const handleOpenJobCardDetail = async (jobCard) => {
+    saveJobCardsListScrollPosition(jobCard?.id);
     if (!jobCard?.id) {
       setSelectedJobCard(jobCard);
       setShowJobCardDetail(true);
@@ -876,6 +958,27 @@ const ServiceAndMaintenance = () => {
     setJobCardActivities([]);
     setJobCardActivitiesLoading(false);
   };
+
+  useEffect(() => {
+    if (showJobCardDetail) return undefined;
+
+    if (jobCardsListScrollRestoreFrameRef.current) {
+      cancelAnimationFrame(jobCardsListScrollRestoreFrameRef.current);
+      jobCardsListScrollRestoreFrameRef.current = null;
+    }
+
+    jobCardsListScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+      restoreJobCardsListScrollPosition();
+      jobCardsListScrollRestoreFrameRef.current = null;
+    });
+
+    return () => {
+      if (jobCardsListScrollRestoreFrameRef.current) {
+        cancelAnimationFrame(jobCardsListScrollRestoreFrameRef.current);
+        jobCardsListScrollRestoreFrameRef.current = null;
+      }
+    };
+  }, [showJobCardDetail, restoreJobCardsListScrollPosition]);
 
   // Activity trail is loaded in parallel with the card in URL open / handleOpen / refetch — no separate effect (avoids duplicate GETs)
 

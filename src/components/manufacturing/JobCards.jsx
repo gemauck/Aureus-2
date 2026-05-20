@@ -609,6 +609,96 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [searchTipsOpen, setSearchTipsOpen] = useState(false);
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
+  const listScrollRestoreFrameRef = useRef(null);
+
+  const JOB_CARDS_INLINE_LIST_SCROLL_KEY = 'jobcards.inlineListScroll';
+  const JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY = 'jobcards.inlineListScrollRestorePending';
+
+  const getListScrollContainer = useCallback(() => {
+    const mainContainer = document.getElementById('main-page-scroll');
+    if (mainContainer && typeof mainContainer.scrollTop === 'number') {
+      return mainContainer;
+    }
+    return document.scrollingElement || document.documentElement || document.body;
+  }, []);
+
+  const saveListScrollPosition = useCallback(
+    (jobCardId) => {
+      if (typeof onOpenDetail === 'function') return;
+      try {
+        const scrollContainer = getListScrollContainer();
+        const scrollTop = Number(scrollContainer?.scrollTop || 0);
+        sessionStorage.setItem(
+          JOB_CARDS_INLINE_LIST_SCROLL_KEY,
+          JSON.stringify({ scrollTop, jobCardId: jobCardId || null, savedAt: Date.now() })
+        );
+        sessionStorage.setItem(JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY, '1');
+      } catch (error) {
+        console.warn('JobCards: Failed to save list scroll position', error);
+      }
+    },
+    [getListScrollContainer, onOpenDetail]
+  );
+
+  const scrollListRowIntoView = useCallback((jobCardId) => {
+    if (!jobCardId) return;
+    const row = document.querySelector(`[data-job-card-row-id="${String(jobCardId)}"]`);
+    if (!row) return;
+    const main = document.getElementById('main-page-scroll');
+    const roots = [];
+    if (main) roots.push(main);
+    const docEl = document.scrollingElement;
+    if (docEl && !roots.includes(docEl)) roots.push(docEl);
+    for (const root of roots) {
+      if (!root || typeof root.scrollTo !== 'function') continue;
+      const rootRect = root.getBoundingClientRect();
+      const elRect = row.getBoundingClientRect();
+      const top = elRect.top - rootRect.top + root.scrollTop - 24;
+      root.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    }
+  }, []);
+
+  const restoreListScrollPosition = useCallback(() => {
+    if (typeof onOpenDetail === 'function') return;
+    let savedScrollTop = 0;
+    let jobCardId = null;
+    try {
+      if (sessionStorage.getItem(JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY) !== '1') return;
+      const rawSaved = sessionStorage.getItem(JOB_CARDS_INLINE_LIST_SCROLL_KEY);
+      if (!rawSaved) {
+        sessionStorage.removeItem(JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY);
+        return;
+      }
+      const parsed = JSON.parse(rawSaved);
+      savedScrollTop = Number(parsed?.scrollTop || 0);
+      jobCardId = parsed?.jobCardId || null;
+    } catch (error) {
+      console.warn('JobCards: Failed to parse saved list scroll position', error);
+      sessionStorage.removeItem(JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY);
+      return;
+    }
+
+    const apply = () => {
+      const scrollContainer = getListScrollContainer();
+      if (scrollContainer && typeof scrollContainer.scrollTop === 'number') {
+        scrollContainer.scrollTop = savedScrollTop;
+      }
+      scrollListRowIntoView(jobCardId);
+    };
+
+    apply();
+    window.requestAnimationFrame(apply);
+    window.setTimeout(apply, 0);
+    window.setTimeout(apply, 120);
+    sessionStorage.removeItem(JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY);
+  }, [getListScrollContainer, onOpenDetail, scrollListRowIntoView]);
+
+  const closeJobCardDetail = useCallback(() => {
+    setShowDetail(false);
+    setSelectedJobCard(null);
+    setDetailServiceForms([]);
+    setDetailActivities([]);
+  }, []);
 
   const attachmentParts = useMemo(
     () =>
@@ -1121,6 +1211,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       onOpenDetail(jobCard);
       return;
     }
+    saveListScrollPosition(jobCard?.id);
     if (!jobCard?.id) {
       setSelectedJobCard(jobCard);
       setDetailServiceForms([]);
@@ -1384,6 +1475,27 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [photoLightboxUrl, closePhotoLightbox]);
+
+  useEffect(() => {
+    if (showDetail || typeof onOpenDetail === 'function') return undefined;
+
+    if (listScrollRestoreFrameRef.current) {
+      cancelAnimationFrame(listScrollRestoreFrameRef.current);
+      listScrollRestoreFrameRef.current = null;
+    }
+
+    listScrollRestoreFrameRef.current = requestAnimationFrame(() => {
+      restoreListScrollPosition();
+      listScrollRestoreFrameRef.current = null;
+    });
+
+    return () => {
+      if (listScrollRestoreFrameRef.current) {
+        cancelAnimationFrame(listScrollRestoreFrameRef.current);
+        listScrollRestoreFrameRef.current = null;
+      }
+    };
+  }, [showDetail, onOpenDetail, restoreListScrollPosition]);
 
   return (
     <div className={`relative mt-6 rounded-2xl shadow-sm overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
@@ -1735,6 +1847,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             return (
               <div
                 key={jc.id}
+                data-job-card-row-id={jc.id}
                 role="button"
                 tabIndex={0}
                 onClick={() => handleRowClick(jc)}
@@ -1919,6 +2032,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 return (
                   <tr
                     key={jc.id}
+                    data-job-card-row-id={jc.id}
                     className={`cursor-pointer ${isDark ? 'hover:bg-slate-800/80' : 'hover:bg-slate-50'}`}
                     onClick={() => handleRowClick(jc)}
                   >
@@ -2063,11 +2177,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setShowDetail(false);
-                  setSelectedJobCard(null);
-                  setDetailServiceForms([]);
-                }}
+                onClick={closeJobCardDetail}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800/70 text-slate-100 hover:bg-slate-700"
                 aria-label="Back to job cards"
               >
@@ -2942,11 +3052,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                onClick={() => {
-                  setShowDetail(false);
-                  setSelectedJobCard(null);
-                  setDetailServiceForms([]);
-                }}
+                onClick={closeJobCardDetail}
               >
                 <i className="fa-solid fa-xmark" />
                 Close
