@@ -1230,6 +1230,23 @@ const toDatetimeLocalInput = val => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+/** Stable local id for one wizard session (offline queue + POST idempotency). */
+function generateClientDraftId() {
+  return `jc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function buildNewJobCardEditingMeta(nowIso = new Date().toISOString()) {
+  const localId = generateClientDraftId();
+  return {
+    localId,
+    serverJobCardId: null,
+    startedAt: nowIso,
+    createdAt: nowIso,
+    synced: false,
+    jobCardNumber: ''
+  };
+}
+
 /** Prisma cuid or UUID — id stored on the server after submit */
 const isLikelyServerJobCardId = id => {
   if (id == null || id === '') return false;
@@ -1393,6 +1410,7 @@ async function syncOneLocalPendingJobCardToServer(draftCard) {
   if (!synced && !errorText) {
     const createPayload = { ...payloadObj };
     delete createPayload.id;
+    createPayload.clientDraftId = localId;
     const createBytes = estimateJsonBytes(createPayload);
     if (createBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
       return {
@@ -1670,6 +1688,7 @@ const JobCardFormPublic = () => {
   const [localDraftsTick, setLocalDraftsTick] = useState(0);
   const [pendingAutoSync, setPendingAutoSync] = useState({ running: false, synced: 0, failed: 0 });
   const pendingAutoSyncInFlightRef = useRef(false);
+  const saveInProgressRef = useRef(false);
   /** Activity trail when editing a card opened from prior list (server GET). */
   const [priorLoadedActivities, setPriorLoadedActivities] = useState([]);
   const [priorActivityLoading, setPriorActivityLoading] = useState(false);
@@ -3707,8 +3726,9 @@ const JobCardFormPublic = () => {
   };
 
   const startNewJobCard = () => {
-    setEditingMeta(null);
-    activeEditCardIdRef.current = null;
+    const meta = buildNewJobCardEditingMeta();
+    setEditingMeta(meta);
+    activeEditCardIdRef.current = meta.localId;
     sessionActivityQueueRef.current = [];
     setPriorLoadedActivities([]);
     setPriorActivityLoading(false);
@@ -4620,6 +4640,16 @@ const JobCardFormPublic = () => {
   }, [stockTakeScanOpen, wizardFlow]);
 
   const handleSave = async (options = {}) => {
+    if (saveInProgressRef.current) {
+      console.warn('JobCardFormPublic: save already in progress, ignoring duplicate tap');
+      return;
+    }
+    saveInProgressRef.current = true;
+    const releaseSaveLock = () => {
+      saveInProgressRef.current = false;
+      setIsSubmitting(false);
+    };
+
     const forceDraft = options?.forceDraft === true;
     const forceSubmitted = options?.forceSubmitted === true;
     const normalizedStatus = forceDraft
@@ -4632,11 +4662,13 @@ const JobCardFormPublic = () => {
     if (normalizedStatus !== 'draft' && !formData.clientId) {
       setStepError('Please select a client or choose "No Client" before submitting.');
       setCurrentStep(0);
+      releaseSaveLock();
       return;
     }
     if (normalizedStatus !== 'draft' && !formData.agentName) {
       setStepError('Please select the attending technician.');
       setCurrentStep(0);
+      releaseSaveLock();
       return;
     }
     const signatureForSave =
@@ -4645,6 +4677,7 @@ const JobCardFormPublic = () => {
     if (normalizedStatus === 'completed' && !signatureForSave) {
       setStepError('A customer signature is required when the job status is Completed.');
       setCurrentStep(STEP_IDS.length - 1);
+      releaseSaveLock();
       return;
     }
 
@@ -4653,11 +4686,22 @@ const JobCardFormPublic = () => {
     try {
       await new Promise((resolve) => requestAnimationFrame(() => resolve()));
       const nowIso = new Date().toISOString();
+      const draftLocalId =
+        editingMeta?.localId ?? activeEditCardIdRef.current ?? generateClientDraftId();
+      if (!editingMeta?.localId) {
+        setEditingMeta(prev => ({
+          ...(prev || buildNewJobCardEditingMeta(nowIso)),
+          localId: draftLocalId,
+          createdAt: prev?.createdAt ?? nowIso,
+          startedAt: prev?.startedAt ?? nowIso
+        }));
+        activeEditCardIdRef.current = draftLocalId;
+      }
       const jobCardData = {
         ...formData,
         customerSignature: signatureForSave,
         customerPosition: formData.customerTitle || '',
-        id: editingMeta?.localId ?? Date.now().toString(),
+        id: draftLocalId,
         startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
         createdAt: editingMeta?.createdAt ?? nowIso,
         updatedAt: nowIso,
@@ -4783,6 +4827,7 @@ const JobCardFormPublic = () => {
         delete createPayload.id;
         delete createPayload.serverJobCardId;
         delete createPayload.activityQueue;
+        createPayload.clientDraftId = draftLocalId;
         const estimatedCreatePayloadBytes = estimateJsonBytes(createPayload);
         if (estimatedCreatePayloadBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
           lastSyncError = 'Upload payload is too large for reliable sync on mobile. Remove some media and retry.';
@@ -4824,6 +4869,19 @@ const JobCardFormPublic = () => {
           const sid = jc?.id ? String(jc.id) : null;
           if (sid) {
             rememberPublicPriorJobCardId(sid);
+            resolvedServerId = sid;
+            setEditingMeta(prev =>
+              prev
+                ? { ...prev, serverJobCardId: sid, synced: true }
+                : {
+                    localId: draftLocalId,
+                    serverJobCardId: sid,
+                    createdAt: jobCardData.createdAt,
+                    startedAt: jobCardData.startedAt,
+                    synced: true,
+                    jobCardNumber: jc?.jobCardNumber || ''
+                  }
+            );
           }
           return { ok: true, serverId: sid };
         } catch (error) {
@@ -4938,7 +4996,7 @@ const JobCardFormPublic = () => {
       console.error('Error saving job card:', error);
       alert(`Failed to save job card: ${error.message}`);
     } finally {
-      setIsSubmitting(false);
+      releaseSaveLock();
     }
   };
 
@@ -4984,7 +5042,8 @@ const JobCardFormPublic = () => {
     }
     if (nextIdx >= 1) {
       const nowIso = new Date().toISOString();
-      const draftLocalId = editingMeta?.localId ?? Date.now().toString();
+      const draftLocalId =
+        editingMeta?.localId ?? activeEditCardIdRef.current ?? generateClientDraftId();
       const prevPending = readLocalPendingJobCards().find(
         c => c && String(c.id) === String(draftLocalId)
       );
