@@ -20,6 +20,7 @@ import {
 import {
   extractHeadingFromOtherComments,
   finalizeJobCardOtherCommentsForSave,
+  mergeCustomerSignoffIntoOtherComments,
   withComputedJobCardHeading
 } from './_lib/jobCardOtherComments.js'
 import { sendEmail } from './_lib/email.js'
@@ -1257,28 +1258,15 @@ async function handler(req, res) {
               : ''
 
         /** Align with public job card API: optional customer lines appended for search/display */
-        const mergeJobCardOtherComments = (b) => {
-          const base = b.otherComments != null ? String(b.otherComments) : ''
-          if (
-            !b.customerName &&
-            !b.customerTitle &&
-            !b.customerPosition &&
-            !b.customerFeedback &&
-            !b.customerSignature
-          ) {
-            return base
-          }
-          const pos = b.customerTitle || b.customerPosition
-          return [
-            base,
-            b.customerName ? `Customer: ${b.customerName}` : '',
-            pos ? `Position: ${pos}` : '',
-            b.customerFeedback ? `Feedback: ${b.customerFeedback}` : '',
-            b.customerSignature ? `Signature: [Captured]` : ''
-          ]
-            .filter(Boolean)
-            .join('\n')
-        }
+        const mergeJobCardOtherComments = (b) =>
+          mergeCustomerSignoffIntoOtherComments({
+            otherComments: b.otherComments != null ? String(b.otherComments) : '',
+            customerName: b.customerName,
+            customerTitle: b.customerTitle,
+            customerPosition: b.customerPosition,
+            customerFeedback: b.customerFeedback,
+            hasSignature: Boolean(b.customerSignature && String(b.customerSignature).trim())
+          })
 
         const otherCommentsForCreate =
           finalizeJobCardOtherCommentsForSave({
@@ -1506,25 +1494,17 @@ async function handler(req, res) {
             customerFeedback: body.customerFeedback,
             customerSignature: body.customerSignature
           }
-          let base = mergedBody.otherComments != null ? String(mergedBody.otherComments) : ''
-          if (
-            mergedBody.customerName ||
-            mergedBody.customerTitle ||
-            mergedBody.customerPosition ||
-            mergedBody.customerFeedback ||
-            mergedBody.customerSignature
-          ) {
-            const pos = mergedBody.customerTitle || mergedBody.customerPosition
-            base = [
-              base,
-              mergedBody.customerName ? `Customer: ${mergedBody.customerName}` : '',
-              pos ? `Position: ${pos}` : '',
-              mergedBody.customerFeedback ? `Feedback: ${mergedBody.customerFeedback}` : '',
-              mergedBody.customerSignature ? `Signature: [Captured]` : ''
-            ]
-              .filter(Boolean)
-              .join('\n')
-          }
+          const base = mergeCustomerSignoffIntoOtherComments({
+            otherComments:
+              mergedBody.otherComments != null ? String(mergedBody.otherComments) : '',
+            customerName: mergedBody.customerName,
+            customerTitle: mergedBody.customerTitle,
+            customerPosition: mergedBody.customerPosition,
+            customerFeedback: mergedBody.customerFeedback,
+            hasSignature: Boolean(
+              mergedBody.customerSignature && String(mergedBody.customerSignature).trim()
+            )
+          })
           const finalized = finalizeJobCardOtherCommentsForSave({
             otherComments: base,
             heading: body.heading,

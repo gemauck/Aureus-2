@@ -4,7 +4,10 @@ import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
-import { finalizeJobCardOtherCommentsForSave } from '../_lib/jobCardOtherComments.js'
+import {
+  finalizeJobCardOtherCommentsForSave,
+  mergeCustomerSignoffIntoOtherComments
+} from '../_lib/jobCardOtherComments.js'
 
 function formatDate(date) {
   if (!date) return null
@@ -201,15 +204,14 @@ async function handler(req, res) {
         // Store customer signature and details in otherComments
         otherComments:
           finalizeJobCardOtherCommentsForSave({
-            otherComments: [
-              body.otherComments || '',
-              body.customerName ? `Customer: ${body.customerName}` : '',
-              positionLine ? `Position: ${positionLine}` : '',
-              body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
-              body.customerSignature ? `Signature: [Captured]` : '',
-            ]
-              .filter(Boolean)
-              .join('\n'),
+            otherComments: mergeCustomerSignoffIntoOtherComments({
+              otherComments: body.otherComments || '',
+              customerName: body.customerName,
+              customerTitle: body.customerTitle,
+              customerPosition: body.customerPosition,
+              customerFeedback: body.customerFeedback,
+              hasSignature: Boolean(sigStr)
+            }),
             heading: body.heading,
             existingOtherComments: ''
           }) ?? '',

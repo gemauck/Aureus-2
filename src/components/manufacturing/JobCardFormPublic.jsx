@@ -764,7 +764,7 @@ const STEP_META = {
   },
   visit: {
     title: 'Site Visit',
-    subtitle: 'Trip & timing',
+    subtitle: 'Location & Time',
     icon: 'fa-route'
   },
   work: {
@@ -1593,6 +1593,7 @@ const JobCardFormPublic = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
+  const [signatureLocked, setSignatureLocked] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
   const [calendarStatus, setCalendarStatus] = useState('Copy calendar link');
   /** Voice clips recorded from text fields: saved with the job card and keyed by section */
@@ -2242,6 +2243,7 @@ const JobCardFormPublic = () => {
   }, []);
 
   const startSignature = useCallback((event) => {
+    if (signatureLocked) return;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
@@ -2251,10 +2253,10 @@ const JobCardFormPublic = () => {
     ctx.beginPath();
     ctx.moveTo(x, y);
     event.preventDefault();
-  }, [getSignaturePosition]);
+  }, [getSignaturePosition, signatureLocked]);
 
   const drawSignature = useCallback((event) => {
-    if (!isDrawingRef.current) return;
+    if (signatureLocked || !isDrawingRef.current) return;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
@@ -2264,15 +2266,25 @@ const JobCardFormPublic = () => {
     ctx.stroke();
     setHasSignature(true);
     event.preventDefault();
-  }, [getSignaturePosition]);
+  }, [getSignaturePosition, signatureLocked]);
 
   const endSignature = useCallback(() => {
     isDrawingRef.current = false;
   }, []);
 
+  const captureSignature = useCallback(() => {
+    if (!hasSignature || !signatureCanvasRef.current) return;
+    const dataUrl = signatureCanvasRef.current.toDataURL('image/png');
+    if (!dataUrl) return;
+    setFormData(prev => ({ ...prev, customerSignature: dataUrl }));
+    setSignatureLocked(true);
+    lastSignatureRestoreRef.current = dataUrl;
+  }, [hasSignature]);
+
   const clearSignature = useCallback(() => {
     lastSignatureRestoreRef.current = null;
     setFormData(prev => ({ ...prev, customerSignature: '' }));
+    setSignatureLocked(false);
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -2285,11 +2297,14 @@ const JobCardFormPublic = () => {
   }, [resizeSignatureCanvas]);
 
   const exportSignature = useCallback(() => {
+    if (signatureLocked && formData.customerSignature) {
+      return String(formData.customerSignature).trim();
+    }
     if (!hasSignature || !signatureCanvasRef.current) {
       return '';
     }
     return signatureCanvasRef.current.toDataURL('image/png');
-  }, [hasSignature]);
+  }, [hasSignature, signatureLocked, formData.customerSignature]);
 
   const handleShareLink = useCallback(async () => {
     const targetUrl = shareUrl || (typeof window !== 'undefined' ? `${window.location.origin}/job-card` : '/job-card');
@@ -3077,14 +3092,51 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     resizeSignatureCanvas();
+    if (signatureLocked && formData.customerSignature) {
+      const sig = formData.customerSignature;
+      if (typeof sig === 'string' && sig.startsWith('data:image') && lastSignatureRestoreRef.current !== sig) {
+        const canvas = signatureCanvasRef.current;
+        if (canvas) {
+          const img = new Image();
+          img.onload = () => {
+            resizeSignatureCanvas();
+            const ctx = canvas.getContext('2d');
+            const ratio = window.devicePixelRatio || 1;
+            ctx.drawImage(img, 0, 0, canvas.width / ratio, canvas.height / ratio);
+            setHasSignature(true);
+            lastSignatureRestoreRef.current = sig;
+          };
+          img.src = sig;
+        }
+      }
+    }
 
-    const handleResize = () => resizeSignatureCanvas();
+    const handleResize = () => {
+      resizeSignatureCanvas();
+      if (signatureLocked && formData.customerSignature) {
+        const sig = formData.customerSignature;
+        if (typeof sig === 'string' && sig.startsWith('data:image')) {
+          lastSignatureRestoreRef.current = null;
+          const canvas = signatureCanvasRef.current;
+          if (!canvas) return;
+          const img = new Image();
+          img.onload = () => {
+            resizeSignatureCanvas();
+            const ctx = canvas.getContext('2d');
+            const ratio = window.devicePixelRatio || 1;
+            ctx.drawImage(img, 0, 0, canvas.width / ratio, canvas.height / ratio);
+            lastSignatureRestoreRef.current = sig;
+          };
+          img.src = sig;
+        }
+      }
+    };
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [resizeSignatureCanvas]);
+  }, [resizeSignatureCanvas, signatureLocked, formData.customerSignature]);
 
   useEffect(() => {
     if (wizardFlow !== 'form') return;
@@ -3109,6 +3161,7 @@ const JobCardFormPublic = () => {
         const h = canvas.height / ratio;
         ctx.drawImage(img, 0, 0, w, h);
         setHasSignature(true);
+        setSignatureLocked(true);
         lastSignatureRestoreRef.current = sig;
       };
       img.onerror = () => {};
@@ -6103,12 +6156,15 @@ const JobCardFormPublic = () => {
               ref={signatureWrapperRef}
               className={[
                 'signature-wrapper border-2 rounded-lg overflow-hidden relative bg-white',
-                hasSignature ? 'border-blue-500' : 'border-gray-300'
+                signatureLocked || hasSignature ? 'border-blue-500' : 'border-gray-300'
               ].join(' ')}
             >
               <canvas
                 ref={signatureCanvasRef}
-                className="signature-canvas w-full h-48 touch-none"
+                className={[
+                  'signature-canvas w-full h-48 touch-none',
+                  signatureLocked ? 'pointer-events-none opacity-0' : ''
+                ].join(' ')}
                 style={{ touchAction: 'none', display: 'block' }}
                 onPointerDown={startSignature}
                 onPointerMove={drawSignature}
@@ -6123,7 +6179,14 @@ const JobCardFormPublic = () => {
                 onTouchEnd={endSignature}
                 onTouchCancel={endSignature}
               />
-              {!hasSignature && (
+              {signatureLocked && formData.customerSignature ? (
+                <img
+                  src={formData.customerSignature}
+                  alt="Saved customer signature"
+                  className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                />
+              ) : null}
+              {!hasSignature && !signatureLocked && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <p className="text-xs sm:text-sm text-gray-400 text-center px-4">
                     Sign here with finger or stylus
@@ -6131,17 +6194,46 @@ const JobCardFormPublic = () => {
           </div>
               )}
             </div>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-gray-500">
-                Signatures are stored securely with the job card record.
-              </span>
-              <button
-                type="button"
-                onClick={clearSignature}
-                className="text-sm font-medium text-blue-600 hover:text-blue-900"
-              >
-                Clear signature
-              </button>
+            <div className="mt-3 space-y-2">
+              {signatureLocked ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-emerald-700">
+                    <i className="fa-solid fa-lock mr-1" aria-hidden />
+                    Signature saved — safe to scroll
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSignature}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-900"
+                  >
+                    Clear and re-sign
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-gray-500">
+                    Tap Save after the customer signs so it stays in place.
+                  </span>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={captureSignature}
+                      disabled={!hasSignature}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Save signature
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearSignature}
+                      disabled={!hasSignature}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-900 disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -6178,7 +6270,10 @@ const JobCardFormPublic = () => {
             label="Job status"
             value={jobStatusOptions.find(o => o.value === formData.status)?.label || formData.status}
           />
-          <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
+          <SummaryRow
+            label="Customer Signature"
+            value={signatureLocked || hasSignature ? 'Captured' : 'Pending'}
+          />
         </div>
         <div className="mt-5 pt-5 border-t border-gray-200 space-y-4">
           <div>

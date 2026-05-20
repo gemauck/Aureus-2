@@ -49,6 +49,49 @@ const mergeHeadingIntoOtherComments = (rawComments, heading) => {
     return lines.filter(Boolean).join('\n');
 };
 
+const parseCustomerSignoffFromOtherComments = (rawComments) => {
+    const customer = { name: '', position: '', feedback: '' };
+    for (const line of String(rawComments || '').split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        if (t.startsWith('Customer:')) customer.name = t.slice('Customer:'.length).trim();
+        else if (t.startsWith('Position:')) customer.position = t.slice('Position:'.length).trim();
+        else if (t.startsWith('Feedback:')) customer.feedback = t.slice('Feedback:'.length).trim();
+    }
+    return customer;
+};
+
+const stripCustomerSignoffLinesFromComments = (rawComments) => {
+    const kept = [];
+    for (const line of String(rawComments || '').split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        if (
+            t.startsWith('Customer:') ||
+            t.startsWith('Position:') ||
+            t.startsWith('Feedback:') ||
+            t.startsWith('Signature:')
+        ) {
+            continue;
+        }
+        kept.push(line);
+    }
+    return kept.join('\n').trim();
+};
+
+const extractSignatureDataUrlFromPhotos = (photos) => {
+    const arr = parseJsonArrayField(photos);
+    const hit = arr.find(
+        (p) =>
+            p &&
+            typeof p === 'object' &&
+            p.kind === 'signature' &&
+            typeof p.url === 'string' &&
+            p.url.trim()
+    );
+    return hit ? hit.url.trim() : '';
+};
+
 function jobCardMediaIsVideoDataUrl(url) {
     return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -152,7 +195,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const signatureCanvasRef = useRef(null);
     const signatureWrapperRef = useRef(null);
     const isDrawingRef = useRef(false);
+    const lastSignatureRestoreRef = useRef(null);
     const [hasSignature, setHasSignature] = useState(false);
+    const [signatureLocked, setSignatureLocked] = useState(false);
 
     const addVoiceClip = useCallback((clip) => {
         setVoiceAttachments((prev) => [
@@ -184,11 +229,20 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 (p) => p && typeof p === 'object' && p.kind === 'voice'
             );
             const visualRaw = photosRaw.filter(
-                (p) => !p || typeof p !== 'object' || p.kind !== 'voice'
+                (p) =>
+                    !p ||
+                    typeof p !== 'object' ||
+                    (p.kind !== 'voice' && p.kind !== 'signature')
             );
             const visualUrls = visualRaw
                 .map((p) => (typeof p === 'string' ? p : p && p.url))
                 .filter(Boolean);
+            const parsedCustomer = parseCustomerSignoffFromOtherComments(jobCard.otherComments || '');
+            const savedSignature =
+                (typeof jobCard.customerSignature === 'string' && jobCard.customerSignature.trim()) ||
+                extractSignatureDataUrlFromPhotos(jobCard.photos) ||
+                '';
+            const technicianComments = stripCustomerSignoffLinesFromComments(jobCard.otherComments || '');
 
             setVoiceAttachments(
                 voiceEntries.map((v, i) => ({
@@ -226,17 +280,17 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 actionsTaken: jobCard.actionsTaken || '',
                 stockUsed: parseJsonArrayField(jobCard.stockUsed),
                 materialsBought: parseJsonArrayField(jobCard.materialsBought),
-                otherComments: jobCard.otherComments || '',
+                otherComments: technicianComments,
                 photos: visualUrls,
                 serviceForms: [],
                 status: jobCard.status || 'draft',
-                customerName: jobCard.customerName || '',
-                customerTitle: jobCard.customerTitle || '',
-                customerFeedback: jobCard.customerFeedback || '',
+                customerName: jobCard.customerName || parsedCustomer.name || '',
+                customerTitle: jobCard.customerTitle || parsedCustomer.position || '',
+                customerFeedback: jobCard.customerFeedback || parsedCustomer.feedback || '',
                 customerSignDate: jobCard.customerSignDate
                     ? String(jobCard.customerSignDate).slice(0, 10)
                     : '',
-                customerSignature: jobCard.customerSignature || ''
+                customerSignature: savedSignature
             });
             setSelectedPhotos(
                 visualUrls.map((url, i) => ({
@@ -244,7 +298,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                     url
                 }))
             );
-            setHasSignature(false);
+            setHasSignature(Boolean(savedSignature));
+            setSignatureLocked(Boolean(savedSignature));
+            lastSignatureRestoreRef.current = savedSignature || null;
         } else {
             setFormData({
                 heading: '',
@@ -283,6 +339,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             setSelectedPhotos([]);
             setVoiceAttachments([]);
             setHasSignature(false);
+            setSignatureLocked(false);
+            lastSignatureRestoreRef.current = null;
         }
     }, [jobCard]);
 
@@ -504,6 +562,28 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         ctx.fillRect(0, 0, width, height);
     }, []);
 
+    const restoreSignatureToCanvas = useCallback(
+        (dataUrl) => {
+            const canvas = signatureCanvasRef.current;
+            if (!canvas || !dataUrl || !String(dataUrl).startsWith('data:image')) return;
+            if (lastSignatureRestoreRef.current === dataUrl) return;
+            const img = new Image();
+            img.onload = () => {
+                if (lastSignatureRestoreRef.current === dataUrl) return;
+                resizeSignatureCanvas();
+                const ctx = canvas.getContext('2d');
+                const ratio = window.devicePixelRatio || 1;
+                const w = canvas.width / ratio;
+                const h = canvas.height / ratio;
+                ctx.drawImage(img, 0, 0, w, h);
+                setHasSignature(true);
+                lastSignatureRestoreRef.current = dataUrl;
+            };
+            img.src = dataUrl;
+        },
+        [resizeSignatureCanvas]
+    );
+
     const getSignaturePosition = useCallback((event) => {
         const canvas = signatureCanvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
@@ -517,6 +597,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
     const startSignature = useCallback(
         (event) => {
+            if (signatureLocked) return;
             const canvas = signatureCanvasRef.current;
             if (!canvas) return;
             isDrawingRef.current = true;
@@ -526,12 +607,12 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             ctx.moveTo(x, y);
             event.preventDefault();
         },
-        [getSignaturePosition]
+        [getSignaturePosition, signatureLocked]
     );
 
     const drawSignature = useCallback(
         (event) => {
-            if (!isDrawingRef.current) return;
+            if (signatureLocked || !isDrawingRef.current) return;
             const canvas = signatureCanvasRef.current;
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
@@ -541,15 +622,26 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             setHasSignature(true);
             event.preventDefault();
         },
-        [getSignaturePosition]
+        [getSignaturePosition, signatureLocked]
     );
 
     const endSignature = useCallback(() => {
         isDrawingRef.current = false;
     }, []);
 
+    const captureSignature = useCallback(() => {
+        if (!hasSignature || !signatureCanvasRef.current) return;
+        const dataUrl = signatureCanvasRef.current.toDataURL('image/png');
+        if (!dataUrl) return;
+        setFormData((prev) => ({ ...prev, customerSignature: dataUrl }));
+        setSignatureLocked(true);
+        lastSignatureRestoreRef.current = dataUrl;
+    }, [hasSignature]);
+
     const clearSignature = useCallback(() => {
+        lastSignatureRestoreRef.current = null;
         setFormData((prev) => ({ ...prev, customerSignature: '' }));
+        setSignatureLocked(false);
         const canvas = signatureCanvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -562,15 +654,32 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     }, [resizeSignatureCanvas]);
 
     const exportSignature = useCallback(() => {
+        if (signatureLocked && formData.customerSignature) {
+            return String(formData.customerSignature).trim();
+        }
         if (!hasSignature || !signatureCanvasRef.current) return '';
         return signatureCanvasRef.current.toDataURL('image/png');
-    }, [hasSignature]);
+    }, [hasSignature, signatureLocked, formData.customerSignature]);
 
     useLayoutEffect(() => {
         if (!isOpen) return;
-        const t = window.setTimeout(() => resizeSignatureCanvas(), 50);
+        const t = window.setTimeout(() => {
+            resizeSignatureCanvas();
+            if (signatureLocked && formData.customerSignature) {
+                restoreSignatureToCanvas(formData.customerSignature);
+            }
+        }, 50);
         return () => window.clearTimeout(t);
-    }, [isOpen, resizeSignatureCanvas]);
+    }, [isOpen, resizeSignatureCanvas, signatureLocked, formData.customerSignature, restoreSignatureToCanvas]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const sig = formData.customerSignature;
+        if (!sig || !String(sig).startsWith('data:image')) return;
+        if (!signatureLocked) return;
+        const raf = requestAnimationFrame(() => restoreSignatureToCanvas(sig));
+        return () => cancelAnimationFrame(raf);
+    }, [isOpen, formData.customerSignature, signatureLocked, restoreSignatureToCanvas]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -859,10 +968,10 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 url: v.dataUrl,
                 mimeType: v.mimeType || 'audio/webm'
             }));
-            const sigDataUrl = exportSignature();
-            const signatureObjects = sigDataUrl
-                ? [{ kind: 'signature', url: sigDataUrl }]
-                : [];
+            const sigDataUrl =
+                exportSignature() ||
+                (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
+            const signatureObjects = sigDataUrl ? [{ kind: 'signature', url: sigDataUrl }] : [];
 
             const { serviceForms: _sf, ...formWithoutForms } = formData;
             const nowIso = new Date().toISOString();
@@ -1778,31 +1887,74 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             <div
                                 ref={signatureWrapperRef}
                                 className={`signature-wrapper relative overflow-hidden rounded-xl border-2 bg-white dark:bg-slate-900 ${
-                                    hasSignature ? 'border-emerald-500' : 'border-slate-300 dark:border-slate-600'
+                                    signatureLocked || hasSignature
+                                        ? 'border-emerald-500'
+                                        : 'border-slate-300 dark:border-slate-600'
                                 }`}
                             >
                                 <canvas
                                     ref={signatureCanvasRef}
-                                    className="signature-canvas block h-[180px] w-full touch-none"
+                                    className={`signature-canvas block h-[180px] w-full touch-none ${
+                                        signatureLocked ? 'pointer-events-none opacity-0' : ''
+                                    }`}
                                     style={{ touchAction: 'none' }}
                                     onPointerDown={startSignature}
                                     onPointerMove={drawSignature}
                                     onPointerUp={endSignature}
                                     onPointerLeave={endSignature}
                                 />
-                                {!hasSignature && (
+                                {signatureLocked && formData.customerSignature ? (
+                                    <img
+                                        src={formData.customerSignature}
+                                        alt="Saved customer signature"
+                                        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                                    />
+                                ) : null}
+                                {!hasSignature && !signatureLocked && (
                                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                                         <span className="text-xs text-slate-400">Sign with mouse or touch</span>
                                     </div>
                                 )}
                             </div>
-                            <button
-                                type="button"
-                                onClick={clearSignature}
-                                className="mt-2 text-xs font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400"
-                            >
-                                Clear signature
-                            </button>
+                            <div className="mt-2 flex flex-wrap items-center gap-3">
+                                {signatureLocked ? (
+                                    <>
+                                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                            <i className="fa-solid fa-lock mr-1" aria-hidden />
+                                            Signature saved
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={clearSignature}
+                                            className="text-xs font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400"
+                                        >
+                                            Clear and re-sign
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={captureSignature}
+                                            disabled={!hasSignature}
+                                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            Save signature
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={clearSignature}
+                                            disabled={!hasSignature}
+                                            className="text-xs font-medium text-primary-600 hover:text-primary-800 disabled:opacity-50 dark:text-primary-400"
+                                        >
+                                            Clear
+                                        </button>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                                            Tap Save after the customer signs so it cannot be overwritten while scrolling.
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </section>
 

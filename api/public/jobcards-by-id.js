@@ -6,7 +6,11 @@ import { buildJobCardUpdateChanges } from '../_lib/jobCardActivityDiff.js'
 import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
-import { finalizeJobCardOtherCommentsForSave } from '../_lib/jobCardOtherComments.js'
+import {
+  finalizeJobCardOtherCommentsForSave,
+  mergeCustomerSignoffIntoOtherComments,
+  withComputedJobCardHeading
+} from '../_lib/jobCardOtherComments.js'
 
 function parseJson(str, defaultValue = []) {
   try {
@@ -48,7 +52,7 @@ async function handler(req, res) {
       const { safetyCultureSnapshotJson: _omitSafetyCultureBlob, ...jobCard } = row
 
       return ok(res, {
-        jobCard: {
+        jobCard: withComputedJobCardHeading({
           ...jobCard,
           otherTechnicians: parseJson(jobCard.otherTechnicians),
           photos: parseJson(jobCard.photos),
@@ -62,7 +66,7 @@ async function handler(req, res) {
           startedAt: formatDate(jobCard.startedAt),
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
-        }
+        })
       })
     } catch (error) {
       console.error('❌ Public job card GET error:', error)
@@ -170,17 +174,16 @@ async function handler(req, res) {
           ? String(body.otherComments)
           : String(existing.otherComments || '')
       otherCommentsUpdate = finalizeJobCardOtherCommentsForSave({
-        otherComments: [
-          baseComments,
-          body.customerName ? `Customer: ${body.customerName}` : '',
-          body.customerPosition || body.customerTitle
-            ? `Position: ${body.customerPosition || body.customerTitle}`
-            : '',
-          body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
-          body.customerSignature ? `Signature: [Captured]` : ''
-        ]
-          .filter(Boolean)
-          .join('\n'),
+        otherComments: mergeCustomerSignoffIntoOtherComments({
+          otherComments: baseComments,
+          customerName: body.customerName,
+          customerTitle: body.customerTitle,
+          customerPosition: body.customerPosition,
+          customerFeedback: body.customerFeedback,
+          hasSignature: Boolean(
+            body.customerSignature && String(body.customerSignature).trim()
+          )
+        }),
         heading: body.heading,
         existingOtherComments: existing.otherComments
       })

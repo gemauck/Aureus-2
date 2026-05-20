@@ -1,8 +1,12 @@
 import { describe, expect, test } from '@jest/globals'
 import {
   extractHeadingFromOtherComments,
+  extractSignatureDataUrlFromPhotos,
   finalizeJobCardOtherCommentsForSave,
+  mergeCustomerSignoffIntoOtherComments,
   mergeHeadingIntoOtherComments,
+  parseCustomerSignoffFromOtherComments,
+  stripCustomerSignoffLinesFromComments,
   withComputedJobCardHeading
 } from '../../../../api/_lib/jobCardOtherComments.js'
 
@@ -60,5 +64,55 @@ describe('jobCardOtherComments', () => {
         otherComments: 'Heading: B'
       }).heading
     ).toBe('A')
+  })
+
+  test('parseCustomerSignoffFromOtherComments reads merged lines', () => {
+    expect(
+      parseCustomerSignoffFromOtherComments(
+        'Notes\nCustomer: Jane Doe\nPosition: Manager\nFeedback: All good\nSignature: [Captured]'
+      )
+    ).toEqual({
+      name: 'Jane Doe',
+      position: 'Manager',
+      feedback: 'All good',
+      signatureLabel: '[Captured]'
+    })
+  })
+
+  test('stripCustomerSignoffLinesFromComments keeps technician notes', () => {
+    expect(
+      stripCustomerSignoffLinesFromComments(
+        'Heading: Pump\nCustomer: Jane\nPump replaced'
+      )
+    ).toBe('Heading: Pump\nPump replaced')
+  })
+
+  test('mergeCustomerSignoffIntoOtherComments replaces prior customer lines', () => {
+    expect(
+      mergeCustomerSignoffIntoOtherComments({
+        otherComments: 'Pump fixed\nCustomer: Old\nPosition: Old',
+        customerName: 'New Name',
+        customerTitle: 'Director',
+        customerFeedback: '',
+        hasSignature: true
+      })
+    ).toBe('Pump fixed\nCustomer: New Name\nPosition: Director\nSignature: [Captured]')
+  })
+
+  test('extractSignatureDataUrlFromPhotos finds signature attachment', () => {
+    expect(
+      extractSignatureDataUrlFromPhotos([
+        { kind: 'signature', url: 'data:image/png;base64,abc' }
+      ])
+    ).toBe('data:image/png;base64,abc')
+  })
+
+  test('withComputedJobCardHeading attaches customer fields and signature url', () => {
+    const row = withComputedJobCardHeading({
+      otherComments: 'Customer: Sam\nSignature: [Captured]',
+      photos: [{ kind: 'signature', url: 'data:image/png;base64,x' }]
+    })
+    expect(row.customerName).toBe('Sam')
+    expect(row.customerSignature).toBe('data:image/png;base64,x')
   })
 })

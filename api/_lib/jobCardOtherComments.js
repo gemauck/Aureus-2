@@ -62,7 +62,107 @@ export function finalizeJobCardOtherCommentsForSave({
   return mergeHeadingIntoOtherComments(base, heading)
 }
 
-/** Attach `heading` for API responses (list/detail/create/update). */
+/** Customer sign-off lines merged into `otherComments` on save (no dedicated DB columns). */
+const CUSTOMER_SIGNOFF_LINE_PREFIXES = [
+  'Customer:',
+  'Position:',
+  'Feedback:',
+  'Signature:'
+]
+
+/** @returns {{ name: string, position: string, feedback: string, signatureLabel: string }} */
+export function parseCustomerSignoffFromOtherComments(rawComments) {
+  const customer = { name: '', position: '', feedback: '', signatureLabel: '' }
+  for (const line of String(rawComments || '').split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    if (t.startsWith('Customer:')) {
+      customer.name = t.slice('Customer:'.length).trim()
+      continue
+    }
+    if (t.startsWith('Position:')) {
+      customer.position = t.slice('Position:'.length).trim()
+      continue
+    }
+    if (t.startsWith('Feedback:')) {
+      customer.feedback = t.slice('Feedback:'.length).trim()
+      continue
+    }
+    if (t.startsWith('Signature:')) {
+      customer.signatureLabel = t.slice('Signature:'.length).trim()
+      continue
+    }
+  }
+  return customer
+}
+
+/** Remove merged customer sign-off lines; keeps heading, project, and technician notes. */
+export function stripCustomerSignoffLinesFromComments(rawComments) {
+  const kept = []
+  for (const line of String(rawComments || '').split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    if (CUSTOMER_SIGNOFF_LINE_PREFIXES.some((prefix) => t.startsWith(prefix))) continue
+    kept.push(line)
+  }
+  return kept.join('\n').trim()
+}
+
+/** @param {unknown} photos */
+export function extractSignatureDataUrlFromPhotos(photos) {
+  let arr = photos
+  if (typeof photos === 'string' && photos.trim()) {
+    try {
+      arr = JSON.parse(photos)
+    } catch {
+      return ''
+    }
+  }
+  if (!Array.isArray(arr)) return ''
+  const hit = arr.find(
+    (p) =>
+      p &&
+      typeof p === 'object' &&
+      p.kind === 'signature' &&
+      typeof p.url === 'string' &&
+      p.url.trim()
+  )
+  return hit ? hit.url.trim() : ''
+}
+
+/**
+ * Append customer sign-off lines once (strips any prior customer lines from `otherComments` first).
+ */
+export function mergeCustomerSignoffIntoOtherComments({
+  otherComments,
+  customerName,
+  customerTitle,
+  customerPosition,
+  customerFeedback,
+  hasSignature
+}) {
+  const base = stripCustomerSignoffLinesFromComments(
+    otherComments != null ? String(otherComments) : ''
+  )
+  const pos = customerTitle || customerPosition
+  const hasCustomer =
+    customerName ||
+    pos ||
+    customerFeedback ||
+    hasSignature
+  if (!hasCustomer) return base
+  return [
+    base,
+    customerName ? `Customer: ${customerName}` : '',
+    pos ? `Position: ${pos}` : '',
+    customerFeedback ? `Feedback: ${customerFeedback}` : '',
+    hasSignature ? 'Signature: [Captured]' : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** Attach `heading` and parsed customer sign-off for API responses (list/detail/create/update). */
 export function withComputedJobCardHeading(jobCard) {
   if (!jobCard || typeof jobCard !== 'object') return jobCard
   const fromComments = extractHeadingFromOtherComments(jobCard.otherComments)
@@ -70,8 +170,14 @@ export function withComputedJobCardHeading(jobCard) {
     jobCard.heading != null && String(jobCard.heading).trim() !== ''
       ? String(jobCard.heading).trim()
       : ''
+  const parsed = parseCustomerSignoffFromOtherComments(jobCard.otherComments)
+  const signatureFromPhotos = extractSignatureDataUrlFromPhotos(jobCard.photos)
   return {
     ...jobCard,
-    heading: explicit || fromComments || ''
+    heading: explicit || fromComments || '',
+    customerName: parsed.name,
+    customerTitle: parsed.position,
+    customerFeedback: parsed.feedback,
+    customerSignature: signatureFromPhotos
   }
 }
