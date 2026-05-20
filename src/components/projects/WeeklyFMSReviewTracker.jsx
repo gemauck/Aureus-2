@@ -23,6 +23,11 @@ const appendPlainTextToRichValue = (value, plainSuffix) => {
     if (typeof value === 'string') return `${value}${value ? '\n' : ''}${suffix}`;
     return suffix;
 };
+const applyExcelStatusCellStyle = (cell, statusConfig, opts = {}) => {
+    if (typeof window !== 'undefined' && typeof window.applyTrackerStatusCellStyle === 'function') {
+        window.applyTrackerStatusCellStyle(cell, statusConfig, opts);
+    }
+};
 
 // Get React hooks from window
 const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
@@ -1630,9 +1635,9 @@ const gridColumns = React.useMemo(() => (
     // ============================================================
     
     const statusOptions = [
-        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600' },
-        { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500' },
-        { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500' }
+        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600', optionStyle: { backgroundColor: '#ffffff', color: '#374151' } },
+        { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
+        { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#334155' } }
     ];
     
     const getStatusConfig = (status) => {
@@ -2857,6 +2862,14 @@ const getAssigneeColor = (identifier, users) => {
                             });
                             const row = ws.addRow(rowValues);
                             weeks.forEach((week, wi) => {
+                                const status = getStatusForYear(doc.collectionStatus, week, selectedYear);
+                                const statusConfig = getStatusConfig(status);
+                                const statusCol = 2 + wi * 3;
+                                applyExcelStatusCellStyle(row.getCell(statusCol), statusConfig);
+                                applyExcelStatusCellStyle(row.getCell(notesColIndexes[wi]), statusConfig, {
+                                    fillOnly: true
+                                });
+
                                 const notesValue = buildWeeklyNotesExportValue(doc, week);
                                 if (notesValue !== '' && notesValue != null) {
                                     const cell = row.getCell(notesColIndexes[wi]);

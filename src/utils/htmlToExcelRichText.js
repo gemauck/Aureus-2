@@ -193,6 +193,39 @@ export function htmlToExcelRichTextValue(html, fontSize = 11) {
     return segmentsToExcelRichText(segments, fontSize);
 }
 
+/** Tailwind sky-50 — working-month column tint in Monthly Data Review. */
+export const WORKING_MONTH_FILL_ARGB = 'FFF0F9FF';
+
+/**
+ * Apply tracker status cell colours to an ExcelJS cell (matches optionStyle in the UI).
+ * @param {object} cell - ExcelJS cell
+ * @param {object|null} statusConfig - status option with optionStyle { backgroundColor, color }
+ * @param {{ workingMonth?: boolean, fillOnly?: boolean }} [opts]
+ */
+export function applyTrackerStatusCellStyle(cell, statusConfig, opts = {}) {
+    if (!cell) return;
+    const { workingMonth = false, fillOnly = false } = opts;
+    const style = statusConfig?.optionStyle;
+    const bgHex = style?.backgroundColor || (workingMonth && !statusConfig ? '#f0f9ff' : null);
+
+    if (bgHex) {
+        cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: normalizeColorToArgb(bgHex) }
+        };
+    }
+
+    if (!fillOnly && style) {
+        cell.font = {
+            name: 'Calibri',
+            size: 11,
+            bold: true,
+            color: { argb: normalizeColorToArgb(style.color || '#1f2937') }
+        };
+    }
+}
+
 /** Append plain suffix (e.g. reviewed stamp) to a string or richText value. */
 export function appendPlainTextToRichValue(value, plainSuffix) {
     const suffix = plainSuffix == null ? '' : String(plainSuffix);

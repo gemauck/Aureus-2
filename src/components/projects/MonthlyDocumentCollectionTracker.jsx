@@ -23,6 +23,11 @@ const appendPlainTextToRichValue = (value, plainSuffix) => {
     if (typeof value === 'string') return `${value}${value ? '\n' : ''}${suffix}`;
     return suffix;
 };
+const applyExcelStatusCellStyle = (cell, statusConfig, opts = {}) => {
+    if (typeof window !== 'undefined' && typeof window.applyTrackerStatusCellStyle === 'function') {
+        window.applyTrackerStatusCellStyle(cell, statusConfig, opts);
+    }
+};
 
 // Get React hooks from window
 const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
@@ -4466,6 +4471,24 @@ const getAssigneeColor = (identifier, users) => {
 
                             const row = ws.addRow(rowValues);
                             months.forEach((month, mi) => {
+                                const rawStatus = getStatusForYear(doc.collectionStatus, month, selectedYear);
+                                let exportKey = rawStatus;
+                                if (isMonthlyDataReview && rawStatus) {
+                                    exportKey = resolveMonthlyDataReviewStatusKey(rawStatus);
+                                } else if (isComplianceReview && rawStatus) {
+                                    exportKey = resolveComplianceStatusKey(rawStatus);
+                                }
+                                const statusConfig = getStatusConfig(exportKey || rawStatus);
+                                const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
+                                const statusCol = 2 + mi * 3;
+                                applyExcelStatusCellStyle(row.getCell(statusCol), statusConfig, {
+                                    workingMonth: isWorkingMonth && !statusConfig
+                                });
+                                applyExcelStatusCellStyle(row.getCell(notesColIndexes[mi]), statusConfig, {
+                                    workingMonth: isWorkingMonth && !statusConfig,
+                                    fillOnly: true
+                                });
+
                                 const notesValue = buildNotesExportValue(doc, month);
                                 if (notesValue !== '' && notesValue != null) {
                                     const cell = row.getCell(notesColIndexes[mi]);
