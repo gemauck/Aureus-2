@@ -305,7 +305,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const deletionQueueRef = useRef([]); // Queue for pending deletions when one is already in progress
     const isProcessingDeletionQueueRef = useRef(false); // Track if the deletion queue is currently being processed
     const scrollSyncRootRef = useRef(null); // Root element for querying scrollable table containers
-    const isScrollingRef = useRef(false); // Flag to prevent infinite scroll loops
+    /** Elements whose scroll events were triggered by sync (not user) — avoids feedback loops without blocking user scroll. */
+    const programmaticScrollElsRef = useRef(new WeakSet());
     const loadRetryTimeoutRef = useRef(null); // Timeout for single retry when load returns empty
     const hasRetriedLoadRef = useRef(false); // Only retry once per "load session"
     const showedPropDataRef = useRef(false); // True when we showed prop data so background fetch failure doesn't clear it
@@ -1595,28 +1596,54 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     // Use root ref + querySelectorAll. Listen to both 'scroll' and 'wheel' (deltaX); trackpad
     // horizontal scroll often fires wheel but not scroll on the overflow div.
     useLayoutEffect(() => {
-        if (sections.length === 0) return;
+        if (sections.length === 0 || trackerLayoutMode !== 'table' || isLoading) return;
         const root = scrollSyncRootRef.current;
         if (!root) return;
+        const expectedContainerCount = sections.length;
         const scrollHandlers = new Map();
         const wheelHandlers = new Map();
+        const programmatic = programmaticScrollElsRef.current;
+
+        const setScrollLeftSynced = (el, scrollLeft) => {
+            if (!el || el.scrollLeft === scrollLeft) return;
+            programmatic.add(el);
+            el.scrollLeft = scrollLeft;
+        };
+
         const handleScroll = (sourceElement) => {
-            if (isScrollingRef.current) return;
-            isScrollingRef.current = true;
+            if (programmatic.has(sourceElement)) {
+                programmatic.delete(sourceElement);
+                return;
+            }
             const scrollLeft = sourceElement.scrollLeft;
             scrollHandlers.forEach((_, el) => {
-                if (el !== sourceElement && el.isConnected) el.scrollLeft = scrollLeft;
+                if (el !== sourceElement && el.isConnected) setScrollLeftSynced(el, scrollLeft);
             });
-            requestAnimationFrame(() => { isScrollingRef.current = false; });
         };
+
+        const detachStale = (connected) => {
+            const connectedSet = new Set(connected);
+            scrollHandlers.forEach((handler, el) => {
+                if (!connectedSet.has(el)) {
+                    el.removeEventListener('scroll', handler);
+                    scrollHandlers.delete(el);
+                }
+            });
+            wheelHandlers.forEach((handler, el) => {
+                if (!connectedSet.has(el)) {
+                    el.removeEventListener('wheel', handler);
+                    wheelHandlers.delete(el);
+                }
+            });
+        };
+
         const attach = () => {
             const containers = Array.from(root.querySelectorAll('[data-scroll-sync]'));
-            const connected = containers.filter(el => el.isConnected);
+            const connected = containers.filter((el) => el.isConnected);
             if (connected.length === 0) return false;
-            // Register listeners on every section first. Baseline scrollLeft sync used to run
-            // while registering in document order; synthetic scroll events could fire before
-            // later sections had handlers — peers stayed out of sync until manual scroll.
-            connected.forEach(el => {
+            detachStale(connected);
+
+            connected.forEach((el) => {
                 if (scrollHandlers.has(el)) return;
                 const onScroll = () => handleScroll(el);
                 scrollHandlers.set(el, onScroll);
@@ -1629,43 +1656,74 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
                     if (dx === 0) return;
                     e.preventDefault();
                     const maxScroll = el.scrollWidth - el.clientWidth;
-                    el.scrollLeft = Math.max(0, Math.min(el.scrollLeft + dx, maxScroll));
+                    setScrollLeftSynced(el, Math.max(0, Math.min(el.scrollLeft + dx, maxScroll)));
                     handleScroll(el);
                 };
                 wheelHandlers.set(el, onWheel);
                 el.addEventListener('wheel', onWheel, { passive: false });
             });
-            const baselineScrollLeft = connected[0].scrollLeft;
-            isScrollingRef.current = true;
-            connected.forEach(el => {
-                if (el.scrollLeft !== baselineScrollLeft) el.scrollLeft = baselineScrollLeft;
-            });
-            requestAnimationFrame(() => {
-                isScrollingRef.current = false;
-            });
+
+            // Wait until every section table is in the DOM before treating attach as complete.
+            if (connected.length < expectedContainerCount) return false;
+
+            // Baseline sync only after all sections have listeners (avoids partial sync drift).
+            const baselineScrollLeft = connected.reduce(
+                (max, el) => Math.max(max, el.scrollLeft),
+                connected[0].scrollLeft
+            );
+            connected.forEach((el) => setScrollLeftSynced(el, baselineScrollLeft));
+            if (DEBUG_SCROLL_SYNC) {
+                console.log('[scroll-sync] attached', connected.length, 'containers, baseline', baselineScrollLeft);
+            }
             return true;
         };
+
         const cleanup = () => {
             scrollHandlers.forEach((handler, el) => el.removeEventListener('scroll', handler));
             scrollHandlers.clear();
             wheelHandlers.forEach((handler, el) => el.removeEventListener('wheel', handler));
             wheelHandlers.clear();
         };
-        if (attach()) return cleanup;
+
         let rafId = null;
         let retries = 0;
-        const retry = () => {
-            rafId = null;
-            if (attach()) return;
-            retries += 1;
-            if (retries < 10) rafId = requestAnimationFrame(retry);
+        const scheduleRetry = () => {
+            if (rafId != null) return;
+            const retry = () => {
+                rafId = null;
+                if (attach()) return;
+                retries += 1;
+                if (retries < 24) rafId = requestAnimationFrame(retry);
+            };
+            rafId = requestAnimationFrame(retry);
         };
-        rafId = requestAnimationFrame(retry);
+
+        if (!attach()) scheduleRetry();
+
+        let moDebounceId = null;
+        const observer = new MutationObserver(() => {
+            if (moDebounceId != null) cancelAnimationFrame(moDebounceId);
+            moDebounceId = requestAnimationFrame(() => {
+                moDebounceId = null;
+                const containers = Array.from(root.querySelectorAll('[data-scroll-sync]')).filter((el) => el.isConnected);
+                const needsRebind =
+                    containers.length !== scrollHandlers.size ||
+                    containers.some((el) => !scrollHandlers.has(el));
+                if (needsRebind) {
+                    retries = 0;
+                    if (!attach()) scheduleRetry();
+                }
+            });
+        });
+        observer.observe(root, { childList: true, subtree: true });
+
         return () => {
             if (rafId != null) cancelAnimationFrame(rafId);
+            if (moDebounceId != null) cancelAnimationFrame(moDebounceId);
+            observer.disconnect();
             cleanup();
         };
-    }, [sections.length, scrollSyncBindingKey]);
+    }, [sections.length, scrollSyncBindingKey, trackerLayoutMode, isLoading]);
 
     // Monthly Data Review: auto-navigate horizontally to the highlighted working month column.
     useEffect(() => {
@@ -1693,7 +1751,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (!targetHeader) return false;
 
             const targetLeft = Math.max(0, targetHeader.offsetLeft - stickyColWidthPx - 16);
+            const programmatic = programmaticScrollElsRef.current;
             containers.forEach((container) => {
+                programmatic.add(container);
                 container.scrollLeft = targetLeft;
             });
             return true;
