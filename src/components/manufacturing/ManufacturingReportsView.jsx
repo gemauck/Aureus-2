@@ -113,6 +113,7 @@
         'recordSource',
         'date',
         'movement_date',
+        'customerName',
         'order_orderNumber',
         'jobCard_jobCardNumber',
         'jobCard_clientName',
@@ -236,6 +237,13 @@
     return stored;
   }
 
+  function formatAllocationCustomerName(client, site) {
+    const c = client != null ? String(client).trim() : '';
+    const s = site != null ? String(site).trim() : '';
+    if (c && s) return `${c}: ${s}`;
+    return c || s;
+  }
+
   function getClientNameFromAllocationRow(row) {
     const name = row.jobCard_clientName || row.order_clientName || '';
     if (name && String(name).trim()) return String(name).trim();
@@ -248,12 +256,15 @@
     return '';
   }
 
-  /** QuickBooks journal "Name" — client, with site when present on job cards. */
+  /** QuickBooks journal "Name" — "Client: Site" when site present, else client only. */
   function getJournalCustomerNameFromRow(row) {
-    const client = getClientNameFromAllocationRow(row);
-    const site = getSiteNameFromAllocationRow(row);
-    if (client && site) return `${client} — ${site}`;
-    return client || site;
+    if (row.customerName != null && String(row.customerName).trim()) {
+      return String(row.customerName).trim();
+    }
+    return formatAllocationCustomerName(
+      getClientNameFromAllocationRow(row),
+      getSiteNameFromAllocationRow(row)
+    );
   }
 
   function getJournalClassFromRow(row) {
@@ -544,6 +555,7 @@
             if (!items.length) {
               out.push({
                 sourceType: 'Sales Order',
+                customerName: resolvedClientName,
                 ...orderFields,
                 line_index: '',
                 line_sku: '',
@@ -566,6 +578,7 @@
               const lineValue = qty * unitCost;
               out.push({
                 sourceType: 'Sales Order',
+                customerName: resolvedClientName,
                 ...orderFields,
                 line_index: idx + 1,
                 line_id: item.id || '',
@@ -599,6 +612,7 @@
             jc.clientId,
             clientNameById
           );
+          const customerName = formatAllocationCustomerName(resolvedJcClientName, jc.siteName);
           const jcForRow = { ...jc, clientName: resolvedJcClientName };
           const jcFields = prefixKeys(jcForRow, 'jobCard');
 
@@ -609,6 +623,7 @@
             const lineValue = qty * unitCost;
             out.push({
               sourceType: 'Job Card Consumption',
+              customerName,
               ...jcFields,
               line_index: idx + 1,
               line_id: line.id || '',
