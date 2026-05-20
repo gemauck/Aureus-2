@@ -198,6 +198,8 @@
   ];
   const JOURNAL_ACCOUNT_STOCK_ASSET = 'Stock on Hand';
   const JOURNAL_ACCOUNT_PARTS_COS = 'Parts & Components - COS';
+  const JOURNAL_ACCOUNT_REPAIRS_COS = 'Repairs & Maintenance - COS';
+  const JOURNAL_JOB_CARD_CATEGORY_NEW_INSTALL = 'New Install';
   const JOURNAL_DEFAULT_CLASS = 'Technical';
 
   function excelSerialFromLocalDate(date = new Date()) {
@@ -236,6 +238,13 @@
     const svc = row.jobCard_serviceCategory;
     if (svc && String(svc).trim()) return String(svc).trim();
     return JOURNAL_DEFAULT_CLASS;
+  }
+
+  /** QuickBooks debit account: New Install job cards → Parts & Components; all else → Repairs & Maintenance. */
+  function getJournalDebitAccountFromRow(row) {
+    const category = String(row.jobCard_callOutCategory || '').trim();
+    if (category === JOURNAL_JOB_CARD_CATEGORY_NEW_INSTALL) return JOURNAL_ACCOUNT_PARTS_COS;
+    return JOURNAL_ACCOUNT_REPAIRS_COS;
   }
 
   function getAllocationLineValue(row) {
@@ -299,7 +308,7 @@
       out.push([
         journalNo,
         journalDateSerial,
-        JOURNAL_ACCOUNT_PARTS_COS,
+        getJournalDebitAccountFromRow(row),
         buildJournalDebitDescription(row),
         formatJournalAmount(value),
         '',
@@ -876,7 +885,7 @@
                     !rows.some((row) => getAllocationLineValue(row) > 0),
                   className: 'px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50',
                   title:
-                    'Download QuickBooks journal CSV (Stock on Hand credit, Parts & Components - COS debit per client line)'
+                    'Download QuickBooks journal CSV (Stock on Hand credit; debit Parts & Components for New Install job cards, else Repairs & Maintenance - COS)'
                 },
                 React.createElement('i', { className: 'fas fa-book text-xs' }),
                 journalExporting ? 'Exporting journal…' : 'Journal Export'
