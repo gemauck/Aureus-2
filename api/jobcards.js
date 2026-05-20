@@ -123,14 +123,6 @@ function formatPdfDateSast(value) {
   })
 }
 
-function extractHeadingFromOtherComments(rawComments) {
-  if (!rawComments || typeof rawComments !== 'string') return ''
-  const line = rawComments
-    .split('\n')
-    .find((entry) => typeof entry === 'string' && entry.trim().startsWith(BILLING_PDF_HEADING_PREFIX))
-  return line ? line.slice(BILLING_PDF_HEADING_PREFIX.length).trim() : ''
-}
-
 function technicianNotesFromOtherComments(rawComments) {
   if (!rawComments || typeof rawComments !== 'string') return ''
   const kept = []
