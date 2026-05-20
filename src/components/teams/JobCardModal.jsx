@@ -1129,11 +1129,11 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                         </div>
                     </div>
 
-                    {/* Time of Departure and Arrival */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Travel & timing */}
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                Time of Departure
+                                Departure time
                             </label>
                             <input
                                 type="datetime-local"
@@ -1145,7 +1145,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                Time of Arrival
+                                Arrival time
                             </label>
                             <input
                                 type="datetime-local"
@@ -1155,61 +1155,26 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             />
                         </div>
-                    </div>
-
-                    {/* Vehicle and Kilometer Readings */}
-                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                Vehicle Used
+                                Total time
                             </label>
-                            <input
-                                type="text"
-                                name="vehicleUsed"
-                                value={formData.vehicleUsed}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                placeholder="e.g., AB12 CD 3456"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                KM Reading Before
-                            </label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                name="kmReadingBefore"
-                                value={formData.kmReadingBefore}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                placeholder="0.0"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                KM Reading After
-                            </label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                name="kmReadingAfter"
-                                value={formData.kmReadingAfter}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                placeholder="0.0"
-                            />
+                            <div
+                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-slate-50 text-gray-900 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
+                                aria-live="polite"
+                            >
+                                {(() => {
+                                    const h = window.jobCardActivityHelpers;
+                                    const minutes = h?.travelMinutesFromDatetimeLocals?.(
+                                        formData.timeOfDeparture,
+                                        formData.timeOfArrival
+                                    );
+                                    const label = h?.formatTravelDurationMinutes?.(minutes);
+                                    return label || '—';
+                                })()}
+                            </div>
                         </div>
                     </div>
-
-                    {/* Travel Kilometers Display */}
-                    {formData.kmReadingBefore && formData.kmReadingAfter && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 dark:bg-blue-900 dark:border-blue-700">
-                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                                Travel Distance: {parseFloat(formData.kmReadingAfter || 0) - parseFloat(formData.kmReadingBefore || 0)} km
-                            </p>
-                        </div>
-                    )}
 
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">

@@ -236,11 +236,38 @@ export function sortJobCardActivitiesChronological(activities) {
   });
 }
 
+/**
+ * Minutes between departure and arrival (datetime-local or ISO strings).
+ * @returns {number|null} null when incomplete or arrival is before departure
+ */
+export function travelMinutesFromDatetimeLocals(departure, arrival) {
+  if (!departure || !arrival) return null;
+  const dep = new Date(departure);
+  const arr = new Date(arrival);
+  if (Number.isNaN(dep.getTime()) || Number.isNaN(arr.getTime())) return null;
+  const diffMs = arr.getTime() - dep.getTime();
+  if (diffMs < 0) return null;
+  return Math.round(diffMs / 60000);
+}
+
+/** Human-readable travel duration from minutes (e.g. "2h 15 min"). */
+export function formatTravelDurationMinutes(minutes) {
+  if (minutes == null || !Number.isFinite(minutes)) return '';
+  if (minutes === 0) return '0 min';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m} min`;
+  if (h > 0) return `${h}h`;
+  return `${m} min`;
+}
+
 const jobCardActivityHelpers = {
   formatJobCardActivityAction,
   formatJobCardActivityDetail,
   formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
+  travelMinutesFromDatetimeLocals,
+  formatTravelDurationMinutes,
   JOB_CARD_ACTIVITY_STEP_LABELS,
   JOB_CARD_FIELD_LABELS,
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS

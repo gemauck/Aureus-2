@@ -5,6 +5,8 @@ import {
   formatJobCardActivityDetail,
   formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
+  travelMinutesFromDatetimeLocals,
+  formatTravelDurationMinutes,
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 } from './jobCardActivityDisplay.js';
 import jsQR from 'jsqr';
@@ -2160,9 +2162,14 @@ const JobCardFormPublic = () => {
     []
   );
 
-  const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
-    ? Math.max(0, parseFloat(formData.kmReadingAfter) - parseFloat(formData.kmReadingBefore))
-    : 0;
+  const travelDurationMinutes = useMemo(
+    () => travelMinutesFromDatetimeLocals(formData.timeOfDeparture, formData.timeOfArrival),
+    [formData.timeOfDeparture, formData.timeOfArrival]
+  );
+  const travelDurationLabel = useMemo(
+    () => formatTravelDurationMinutes(travelDurationMinutes),
+    [travelDurationMinutes]
+  );
 
   const totalMaterialCost = useMemo(
     () => (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0),
@@ -5271,95 +5278,47 @@ const JobCardFormPublic = () => {
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Travel & Timing</h2>
-          <p className="text-sm text-gray-500 mt-1">Record departure, arrival, vehicle and kilometer readings.</p>
+          <p className="text-sm text-gray-500 mt-1">Record departure and arrival times. Total travel time is calculated automatically.</p>
         </header>
-        <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Time of Departure
-                </label>
-                <input
-                  type="datetime-local"
-                  name="timeOfDeparture"
-                  value={formData.timeOfDeparture}
-                  onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                style={{ fontSize: '16px' }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Time of Arrival
-                </label>
-                <input
-                  type="datetime-local"
-                  name="timeOfArrival"
-                  value={formData.timeOfArrival}
-                  onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                style={{ fontSize: '16px' }}
-                />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Departure time
+            </label>
+            <input
+              type="datetime-local"
+              name="timeOfDeparture"
+              value={formData.timeOfDeparture}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Arrival time
+            </label>
+            <input
+              type="datetime-local"
+              name="timeOfArrival"
+              value={formData.timeOfArrival}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              style={{ fontSize: '16px' }}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Total time
+            </label>
+            <div
+              className="w-full px-4 py-3 text-base border border-gray-200 rounded-lg bg-slate-50 text-gray-900"
+              style={{ fontSize: '16px' }}
+              aria-live="polite"
+            >
+              {travelDurationLabel || '—'}
             </div>
           </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Vehicle Used
-                </label>
-                <input
-                  type="text"
-                  name="vehicleUsed"
-                  value={formData.vehicleUsed}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., AB12 CD GP"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  KM Reading Before
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  name="kmReadingBefore"
-                  value={formData.kmReadingBefore}
-                  onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.0"
-                style={{ fontSize: '16px' }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  KM Reading After
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  name="kmReadingAfter"
-                  value={formData.kmReadingAfter}
-                  onChange={handleChange}
-                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.0"
-                style={{ fontSize: '16px' }}
-                />
-            </div>
-          </div>
-
-          {travelKm > 0 && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/50 dark:bg-blue-950/30 flex items-center gap-2">
-              <i className="fas fa-road text-blue-600"></i>
-              <p className="text-sm font-medium text-blue-950">
-                Travel Distance: {travelKm.toFixed(1)} km
-              </p>
-            </div>
-          )}
         </div>
       </section>
       {renderNavigationButtons()}
@@ -6209,7 +6168,7 @@ const JobCardFormPublic = () => {
           />
           <SummaryRow label="Client" value={formData.clientName || clients.find(c => c.id === formData.clientId)?.name} />
           <SummaryRow label="Site" value={formData.siteName} />
-          <SummaryRow label="Travel Distance" value={travelKm > 0 ? `${travelKm.toFixed(1)} km` : ''} />
+          <SummaryRow label="Travel time" value={travelDurationLabel} />
           <SummaryRow label="Stock Lines" value={formData.stockUsed.length > 0 ? `${formData.stockUsed.length}` : ''} />
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
           <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />
