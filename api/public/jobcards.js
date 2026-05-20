@@ -4,6 +4,7 @@ import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
+import { finalizeJobCardOtherCommentsForSave } from '../_lib/jobCardOtherComments.js'
 
 function formatDate(date) {
   if (!date) return null
@@ -198,15 +199,20 @@ async function handler(req, res) {
         totalMaterialsCost,
         photos: JSON.stringify(photos),
         // Store customer signature and details in otherComments
-        otherComments: [
-          body.otherComments || '',
-          body.customerName ? `Customer: ${body.customerName}` : '',
-          positionLine ? `Position: ${positionLine}` : '',
-          body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
-          body.customerSignature ? `Signature: [Captured]` : '',
-        ]
-          .filter(Boolean)
-          .join('\n'),
+        otherComments:
+          finalizeJobCardOtherCommentsForSave({
+            otherComments: [
+              body.otherComments || '',
+              body.customerName ? `Customer: ${body.customerName}` : '',
+              positionLine ? `Position: ${positionLine}` : '',
+              body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
+              body.customerSignature ? `Signature: [Captured]` : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            heading: body.heading,
+            existingOtherComments: ''
+          }) ?? '',
         status,
         startedAt: clientStartedAt,
         submittedAt,

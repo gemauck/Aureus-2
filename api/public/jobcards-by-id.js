@@ -6,6 +6,7 @@ import { buildJobCardUpdateChanges } from '../_lib/jobCardActivityDiff.js'
 import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
+import { finalizeJobCardOtherCommentsForSave } from '../_lib/jobCardOtherComments.js'
 
 function parseJson(str, defaultValue = []) {
   try {
@@ -157,23 +158,32 @@ async function handler(req, res) {
     let otherCommentsUpdate
     if (
       body.otherComments !== undefined ||
+      body.heading !== undefined ||
       body.customerName !== undefined ||
       body.customerPosition !== undefined ||
       body.customerTitle !== undefined ||
       body.customerFeedback !== undefined ||
       body.customerSignature !== undefined
     ) {
-      otherCommentsUpdate = [
-        body.otherComments != null ? String(body.otherComments) : '',
-        body.customerName ? `Customer: ${body.customerName}` : '',
-        body.customerPosition || body.customerTitle
-          ? `Position: ${body.customerPosition || body.customerTitle}`
-          : '',
-        body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
-        body.customerSignature ? `Signature: [Captured]` : ''
-      ]
-        .filter(Boolean)
-        .join('\n')
+      const baseComments =
+        body.otherComments !== undefined
+          ? String(body.otherComments)
+          : String(existing.otherComments || '')
+      otherCommentsUpdate = finalizeJobCardOtherCommentsForSave({
+        otherComments: [
+          baseComments,
+          body.customerName ? `Customer: ${body.customerName}` : '',
+          body.customerPosition || body.customerTitle
+            ? `Position: ${body.customerPosition || body.customerTitle}`
+            : '',
+          body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
+          body.customerSignature ? `Signature: [Captured]` : ''
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        heading: body.heading,
+        existingOtherComments: existing.otherComments
+      })
     }
 
     const data = {}

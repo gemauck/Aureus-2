@@ -17,6 +17,11 @@ import {
   enrichJobCardRowsSiteNames,
   resolveClientSiteName
 } from './_lib/jobCardSiteResolve.js'
+import {
+  extractHeadingFromOtherComments,
+  finalizeJobCardOtherCommentsForSave,
+  withComputedJobCardHeading
+} from './_lib/jobCardOtherComments.js'
 import { sendEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import PDFDocument from 'pdfkit'
@@ -698,21 +703,12 @@ const LIST_SORT_WHITELIST = {
 
 /** List responses only: keeps mobile list/search payloads small (full text comes from GET /api/jobcards/:id). */
 const LIST_TEXT_PREVIEW_MAX = 420
-const HEADING_PREFIX = 'Heading:'
 
 function truncateJobCardListText(value, max = LIST_TEXT_PREVIEW_MAX) {
   if (value == null) return ''
   const s = String(value)
   if (s.length <= max) return s
   return `${s.slice(0, max)}…`
-}
-
-function extractHeadingFromComments(rawComments) {
-  if (!rawComments || typeof rawComments !== 'string') return ''
-  const line = rawComments
-    .split('\n')
-    .find((entry) => typeof entry === 'string' && entry.trim().startsWith(HEADING_PREFIX))
-  return line ? line.slice(HEADING_PREFIX.length).trim() : ''
 }
 
 /**
@@ -1088,7 +1084,7 @@ async function handler(req, res) {
           const heading =
             rest.heading != null && String(rest.heading).trim() !== ''
               ? String(rest.heading).trim()
-              : extractHeadingFromComments(otherComments)
+              : extractHeadingFromOtherComments(otherComments)
           const row = {
             ...rest,
             heading,
@@ -1182,7 +1178,7 @@ async function handler(req, res) {
 
         const [enrichedRow] = await enrichJobCardRowsSiteNames(prisma, [jobCard])
 
-        const common = {
+        const common = withComputedJobCardHeading({
           ...enrichedRow,
           recordedByName,
           recordedByEmail,
@@ -1197,7 +1193,7 @@ async function handler(req, res) {
           startedAt: formatDate(jobCard.startedAt),
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
-        }
+        })
 
         if (omitPhotos) {
           return ok(res, {
@@ -1292,7 +1288,12 @@ async function handler(req, res) {
             .join('\n')
         }
 
-        const otherCommentsForCreate = mergeJobCardOtherComments(body)
+        const otherCommentsForCreate =
+          finalizeJobCardOtherCommentsForSave({
+            otherComments: mergeJobCardOtherComments(body),
+            heading: body.heading,
+            existingOtherComments: ''
+          }) ?? mergeJobCardOtherComments(body)
 
         const statusForCreate = normalizeJobCardStatus(body.status, 'draft')
         if (!statusForCreate) {
@@ -1402,7 +1403,7 @@ async function handler(req, res) {
         await scheduleJobCardStockMovementSync(jobCard)
 
         return created(res, { 
-          jobCard: {
+          jobCard: withComputedJobCardHeading({
             ...jobCard,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
@@ -1416,7 +1417,7 @@ async function handler(req, res) {
             completedAt: formatDate(jobCard.completedAt),
             createdAt: formatDate(jobCard.createdAt),
             updatedAt: formatDate(jobCard.updatedAt)
-          }
+          })
         })
       } catch (error) {
         console.error('❌ Failed to create job card:', error)
@@ -1495,6 +1496,7 @@ async function handler(req, res) {
         }
         if (
           body.otherComments !== undefined ||
+          body.heading !== undefined ||
           body.customerName !== undefined ||
           body.customerTitle !== undefined ||
           body.customerPosition !== undefined ||
@@ -1512,7 +1514,7 @@ async function handler(req, res) {
             customerFeedback: body.customerFeedback,
             customerSignature: body.customerSignature
           }
-          const base = mergedBody.otherComments != null ? String(mergedBody.otherComments) : ''
+          let base = mergedBody.otherComments != null ? String(mergedBody.otherComments) : ''
           if (
             mergedBody.customerName ||
             mergedBody.customerTitle ||
@@ -1521,7 +1523,7 @@ async function handler(req, res) {
             mergedBody.customerSignature
           ) {
             const pos = mergedBody.customerTitle || mergedBody.customerPosition
-            updateData.otherComments = [
+            base = [
               base,
               mergedBody.customerName ? `Customer: ${mergedBody.customerName}` : '',
               pos ? `Position: ${pos}` : '',
@@ -1530,8 +1532,14 @@ async function handler(req, res) {
             ]
               .filter(Boolean)
               .join('\n')
-          } else {
-            updateData.otherComments = base
+          }
+          const finalized = finalizeJobCardOtherCommentsForSave({
+            otherComments: base,
+            heading: body.heading,
+            existingOtherComments: existing.otherComments
+          })
+          if (finalized !== undefined) {
+            updateData.otherComments = finalized
           }
         }
         if (body.photos !== undefined) {
@@ -1582,7 +1590,7 @@ async function handler(req, res) {
           /* No prisma update — audit not required for no-op PATCH (see eslint-rules/manufacturing-audit.mjs). */
           // eslint-disable-next-line mfg-audit/require-audit-before-mutation-success
           return ok(res, {
-            jobCard: {
+            jobCard: withComputedJobCardHeading({
               ...jobCard,
               otherTechnicians: parseJson(jobCard.otherTechnicians),
               photos: parseJson(jobCard.photos),
@@ -1596,7 +1604,7 @@ async function handler(req, res) {
               startedAt: formatDate(jobCard.startedAt),
               createdAt: formatDate(jobCard.createdAt),
               updatedAt: formatDate(jobCard.updatedAt)
-            }
+            })
           })
         }
 
@@ -1653,7 +1661,7 @@ async function handler(req, res) {
         await scheduleJobCardStockMovementSync(jobCard)
 
         return ok(res, { 
-          jobCard: {
+          jobCard: withComputedJobCardHeading({
             ...jobCard,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
@@ -1668,7 +1676,7 @@ async function handler(req, res) {
             startedAt: formatDate(jobCard.startedAt),
             createdAt: formatDate(jobCard.createdAt),
             updatedAt: formatDate(jobCard.updatedAt)
-          }
+          })
         })
       } catch (error) {
         console.error('❌ Failed to update job card:', error)

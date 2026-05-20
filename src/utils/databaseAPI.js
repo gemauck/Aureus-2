@@ -1,5 +1,46 @@
 // Database-First API Utility - All data operations go through database
 
+const JOB_CARD_HEADING_PREFIX = 'Heading:';
+
+function extractJobCardHeadingFromComments(rawComments) {
+    if (!rawComments || typeof rawComments !== 'string') return '';
+    const line = rawComments
+        .split('\n')
+        .find((entry) => typeof entry === 'string' && entry.trim().startsWith(JOB_CARD_HEADING_PREFIX));
+    return line ? line.slice(JOB_CARD_HEADING_PREFIX.length).trim() : '';
+}
+
+function mergeJobCardHeadingIntoComments(rawComments, heading) {
+    if (heading === undefined) {
+        return rawComments != null ? String(rawComments) : '';
+    }
+    const withoutHeading = String(rawComments ?? '')
+        .split('\n')
+        .filter((line) => line && !String(line).trim().startsWith(JOB_CARD_HEADING_PREFIX));
+    const headingLine = heading != null ? String(heading).trim() : '';
+    const lines = [...withoutHeading];
+    if (headingLine) {
+        lines.unshift(`${JOB_CARD_HEADING_PREFIX} ${headingLine}`);
+    }
+    return lines.filter(Boolean).join('\n');
+}
+
+/** Ensure heading survives all job card saves from the browser (modal, offline sync, etc.). */
+function prepareJobCardPayloadForSave(payload) {
+    if (!payload || typeof payload !== 'object') return payload;
+    const hasHeadingField = Object.prototype.hasOwnProperty.call(payload, 'heading');
+    const headingFromComments = extractJobCardHeadingFromComments(payload.otherComments);
+    if (!hasHeadingField && !headingFromComments) return payload;
+    const effectiveHeading = hasHeadingField
+        ? (payload.heading != null ? String(payload.heading).trim() : '')
+        : headingFromComments;
+    return {
+        ...payload,
+        heading: effectiveHeading,
+        otherComments: mergeJobCardHeadingIntoComments(payload.otherComments, effectiveHeading)
+    };
+}
+
 /** Manufacturing inventory extended value: quantity × unit cost (matches api/_lib/inventoryValue.js). */
 function _computedManufacturingInventoryTotalValue(quantity, unitCost) {
     return (Number(quantity) || 0) * (Number(unitCost) || 0);
@@ -2500,7 +2541,7 @@ const DatabaseAPI = {
     async createJobCard(jobCardData) {
         const response = await this.makeRequest('/jobcards', {
             method: 'POST',
-            body: JSON.stringify(jobCardData)
+            body: JSON.stringify(prepareJobCardPayloadForSave(jobCardData))
         });
         // Clear cache for job cards list to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
@@ -2510,7 +2551,7 @@ const DatabaseAPI = {
     async updateJobCard(id, jobCardData) {
         const response = await this.makeRequest(`/jobcards/${id}`, {
             method: 'PATCH',
-            body: JSON.stringify(jobCardData)
+            body: JSON.stringify(prepareJobCardPayloadForSave(jobCardData))
         });
         // Clear cache for both list and individual job card
         this._responseCache.delete('GET:/jobcards');

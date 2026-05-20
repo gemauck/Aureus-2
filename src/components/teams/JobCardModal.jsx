@@ -37,6 +37,18 @@ const parseHeadingFromComments = (rawComments) => {
     return headingLine ? headingLine.slice(HEADING_PREFIX.length).trim() : '';
 };
 
+const mergeHeadingIntoOtherComments = (rawComments, heading) => {
+    const withoutHeading = String(rawComments ?? '')
+        .split('\n')
+        .filter((line) => line && !String(line).trim().startsWith(HEADING_PREFIX));
+    const headingLine = heading != null ? String(heading).trim() : '';
+    const lines = [...withoutHeading];
+    if (headingLine) {
+        lines.unshift(`${HEADING_PREFIX} ${headingLine}`);
+    }
+    return lines.filter(Boolean).join('\n');
+};
+
 function jobCardMediaIsVideoDataUrl(url) {
     return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -855,6 +867,12 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             const { serviceForms: _sf, ...formWithoutForms } = formData;
             const nowIso = new Date().toISOString();
             const startedAtSeed = jobCard?.startedAt || jobCard?.createdAt || nowIso;
+            const headingLine = String(formData.heading || '').trim();
+            const otherCommentsForSave = mergeHeadingIntoOtherComments(
+                formData.otherComments || '',
+                headingLine
+            );
+
             const jobCardData = {
                 ...formWithoutForms,
                 status: targetStatus,
@@ -865,6 +883,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 locationLongitude: formData.locationLongitude != null ? String(formData.locationLongitude) : '',
                 photos: [...visualUrls, ...voicePhotoEntries, ...signatureObjects],
                 customerSignature: sigDataUrl || '',
+                otherComments: otherCommentsForSave,
+                heading: headingLine,
                 id: jobCard?.id || Date.now().toString(),
                 startedAt: startedAtSeed,
                 createdAt: jobCard?.createdAt || startedAtSeed,
