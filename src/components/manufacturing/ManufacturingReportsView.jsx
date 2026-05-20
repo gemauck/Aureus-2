@@ -191,8 +191,8 @@
     'Date',
     'Account',
     'Description',
-    'Debits',
-    'Credits',
+    'Debit',
+    'Credit',
     'Name',
     'Class'
   ];
