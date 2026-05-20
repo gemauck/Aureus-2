@@ -5277,8 +5277,8 @@ const JobCardFormPublic = () => {
 
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Travel & Timing</h2>
-          <p className="text-sm text-gray-500 mt-1">Record departure and arrival times. Total travel time is calculated automatically.</p>
+          <h2 className="text-lg font-semibold text-gray-900">Job Time</h2>
+          <p className="text-sm text-gray-500 mt-1">Record time on clients job</p>
         </header>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
