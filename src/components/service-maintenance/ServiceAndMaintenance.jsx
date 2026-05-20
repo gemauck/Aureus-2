@@ -404,6 +404,13 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/** Safe for HTML attribute values (e.g. data: URLs in img src). */
+function escapeHtmlAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
   const isAdminUser =
@@ -1406,10 +1413,10 @@ const ServiceAndMaintenance = () => {
     try {
       setDownloadingPdf(true);
       const token = window.storage?.getToken?.();
-      let jobCardForPdf = selectedJobCard;
+      let jobCardForPdf = { ...selectedJobCard };
 
-      // Ensure export uses full attachment payload even when detail screen was loaded with omitPhotos.
-      if (jobCardForPdf?.id && token && (jobCardForPdf.attachmentsPending === true || !Array.isArray(jobCardForPdf.photos))) {
+      // Always load attachments for PDF so customer signature image is available.
+      if (jobCardForPdf?.id && token) {
         try {
           const pr = await fetchWithTimeout(`/api/jobcards/${encodeURIComponent(jobCardForPdf.id)}/photos`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -1417,35 +1424,38 @@ const ServiceAndMaintenance = () => {
           if (pr.ok) {
             const pd = await pr.json();
             const photos = pd?.data?.photos ?? pd?.photos;
-            if (Array.isArray(photos)) {
-              const sigUrl = extractSignatureUrlFromJobCardPhotos(photos);
-              const sigPayload =
-                typeof (pd?.data?.customerSignature ?? pd?.customerSignature) === 'string'
-                  ? String(pd.data?.customerSignature ?? pd.customerSignature).trim()
-                  : '';
-              const customerSignature =
-                sigUrl || (sigPayload.startsWith('data:image') ? sigPayload : '');
-              jobCardForPdf = {
-                ...jobCardForPdf,
-                photos,
-                customerSignature: customerSignature || jobCardForPdf.customerSignature,
-                attachmentsPending: false
-              };
-              setSelectedJobCard((prev) =>
-                prev?.id === jobCardForPdf.id
-                  ? {
-                      ...prev,
-                      photos,
-                      customerSignature: customerSignature || prev?.customerSignature,
-                      attachmentsPending: false
-                    }
-                  : prev
-              );
-            }
+            const photoList = Array.isArray(photos) ? photos : [];
+            const sigUrl = extractSignatureUrlFromJobCardPhotos(photoList);
+            const sigPayload =
+              typeof (pd?.data?.customerSignature ?? pd?.customerSignature) === 'string'
+                ? String(pd.data?.customerSignature ?? pd.customerSignature).trim()
+                : '';
+            const customerSignature =
+              sigUrl ||
+              (sigPayload.startsWith('data:image') ? sigPayload : '') ||
+              (typeof jobCardForPdf.customerSignature === 'string' &&
+              jobCardForPdf.customerSignature.trim().startsWith('data:image')
+                ? jobCardForPdf.customerSignature.trim()
+                : '') ||
+              (signatureImageUrl && signatureImageUrl.startsWith('data:image') ? signatureImageUrl : '');
+            jobCardForPdf = {
+              ...jobCardForPdf,
+              photos: photoList,
+              customerSignature,
+              attachmentsPending: false
+            };
           }
         } catch (error) {
           console.warn('Could not refresh job card photos before PDF export', error);
         }
+      }
+
+      if (
+        !jobCardForPdf.customerSignature &&
+        signatureImageUrl &&
+        signatureImageUrl.startsWith('data:image')
+      ) {
+        jobCardForPdf = { ...jobCardForPdf, customerSignature: signatureImageUrl };
       }
 
       let companyName = 'Abcotronics';
@@ -1573,6 +1583,7 @@ const ServiceAndMaintenance = () => {
         pdfCustomerReport.customer.name ||
         '';
       const pdfSigUrl =
+        (signatureImageUrl && signatureImageUrl.startsWith('data:image') ? signatureImageUrl : '') ||
         extractSignatureUrlFromJobCardPhotos(jobCardForPdf.photos) ||
         (typeof jobCardForPdf.customerSignature === 'string' &&
         jobCardForPdf.customerSignature.trim().startsWith('data:image')
@@ -1591,7 +1602,7 @@ const ServiceAndMaintenance = () => {
       ${pdfCustomerReport.customer.feedback ? `<p><strong>Feedback:</strong> ${escapeHtml(pdfCustomerReport.customer.feedback)}</p>` : ''}
       ${
         pdfSigUrl
-          ? `<div class="signature-box"><img src="${escapeHtml(pdfSigUrl)}" alt="Customer signature" /></div>`
+          ? `<div class="signature-box"><img src="${escapeHtmlAttr(pdfSigUrl)}" alt="Customer signature" /></div>`
           : pdfCustomerReport.customer.signatureLabel
             ? `<p class="muted">Signature marked ${escapeHtml(pdfCustomerReport.customer.signatureLabel)} but image not on file.</p>`
             : '<p class="muted">No customer signature recorded.</p>'
@@ -1729,7 +1740,7 @@ const ServiceAndMaintenance = () => {
       printWin.document.write(html);
       printWin.document.close();
       printWin.focus();
-      await waitForWindowImages(printWin, 12000);
+      await waitForWindowImages(printWin, pdfSigUrl ? 20000 : 12000);
       await new Promise((resolve) => setTimeout(resolve, 250));
       printWin.print();
       printWin.close();
@@ -1748,7 +1759,8 @@ const ServiceAndMaintenance = () => {
     stockRowsForDisplay,
     materialsRowsForDisplay,
     selectedHeading,
-    otherCommentsReport.technicianNotes
+    otherCommentsReport.technicianNotes,
+    signatureImageUrl
   ]);
 
   useEffect(() => {

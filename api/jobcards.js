@@ -22,6 +22,7 @@ import {
   extractSignatureDataUrlFromPhotos,
   finalizeJobCardOtherCommentsForSave,
   mergeCustomerSignoffIntoOtherComments,
+  parseCustomerSignoffFromOtherComments,
   withComputedJobCardHeading
 } from './_lib/jobCardOtherComments.js'
 import { findJobCardByClientDraftId } from './_lib/jobCardIdempotency.js'
@@ -209,6 +210,12 @@ async function fetchImageBufferForBillingPdf(url, timeoutMs = 8000) {
   }
 }
 
+async function loadBillingPdfSignatureBuffer(photosJson) {
+  const url = extractSignatureDataUrlFromPhotos(billingPdfParseJson(photosJson, []))
+  if (!url) return null
+  return fetchImageBufferForBillingPdf(url)
+}
+
 async function loadBillingPdfImageBuffers(photosJson, { maxImages = 8 } = {}) {
   const photos = billingPdfParseJson(photosJson, [])
   if (!Array.isArray(photos)) return []
@@ -276,6 +283,8 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
   const stockRows = stockRowsForBillingPdf(jobCard)
   const materialRows = materialsRowsForBillingPdf(jobCard)
   const coords = parseJobCardLatLng(jobCard)
+  const customerSignoff = parseCustomerSignoffFromOtherComments(jobCard.otherComments)
+  const signatureBuffer = await loadBillingPdfSignatureBuffer(jobCard.photos)
   const imageBuffers = await loadBillingPdfImageBuffers(jobCard.photos, { maxImages: 12 })
 
   return new Promise((resolve, reject) => {
@@ -387,6 +396,60 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
       doc.font('Helvetica-Bold').text('Additional notes: ', left, contentY, { continued: true, width: contentW })
       doc.font('Helvetica').text(additionalNotes, { width: contentW })
       contentY = doc.y + 4
+    }
+
+    const hasSignoffBlock =
+      customerSignoff.name ||
+      customerSignoff.position ||
+      customerSignoff.feedback ||
+      signatureBuffer ||
+      customerSignoff.signatureLabel
+    if (hasSignoffBlock) {
+      contentY += 8
+      if (contentY > doc.page.height - 160) {
+        doc.addPage()
+        contentY = doc.page.margins.top
+      }
+      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text('Customer sign-off', left, contentY, {
+        width: contentW
+      })
+      contentY += 16
+      doc.font('Helvetica').fontSize(10)
+      const signKv = (k, v) => {
+        doc.font('Helvetica-Bold').text(`${k}: `, left, contentY, { continued: true })
+        doc.font('Helvetica').text(String(v || '—'), { width: contentW })
+        contentY = doc.y + 2
+      }
+      if (customerSignoff.name) signKv('Customer name', customerSignoff.name)
+      if (customerSignoff.position) signKv('Role / title', customerSignoff.position)
+      if (customerSignoff.feedback) signKv('Feedback', customerSignoff.feedback)
+      if (signatureBuffer) {
+        try {
+          if (contentY > doc.page.height - 100) {
+            doc.addPage()
+            contentY = doc.page.margins.top
+          }
+          doc.image(signatureBuffer, left, contentY, { fit: [220, 90] })
+          contentY += 98
+        } catch {
+          doc.fillColor('#6b7280')
+            .font('Helvetica-Oblique')
+            .text('Signature image could not be embedded.', left, contentY, { width: contentW })
+          contentY = doc.y + 4
+          doc.fillColor('#111827').font('Helvetica')
+        }
+      } else if (customerSignoff.signatureLabel) {
+        doc.fillColor('#6b7280')
+          .font('Helvetica-Oblique')
+          .text(
+            `Signature marked ${customerSignoff.signatureLabel} but image not on file.`,
+            left,
+            contentY,
+            { width: contentW }
+          )
+        contentY = doc.y + 4
+        doc.fillColor('#111827').font('Helvetica')
+      }
     }
 
     contentY += 8
