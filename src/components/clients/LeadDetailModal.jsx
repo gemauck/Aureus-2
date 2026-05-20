@@ -29,6 +29,18 @@ function removeSiteIdFromContact(contact, siteId) {
     return { ...contact, siteIds: next, siteId: next[0] || null };
 }
 
+function mergeContactRecords(items = [], extras = []) {
+    const byId = new Map();
+    [...(items || []), ...(extras || [])].forEach((c) => {
+        if (!c || c.id == null || c.id === '') return;
+        const id = String(c.id);
+        const prev = byId.get(id);
+        const siteIds = [...new Set([...getContactSiteIds(prev), ...getContactSiteIds(c)])];
+        byId.set(id, { ...(prev || {}), ...c, siteIds, siteId: siteIds[0] || null });
+    });
+    return Array.from(byId.values());
+}
+
 const LeadDetailModal = ({
     leadId,
     initialLead = null,
@@ -2406,24 +2418,53 @@ const LeadDetailModal = ({
         }
     };
 
-    // Link/unlink contact to current site (Sites tab – Linked contacts section)
+    const persistContactSiteLinks = async (contactId, nextSiteIds, activityTitle, activityDetail) => {
+        const leadId = formData.id;
+        if (!leadId || !contactId || !editingSite?.id) return;
+
+        const cid = String(contactId);
+        const allContacts = mergeContactRecords(formData.contacts || []);
+        const target = allContacts.find((c) => String(c.id) === cid);
+        if (!target) {
+            alert('Contact not found. Refresh the page and try again.');
+            return;
+        }
+
+        const updatedContact = { ...target, siteIds: nextSiteIds, siteId: nextSiteIds[0] || null };
+        const updatedContacts = allContacts.map((c) => (String(c.id) === cid ? updatedContact : c));
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+
+        try {
+            if (window.api?.updateContact) {
+                await window.api.updateContact(leadId, cid, { siteIds: nextSiteIds });
+            } else {
+                const finalFormData = logActivity(activityTitle, activityDetail, null, false, updatedFormData);
+                await onSave(finalFormData, true);
+                return;
+            }
+            logActivity(activityTitle, activityDetail, null, false, updatedFormData);
+        } catch (err) {
+            console.error('Failed to update contact site links:', err);
+            alert('Could not save contact link: ' + (err?.message || 'Unknown error'));
+            setFormData(formData);
+        }
+    };
+
     const handleLinkContactToSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
-        const contacts = formData.contacts || [];
-        const updatedContacts = contacts.map(c => c.id === contactId ? addSiteIdToContact(c, editingSite.id) : c);
-        const updatedFormData = { ...formData, contacts: updatedContacts };
-        setFormData(updatedFormData);
-        const finalFormData = logActivity('Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`, null, false, updatedFormData);
-        Promise.resolve().then(() => onSave(finalFormData, true));
+        const target = mergeContactRecords(formData.contacts || []).find((c) => String(c.id) === String(contactId));
+        if (!target) return;
+        const nextSiteIds = [...new Set([...getContactSiteIds(target), String(editingSite.id)])];
+        void persistContactSiteLinks(contactId, nextSiteIds, 'Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`);
     };
+
     const handleUnlinkContactFromSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
-        const contacts = formData.contacts || [];
-        const updatedContacts = contacts.map(c => c.id === contactId ? removeSiteIdFromContact(c, editingSite.id) : c);
-        const updatedFormData = { ...formData, contacts: updatedContacts };
-        setFormData(updatedFormData);
-        const finalFormData = logActivity('Contact unlinked from site', 'Contact unlinked from this site', null, false, updatedFormData);
-        Promise.resolve().then(() => onSave(finalFormData, true));
+        const target = mergeContactRecords(formData.contacts || []).find((c) => String(c.id) === String(contactId));
+        if (!target) return;
+        const nextSiteIds = getContactSiteIds(target).filter((id) => id !== String(editingSite.id));
+        void persistContactSiteLinks(contactId, nextSiteIds, 'Contact unlinked from site', 'Contact unlinked from this site');
     };
 
     const handleDeleteSite = (siteId) => {
@@ -4046,7 +4087,7 @@ const LeadDetailModal = ({
                                                 <div className={sectionWrapCls}>
                                                     <h5 className={sectionHeadingCls}>Linked contacts</h5>
                                                     {(() => {
-                                                        const allC = formData.contacts || [];
+                                                        const allC = mergeContactRecords(formData.contacts || []);
                                                         const linkedToThisSite = allC.filter(c => contactIsLinkedToSite(c, editingSite.id));
                                                         const availableToLink = allC.filter(c => !contactIsLinkedToSite(c, editingSite.id));
                                                         return (
@@ -4112,7 +4153,7 @@ const LeadDetailModal = ({
                                                 <p>No sites added yet</p>
                                             </div>
                                         ) : (() => {
-                                            const allContactsForSiteCards = formData.contacts || [];
+                                            const allContactsForSiteCards = mergeContactRecords(formData.contacts || []);
                                             const getSiteContactDisplay = (s) => {
                                                 const linked = allContactsForSiteCards.filter(c => contactIsLinkedToSite(c, s.id));
                                                 if (linked.length > 0) return linked.map(c => c.name).join(', ');

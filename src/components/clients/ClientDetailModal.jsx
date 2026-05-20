@@ -31,6 +31,19 @@ function removeSiteIdFromContact(contact, siteId) {
     return { ...contact, siteIds: next, siteId: next[0] || null };
 }
 
+/** Merge contacts by id; union siteIds so link/unlink state is not lost on DB reload. */
+function mergeContactRecords(items = [], extras = []) {
+    const byId = new Map();
+    [...(items || []), ...(extras || [])].forEach((c) => {
+        if (!c || c.id == null || c.id === '') return;
+        const id = String(c.id);
+        const prev = byId.get(id);
+        const siteIds = [...new Set([...getContactSiteIds(prev), ...getContactSiteIds(c)])];
+        byId.set(id, { ...(prev || {}), ...c, siteIds, siteId: siteIds[0] || null });
+    });
+    return Array.from(byId.values());
+}
+
 const LEAD_PROPOSAL_PROCESS_STEPS = [
     { step: 1, label: 'Customer Engagement Mandate' },
     { step: 2, label: 'Proposal Drafting' },
@@ -3034,17 +3047,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 finalContacts = client.contacts;
             } else if (client.clientContacts && Array.isArray(client.clientContacts) && client.clientContacts.length > 0) {
                 // Fallback: if relation object still exists, convert it
-                finalContacts = client.clientContacts.map(contact => ({
-                    id: contact.id,
-                    name: contact.name,
-                    email: contact.email || '',
-                    phone: contact.phone || '',
-                    mobile: contact.mobile || '',
-                    role: contact.role || '',
-                    title: contact.title || '',
-                    isPrimary: contact.isPrimary || false,
-                    notes: contact.notes || ''
-                }));
+                finalContacts = client.clientContacts.map(contact => {
+                    const siteIds = getContactSiteIds(contact);
+                    return {
+                        id: contact.id,
+                        name: contact.name,
+                        email: contact.email || '',
+                        phone: contact.phone || '',
+                        mobile: contact.mobile || '',
+                        role: contact.role || '',
+                        title: contact.title || '',
+                        isPrimary: contact.isPrimary || false,
+                        notes: contact.notes || '',
+                        siteIds,
+                        siteId: siteIds[0] || null
+                    };
+                });
             } else {
                 // Last resort: parse from JSON fields (backward compatibility)
                 const parsedContacts = typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []);
@@ -3470,8 +3488,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const existingContactsForUpdate = currentFormDataForUpdate.contacts || [];
             console.log(`🔧 Existing contacts count: ${existingContactsForUpdate.length}, Optimistic contacts count: ${optimisticContacts.length}`);
             
-                // Merge: API contacts + existing contacts + optimistic contacts
-                const mergedContacts = mergeUniqueById(contacts, [...existingContactsForUpdate, ...optimisticContacts]);
+                // Merge: keep local site links; overlay API scalar fields
+                const mergedContacts = mergeContactRecords(
+                    [...existingContactsForUpdate, ...optimisticContacts],
+                    contacts
+                );
             console.log(`🔧 Merged contacts array:`, mergedContacts);
             
             // Create updated formData - ensure it's a completely new object reference
@@ -4030,8 +4051,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     const handleUpdateContact = () => {
-        const updatedContacts = formData.contacts.map(c => 
-            c.id === editingContact.id ? {...newContact, id: c.id} : c
+        const siteIds = getContactSiteIds(newContact);
+        const contactPayload = { ...newContact, siteIds, siteId: siteIds[0] || null };
+        const updatedContacts = formData.contacts.map(c =>
+            String(c.id) === String(editingContact.id) ? { ...contactPayload, id: c.id } : c
         );
         const updatedFormData = {...formData, contacts: updatedContacts};
         setFormData(updatedFormData);
@@ -4098,34 +4121,64 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    // Link/unlink contact to current site (used in Sites tab – Linked contacts section)
+    // Link/unlink contact to current site (Sites tab – Linked contacts); persists via contacts API
+    const persistContactSiteLinks = async (contactId, nextSiteIds, activityTitle, activityDetail) => {
+        const clientId = formData.id || client?.id;
+        if (!clientId || !contactId || !editingSite?.id) return;
+
+        const cid = String(contactId);
+        const siteId = String(editingSite.id);
+        const allContacts = mergeContactRecords(formData.contacts || [], optimisticContacts || []);
+        const target = allContacts.find((c) => String(c.id) === cid);
+        if (!target) {
+            alert('Contact not found. Refresh the page and try again.');
+            return;
+        }
+
+        const updatedContact = { ...target, siteIds: nextSiteIds, siteId: nextSiteIds[0] || null };
+        const updatedContacts = allContacts.map((c) => (String(c.id) === cid ? updatedContact : c));
+        const updatedFormData = { ...formData, contacts: updatedContacts };
+        setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
+        isAutoSavingRef.current = true;
+        lastInlineSaveAtRef.current = Date.now();
+        hasUserEditedForm.current = true;
+
+        try {
+            if (window.api?.updateContact) {
+                await window.api.updateContact(clientId, cid, { siteIds: nextSiteIds });
+            } else {
+                const finalFormData = logActivity(activityTitle, activityDetail, null, false, updatedFormData);
+                await onSave(finalFormData, true);
+                return;
+            }
+            logActivity(activityTitle, activityDetail, null, false, updatedFormData);
+        } catch (err) {
+            console.error('Failed to update contact site links:', err);
+            alert('Could not save contact link: ' + (err?.message || 'Unknown error'));
+            setFormData(formData);
+            formDataRef.current = formData;
+        } finally {
+            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
+        }
+    };
+
     const handleLinkContactToSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
-        const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
-        const updatedContacts = allContacts.map(c => c.id === contactId ? addSiteIdToContact(c, editingSite.id) : c);
-        const updatedFormData = { ...formData, contacts: updatedContacts };
-        setFormData(updatedFormData);
-        formDataRef.current = updatedFormData;
-        isAutoSavingRef.current = true;
-        lastInlineSaveAtRef.current = Date.now();
-        const finalFormData = logActivity('Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`, null, false, updatedFormData);
-        Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
-            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
-        });
+        const allContacts = mergeContactRecords(formData.contacts || [], optimisticContacts || []);
+        const target = allContacts.find((c) => String(c.id) === String(contactId));
+        if (!target) return;
+        const nextSiteIds = [...new Set([...getContactSiteIds(target), String(editingSite.id)])];
+        void persistContactSiteLinks(contactId, nextSiteIds, 'Contact linked to site', `Linked contact to site ${editingSite.name || 'this site'}`);
     };
+
     const handleUnlinkContactFromSite = (contactId) => {
         if (!editingSite?.id || !contactId) return;
-        const allContacts = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
-        const updatedContacts = allContacts.map(c => c.id === contactId ? removeSiteIdFromContact(c, editingSite.id) : c);
-        const updatedFormData = { ...formData, contacts: updatedContacts };
-        setFormData(updatedFormData);
-        formDataRef.current = updatedFormData;
-        isAutoSavingRef.current = true;
-        lastInlineSaveAtRef.current = Date.now();
-        const finalFormData = logActivity('Contact unlinked from site', 'Contact unlinked from this site', null, false, updatedFormData);
-        Promise.resolve().then(() => onSave(finalFormData, true)).finally(() => {
-            setTimeout(() => { isAutoSavingRef.current = false; }, TAB_PRESERVE_AFTER_INLINE_SAVE_MS);
-        });
+        const allContacts = mergeContactRecords(formData.contacts || [], optimisticContacts || []);
+        const target = allContacts.find((c) => String(c.id) === String(contactId));
+        if (!target) return;
+        const nextSiteIds = getContactSiteIds(target).filter((id) => id !== String(editingSite.id));
+        void persistContactSiteLinks(contactId, nextSiteIds, 'Contact unlinked from site', 'Contact unlinked from this site');
     };
 
     const handleAddFollowUp = () => {
@@ -7191,7 +7244,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <div className={sectionWrapCls}>
                                                     <h5 className={sectionHeadingCls}>Linked contacts</h5>
                                                     {(() => {
-                                                        const allContactsForSite = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+                                                        const allContactsForSite = mergeContactRecords(formData.contacts || [], optimisticContacts || []);
                                                         const linkedToThisSite = allContactsForSite.filter(c => contactIsLinkedToSite(c, editingSite.id));
                                                         const availableToLink = allContactsForSite.filter(c => !contactIsLinkedToSite(c, editingSite.id));
                                                         return (
@@ -7296,7 +7349,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 </div>
                                             );
                                         }
-                                        const allContactsForTable = mergeUniqueById(formData.contacts || [], optimisticContacts || []);
+                                        const allContactsForTable = mergeContactRecords(formData.contacts || [], optimisticContacts || []);
                                         const getSiteContactDisplay = (site) => {
                                             const linked = allContactsForTable.filter(c => contactIsLinkedToSite(c, site.id));
                                             if (linked.length > 0) return linked.map(c => c.name).join(', ');

@@ -13,6 +13,7 @@ import { isAdminRole } from '../_lib/authRoles.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 import { cascadeClientNameToRelatedRecords } from '../_lib/syncClientNameCascade.js'
 import {
+  enrichClientRecordContacts,
   enrichContactsWithSiteIds,
   fetchContactSiteIdsByClientId,
   normalizeContactSiteIds,
@@ -352,8 +353,10 @@ async function handler(req, res) {
           clientComments: clientBasic.clientComments || []
         }
         
+        const clientForParse = await enrichClientRecordContacts(prisma, client)
+
         // Phase 3: Use shared parseClientJsonFields which handles normalized tables, JSONB, and String fallback
-        const parsedClient = parseClientJsonFields(client)
+        const parsedClient = parseClientJsonFields(clientForParse)
         
         // Legacy parsing for other fields (if parseClientJsonFields didn't handle them)
         const jsonFields = ['followUps', 'projectIds', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services', 'kyc']
@@ -1268,7 +1271,8 @@ async function handler(req, res) {
             return notFound(res)
           }
           
-          const parsedClient = parseClientJsonFields(client)
+          const clientForParse = await enrichClientRecordContacts(prisma, client)
+          const parsedClient = parseClientJsonFields(clientForParse)
           return ok(res, { client: parsedClient })
         }
         
@@ -1325,8 +1329,10 @@ async function handler(req, res) {
           })
         }
         
+        const clientForParse = await enrichClientRecordContacts(prisma, client)
+
         // Parse JSON fields before returning using shared utility
-        const parsedClient = parseClientJsonFields(client)
+        const parsedClient = parseClientJsonFields(clientForParse)
 
         if (body.notes !== undefined) {
           const currentNotes = client?.notes != null ? String(client.notes) : ''

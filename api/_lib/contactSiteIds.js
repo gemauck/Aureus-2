@@ -53,7 +53,8 @@ export async function syncContactSiteLinks(prisma, contactId, siteIds) {
       data: { siteId: ids[0] || null }
     })
   } catch (err) {
-    console.warn(`⚠️ Could not sync contact-site links for ${contactId}:`, err.message)
+    console.error(`❌ Could not sync contact-site links for ${contactId}:`, err.message)
+    throw err
   }
 }
 
@@ -64,4 +65,16 @@ export function enrichContactsWithSiteIds(contacts, siteIdsByContactId) {
     const ids = fromJunction.length > 0 ? fromJunction : normalizeContactSiteIds(c)
     return contactWithSiteIds(c, ids)
   })
+}
+
+/** Attach junction siteIds to client.clientContacts before parseClientJsonFields. */
+export async function enrichClientRecordContacts(prisma, clientRecord) {
+  if (!clientRecord?.id || !Array.isArray(clientRecord.clientContacts) || clientRecord.clientContacts.length === 0) {
+    return clientRecord
+  }
+  const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, clientRecord.id)
+  return {
+    ...clientRecord,
+    clientContacts: enrichContactsWithSiteIds(clientRecord.clientContacts, siteIdsByContactId)
+  }
 }

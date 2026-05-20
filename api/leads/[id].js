@@ -13,6 +13,7 @@ import { notifyMentionsOnClientOrLeadNotes } from '../_lib/noteMentions.js'
 import { workflowJsonForPrisma } from '../_lib/leadProposalWorkflow.js'
 import { notifyLeadProposalCirculationChanges } from '../_lib/notifyLeadProposalCirculationChanges.js'
 import {
+  enrichClientRecordContacts,
   enrichContactsWithSiteIds,
   fetchContactSiteIdsByClientId,
   normalizeContactSiteIds,
@@ -277,13 +278,10 @@ async function handler(req, res) {
             return notFound(res)
           }
           
-          if (lead?.clientContacts?.length) {
-            const siteIdsByContactId = await fetchContactSiteIdsByClientId(prisma, id)
-            lead.clientContacts = enrichContactsWithSiteIds(lead.clientContacts, siteIdsByContactId)
-          }
+          const leadForParse = await enrichClientRecordContacts(prisma, lead)
 
           // Phase 3: Use shared parseClientJsonFields which handles normalized tables, JSONB, and String fallback
-          const parsedLead = parseClientJsonFields(lead)
+          const parsedLead = parseClientJsonFields(leadForParse)
           
           // Check if current user has starred this lead
           try {
@@ -1337,8 +1335,10 @@ async function handler(req, res) {
           })
         }
         
+        const leadForParse = await enrichClientRecordContacts(prisma, lead)
+
         // Parse JSON fields before returning using shared utility
-        const parsedLead = parseClientJsonFields(lead)
+        const parsedLead = parseClientJsonFields(leadForParse)
 
         if (body.notes !== undefined) {
           const currentNotes = lead?.notes != null ? String(lead.notes) : ''
