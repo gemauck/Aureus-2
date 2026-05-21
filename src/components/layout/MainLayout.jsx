@@ -21,15 +21,17 @@ function canAccessErpCalendar(user) {
 /** Wide layout viewport for "Desktop site" on phones; ≥1024 so Tailwind lg: applies. Keep in sync with main.css .erp-desktop-site min-width. */
 const DESKTOP_SITE_LAYOUT_MIN_PX = 1330;
 
-/** Default layout: desktop-style shell; users on phones can opt into mobile layout via theme menu (stored as erpPreferDesktopLayout). */
+/** Default layout: mobile shell on narrow viewports; desktop shell on wide screens. Override via theme → Layout (erpPreferDesktopLayout). */
 function readPreferDesktopLayout() {
+    const narrowViewport =
+        typeof window !== 'undefined' && window.innerWidth < 1024;
     try {
         const v = localStorage.getItem('erpPreferDesktopLayout');
         if (v === 'false') return false;
         if (v === 'true') return true;
-        return true;
+        return !narrowViewport;
     } catch {
-        return true;
+        return !narrowViewport;
     }
 }
 
@@ -502,7 +504,7 @@ const MainLayout = () => {
         typeof window !== 'undefined' ? window.innerWidth < 1024 : false
     );
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-    /** Desktop-style layout by default; on narrow viewports user can switch to mobile-friendly shell in theme → Layout */
+    /** Mobile-friendly shell by default on phones; user can switch to desktop layout in theme → Layout */
     const [preferDesktopSite, setPreferDesktopSite] = useState(() => readPreferDesktopLayout());
     const effectiveIsMobile = isMobile && !preferDesktopSite;
     
