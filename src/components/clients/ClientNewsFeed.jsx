@@ -25,6 +25,7 @@ const ClientNewsFeed = () => {
     const [activeTab, setActiveTab] = useState('activities'); // activities, news
     const [lastCheckedAt, setLastCheckedAt] = useState(null); // when we last ran the news search
     const hasAutoRefreshedStaleRef = useRef(false);
+    const hasTabStaleRefreshRef = useRef(false);
 
     // Get theme
     const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
@@ -308,7 +309,7 @@ const ClientNewsFeed = () => {
         return publishedDate >= dayAgo;
     };
 
-    // Trigger backend to fetch new articles from Google News for all clients/leads, then reload feed
+    // Batched refresh: each POST processes ~30 clients (stale-first) to avoid gateway timeouts
     const triggerNewsSearchAndRefresh = async () => {
         const token = window.storage?.getToken?.();
         if (!token) {
@@ -316,28 +317,37 @@ const ClientNewsFeed = () => {
             return;
         }
         setIsRefreshingNews(true);
+        let totalProcessed = 0;
+        let totalNew = 0;
+        let offset = 0;
         try {
-            const searchRes = await fetch('/api/client-news/search', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-            });
-            const searchData = searchRes.ok ? await searchRes.json().catch(() => ({})) : null;
-            const payload = searchData?.data ?? searchData;
-            const clientsProcessed = payload?.clientsProcessed ?? 0;
-            const articlesFound = payload?.articlesFound ?? 0;
-            if (!searchRes.ok) {
-                console.warn('News search request failed:', searchRes.status);
+            let hasMore = true;
+            while (hasMore) {
+                const searchRes = await fetch(`/api/client-news/search?offset=${offset}&limit=30`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                const searchData = searchRes.ok ? await searchRes.json().catch(() => ({})) : null;
+                const payload = searchData?.data ?? searchData;
+                if (!searchRes.ok) {
+                    console.warn('News search batch failed:', searchRes.status, offset);
+                    break;
+                }
+                totalProcessed += payload?.clientsProcessed ?? 0;
+                totalNew += payload?.articlesFound ?? 0;
+                hasMore = payload?.hasMore === true && payload?.nextOffset != null;
+                offset = payload?.nextOffset ?? offset + (payload?.clientsProcessed ?? 0);
             }
             await Promise.all([loadActivities({ silent: true }), loadNewsArticles()]);
             setLastCheckedAt(new Date());
-            if (searchRes.ok && (articlesFound > 0 || clientsProcessed > 0)) {
-                const msg = articlesFound > 0
-                    ? `Found new articles for ${articlesFound} client(s). Feed updated.`
-                    : `Checked ${clientsProcessed} client(s) and leads. Feed updated.`;
+            if (totalProcessed > 0) {
+                const msg = totalNew > 0
+                    ? `Found new articles for ${totalNew} client(s). Checked ${totalProcessed} client(s)/lead(s).`
+                    : `Checked ${totalProcessed} client(s) and leads. Feed updated.`;
                 if (window.toast) window.toast(msg); else alert(msg);
             }
         } catch (err) {
@@ -363,17 +373,18 @@ const ClientNewsFeed = () => {
         }
     }, [newsArticles]);
 
-    // When user switches to News tab, if feed is stale try refresh again (in case first run failed)
+    // When user opens News tab and feed is stale, refresh once (in case mount refresh failed)
     useEffect(() => {
-        if (activeTab !== 'news' || newsArticles.length === 0 || isRefreshingNews) return;
+        if (activeTab !== 'news' || newsArticles.length === 0 || isRefreshingNews || hasTabStaleRefreshRef.current) return;
         const newest = newsArticles[0];
         const newestDate = new Date(newest.publishedAt || newest.createdAt);
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - STALE_FEED_DAYS);
         if (newestDate < cutoff) {
+            hasTabStaleRefreshRef.current = true;
             triggerNewsSearchAndRefresh();
         }
-    }, [activeTab]);
+    }, [activeTab, newsArticles.length, isRefreshingNews]);
 
     return (
         <div className="space-y-4">

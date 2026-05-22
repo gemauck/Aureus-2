@@ -5,6 +5,10 @@ import { prisma } from '../_lib/prisma.js'
 import { ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { buildGoogleNewsRssUrl } from '../_lib/clientNewsFeed.js'
+
+const RSS_DELAY_MS = 400
+const DEFAULT_BATCH_SIZE = 30
 
 // Parse XML/RSS feed - simple parser for RSS feeds
 function parseRSS(xmlText) {
@@ -92,13 +96,12 @@ export async function searchNewsForClient(clientName, website) {
       } catch (e) { /* ignore */ }
     }
 
-    const encodedQuery = encodeURIComponent(queryToUse)
-    const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
+    const rssUrl = buildGoogleNewsRssUrl(queryToUse)
     let { articles } = await fetchRss(rssUrl)
 
     // If 0 results, retry with name only (sometimes "X OR domain" returns nothing)
     if (articles.length === 0 && queryToUse !== searchQuery) {
-      const fallbackUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en&gl=US&ceid=US:en`
+      const fallbackUrl = buildGoogleNewsRssUrl(searchQuery)
       const fallback = await fetchRss(fallbackUrl)
       articles = fallback.articles
     }
@@ -189,39 +192,59 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
   }
 }
 
+/** Clients subscribed to RSS, ordered stale-first (no news / oldest news first). */
+export async function getClientsForNewsSearch({ offset = 0, limit = DEFAULT_BATCH_SIZE } = {}) {
+  const rows = await prisma.$queryRaw`
+    SELECT c.id, c.name, c.website, c.type, c."rssSubscribed"
+    FROM "Client" c
+    LEFT JOIN (
+      SELECT "clientId", MAX("publishedAt") AS last_news
+      FROM "ClientNews"
+      GROUP BY "clientId"
+    ) n ON n."clientId" = c.id
+    WHERE c."rssSubscribed" IS NOT FALSE
+    ORDER BY n.last_news ASC NULLS FIRST, c.name ASC
+    OFFSET ${offset}
+    LIMIT ${limit}
+  `
+  return rows
+}
+
+export async function countClientsForNewsSearch() {
+  const [{ count }] = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS count FROM "Client" c WHERE c."rssSubscribed" IS NOT FALSE
+  `
+  return count
+}
+
 async function handler(req, res) {
-  // POST /api/client-news/search - Trigger news search for all clients
+  // POST /api/client-news/search?offset=0&limit=30 — batched refresh (avoids HTTP timeout)
   if (req.method !== 'POST') {
     return serverError(res, 'Method not allowed')
   }
 
   try {
+    const url = new URL(req.url || '', 'http://localhost')
+    const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0)
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(url.searchParams.get('limit') || String(DEFAULT_BATCH_SIZE), 10) || DEFAULT_BATCH_SIZE)
+    )
+
     let clients = []
+    let totalSubscribed = 0
     try {
-      clients = await prisma.client.findMany({
-        where: {
-          OR: [
-            { rssSubscribed: true },
-            { rssSubscribed: null }
-          ]
-        },
-        select: {
-          id: true,
-          name: true,
-          website: true,
-          type: true,
-          rssSubscribed: true
-        }
-      })
+      totalSubscribed = await countClientsForNewsSearch()
+      clients = await getClientsForNewsSearch({ offset, limit })
     } catch (dbErr) {
       console.error('❌ Database error loading clients for news search:', dbErr)
       return serverError(res, 'Failed to load clients for news search', dbErr.message)
     }
 
-    if (clients.length === 0) {
-      console.warn('   ⚠️ No clients/leads found with rssSubscribed true or null. Check DB.')
+    if (clients.length === 0 && offset === 0) {
+      console.warn('   ⚠️ No clients/leads subscribed to news feed.')
     } else {
-      console.log(`   📰 News search: ${clients.length} client(s)/lead(s) to search`)
+      console.log(`   📰 News search batch: ${clients.length} client(s) (offset ${offset}, limit ${limit})`)
     }
 
     const allArticles = []
@@ -242,31 +265,41 @@ async function handler(req, res) {
             source: 'Google News'
           })
         }
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, RSS_DELAY_MS))
       } catch (clientError) {
         console.error(`Error searching news for ${client.name}:`, clientError)
       }
     }
 
-    try {
-      const yesterday = new Date(today)
-      yesterday.setDate(yesterday.getDate() - 1)
-      await prisma.clientNews.updateMany({
-        where: {
-          publishedAt: { lt: yesterday },
-          isNew: true
-        },
-        data: { isNew: false }
-      })
-    } catch (updateErr) {
-      console.error('❌ Database error marking old articles:', updateErr)
-      return serverError(res, 'Failed to update article flags', updateErr.message)
+    const nextOffset = offset + clients.length
+    const hasMore = nextOffset < totalSubscribed
+
+    if (!hasMore) {
+      try {
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        await prisma.clientNews.updateMany({
+          where: {
+            publishedAt: { lt: yesterday },
+            isNew: true
+          },
+          data: { isNew: false }
+        })
+      } catch (updateErr) {
+        console.error('❌ Database error marking old articles:', updateErr)
+        return serverError(res, 'Failed to update article flags', updateErr.message)
+      }
     }
 
     return ok(res, {
       success: true,
       articlesFound: allArticles.length,
       clientsProcessed: clients.length,
+      clientsTotal: totalSubscribed,
+      offset,
+      limit,
+      nextOffset: hasMore ? nextOffset : null,
+      hasMore,
       articles: allArticles
     })
   } catch (error) {

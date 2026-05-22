@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { diversifyNewsArticles } from './_lib/clientNewsFeed.js'
 
 async function handler(req, res) {
   try {
@@ -25,7 +26,7 @@ async function handler(req, res) {
             }
           },
           orderBy: { publishedAt: 'desc' },
-          take: 100 // Limit to recent articles
+          take: 300
         })
 
         // Filter to only include articles from subscribed clients
@@ -61,7 +62,6 @@ async function handler(req, res) {
         if (unsubscribedClients.size > 0) {
         }
 
-        // Format the response
         const formattedArticles = newsArticles.map(article => ({
           id: article.id,
           clientId: article.clientId,
@@ -76,7 +76,12 @@ async function handler(req, res) {
           isNew: article.isNew
         }))
 
-        return ok(res, { newsArticles: formattedArticles })
+        const diversified = diversifyNewsArticles(formattedArticles, {
+          maxPerClient: 4,
+          limit: 100
+        })
+
+        return ok(res, { newsArticles: diversified })
       } catch (dbError) {
         console.error('❌ Database error getting client news:', dbError)
         return serverError(res, 'Failed to get client news', dbError.message)
