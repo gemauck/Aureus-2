@@ -17,6 +17,7 @@ export const JOB_CARD_CALL_OUT_CATEGORY_OPTIONS = [
   'Maintenance',
   'Near Miss',
   'New Install',
+  'Nozzle',
   'Observation'
 ];
 
