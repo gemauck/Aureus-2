@@ -12,7 +12,10 @@ import {
   normalizeJobCardNumberToken
 } from './_lib/jobCardNumber.js'
 import { syncJobCardStockMovements } from './_lib/jobCardStockMovements.js'
-import { buildJobCardListWhereClause } from './_lib/jobCardListSearch.js'
+import {
+  buildJobCardListWhereClause,
+  jobCardJsonFieldHasEntries
+} from './_lib/jobCardListSearch.js'
 import {
   enrichJobCardRowsSiteNames,
   resolveClientSiteName
@@ -966,6 +969,11 @@ async function handler(req, res) {
         const withStockUsedOnly =
           url.searchParams.get('withStockUsedOnly') === '1' ||
           String(url.searchParams.get('withStockUsedOnly') || '').toLowerCase() === 'true'
+        const usageFilterRaw = (
+          url.searchParams.get('usageFilter') ||
+          url.searchParams.get('stockMaterials') ||
+          ''
+        ).trim()
         const includeTotal =
           url.searchParams.get('includeTotal') === '1' ||
           String(url.searchParams.get('includeTotal') || '').toLowerCase() === 'true'
@@ -990,7 +998,8 @@ async function handler(req, res) {
           ownerIdParamRaw ||
           createdFromRaw ||
           createdToRaw ||
-          includeStockUsed
+          includeStockUsed ||
+          usageFilterRaw
         )
         const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
@@ -1020,7 +1029,7 @@ async function handler(req, res) {
         if (jobCardNumberParam && /^JC\d{4}$/.test(jobCardNumberParam)) {
           baseFilters.jobCardNumber = jobCardNumberParam
         }
-        if (withStockUsedOnly) {
+        if (withStockUsedOnly && !usageFilterRaw) {
           baseFilters.stockUsed = { notIn: ['[]', ''] }
         }
 
@@ -1047,7 +1056,8 @@ async function handler(req, res) {
           searchQ,
           site: siteFilterRaw,
           location: locationFilterRaw,
-          agentName: agentNameFilterRaw
+          agentName: agentNameFilterRaw,
+          usageFilter: usageFilterRaw || undefined
         })
 
         const sortField = LIST_SORT_WHITELIST[sortFieldRaw] ? sortFieldRaw : 'createdAt'
@@ -1087,7 +1097,9 @@ async function handler(req, res) {
           completedAt: true,
           startedAt: true,
           safetyCultureIssueId: true,
-          safetyCultureAuditId: true
+          safetyCultureAuditId: true,
+          stockUsed: true,
+          materialsBought: true
         }
 
         const totalItemsPromise = includeTotal
@@ -1140,7 +1152,13 @@ async function handler(req, res) {
 
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {
-          const { _count, otherComments, stockUsed: stockUsedRaw, ...rest } = jobCard
+          const {
+            _count,
+            otherComments,
+            stockUsed: stockUsedRaw,
+            materialsBought: materialsBoughtRaw,
+            ...rest
+          } = jobCard
           const heading =
             rest.heading != null && String(rest.heading).trim() !== ''
               ? String(rest.heading).trim()
@@ -1148,6 +1166,8 @@ async function handler(req, res) {
           const row = {
             ...rest,
             heading,
+            hasStockUsage: jobCardJsonFieldHasEntries(stockUsedRaw),
+            hasMaterialsBought: jobCardJsonFieldHasEntries(materialsBoughtRaw),
             serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
             reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
             location: truncateJobCardListText(rest.location),

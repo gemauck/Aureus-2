@@ -576,7 +576,19 @@ function JobCardListMetricChips({ jc, isDark, chipTextClass = 'text-[10px]' }) {
       icon: 'fa-route'
     });
   }
-  if (typeof jc.totalMaterialsCost === 'number' && jc.totalMaterialsCost > 0) {
+  if (jc.hasStockUsage) {
+    parts.push({ key: 'stock', text: 'Stock used', icon: 'fa-boxes-stacked' });
+  }
+  if (jc.hasMaterialsBought) {
+    parts.push({
+      key: 'materials',
+      text:
+        typeof jc.totalMaterialsCost === 'number' && jc.totalMaterialsCost > 0
+          ? `Materials R ${jc.totalMaterialsCost.toFixed(2)}`
+          : 'Materials bought',
+      icon: 'fa-cart-shopping'
+    });
+  } else if (typeof jc.totalMaterialsCost === 'number' && jc.totalMaterialsCost > 0) {
     parts.push({
       key: 'cost',
       text: `R ${jc.totalMaterialsCost.toFixed(2)}`,
@@ -666,6 +678,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [searchTipsOpen, setSearchTipsOpen] = useState(false);
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
+  /** all | has | none — stock used and/or materials bought on the job card */
+  const [usageFilter, setUsageFilter] = useState('all');
   const listScrollRestoreFrameRef = useRef(null);
 
   const JOB_CARDS_INLINE_LIST_SCROLL_KEY = 'jobcards.inlineListScroll';
@@ -828,7 +842,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     siteFilter,
     locationFilter,
     createdFrom,
-    createdTo
+    createdTo,
+    usageFilter
   ]);
 
   const currentUser = useMemo(
@@ -929,6 +944,9 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       if (createdTo) {
         params.set('createdTo', createdTo);
       }
+      if (usageFilter && usageFilter !== 'all') {
+        params.set('usageFilter', usageFilter);
+      }
       const apiSortField =
         sortField === 'client'
           ? 'clientName'
@@ -959,7 +977,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       siteFilter,
       locationFilter,
       createdFrom,
-      createdTo
+      createdTo,
+      usageFilter
     ]
   );
 
@@ -1675,7 +1694,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           </label>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-10">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-11">
           <select
             aria-label="Filter by status"
             className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
@@ -1813,6 +1832,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Filter by stock or materials usage"
+            className={`rounded-lg px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200' : 'border-slate-200 bg-white text-slate-700'}`}
+            value={usageFilter}
+            onChange={(e) => setUsageFilter(e.target.value)}
+          >
+            <option value="all">All stock/materials</option>
+            <option value="has">With stock or materials</option>
+            <option value="none">Without stock or materials</option>
+          </select>
           <div className="flex flex-col gap-0.5">
             <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Created from</span>
             <input
@@ -1852,6 +1881,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 setStatusFilter('all');
                 setClientFilter('');
                 setCategoryFilter('');
+                setUsageFilter('all');
               }}
               className={`w-full rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${isDark ? 'border-slate-600 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
             >

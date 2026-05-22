@@ -2526,6 +2526,9 @@ const DatabaseAPI = {
         if (Number.isFinite(pageSize) && pageSize > 0) params.set('pageSize', String(pageSize));
         if (options?.includeStockUsed) params.set('includeStockUsed', '1');
         if (options?.withStockUsedOnly) params.set('withStockUsedOnly', '1');
+        if (options?.usageFilter && options.usageFilter !== 'all') {
+            params.set('usageFilter', String(options.usageFilter));
+        }
         if (options?.clientId) params.set('clientId', String(options.clientId));
         if (options?.status) params.set('status', String(options.status));
         const qs = params.toString();

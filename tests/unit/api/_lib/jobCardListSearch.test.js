@@ -2,7 +2,9 @@ import { describe, test, expect } from '@jest/globals';
 import {
   parseJobCardListSearchQuery,
   buildJobCardListSearchOr,
-  buildJobCardListWhereClause
+  buildJobCardListWhereClause,
+  buildJobCardUsageFilter,
+  jobCardJsonFieldHasEntries
 } from '../../../../api/_lib/jobCardListSearch.js';
 
 describe('parseJobCardListSearchQuery', () => {
@@ -42,5 +44,37 @@ describe('buildJobCardListWhereClause', () => {
     );
     expect(where.AND).toHaveLength(3);
     expect(where.AND[0]).toEqual({ status: 'completed' });
+  });
+
+  test('merges usage filter with base filters', () => {
+    const where = buildJobCardListWhereClause(
+      { status: 'draft' },
+      { usageFilter: 'has' }
+    );
+    expect(where.AND).toHaveLength(2);
+    expect(where.AND[1].OR).toHaveLength(2);
+  });
+});
+
+describe('buildJobCardUsageFilter', () => {
+  test('has matches stock or materials', () => {
+    const facet = buildJobCardUsageFilter('has');
+    expect(facet.OR).toHaveLength(2);
+  });
+
+  test('none requires both empty', () => {
+    const facet = buildJobCardUsageFilter('none');
+    expect(facet.AND).toHaveLength(2);
+  });
+
+  test('all returns null', () => {
+    expect(buildJobCardUsageFilter('all')).toBeNull();
+  });
+});
+
+describe('jobCardJsonFieldHasEntries', () => {
+  test('detects non-empty JSON columns', () => {
+    expect(jobCardJsonFieldHasEntries('[]')).toBe(false);
+    expect(jobCardJsonFieldHasEntries('[{"sku":"A"}]')).toBe(true);
   });
 });

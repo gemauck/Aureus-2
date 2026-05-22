@@ -5,6 +5,55 @@
 
 const HEADING_PREFIX = 'Heading:'
 
+/** Stored JSON columns when no stock lines / no materials rows have been saved. */
+export const JOBCARD_EMPTY_JSON_FIELD_VALUES = ['[]', '']
+
+/**
+ * True when a JobCard JSON column (stockUsed / materialsBought) has at least one saved row.
+ */
+export function jobCardJsonFieldHasEntries(value) {
+  if (value == null) return false
+  const s = String(value).trim()
+  return s !== '' && !JOBCARD_EMPTY_JSON_FIELD_VALUES.includes(s)
+}
+
+/**
+ * Prisma where fragment for usageFilter query param: all | has | none.
+ * `has` = any stock used or materials bought; `none` = neither.
+ */
+export function buildJobCardUsageFilter(usageFilter) {
+  const v = String(usageFilter || 'all')
+    .trim()
+    .toLowerCase()
+  if (v === 'has' || v === 'with' || v === 'yes' || v === '1') {
+    return {
+      OR: [
+        { stockUsed: { notIn: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
+        { materialsBought: { notIn: JOBCARD_EMPTY_JSON_FIELD_VALUES } }
+      ]
+    }
+  }
+  if (v === 'none' || v === 'without' || v === 'no' || v === '0') {
+    return {
+      AND: [
+        {
+          OR: [
+            { stockUsed: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
+            { stockUsed: null }
+          ]
+        },
+        {
+          OR: [
+            { materialsBought: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
+            { materialsBought: null }
+          ]
+        }
+      ]
+    }
+  }
+  return null
+}
+
 /** Prisma `contains` targets for a single free-text token (list endpoint only). */
 export const JOB_CARD_LIST_FREE_TEXT_FIELDS = [
   'jobCardNumber',
@@ -248,11 +297,16 @@ export function buildJobCardListFacetFilters(filters = {}) {
 /**
  * Merge base filters, facet filters, and q search into one Prisma where.
  */
-export function buildJobCardListWhereClause(baseFilters, { searchQ, site, location, agentName } = {}) {
+export function buildJobCardListWhereClause(
+  baseFilters,
+  { searchQ, site, location, agentName, usageFilter } = {}
+) {
   const parts = []
   if (baseFilters && Object.keys(baseFilters).length > 0) {
     parts.push(baseFilters)
   }
+  const usageFacet = buildJobCardUsageFilter(usageFilter)
+  if (usageFacet) parts.push(usageFacet)
   const facet = buildJobCardListFacetFilters({ site, location, agentName })
   if (facet) parts.push(facet)
   const searchOr = searchQ ? buildJobCardListSearchOr(searchQ) : null
