@@ -62,9 +62,11 @@ describe('buildJobCardUsageFilter', () => {
     expect(facet.OR).toHaveLength(2);
   });
 
-  test('none requires both empty', () => {
+  test('none requires both empty JSON columns', () => {
     const facet = buildJobCardUsageFilter('none');
     expect(facet.AND).toHaveLength(2);
+    expect(facet.AND[0].stockUsed.in).toEqual(['[]', '']);
+    expect(facet.AND[1].materialsBought.in).toEqual(['[]', '']);
   });
 
   test('all returns null', () => {

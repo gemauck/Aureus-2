@@ -34,20 +34,11 @@ export function buildJobCardUsageFilter(usageFilter) {
     }
   }
   if (v === 'none' || v === 'without' || v === 'no' || v === '0') {
+    // stockUsed / materialsBought are non-null String @default("[]") — do not filter on null
     return {
       AND: [
-        {
-          OR: [
-            { stockUsed: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
-            { stockUsed: null }
-          ]
-        },
-        {
-          OR: [
-            { materialsBought: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
-            { materialsBought: null }
-          ]
-        }
+        { stockUsed: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } },
+        { materialsBought: { in: JOBCARD_EMPTY_JSON_FIELD_VALUES } }
       ]
     }
   }

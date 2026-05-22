@@ -75,6 +75,26 @@ function jobCardAttachmentUrlIsVideo(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
 
+/** Human-readable message from API error JSON ({ error: { message } } or legacy shapes). */
+function formatApiErrorMessage(payload, fallback = 'Request failed.') {
+  if (payload == null) return fallback;
+  if (typeof payload === 'string' && payload.trim()) return payload.trim();
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  const err = payload.error;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (err && typeof err === 'object') {
+    if (typeof err.message === 'string' && err.message.trim()) {
+      return err.message.trim();
+    }
+    if (typeof err.details === 'string' && err.details.trim()) {
+      return err.details.trim();
+    }
+  }
+  return fallback;
+}
+
 /** Job card JSON fields may arrive parsed or as a string from older clients. */
 function parseJsonArrayLoose(value) {
   if (Array.isArray(value)) return value;
@@ -1010,7 +1030,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           let errorMessage = 'Failed to load job cards.';
           try {
             const errorData = JSON.parse(text);
-            errorMessage = errorData.message || errorData.error || errorMessage;
+            errorMessage = formatApiErrorMessage(errorData, errorMessage);
           } catch {
             if (response.status === 401) {
               errorMessage = 'Authentication required. Please log in again.';
