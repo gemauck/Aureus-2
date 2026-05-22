@@ -30,7 +30,7 @@ const applyExcelStatusCellStyle = (cell, statusConfig, opts = {}) => {
 };
 
 // Get React hooks from window
-const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo } = React;
 const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
@@ -143,6 +143,201 @@ const downloadCommentAttachment = (url, filename) => {
         })
         .catch(() => {});
 };
+
+const WEEKLY_FMS_STATUS_OPTIONS = [
+    { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600', optionStyle: { backgroundColor: '#ffffff', color: '#374151' } },
+    { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
+    { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#334155' } }
+];
+
+const getWeeklyFmsStatusConfig = (status) => {
+    if (!status || status === '' || status === 'Select Status') return null;
+    return WEEKLY_FMS_STATUS_OPTIONS.find((opt) => opt.value === status) || null;
+};
+
+const linkifyWeeklyFmsNotes = (text) => {
+    if (!text || typeof text !== 'string') return [];
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?)/gi;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => {
+        if (!part) return null;
+        const isUrl = i % 2 === 1;
+        if (isUrl) {
+            const href = part.startsWith('http') ? part : `https://${part.replace(/^www\./i, '')}`;
+            return (
+                <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800 underline break-all" onClick={(e) => e.stopPropagation()}>
+                    {part}
+                </a>
+            );
+        }
+        return part;
+    });
+};
+
+const WEEKLY_FMS_CELL_CV_STYLE = { contentVisibility: 'auto', containIntrinsicSize: '0 88px' };
+
+const WeeklyFMSNotesCell = memo(function WeeklyFMSNotesCell({
+    cellKey,
+    notes,
+    statusCellColor,
+    isWorkingWeek,
+    isEditing,
+    docName,
+    weekLabel,
+    selectedYear,
+    onStartEdit,
+    onCommitEdit
+}) {
+    const inputRef = useRef(null);
+    const draftRef = useRef(notes || '');
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            draftRef.current = notes || '';
+            inputRef.current.focus();
+        }
+    }, [isEditing, notes]);
+
+    const cellBg = statusCellColor || (isWorkingWeek ? 'bg-primary-50' : '');
+
+    return (
+        <td
+            className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+            role="gridcell"
+            style={{ minWidth: '200px', width: '200px', ...WEEKLY_FMS_CELL_CV_STYLE }}
+        >
+            <div className="flex flex-row gap-1 items-stretch w-full">
+                <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                        <textarea
+                            ref={inputRef}
+                            key={`notes-edit-${cellKey}`}
+                            defaultValue={notes || ''}
+                            onInput={(e) => { draftRef.current = e.target.value; }}
+                            onBlur={() => onCommitEdit(cellKey, draftRef.current)}
+                            placeholder="Notes..."
+                            rows={4}
+                            className="w-full min-w-0 h-[4.5rem] max-h-[4.5rem] px-2 py-1 text-xs border border-gray-200 rounded resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
+                            aria-label={`Notes for ${docName || 'document'} in ${weekLabel} ${selectedYear}`}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    ) : (
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); onStartEdit(cellKey); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEdit(cellKey); } }}
+                            className={`h-[4.5rem] max-h-[4.5rem] overflow-y-auto w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
+                            title="Click to edit"
+                        >
+                            {notes ? linkifyWeeklyFmsNotes(notes) : 'Notes...'}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </td>
+    );
+});
+
+const WeeklyFMSStatusCell = memo(function WeeklyFMSStatusCell({
+    cellKey,
+    sectionId,
+    documentId,
+    docName,
+    week,
+    weekNumber,
+    weekLabel,
+    selectedYear,
+    status,
+    commentCount,
+    isPopupOpen,
+    isSelected,
+    isWorkingWeek,
+    cellActionsRef
+}) {
+    const statusConfig = status ? getWeeklyFmsStatusConfig(status) : null;
+    let cellBackgroundClass = statusConfig
+        ? statusConfig.cellColor
+        : (isWorkingWeek ? 'bg-primary-50' : '');
+    if (isSelected) {
+        cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
+    }
+    const baseTextColorClass = statusConfig && statusConfig.color
+        ? statusConfig.color.split(' ').filter((cls) => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
+        : 'text-gray-400 dark:text-gray-400';
+    const textColorClass = isSelected ? 'text-white dark:text-gray-100' : baseTextColorClass;
+    const hasComments = commentCount > 0;
+
+    return (
+        <td
+            className={`px-2 py-0.5 text-xs border-l-4 border-gray-400 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+            onClick={(e) => cellActionsRef.current.onStatusCellClick(cellKey, sectionId, documentId, week, e)}
+            title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
+            style={WEEKLY_FMS_CELL_CV_STYLE}
+        >
+            <div className="min-w-[180px] w-[180px] relative">
+                <select
+                    value={status || ''}
+                    onChange={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, e.target.value);
+                    }}
+                    onBlur={(e) => {
+                        const newStatus = e.target.value;
+                        if (newStatus !== status) {
+                            cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, newStatus);
+                        }
+                    }}
+                    onMouseDown={(e) => {
+                        if (!e.ctrlKey && !e.metaKey) {
+                            cellActionsRef.current.onStatusSelectMouseDown(cellKey, e);
+                        }
+                    }}
+                    onClick={(e) => {
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            cellActionsRef.current.onStatusSelectMultiClick(cellKey, e);
+                        }
+                    }}
+                    aria-label={`Status for ${docName || 'document'} in ${weekLabel} ${selectedYear}`}
+                    role="combobox"
+                    aria-haspopup="listbox"
+                    data-section-id={sectionId}
+                    data-document-id={documentId}
+                    data-week={weekNumber}
+                    data-week-label={weekLabel}
+                    data-year={selectedYear}
+                    className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
+                >
+                    <option value="">—</option>
+                    {WEEKLY_FMS_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+                <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
+                    <button
+                        data-comment-cell={cellKey}
+                        onClick={(e) => cellActionsRef.current.onCommentButtonClick(cellKey, sectionId, documentId, weekLabel, e)}
+                        className="text-red-300 hover:text-red-400 transition-colors relative p-1"
+                        title={hasComments ? `${commentCount} comment(s)` : 'Add comment'}
+                        type="button"
+                    >
+                        <i className="fas fa-comment text-base"></i>
+                        {hasComments && (
+                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                                {commentCount}
+                            </span>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </td>
+    );
+});
 
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
@@ -478,7 +673,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     
     // Main data state - loaded from database, stored per year
     const [sectionsByYear, setSectionsByYear] = useState({});
-    
+
     // View model for the currently selected year only
     // This ensures that edits (adding sections, documents, comments, etc.)
     // are scoped to a single year instead of affecting every year.
@@ -519,12 +714,27 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return {};
     }, [sectionsByYear]);
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(() => !(project?.weeklyFMSReviewSections));
+    const [showAllWeekColumns, setShowAllWeekColumns] = useState(false);
+    const weeklyFmsCellActionsRef = useRef({});
     
     // Keep refs in sync with latest state
     useEffect(() => {
         sectionsRef.current = sectionsByYear;
     }, [sectionsByYear]);
+
+    // Paint immediately from project prop while network refresh runs in background
+    useEffect(() => {
+        if (!project?.weeklyFMSReviewSections) return;
+        const hasData = sectionsRef.current && Object.keys(sectionsRef.current).length > 0;
+        if (hasData) return;
+        const normalized = normalizeSectionsByYear(project.weeklyFMSReviewSections);
+        if (!normalized || Object.keys(normalized).length === 0) return;
+        setSectionsByYear(normalized);
+        sectionsRef.current = normalized;
+        lastSavedDataRef.current = JSON.stringify(normalized);
+        setIsLoading(false);
+    }, [project?.id, project?.weeklyFMSReviewSections]);
     
     useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
@@ -555,12 +765,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const templateDropdownRef = useRef(null);
     const [expandedDescriptionId, setExpandedDescriptionId] = useState(null);
     const [editingNotesCell, setEditingNotesCell] = useState(null);
-    const notesInputRef = useRef(null);
-    useEffect(() => {
-        if (editingNotesCell && notesInputRef.current) {
-            notesInputRef.current.focus();
-        }
-    }, [editingNotesCell]);
     const [showTemplateList, setShowTemplateList] = useState(true);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
@@ -642,39 +846,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         };
     }, [sections.length]);
     
-    // When opening or returning to Weekly FMS (navigation, refresh, hard refresh): scroll to the working week.
-    useEffect(() => {
-        if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
-        const workingWeekIndex = weeks.findIndex(w => workingWeeks.includes(w.number));
-        if (workingWeekIndex < 0) return;
-        const STICKY_WIDTH = 300;
-        const WEEK_COLUMN_WIDTH = 380; // Status + Notes per week (180px + 200px)
-        const targetScrollLeft = Math.max(0, STICKY_WIDTH + workingWeekIndex * WEEK_COLUMN_WIDTH - 80);
-        const run = () => {
-            const root = scrollSyncRootRef.current;
-            if (!root) return false;
-            const containers = root.querySelectorAll('[data-scroll-sync]');
-            if (containers.length === 0) return false;
-            containers.forEach(el => { el.scrollLeft = targetScrollLeft; });
-            return true;
-        };
-        // Retry at several delays so we catch the DOM after layout (works on navigation, refresh, hard refresh).
-        const delays = [100, 350, 700];
-        const timeouts = [];
-        const rafId = requestAnimationFrame(() => {
-            delays.forEach((delay) => {
-                const id = setTimeout(() => {
-                    run();
-                }, delay);
-                timeouts.push(id);
-            });
-        });
-        return () => {
-            cancelAnimationFrame(rafId);
-            timeouts.forEach((id) => clearTimeout(id));
-        };
-    }, [sections.length, selectedYear, currentYear, workingWeeks, weeks]);
-    
     // When creating a template from the current year's sections, we pre‑seed
     // the modal via this state so that it goes through the "create" code path
     // (POST) instead of trying to update an existing template.
@@ -736,10 +907,12 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             console.log('⏸️ Load skipped: deletion in progress');
             return;
         }
-        setIsLoading(true);
+        const hasCachedSections = sectionsRef.current && Object.keys(sectionsRef.current).length > 0;
+        if (!hasCachedSections) {
+            setIsLoading(true);
+        }
         try {
             if (apiRef.current) {
-                console.log('📥 Loading from database...', { projectId: project.id });
                 const freshProject = await apiRef.current.fetchProject(project.id);
                 if (freshProject?.weeklyFMSReviewSections) {
                     const normalized = normalizeSectionsByYear(freshProject.weeklyFMSReviewSections);
@@ -1246,6 +1419,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         }
         
         setSelectedYear(year);
+        setShowAllWeekColumns(false);
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
         }
@@ -1372,6 +1546,59 @@ const gridColumns = React.useMemo(() => (
         };
     })
 ), [weeks, selectedYear]);
+
+    const WEEK_COLUMN_VIEW_PAD = 12;
+    const workingWeekIndex = useMemo(() => {
+        if (workingWeeks.length === 0) return 0;
+        const idx = weeks.findIndex((w) => workingWeeks.includes(w.number));
+        return idx >= 0 ? idx : 0;
+    }, [weeks, workingWeeks]);
+
+    const displayWeekColumnStart = useMemo(() => {
+        if (showAllWeekColumns) return 0;
+        return Math.max(0, workingWeekIndex - WEEK_COLUMN_VIEW_PAD);
+    }, [showAllWeekColumns, workingWeekIndex]);
+
+    const displayGridColumns = useMemo(() => {
+        if (showAllWeekColumns || gridColumns.length <= WEEK_COLUMN_VIEW_PAD * 2 + 1) {
+            return gridColumns;
+        }
+        const start = displayWeekColumnStart;
+        const end = Math.min(gridColumns.length, workingWeekIndex + WEEK_COLUMN_VIEW_PAD + 1);
+        return gridColumns.slice(start, end);
+    }, [gridColumns, showAllWeekColumns, workingWeekIndex, displayWeekColumnStart]);
+
+    // When opening or returning to Weekly FMS: scroll to the working week (after column window is known).
+    useEffect(() => {
+        if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
+        const workingWeekIndexLocal = weeks.findIndex((w) => workingWeeks.includes(w.number));
+        if (workingWeekIndexLocal < 0) return;
+        const STICKY_WIDTH = 300;
+        const WEEK_COLUMN_WIDTH = 380;
+        const columnIndexInView = showAllWeekColumns
+            ? workingWeekIndexLocal
+            : Math.max(0, workingWeekIndexLocal - displayWeekColumnStart);
+        const targetScrollLeft = Math.max(0, STICKY_WIDTH + columnIndexInView * WEEK_COLUMN_WIDTH - 80);
+        const run = () => {
+            const root = scrollSyncRootRef.current;
+            if (!root) return false;
+            const containers = root.querySelectorAll('[data-scroll-sync]');
+            if (containers.length === 0) return false;
+            containers.forEach((el) => { el.scrollLeft = targetScrollLeft; });
+            return true;
+        };
+        const delays = [100, 350, 700];
+        const timeouts = [];
+        const rafId = requestAnimationFrame(() => {
+            delays.forEach((delay) => {
+                timeouts.push(setTimeout(() => { run(); }, delay));
+            });
+        });
+        return () => {
+            cancelAnimationFrame(rafId);
+            timeouts.forEach((id) => clearTimeout(id));
+        };
+    }, [sections.length, selectedYear, currentYear, workingWeeks, weeks, showAllWeekColumns, displayWeekColumnStart]);
 
     // ProjectActivityLog timeline for the open weekly FMS cell (status changes)
     useEffect(() => {
@@ -2358,6 +2585,25 @@ const getAssigneeColor = (identifier, users) => {
         sectionsRef.current = updatedSectionsByYear;
         setSectionsByYear(updatedSectionsByYear);
     }, [selectedYear, getLatestSectionsByYear]);
+
+    const notesCellMetaRef = useRef(new Map());
+
+    const handleStartEditNotes = useCallback((cellKey) => {
+        setEditingNotesCell(cellKey);
+    }, []);
+
+    const handleCommitNotesEdit = useCallback((cellKey, text) => {
+        const meta = notesCellMetaRef.current.get(cellKey);
+        setEditingNotesCell(null);
+        if (!meta) return;
+        handleUpdateNotes(meta.sectionId, meta.documentId, meta.week, text);
+        lastSavedDataRef.current = null;
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        saveToDatabase();
+    }, [handleUpdateNotes]);
 
     const uploadCommentAttachments = async (files) => {
         if (!files?.length) return [];
@@ -3460,61 +3706,21 @@ const getAssigneeColor = (identifier, users) => {
         }
     }, [selectedYear, sections.length, checkAndOpenDeepLink]);
     
-    // ============================================================
-    // RENDER STATUS CELL
-    // ============================================================
-    
-    const renderStatusCell = (section, doc, week) => {
-        const status = getDocumentStatus(doc, week);
-        const statusConfig = status ? getStatusConfig(status) : null;
-        const comments = getDocumentComments(doc, week);
-        const hasComments = comments.length > 0;
-        // Use week number for cell key (more reliable than label which contains special chars)
-        // Use week number for cell key (more reliable than label which contains special chars)
-        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
-        const weekLabel = typeof week === 'object' ? week.label : week;
-        const cellKey = `${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}`;
-        const isPopupOpen = hoverCommentCell === cellKey;
-        const isSelected = selectedCells.has(cellKey);
-        
-        const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
-        let cellBackgroundClass = statusConfig 
-            ? statusConfig.cellColor 
-            : (isWorkingWeek ? 'bg-primary-50' : '');
-        
-        // Add selection styling (with higher priority)
-        if (isSelected) {
-            cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
-        }
-        
-const baseTextColorClass = statusConfig && statusConfig.color
-            ? statusConfig.color.split(' ').filter(cls => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
-            : 'text-gray-400 dark:text-gray-400';
-
-        const textColorClass = isSelected ? 'text-white dark:text-gray-100' : baseTextColorClass;
-        
-        const handleCellClick = (e) => {
-            // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
+    // Stable cell interaction handlers (memoized grid cells read via ref)
+    weeklyFmsCellActionsRef.current = {
+        onStatusCellClick: (cellKey, sectionId, documentId, week, e) => {
             const isMultiSelect = e.ctrlKey || e.metaKey;
-            
             if (isMultiSelect) {
                 e.preventDefault();
                 e.stopPropagation();
-                
-                setSelectedCells(prev => {
+                setSelectedCells((prev) => {
                     const newSet = new Set(prev);
-                    if (newSet.has(cellKey)) {
-                        newSet.delete(cellKey);
-                    } else {
-                        newSet.add(cellKey);
-                    }
-                    // Update ref immediately
+                    if (newSet.has(cellKey)) newSet.delete(cellKey);
+                    else newSet.add(cellKey);
                     selectedCellsRef.current = newSet;
                     return newSet;
                 });
             } else {
-                // Single click without modifier - clear selection if clicking on a different cell
-                // Use ref to get latest value
                 const currentSelectedCells = selectedCellsRef.current;
                 if (currentSelectedCells.size > 0 && !currentSelectedCells.has(cellKey)) {
                     const newSet = new Set();
@@ -3522,251 +3728,92 @@ const baseTextColorClass = statusConfig && statusConfig.color
                     selectedCellsRef.current = newSet;
                 }
             }
-        };
-        
-        return (
-            <td 
-                className={`px-2 py-0.5 text-xs border-l-4 border-gray-400 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
-                onClick={handleCellClick}
-                title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
-            >
-                <div className="min-w-[180px] w-[180px] relative">
-                    <select
-                        value={status || ''}
-                        onChange={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const newStatus = e.target.value;
-                            // Always use ref to get latest selectedCells value
-                            const currentSelectedCells = selectedCellsRef.current;
-                            // Only apply to selected cells if:
-                            // 1. There are multiple selected cells (more than just this one)
-                            // 2. This cell is part of the selection
-                            // This prevents accidentally applying to cells that were selected unintentionally
-                            const applyToSelected = currentSelectedCells.size > 1 && currentSelectedCells.has(cellKey);
-                            
-                            handleUpdateStatus(section.id, doc.id, week, newStatus, applyToSelected);
-                        }}
-                        onBlur={(e) => {
-                            // Ensure state is saved on blur
-                            const newStatus = e.target.value;
-                            if (newStatus !== status) {
-                                const currentSelectedCells = selectedCellsRef.current;
-                                // Only apply to selected cells if there are multiple selected
-                                const applyToSelected = currentSelectedCells.size > 1 && currentSelectedCells.has(cellKey);
-                                handleUpdateStatus(section.id, doc.id, week, newStatus, applyToSelected);
-                            }
-                        }}
-                        onMouseDown={(e) => {
-                            // Clear selection when clicking on dropdown (unless Ctrl/Cmd is held for multi-select)
-                            if (!e.ctrlKey && !e.metaKey) {
-                                // Clear any existing selection when user clicks on dropdown
-                                const currentSelectedCells = selectedCellsRef.current;
-                                if (currentSelectedCells.size > 0) {
-                                    const newSet = new Set([cellKey]); // Keep only this cell selected
-                                    setSelectedCells(newSet);
-                                    selectedCellsRef.current = newSet;
-                                }
-                                e.stopPropagation();
-                            }
-                            // Allow Ctrl/Cmd+Click to bubble up for multi-select
-                        }}
-                        onClick={(e) => {
-                            // Handle Ctrl/Cmd+Click on the select itself for multi-select
-                            if (e.ctrlKey || e.metaKey) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                
-                                setSelectedCells(prev => {
-                                    const newSet = new Set(prev);
-                                    if (newSet.has(cellKey)) {
-                                        newSet.delete(cellKey);
-                                    } else {
-                                        newSet.add(cellKey);
-                                    }
-                                    selectedCellsRef.current = newSet;
-                                    return newSet;
-                                });
-                            }
-                        }}
-                        aria-label={`Status for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
-                        role="combobox"
-                        aria-haspopup="listbox"
-                        data-section-id={section.id}
-                        data-document-id={doc.id}
-                        data-week={weekNumber}
-                        data-week-label={weekLabel}
-                        data-year={selectedYear}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
-                    >
-                        <option value="">—</option>
-                        {statusOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                    
-                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
-                        <button
-                            data-comment-cell={cellKey}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                
-                                if (isPopupOpen) {
-                                    setHoverCommentCell(null);
-                                    // Clear URL params when closing popup (but preserve project path)
-                                    if (window.RouteState && window.RouteState.navigate && project?.id) {
-                                        window.RouteState.navigate({
-                                            page: 'projects',
-                                            segments: [String(project.id)],
-                                            hash: '',
-                                            search: '',
-                                            replace: false,
-                                            preserveSearch: false,
-                                            preserveHash: false
-                                        });
-                                    }
-                                } else {
-                                    // Set position synchronously from button rect so first paint is correct (no jump/jitter)
-                                    const commentButton = e.currentTarget;
-                                    if (commentButton) {
-                                        const buttonRect = commentButton.getBoundingClientRect();
-                                        const vw = window.innerWidth;
-                                        const vh = window.innerHeight;
-                                        const popupWidth = 288;
-                                        const popupHeight = 300;
-                                        const spacing = 8;
-                                        const tailSize = 12;
-                                        const spaceBelow = vh - buttonRect.bottom;
-                                        const spaceAbove = buttonRect.top;
-                                        const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
-                                        const popupTop = positionAbove
-                                            ? buttonRect.top - popupHeight - spacing - tailSize
-                                            : buttonRect.bottom + spacing + tailSize;
-                                        let preferredLeft = buttonRect.left + buttonRect.width / 2 - popupWidth / 2;
-                                        if (preferredLeft < 10) preferredLeft = 10;
-                                        else if (preferredLeft + popupWidth > vw - 10) preferredLeft = vw - popupWidth - 10;
-                                        setCommentPopupPosition({ top: popupTop, left: preferredLeft });
-                                    }
-                                    setHoverCommentCell(cellKey);
-                                    
-                                    // Update URL with deep link when opening popup (week is the week param; weekLabel is derived from it)
-                                    if (section && doc && weekLabel && project?.id) {
-                                        const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(section.id)}&docDocumentId=${encodeURIComponent(doc.id)}&docWeek=${encodeURIComponent(weekLabel)}&docYear=${encodeURIComponent(selectedYear)}`;
-                                        
-                                        if (window.RouteState && window.RouteState.navigate) {
-                                            window.RouteState.navigate({
-                                                page: 'projects',
-                                                segments: [String(project.id)],
-                                                hash: deepLinkUrl.replace('#', ''),
-                                                replace: false,
-                                                preserveSearch: false,
-                                                preserveHash: false
-                                            });
-                                        } else {
-                                            window.location.hash = deepLinkUrl;
-                                        }
-                                    }
-                                }
-                            }}
-                            className="text-red-300 hover:text-red-400 transition-colors relative p-1"
-                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
-                            type="button"
-                        >
-                            <i className="fas fa-comment text-base"></i>
-                            {hasComments && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                    {comments.length}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </td>
-        );
-    };
-    
-    // Turn URLs in plain text into clickable links (for notes display)
-    const linkifyNotes = (text) => {
-        if (!text || typeof text !== 'string') return [];
-        const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?)/gi;
-        const parts = text.split(urlRegex);
-        return parts.map((part, i) => {
-            if (!part) return null;
-            // Odd-indexed segments from split() are the captured URL matches
-            const isUrl = i % 2 === 1;
-            if (isUrl) {
-                const href = part.startsWith('http') ? part : `https://${part.replace(/^www\./i, '')}`;
-                return (
-                    <a key={i} href={href} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:text-sky-800 underline break-all" onClick={(e) => e.stopPropagation()}>
-                        {part}
-                    </a>
-                );
+        },
+        onStatusSelectChange: (cellKey, sectionId, documentId, week, newStatus) => {
+            const currentSelectedCells = selectedCellsRef.current;
+            const applyToSelected = currentSelectedCells.size > 1 && currentSelectedCells.has(cellKey);
+            handleUpdateStatus(sectionId, documentId, week, newStatus, applyToSelected);
+        },
+        onStatusSelectMouseDown: (cellKey, e) => {
+            if (!e.ctrlKey && !e.metaKey) {
+                const currentSelectedCells = selectedCellsRef.current;
+                if (currentSelectedCells.size > 0) {
+                    const newSet = new Set([cellKey]);
+                    setSelectedCells(newSet);
+                    selectedCellsRef.current = newSet;
+                }
+                e.stopPropagation();
             }
-            return part;
-        });
+        },
+        onStatusSelectMultiClick: (cellKey, e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setSelectedCells((prev) => {
+                const newSet = new Set(prev);
+                if (newSet.has(cellKey)) newSet.delete(cellKey);
+                else newSet.add(cellKey);
+                selectedCellsRef.current = newSet;
+                return newSet;
+            });
+        },
+        onCommentButtonClick: (cellKey, sectionId, documentId, weekLabel, e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isPopupOpen = hoverCommentCellRef.current === cellKey;
+            if (isPopupOpen) {
+                setHoverCommentCell(null);
+                if (window.RouteState?.navigate && project?.id) {
+                    window.RouteState.navigate({
+                        page: 'projects',
+                        segments: [String(project.id)],
+                        hash: '',
+                        search: '',
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
+                return;
+            }
+            const commentButton = e.currentTarget;
+            if (commentButton) {
+                const buttonRect = commentButton.getBoundingClientRect();
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const popupWidth = 288;
+                const popupHeight = 300;
+                const spacing = 8;
+                const tailSize = 12;
+                const spaceBelow = vh - buttonRect.bottom;
+                const spaceAbove = buttonRect.top;
+                const positionAbove = spaceBelow < popupHeight + spacing && spaceAbove > spaceBelow;
+                const popupTop = positionAbove
+                    ? buttonRect.top - popupHeight - spacing - tailSize
+                    : buttonRect.bottom + spacing + tailSize;
+                let preferredLeft = buttonRect.left + buttonRect.width / 2 - popupWidth / 2;
+                if (preferredLeft < 10) preferredLeft = 10;
+                else if (preferredLeft + popupWidth > vw - 10) preferredLeft = vw - popupWidth - 10;
+                setCommentPopupPosition({ top: popupTop, left: preferredLeft });
+            }
+            setHoverCommentCell(cellKey);
+            if (sectionId && documentId && weekLabel && project?.id) {
+                const deepLinkUrl = `#/projects/${project.id}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docWeek=${encodeURIComponent(weekLabel)}&docYear=${encodeURIComponent(selectedYear)}`;
+                if (window.RouteState?.navigate) {
+                    window.RouteState.navigate({
+                        page: 'projects',
+                        segments: [String(project.id)],
+                        hash: deepLinkUrl.replace('#', ''),
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                } else {
+                    window.location.hash = deepLinkUrl;
+                }
+            }
+        }
     };
-    
-    const renderNotesCell = (section, doc, week) => {
-        const notes = getDocumentNotes(doc, week);
-        const status = getDocumentStatus(doc, week);
-        const statusConfig = status ? getStatusConfig(status) : null;
-        const weekNumber = typeof week === 'object' ? week.number : (typeof week === 'string' ? parseInt(week.match(/Week\s+(\d+)/i)?.[1] || week.match(/\d+/)?.[0] || '0') : week);
-        const weekLabel = typeof week === 'object' ? week.label : week;
-        const weekKey = getWeekKey(week, selectedYear);
-        const cellKey = weekKey ? `${section.id}-${doc.id}-${weekKey}` : `${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}`;
-        const isEditing = editingNotesCell === cellKey;
-        const isWorkingWeek = workingWeeks.includes(weekNumber) && selectedYear === currentYear;
-        const cellBg = statusConfig?.cellColor || (isWorkingWeek ? 'bg-primary-50' : '');
-        return (
-            <td
-                className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
-                role="gridcell"
-                style={{ minWidth: '200px', width: '200px' }}
-            >
-                <div className="flex flex-row gap-1 items-stretch w-full">
-                    <div className="flex-1 min-w-0">
-                        {isEditing ? (
-                            <textarea
-                                ref={notesInputRef}
-                                key={`notes-edit-${cellKey}`}
-                                defaultValue={notes}
-                                onChange={(e) => handleUpdateNotes(section.id, doc.id, week, e.target.value)}
-                                onBlur={() => {
-                                    setEditingNotesCell(null);
-                                    lastSavedDataRef.current = null;
-                                    if (saveTimeoutRef.current) {
-                                        clearTimeout(saveTimeoutRef.current);
-                                        saveTimeoutRef.current = null;
-                                    }
-                                    saveToDatabase();
-                                }}
-                                placeholder="Notes..."
-                                rows={4}
-                                className="w-full min-w-0 h-[4.5rem] max-h-[4.5rem] px-2 py-1 text-xs border border-gray-200 rounded resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
-                                aria-label={`Notes for ${doc.name || 'document'} in ${weekLabel} ${selectedYear}`}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        ) : (
-                            <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => { e.stopPropagation(); setEditingNotesCell(cellKey); }}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingNotesCell(cellKey); } }}
-                                className={`h-[4.5rem] max-h-[4.5rem] overflow-y-auto w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
-                                title="Click to edit"
-                            >
-                                {notes ? linkifyNotes(notes) : 'Notes...'}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </td>
-        );
-    };
-    
+
     // ============================================================
     // MODALS
     // ============================================================
@@ -4450,6 +4497,8 @@ const baseTextColorClass = statusConfig && statusConfig.color
         );
     }
     
+    notesCellMetaRef.current = new Map();
+
     return (
         <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
             {/* Comment Popup */}
@@ -4978,6 +5027,32 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 </div>
             </div>
             
+            {gridColumns.length > displayGridColumns.length && (
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
+                    <span>
+                        Showing weeks {displayGridColumns[0]?.week?.number ?? '—'}–{displayGridColumns[displayGridColumns.length - 1]?.week?.number ?? '—'} ({displayGridColumns.length} of {gridColumns.length}) for faster performance.
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setShowAllWeekColumns(true)}
+                        className="shrink-0 rounded-md bg-sky-600 px-3 py-1 font-semibold text-white hover:bg-sky-700"
+                    >
+                        Show all weeks
+                    </button>
+                </div>
+            )}
+            {showAllWeekColumns && gridColumns.length > WEEK_COLUMN_VIEW_PAD * 2 + 1 && (
+                <div className="mb-3 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => setShowAllWeekColumns(false)}
+                        className="text-xs font-semibold text-sky-700 hover:text-sky-900 dark:text-sky-300"
+                    >
+                        Focus on working week (faster)
+                    </button>
+                </div>
+            )}
+
             {/* Legend */}
             <div className="mb-4 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 to-white p-3 shadow-sm dark:border-gray-600 dark:from-gray-800 dark:to-gray-900">
                 <div className="flex flex-wrap items-center gap-4">
@@ -5096,7 +5171,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             >
                                                 Document / Data
                                             </th>
-                                            {gridColumns.map((col) => {
+                                            {displayGridColumns.map((col) => {
                                                 const week = col.week;
                                                 return (
                                                     <th
@@ -5130,7 +5205,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                             </th>
                                         </tr>
                                         <tr>
-                                            {gridColumns.map((col) => {
+                                            {displayGridColumns.map((col) => {
                                                 const week = col.week;
                                                 const isWorking = workingWeeks.includes(week.number) && selectedYear === currentYear;
                                                 return (
@@ -5162,7 +5237,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                     >
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={gridColumns.length * 2 + 2} className="px-8 py-12 text-center">
+                                                <td colSpan={displayGridColumns.length * 2 + 2} className="px-8 py-12 text-center">
                                                     <div className="flex flex-col items-center gap-3">
                                                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
                                                             <i className="fas fa-file-alt text-2xl text-gray-400"></i>
@@ -5329,12 +5404,53 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                                             </div>
                                                             </div>
                                                     </td>
-                                                    {gridColumns.map((col) => (
-                                                        <React.Fragment key={`${doc.id}-${col.key}`}>
-                                                            {renderStatusCell(section, doc, col.week)}
-                                                            {renderNotesCell(section, doc, col.week)}
-                                                        </React.Fragment>
-                                                    ))}
+                                                    {displayGridColumns.map((col) => {
+                                                        const week = col.week;
+                                                        const weekNumber = week.number;
+                                                        const weekLabel = week.label;
+                                                        const cellKey = `${section.id}-${doc.id}-W${String(weekNumber).padStart(2, '0')}`;
+                                                        const status = getDocumentStatus(doc, week);
+                                                        const notes = getDocumentNotes(doc, week);
+                                                        const comments = getDocumentComments(doc, week);
+                                                        const statusConfig = status ? getStatusConfig(status) : null;
+                                                        notesCellMetaRef.current.set(cellKey, {
+                                                            sectionId: section.id,
+                                                            documentId: doc.id,
+                                                            week
+                                                        });
+                                                        return (
+                                                            <React.Fragment key={`${doc.id}-${col.key}`}>
+                                                                <WeeklyFMSStatusCell
+                                                                    cellKey={cellKey}
+                                                                    sectionId={section.id}
+                                                                    documentId={doc.id}
+                                                                    docName={doc.name}
+                                                                    week={week}
+                                                                    weekNumber={weekNumber}
+                                                                    weekLabel={weekLabel}
+                                                                    selectedYear={selectedYear}
+                                                                    status={status || ''}
+                                                                    commentCount={comments.length}
+                                                                    isPopupOpen={hoverCommentCell === cellKey}
+                                                                    isSelected={selectedCells.has(cellKey)}
+                                                                    isWorkingWeek={workingWeeks.includes(weekNumber) && selectedYear === currentYear}
+                                                                    cellActionsRef={weeklyFmsCellActionsRef}
+                                                                />
+                                                                <WeeklyFMSNotesCell
+                                                                    cellKey={cellKey}
+                                                                    notes={notes}
+                                                                    statusCellColor={statusConfig?.cellColor}
+                                                                    isWorkingWeek={workingWeeks.includes(weekNumber) && selectedYear === currentYear}
+                                                                    isEditing={editingNotesCell === cellKey}
+                                                                    docName={doc.name}
+                                                                    weekLabel={weekLabel}
+                                                                    selectedYear={selectedYear}
+                                                                    onStartEdit={handleStartEditNotes}
+                                                                    onCommitEdit={handleCommitNotesEdit}
+                                                                />
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
                                                     <td className="px-4 py-2 border-l-4 border-gray-400">
                                                         <div className="flex items-center gap-2 justify-center">
                                                             <button
