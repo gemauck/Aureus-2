@@ -273,41 +273,54 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
         });
     };
 
-    return (
-        <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    {onBack && (
-                        <button
-                            onClick={onBack}
-                            className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                    )}
-                    <div>
-                        <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">Document Collection Checklist</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track required documents for this project</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-4">
-                    <div className="text-right">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">Progress</div>
-                        <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">{progress}%</div>
-                    </div>
-                    <div
-                        className="w-16 h-16 rounded-full border-4 border-gray-200 dark:border-gray-600 flex items-center justify-center document-checklist-progress-ring"
-                        style={{
-                            background: `conic-gradient(from 0deg, #3b82f6 0% ${progress}%, var(--progress-track, #e5e7eb) ${progress}% 100%)`
-                        }}
-                    >
-                        <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center">
-                            <i className="fas fa-check text-primary-600 dark:text-primary-400"></i>
-                        </div>
-                    </div>
+    const TU = window.TrackerUIShared;
+    const progressRing = (
+        <div className="flex items-center gap-4">
+            <div className="text-right">
+                <div className="text-sm text-slate-600 dark:text-slate-400">Progress</div>
+                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{progress}%</div>
+            </div>
+            <div
+                className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-slate-200 document-checklist-progress-ring dark:border-slate-600"
+                style={{
+                    background: `conic-gradient(from 0deg, #4f46e5 0% ${progress}%, var(--progress-track, #e2e8f0) ${progress}% 100%)`
+                }}
+            >
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white dark:bg-slate-800">
+                    <i className="fas fa-check text-indigo-600 dark:text-indigo-400"></i>
                 </div>
             </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-4">
+            {TU ? (
+                <TU.TrackerHeader
+                    badgeLabel="Checklist"
+                    badgeIcon="fa-clipboard-check"
+                    title="Document Collection Checklist"
+                    projectName={project?.name}
+                    client={project?.client}
+                    onBack={onBack}
+                    exportButton={progressRing}
+                />
+            ) : (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        {onBack && (
+                            <button onClick={onBack} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+                                <i className="fas fa-arrow-left"></i>
+                            </button>
+                        )}
+                        <div>
+                            <h2 className="text-xl font-semibold text-gray-900">Document Collection Checklist</h2>
+                            <p className="text-sm text-gray-500">Track required documents for this project</p>
+                        </div>
+                    </div>
+                    {progressRing}
+                </div>
+            )}
 
             {/* Progress Bar */}
             <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">

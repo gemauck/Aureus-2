@@ -303,6 +303,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const trackerTabForDeepLink = isMonthlyDataReview ? 'monthlyDataReview' : isComplianceReview ? 'complianceReview' : 'documentCollection';
     const trackerNotifySource = trackerTabForDeepLink;
     const trackerContextTitlePrefix = isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection';
+    const trackerBadgeLabel = isMonthlyDataReview ? 'Data review' : isComplianceReview ? 'Compliance' : 'Documents';
+    const trackerBadgeIcon = isMonthlyDataReview ? 'fa-database' : isComplianceReview ? 'fa-shield-halved' : 'fa-folder-open';
+    const trackerTitle = isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection Tracker';
+    const TU = window.TrackerUIShared;
     // Month grid column widths (Data Review, Compliance Review, Document Collection)
     const jsonTrackerStatusColPx = isComplianceReview ? 280 : 360;
     const jsonTrackerNotesColPx = isComplianceReview ? 336 : 416;
@@ -2962,9 +2966,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         { value: 'reviewed-issue', label: 'Reviewed - Issue', color: 'bg-red-200 text-red-800 font-semibold dark:bg-red-900/60 dark:text-red-200', cellColor: 'bg-red-200 border-l-4 border-red-400 shadow-sm dark:bg-red-900/60 dark:border-red-500', optionStyle: { backgroundColor: '#fecaca', color: '#9f1239' } },
         { value: 'in-progress', label: 'In Progress', color: 'bg-amber-200 text-amber-800 font-semibold dark:bg-amber-900/60 dark:text-amber-200', cellColor: 'bg-amber-200 border-l-4 border-amber-300 shadow-sm dark:bg-amber-900/60 dark:border-amber-500', optionStyle: { backgroundColor: '#fde68a', color: '#92400e' } }
     ];
-    const statusOptions = isComplianceReview
+    const rawStatusOptions = isComplianceReview
         ? complianceReviewStatusOptions
         : (isJsonOnlyTracker ? monthlyDataReviewStatusOptions : documentCollectionStatusOptions);
+    const statusOptions = TU ? TU.normalizeStatusOptions(rawStatusOptions) : rawStatusOptions;
 
     // Keep old compliance values visible after rollout by mapping to new values.
     const normalizeComplianceStatusValue = (status) => {
@@ -5420,20 +5425,15 @@ const getAssigneeColor = (identifier, users) => {
         const showCellActions = true;
         
         const isWorkingMonth = isOneMonthArrears(selectedYear, months.indexOf(month));
-        let cellBackgroundClass = statusConfig 
-            ? statusConfig.cellColor 
-            : (isWorkingMonth ? 'bg-sky-50' : '');
-        
-        // Add selection styling (with higher priority) - pastel
+        let cellBackgroundClass = statusConfig
+            ? statusConfig.cellColor
+            : (TU ? TU.workingMonthCellBg(isWorkingMonth) : (isWorkingMonth ? 'bg-sky-50' : ''));
         if (isSelected) {
-            cellBackgroundClass = 'bg-sky-200 border-2 border-sky-400 dark:bg-sky-800 dark:border-sky-500';
+            cellBackgroundClass = TU ? TU.selectedCellBg : 'bg-sky-200 border-2 border-sky-400 dark:bg-sky-800 dark:border-sky-500';
         }
-        
-const baseTextColorClass = statusConfig && statusConfig.color
-            ? statusConfig.color.split(' ').filter(cls => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
-            : 'text-gray-400 dark:text-gray-400';
-        
-        const textColorClass = isSelected ? 'text-sky-900 dark:text-sky-100' : baseTextColorClass;
+        const selectWrapClass = TU
+            ? TU.getStatusSelectWrap(isMonthlyDataReview ? resolveMonthlyDataReviewStatusKey(status) : status, statusOptions)
+            : (statusConfig?.selectWrap || 'bg-white border-slate-200 text-slate-500');
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -5466,11 +5466,11 @@ const baseTextColorClass = statusConfig && statusConfig.color
             }
         };
         
-        const monthSeparatorClass = isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200';
+        const monthSeparatorClass = isJsonOnlyTracker ? 'border-l border-slate-300 dark:border-slate-600' : 'border-l border-slate-200/90 dark:border-slate-700';
         const isList = variant === 'list';
         const outerClassName = isList
             ? `px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-600 ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-gray-900' : ''}`
-            : `px-3 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:bg-opacity-90'}`;
+            : `px-1.5 py-1.5 text-xs ${monthSeparatorClass} ${cellBackgroundClass} relative transition-all`;
         const innerWidthClass = isList ? 'w-full min-w-0' : 'relative w-full min-w-0';
         const OuterTag = isList ? 'div' : 'td';
         const outerProps = isList
@@ -5502,8 +5502,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                 role: 'gridcell'
             };
         return (
-            <OuterTag {...outerProps}>
+            <OuterTag {...outerProps} style={!isList && TU?.TRACKER_CELL_CV_STYLE ? { ...outerProps.style, ...TU.TRACKER_CELL_CV_STYLE } : outerProps.style}>
                 <div className={innerWidthClass}>
+                    <div className={`relative flex-1 min-w-0 rounded-lg border shadow-sm ${selectWrapClass}`}>
                     <select
                         value={isMonthlyDataReview ? (status ? resolveMonthlyDataReviewStatusKey(status) : '') : (status || '')}
                         onChange={(e) => {
@@ -5559,9 +5560,9 @@ const baseTextColorClass = statusConfig && statusConfig.color
                         data-document-id={doc.id}
                         data-month={month}
                         data-year={selectedYear}
-                        className={`w-full pl-2 pr-20 py-1.5 text-xs rounded-lg font-semibold border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-400`}
+                        className="w-full pl-2 pr-20 py-1.5 text-[11px] font-medium rounded-lg border-0 cursor-pointer appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                     >
-                        <option value="">—</option>
+                        <option value="">Select status</option>
                         {statusOptions.map(option => (
                             <option key={option.value} value={option.value} style={option.optionStyle || {}}>
                                 {option.label}
@@ -5705,6 +5706,7 @@ const baseTextColorClass = statusConfig && statusConfig.color
                                 </span>
                             );
                         })()}
+                    </div>
                     </div>
                 </div>
             </OuterTag>
@@ -8625,20 +8627,145 @@ Abcotronics`;
     // ============================================================
     
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-sky-600 dark:text-sky-400 mb-3"></i>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading document collection tracker...</p>
-                    {loadingSlow && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">Taking longer than usual — still loading. You can retry by refreshing the page.</p>
-                    )}
+        const loadMsg = isMonthlyDataReview
+            ? 'Loading monthly data review…'
+            : isComplianceReview
+                ? 'Loading compliance review…'
+                : 'Loading document collection…';
+        return TU
+            ? <TU.TrackerLoadingScreen message={loadMsg} submessage="Preparing your checklist" slowHint={loadingSlow ? 'Taking longer than usual — you can refresh to retry.' : undefined} />
+            : (
+                <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-sky-600 dark:text-sky-400 mb-3"></i>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{loadMsg}</p>
+                        {loadingSlow && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">Taking longer than usual — still loading. You can retry by refreshing the page.</p>
+                        )}
+                    </div>
                 </div>
-            </div>
-        );
+            );
     }
-    
-    return (
+
+    const mdctExportButton = (
+        <button
+            onClick={handleExportToExcel}
+            disabled={isExporting || sections.length === 0}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 self-start lg:self-auto"
+        >
+            {isExporting ? <><i className="fas fa-spinner fa-spin"></i><span>Exporting…</span></> : <><i className="fas fa-file-excel"></i><span>Export</span></>}
+        </button>
+    );
+
+    const mdctToolbar = (
+        <>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-600 dark:bg-slate-800">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Year</label>
+                <select
+                    value={selectedYear}
+                    onChange={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const newYear = parseInt(e.target.value, 10);
+                        if (!isNaN(newYear)) handleYearChange(newYear);
+                    }}
+                    onBlur={(e) => {
+                        const newYear = parseInt(e.target.value, 10);
+                        if (!isNaN(newYear) && newYear !== selectedYear) handleYearChange(newYear);
+                    }}
+                    aria-label="Select year"
+                    data-testid="year-selector"
+                    className="cursor-pointer border-0 bg-transparent text-sm font-medium text-slate-900 focus:ring-0 dark:text-slate-100"
+                >
+                    {yearOptions.map((year) => (
+                        <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
+                    ))}
+                </select>
+            </div>
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm dark:border-slate-600 dark:bg-slate-800" role="group" aria-label="Tracker layout">
+                <button
+                    type="button"
+                    onClick={() => setTrackerLayoutMode('list')}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${trackerLayoutMode === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                    aria-pressed={trackerLayoutMode === 'list'}
+                >
+                    <i className="fas fa-list-ul mr-1" aria-hidden="true" />List
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setTrackerLayoutMode('table')}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${trackerLayoutMode === 'table' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                    aria-pressed={trackerLayoutMode === 'table'}
+                >
+                    <i className="fas fa-table mr-1" aria-hidden="true" />Grid
+                </button>
+            </div>
+            <button type="button" onClick={handleAddSection} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 flex items-center gap-1.5">
+                <i className="fas fa-plus"></i><span>Add Section</span>
+            </button>
+            {isComplianceReview && (
+                <>
+                    <input type="file" ref={complianceImportFileInputRef} accept=".xlsx" className="hidden" onChange={handleComplianceImportFileChange} />
+                    <button
+                        type="button"
+                        onClick={handleImportFromExcelClick}
+                        disabled={isImportingExcel}
+                        className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                        {isImportingExcel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-import"></i>}
+                        <span>{isImportingExcel ? 'Importing…' : 'Import Excel'}</span>
+                    </button>
+                </>
+            )}
+            <div className="relative" ref={templateDropdownRef}>
+                <button onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 flex items-center gap-1.5">
+                    <i className="fas fa-layer-group"></i><span>Templates</span>
+                    <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
+                </button>
+                {isTemplateDropdownOpen && (
+                    <div className="absolute left-0 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-xl z-50 dark:border-slate-600 dark:bg-slate-800">
+                        <button onClick={() => { setShowApplyTemplateModal(true); setIsTemplateDropdownOpen(false); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 flex items-center gap-2 dark:hover:bg-indigo-950/40"><i className="fas fa-magic text-indigo-600"></i><span>Apply Template</span></button>
+                        <button onClick={() => { setShowTemplateModal(true); setIsTemplateDropdownOpen(false); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-blue-50 flex items-center gap-2 dark:hover:bg-blue-950/40"><i className="fas fa-layer-group text-blue-600"></i><span>Manage Templates</span></button>
+                        <button
+                            onClick={() => {
+                                try {
+                                    if (!sections || sections.length === 0) {
+                                        alert('There are no sections in this year to save as a template.');
+                                        setIsTemplateDropdownOpen(false);
+                                        return;
+                                    }
+                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                    const name = window.prompt('Template name', defaultName);
+                                    if (!name || !name.trim()) {
+                                        setIsTemplateDropdownOpen(false);
+                                        return;
+                                    }
+                                    setEditingTemplate(null);
+                                    setPrefilledTemplate({
+                                        name: name.trim(),
+                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                        sections: buildTemplateSectionsFromCurrent()
+                                    });
+                                    setShowTemplateList(false);
+                                    setShowTemplateModal(true);
+                                    setIsTemplateDropdownOpen(false);
+                                } catch (e) {
+                                    console.error('Failed to prepare template from current year:', e);
+                                    alert('Could not prepare template from current year. See console for details.');
+                                    setIsTemplateDropdownOpen(false);
+                                }
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-amber-50 flex items-center gap-2 dark:hover:bg-amber-950/40"
+                        >
+                            <i className="fas fa-save text-amber-600"></i><span>Save Template</span>
+                        </button>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const pageContent = (
         <div className="space-y-3">
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
@@ -9243,225 +9370,29 @@ Abcotronics`;
                 );
             })()}
             
-            {/* Header - compact toolbar */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600 p-3 mb-4">
-                <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <button
-                                onClick={onBack}
-                                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors shrink-0"
-                                aria-label="Back"
-                            >
-                                <i className="fas fa-arrow-left"></i>
-                            </button>
-                            <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                    {isMonthlyDataReview ? 'Monthly Data Review' : isComplianceReview ? 'Compliance Review' : 'Document Collection Tracker'}
-                                </h1>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                    {project?.name}
-                                    {project?.client && ` • ${project.client}`}
-                                    {!isJsonOnlyTracker && getFacilitiesLabel(project) && ` • ${getFacilitiesLabel(project)}`}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600">
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Year</label>
-                                <select
-                                    value={selectedYear}
-                                    onChange={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        const newYear = parseInt(e.target.value, 10);
-                                        if (!isNaN(newYear)) handleYearChange(newYear);
-                                    }}
-                                    onBlur={(e) => {
-                                        const newYear = parseInt(e.target.value, 10);
-                                        if (!isNaN(newYear) && newYear !== selectedYear) handleYearChange(newYear);
-                                    }}
-                                    aria-label="Select year"
-                                    data-testid="year-selector"
-                                    className="text-xs font-medium text-gray-900 dark:text-gray-100 bg-transparent border-0 focus:ring-0 cursor-pointer py-0.5"
-                                >
-                                    {yearOptions.map(year => (
-                                        <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div
-                                className="flex items-center gap-1 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600"
-                                role="group"
-                                aria-label="Tracker layout"
-                            >
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-400 hidden sm:inline">View</span>
-                                <div className="flex rounded-md overflow-hidden border border-gray-300 dark:border-gray-600">
-                                    <button
-                                        type="button"
-                                        onClick={() => setTrackerLayoutMode('list')}
-                                        className={`px-2.5 py-1 text-xs font-semibold transition-colors ${
-                                            trackerLayoutMode === 'list'
-                                                ? 'bg-primary-600 text-white'
-                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                        }`}
-                                        aria-pressed={trackerLayoutMode === 'list'}
-                                        title="List — one month per row, full width"
-                                    >
-                                        <i className="fas fa-list-ul mr-1" aria-hidden="true" />
-                                        List
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setTrackerLayoutMode('table')}
-                                        className={`px-2.5 py-1 text-xs font-semibold transition-colors border-l border-gray-300 dark:border-gray-600 ${
-                                            trackerLayoutMode === 'table'
-                                                ? 'bg-primary-600 text-white'
-                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                                        }`}
-                                        aria-pressed={trackerLayoutMode === 'table'}
-                                        title="Grid — full year table (scroll horizontally on small screens)"
-                                    >
-                                        <i className="fas fa-table mr-1" aria-hidden="true" />
-                                        Grid
-                                    </button>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleAddSection}
-                                className="px-3 py-1.5 bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600 text-xs font-semibold flex items-center gap-1.5"
-                            >
-                                <i className="fas fa-plus"></i><span>Add Section</span>
-                            </button>
-                            {isComplianceReview && (
-                                <>
-                                    <input
-                                        type="file"
-                                        ref={complianceImportFileInputRef}
-                                        accept=".xlsx"
-                                        className="hidden"
-                                        onChange={handleComplianceImportFileChange}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={handleImportFromExcelClick}
-                                        disabled={isImportingExcel}
-                                        className="px-3 py-1.5 bg-amber-200 dark:bg-amber-700 text-amber-800 dark:text-amber-100 rounded-lg hover:bg-amber-300 dark:hover:bg-amber-600 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                                        title="Import sections from Compliance Monthly Assessment Excel (.xlsx)"
-                                    >
-                                        {isImportingExcel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-import"></i>}
-                                        <span>{isImportingExcel ? 'Importing…' : 'Import from Excel'}</span>
-                                    </button>
-                                </>
-                            )}
-                            <div className="relative" ref={templateDropdownRef}>
-                                <button
-                                    onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
-                                    className="px-3 py-1.5 bg-blue-200 dark:bg-blue-700 text-blue-800 dark:text-blue-100 rounded-lg hover:bg-blue-300 dark:hover:bg-blue-600 text-xs font-semibold flex items-center gap-1.5"
-                                >
-                                    <i className="fas fa-layer-group"></i><span>Templates</span>
-                                    <i className={`fas fa-chevron-${isTemplateDropdownOpen ? 'up' : 'down'} text-xs`}></i>
-                                </button>
-                                
-                                {isTemplateDropdownOpen && (
-                                    <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50">
-                                        <button
-                                            onClick={() => {
-                                                setShowApplyTemplateModal(true);
-                                                setIsTemplateDropdownOpen(false);
-                                            }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/40 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-2 transition-colors"
-                                        >
-                                            <i className="fas fa-magic text-primary-600 dark:text-primary-400"></i>
-                                            <span>Apply Template</span>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setShowTemplateModal(true);
-                                                setIsTemplateDropdownOpen(false);
-                                            }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-2 transition-colors"
-                                        >
-                                            <i className="fas fa-layer-group text-blue-600 dark:text-blue-400"></i>
-                                            <span>Manage Templates</span>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                try {
-                                                    if (!sections || sections.length === 0) {
-                                                        alert('There are no sections in this year to save as a template.');
-                                                        setIsTemplateDropdownOpen(false);
-                                                        return;
-                                                    }
-                                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
-                                                    const name = window.prompt('Template name', defaultName);
-                                                    if (!name || !name.trim()) {
-                                                        setIsTemplateDropdownOpen(false);
-                                                        return;
-                                                    }
-                                                    setEditingTemplate(null);
-                                                    setPrefilledTemplate({
-                                                        name: name.trim(),
-                                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                                        sections: buildTemplateSectionsFromCurrent()
-                                                    });
-                                                    setShowTemplateList(false);
-                                                    setShowTemplateModal(true);
-                                                    setIsTemplateDropdownOpen(false);
-                                                } catch (e) {
-                                                    console.error('❌ Failed to prepare template from current year:', e);
-                                                    alert('Could not prepare template from current year. See console for details.');
-                                                    setIsTemplateDropdownOpen(false);
-                                                }
-                                            }}
-                                            className="w-full px-4 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-amber-50 dark:hover:bg-amber-900/40 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-2 transition-colors"
-                                            title="Save current year as template"
-                                        >
-                                            <i className="fas fa-save text-amber-600 dark:text-amber-400"></i>
-                                            <span>Save Template</span>
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                            <button
-                                onClick={handleExportToExcel}
-                                disabled={isExporting || sections.length === 0}
-                                className="px-3 py-1.5 bg-emerald-200 dark:bg-emerald-700 text-emerald-800 dark:text-emerald-100 rounded-lg hover:bg-emerald-300 dark:hover:bg-emerald-600 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                            >
-                                {isExporting ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-file-excel"></i>}
-                                <span>{isExporting ? 'Exporting…' : 'Export'}</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            {/* Legend - collapsible to reduce clutter */}
-            <div className="rounded-xl border border-gray-200 dark:border-gray-600 mb-4 shadow-sm overflow-hidden bg-gradient-to-r from-gray-50 to-white dark:from-gray-800 dark:to-gray-900">
-                <button
-                    type="button"
-                    onClick={() => setLegendCollapsed(!legendCollapsed)}
-                                    className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-sky-50/80 dark:hover:bg-sky-900/30 transition-colors"
-                    aria-expanded={!legendCollapsed}
-                >
-                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Status legend</span>
-                    <i className={`fas fa-chevron-${legendCollapsed ? 'down' : 'up'} text-gray-500 dark:text-gray-400 text-xs`}></i>
-                </button>
-                {!legendCollapsed && (
-                    <div className="px-3 pb-3 pt-0 flex flex-wrap items-center gap-3">
-                        {statusOptions.map((option, idx) => (
-                            <React.Fragment key={option.value}>
-                                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm">
-                                    <div className={`w-3.5 h-3.5 rounded-full ${option.cellColor} ring-2 ring-white dark:ring-gray-700 shadow-sm`}></div>
-                                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{option.label}</span>
-                                </div>
-                                {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-[10px] text-gray-400 dark:text-gray-500"></i>}
-                            </React.Fragment>
-                        ))}
-                    </div>
-                )}
-            </div>
+            {TU && (
+                <>
+                    <TU.TrackerHeader
+                        badgeLabel={trackerBadgeLabel}
+                        badgeIcon={trackerBadgeIcon}
+                        title={trackerTitle}
+                        selectedYear={selectedYear}
+                        projectName={project?.name}
+                        client={project?.client}
+                        facilities={!isJsonOnlyTracker ? (getFacilitiesLabel(project) || undefined) : undefined}
+                        onBack={onBack}
+                        exportButton={mdctExportButton}
+                        toolbar={mdctToolbar}
+                    />
+                    <TU.TrackerLegend
+                        statusOptions={statusOptions}
+                        collapsible
+                        collapsed={legendCollapsed}
+                        onToggleCollapsed={() => setLegendCollapsed(!legendCollapsed)}
+                        hint="Ctrl/Cmd+click cells to multi-select"
+                    />
+                </>
+            )}
             
             {/* Per-section tables; horizontal scroll position is kept in sync across sections */}
             <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
@@ -9577,7 +9508,7 @@ Abcotronics`;
                                     <i className="fas fa-grip-vertical text-gray-400 dark:text-gray-500 text-sm"></i>
                                     <div className="flex-1">
                                         <div className="font-bold text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                            <span>#{sectionIndex + 1}</span>
+                                            {TU ? <TU.TrackerSectionBadge index={sectionIndex + 1} /> : <span>#{sectionIndex + 1}</span>}
                                             <span>{section.name}</span>
                                         </div>
                                         {section.description && (
@@ -10337,6 +10268,8 @@ Abcotronics`;
             })()}
         </div>
     );
+
+    return TU ? <TU.TrackerPageShell>{pageContent}</TU.TrackerPageShell> : pageContent;
 };
 
 // Make available globally

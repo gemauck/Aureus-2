@@ -573,9 +573,13 @@ app.use((req, res, next) => {
     'http://www.abcoafrica.co.za.',
     // Localhost for development
     'http://localhost:3000',
-    'http://localhost:3001', 
+    'http://localhost:3001',
     'http://localhost:3002',
-    'http://localhost:8000'
+    'http://localhost:8000',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:3002',
+    'http://127.0.0.1:8000'
   ].filter(Boolean)
   
   // Normalize origin by removing trailing dots
@@ -587,7 +591,12 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true')
   
   // When credentials are included, we cannot use wildcard origin
-  if (origin && (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:'))) {
+  if (
+    origin &&
+    (allowedOrigins.includes(origin) ||
+      origin.startsWith('http://localhost:') ||
+      origin.startsWith('http://127.0.0.1:'))
+  ) {
     res.setHeader('Access-Control-Allow-Origin', origin)
   } else if (origin) {
     // For unknown origins, don't set Access-Control-Allow-Origin at all

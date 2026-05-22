@@ -34,6 +34,10 @@ const { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo
 const storage = window.storage;
 const documentRef = window.document; // Store reference to avoid shadowing issues
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
+const STICKY_DOC_COLUMN_WIDTH = 300;
+const WEEK_COLUMN_STATUS_WIDTH = 168;
+const WEEK_COLUMN_NOTES_WIDTH = 200;
+const WEEK_COLUMN_GROUP_WIDTH = WEEK_COLUMN_STATUS_WIDTH + WEEK_COLUMN_NOTES_WIDTH;
 
 const getCommentIdFromLocation = () => {
     if (typeof window === 'undefined') return null;
@@ -209,7 +213,7 @@ const WeeklyFMSNotesCell = memo(function WeeklyFMSNotesCell({
         <td
             className={`px-1.5 py-1.5 text-xs border-l border-slate-200/90 dark:border-slate-700 ${cellBg} align-top`}
             role="gridcell"
-            style={{ minWidth: '200px', width: '200px', ...WEEKLY_FMS_CELL_CV_STYLE }}
+            style={{ minWidth: `${WEEK_COLUMN_NOTES_WIDTH}px`, width: `${WEEK_COLUMN_NOTES_WIDTH}px`, ...WEEKLY_FMS_CELL_CV_STYLE }}
         >
             <div className="flex flex-row gap-1 items-stretch w-full">
                 <div className="flex-1 min-w-0">
@@ -279,9 +283,9 @@ const WeeklyFMSStatusCell = memo(function WeeklyFMSStatusCell({
             className={`px-1.5 py-1.5 text-xs border-l border-slate-200/90 dark:border-slate-700 ${cellBackgroundClass} relative ${isSelected ? '' : ''}`}
             onClick={(e) => cellActionsRef.current.onStatusCellClick(cellKey, sectionId, documentId, week, e)}
             title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
-            style={WEEKLY_FMS_CELL_CV_STYLE}
+            style={{ minWidth: `${WEEK_COLUMN_STATUS_WIDTH}px`, width: `${WEEK_COLUMN_STATUS_WIDTH}px`, ...WEEKLY_FMS_CELL_CV_STYLE }}
         >
-            <div className="min-w-[168px] w-[168px] flex items-center gap-1">
+            <div className="flex w-full min-w-0 items-center gap-1">
                 <div className={`relative flex-1 min-w-0 rounded-lg border shadow-sm ${selectWrapClass}`}>
                     <select
                         value={status || ''}
@@ -468,32 +472,44 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     // Generate weeks for the selected year (recalculate when year changes)
     const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
-    // Calculate working week (1 week in arrears from current week only)
-    const getWorkingWeeks = () => {
+    // Working week = one calendar week in arrears (by Monday week start).
+    const getWorkingWeekNumbersForWeekList = (weekList) => {
+        if (!weekList || weekList.length === 0) return [];
         const today = new Date();
         const currentWeekStart = new Date(today);
         const dayOfWeek = currentWeekStart.getDay();
         const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         currentWeekStart.setDate(currentWeekStart.getDate() + daysToMonday);
-        
-        // One week in arrears only
+
         const oneWeekAgo = new Date(currentWeekStart);
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        
+        const oneWeekAgoStart = new Date(oneWeekAgo);
+        oneWeekAgoStart.setHours(0, 0, 0, 0);
+
         const weekNumbers = [];
-        weeks.forEach((week) => {
+        weekList.forEach((week) => {
             const weekStart = new Date(week.startDate);
             weekStart.setHours(0, 0, 0, 0);
-            const oneWeekAgoStart = new Date(oneWeekAgo);
-            oneWeekAgoStart.setHours(0, 0, 0, 0);
             if (weekStart.getTime() === oneWeekAgoStart.getTime()) {
                 weekNumbers.push(week.number);
             }
         });
         return weekNumbers;
     };
-    
-    const workingWeeks = React.useMemo(() => getWorkingWeeks(), [weeks, currentYear]);
+
+    const workingWeekNumbersCurrentYear = React.useMemo(
+        () => getWorkingWeekNumbersForWeekList(generateWeeksForYear(currentYear)),
+        [currentYear]
+    );
+
+    // Highlight + scroll target: real working week in current year; same week number when viewing other years.
+    const focusWeekNumbers = React.useMemo(() => {
+        if (selectedYear === currentYear) {
+            return getWorkingWeekNumbersForWeekList(weeks);
+        }
+        if (workingWeekNumbersCurrentYear.length === 0) return [];
+        return workingWeekNumbersCurrentYear.filter((n) => weeks.some((w) => w.number === n));
+    }, [weeks, selectedYear, currentYear, workingWeekNumbersCurrentYear]);
     
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
     
@@ -1558,58 +1574,56 @@ const gridColumns = React.useMemo(() => (
     })
 ), [weeks, selectedYear]);
 
-    const WEEK_COLUMN_VIEW_PAD = 12;
-    const workingWeekIndex = useMemo(() => {
-        if (workingWeeks.length === 0) return 0;
-        const idx = weeks.findIndex((w) => workingWeeks.includes(w.number));
+    const WEEK_COLUMN_VIEW_PAD = 2;
+    const focusWeekIndex = useMemo(() => {
+        if (focusWeekNumbers.length === 0) return 0;
+        const idx = weeks.findIndex((w) => focusWeekNumbers.includes(w.number));
         return idx >= 0 ? idx : 0;
-    }, [weeks, workingWeeks]);
+    }, [weeks, focusWeekNumbers]);
 
     const displayWeekColumnStart = useMemo(() => {
         if (showAllWeekColumns) return 0;
-        return Math.max(0, workingWeekIndex - WEEK_COLUMN_VIEW_PAD);
-    }, [showAllWeekColumns, workingWeekIndex]);
+        return Math.max(0, focusWeekIndex - WEEK_COLUMN_VIEW_PAD);
+    }, [showAllWeekColumns, focusWeekIndex]);
 
     const displayGridColumns = useMemo(() => {
         if (showAllWeekColumns || gridColumns.length <= WEEK_COLUMN_VIEW_PAD * 2 + 1) {
             return gridColumns;
         }
         const start = displayWeekColumnStart;
-        const end = Math.min(gridColumns.length, workingWeekIndex + WEEK_COLUMN_VIEW_PAD + 1);
+        const end = Math.min(gridColumns.length, focusWeekIndex + WEEK_COLUMN_VIEW_PAD + 1);
         return gridColumns.slice(start, end);
-    }, [gridColumns, showAllWeekColumns, workingWeekIndex, displayWeekColumnStart]);
+    }, [gridColumns, showAllWeekColumns, focusWeekIndex, displayWeekColumnStart]);
 
-    // When opening or returning to Weekly FMS: scroll to the working week (after column window is known).
-    useEffect(() => {
-        if (sections.length === 0 || selectedYear !== currentYear || workingWeeks.length === 0) return;
-        const workingWeekIndexLocal = weeks.findIndex((w) => workingWeeks.includes(w.number));
-        if (workingWeekIndexLocal < 0) return;
-        const STICKY_WIDTH = 300;
-        const WEEK_COLUMN_WIDTH = 380;
-        const columnIndexInView = showAllWeekColumns
-            ? workingWeekIndexLocal
-            : Math.max(0, workingWeekIndexLocal - displayWeekColumnStart);
-        const targetScrollLeft = Math.max(0, STICKY_WIDTH + columnIndexInView * WEEK_COLUMN_WIDTH - 80);
-        const run = () => {
-            const root = scrollSyncRootRef.current;
-            if (!root) return false;
-            const containers = root.querySelectorAll('[data-scroll-sync]');
-            if (containers.length === 0) return false;
-            containers.forEach((el) => { el.scrollLeft = targetScrollLeft; });
-            return true;
-        };
-        const delays = [100, 350, 700];
-        const timeouts = [];
-        const rafId = requestAnimationFrame(() => {
-            delays.forEach((delay) => {
-                timeouts.push(setTimeout(() => { run(); }, delay));
-            });
+    const scrollFocusWeekIntoView = useCallback(() => {
+        const root = scrollSyncRootRef.current;
+        if (!root || focusWeekNumbers.length === 0) return false;
+        const containers = root.querySelectorAll('[data-scroll-sync]');
+        if (containers.length === 0) return false;
+
+        let synced = false;
+        containers.forEach((container) => {
+            const anchor = container.querySelector('[data-focus-week-anchor="true"]');
+            if (!anchor) return;
+            const colLeft = anchor.offsetLeft;
+            const viewWidth = container.clientWidth;
+            const targetScrollLeft = Math.max(
+                0,
+                colLeft - STICKY_DOC_COLUMN_WIDTH - Math.max(0, (viewWidth - STICKY_DOC_COLUMN_WIDTH - WEEK_COLUMN_GROUP_WIDTH) / 2)
+            );
+            container.scrollLeft = targetScrollLeft;
+            synced = true;
         });
-        return () => {
-            cancelAnimationFrame(rafId);
-            timeouts.forEach((id) => clearTimeout(id));
-        };
-    }, [sections.length, selectedYear, currentYear, workingWeeks, weeks, showAllWeekColumns, displayWeekColumnStart]);
+        return synced;
+    }, [focusWeekNumbers]);
+
+    // When opening or returning: center the working-week column so status + notes are fully visible.
+    useLayoutEffect(() => {
+        if (sections.length === 0 || focusWeekNumbers.length === 0) return undefined;
+        const delays = [0, 120, 400, 800];
+        const timeouts = delays.map((delay) => setTimeout(() => { scrollFocusWeekIntoView(); }, delay));
+        return () => { timeouts.forEach((id) => clearTimeout(id)); };
+    }, [sections.length, focusWeekNumbers, weeks, showAllWeekColumns, displayWeekColumnStart, displayGridColumns, scrollFocusWeekIntoView]);
 
     // ProjectActivityLog timeline for the open weekly FMS cell (status changes)
     useEffect(() => {
@@ -5044,18 +5058,34 @@ const getAssigneeColor = (identifier, users) => {
             
             {gridColumns.length > displayGridColumns.length && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200/80 bg-indigo-50/80 px-4 py-2.5 text-xs text-indigo-950 shadow-sm dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-100">
-                    <span className="flex items-center gap-2">
+                    <span className="flex flex-wrap items-center gap-2">
                         <i className="fas fa-bolt text-indigo-500" aria-hidden="true" />
                         Weeks {displayGridColumns[0]?.week?.number ?? '—'}–{displayGridColumns[displayGridColumns.length - 1]?.week?.number ?? '—'}
                         <span className="text-indigo-600/80 dark:text-indigo-300/80">({displayGridColumns.length} of {gridColumns.length} shown)</span>
+                        {focusWeekNumbers.length > 0 && (
+                            <span className="text-indigo-700/90 dark:text-indigo-200/90">
+                                · Working week{focusWeekNumbers.length > 1 ? 's' : ''} {focusWeekNumbers.join(', ')} centered on open
+                            </span>
+                        )}
                     </span>
-                    <button
-                        type="button"
-                        onClick={() => setShowAllWeekColumns(true)}
-                        className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700"
-                    >
-                        Show all weeks
-                    </button>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {focusWeekNumbers.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => scrollFocusWeekIntoView()}
+                                className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-800 shadow-sm hover:bg-indigo-50 dark:border-indigo-600 dark:bg-slate-800 dark:text-indigo-100 dark:hover:bg-slate-700"
+                            >
+                                Go to working week
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setShowAllWeekColumns(true)}
+                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700"
+                        >
+                            Show all weeks
+                        </button>
+                    </div>
                 </div>
             )}
             {showAllWeekColumns && gridColumns.length > WEEK_COLUMN_VIEW_PAD * 2 + 1 && (
@@ -5175,7 +5205,7 @@ const getAssigneeColor = (identifier, users) => {
 
                             {/* Scrollable week/document grid for this section only */}
                             <div data-scroll-sync className="overflow-x-auto scrollbar-thin">
-                                <table className="min-w-full border-collapse">
+                                <table className="w-max border-collapse">
                                     <thead className="bg-slate-100/90 dark:bg-slate-800/80">
                                         <tr>
                                             <th
@@ -5187,21 +5217,23 @@ const getAssigneeColor = (identifier, users) => {
                                             </th>
                                             {displayGridColumns.map((col) => {
                                                 const week = col.week;
+                                                const isFocusWeek = focusWeekNumbers.includes(week.number);
                                                 return (
                                                     <th
                                                         key={col.key}
                                                         colSpan={2}
                                                         className={`border-b border-l border-slate-200 px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide dark:border-slate-600 ${
-                                                            workingWeeks.includes(week.number) && selectedYear === currentYear
+                                                            isFocusWeek
                                                                 ? 'bg-indigo-100 text-indigo-900 ring-1 ring-inset ring-indigo-300/60 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700'
                                                                 : 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400'
                                                         }`}
+                                                        style={{ minWidth: `${WEEK_COLUMN_GROUP_WIDTH}px`, width: `${WEEK_COLUMN_GROUP_WIDTH}px` }}
                                                         title={week.dateRange}
                                                     >
                                                         <div className="flex flex-col items-center gap-1">
                                                             <span className="leading-tight">{week.label}</span>
                                                             <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tabular-nums ${
-                                                                workingWeeks.includes(week.number) && selectedYear === currentYear
+                                                                isFocusWeek
                                                                     ? 'bg-white/80 text-emerald-700 dark:bg-slate-900/50 dark:text-emerald-300'
                                                                     : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
                                                             }`}>
@@ -5223,24 +5255,26 @@ const getAssigneeColor = (identifier, users) => {
                                             </th>
                                         </tr>
                                         <tr>
-                                            {displayGridColumns.map((col) => {
+                                            {displayGridColumns.map((col, colIdx) => {
                                                 const week = col.week;
-                                                const isWorking = workingWeeks.includes(week.number) && selectedYear === currentYear;
+                                                const isFocusWeek = focusWeekNumbers.includes(week.number);
+                                                const isFocusWeekAnchor = isFocusWeek && sectionIndex === 0 && colIdx === displayGridColumns.findIndex((c) => focusWeekNumbers.includes(c.week.number));
                                                 return (
                                                     <React.Fragment key={col.key}>
                                                         <th
                                                             className={`border-l border-slate-200 px-2 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:text-slate-400 ${
-                                                                isWorking ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
+                                                                isFocusWeek ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
                                                             }`}
-                                                            style={{ minWidth: '168px', width: '168px' }}
+                                                            style={{ minWidth: `${WEEK_COLUMN_STATUS_WIDTH}px`, width: `${WEEK_COLUMN_STATUS_WIDTH}px` }}
+                                                            {...(isFocusWeekAnchor ? { 'data-focus-week-anchor': 'true' } : {})}
                                                         >
                                                             Status
                                                         </th>
                                                         <th
                                                             className={`border-l border-slate-200 px-2 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:text-slate-400 ${
-                                                                isWorking ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
+                                                                isFocusWeek ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
                                                             }`}
-                                                            style={{ minWidth: '200px', width: '200px' }}
+                                                            style={{ minWidth: `${WEEK_COLUMN_NOTES_WIDTH}px`, width: `${WEEK_COLUMN_NOTES_WIDTH}px` }}
                                                         >
                                                             Notes
                                                         </th>
@@ -5451,14 +5485,14 @@ const getAssigneeColor = (identifier, users) => {
                                                                     commentCount={comments.length}
                                                                     isPopupOpen={hoverCommentCell === cellKey}
                                                                     isSelected={selectedCells.has(cellKey)}
-                                                                    isWorkingWeek={workingWeeks.includes(weekNumber) && selectedYear === currentYear}
+                                                                    isWorkingWeek={focusWeekNumbers.includes(weekNumber)}
                                                                     cellActionsRef={weeklyFmsCellActionsRef}
                                                                 />
                                                                 <WeeklyFMSNotesCell
                                                                     cellKey={cellKey}
                                                                     notes={notes}
                                                                     statusCellColor={statusConfig?.cellColor}
-                                                                    isWorkingWeek={workingWeeks.includes(weekNumber) && selectedYear === currentYear}
+                                                                    isWorkingWeek={focusWeekNumbers.includes(weekNumber)}
                                                                     isEditing={editingNotesCell === cellKey}
                                                                     docName={doc.name}
                                                                     weekLabel={weekLabel}

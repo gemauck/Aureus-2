@@ -32,6 +32,7 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
         './src/components/projects/WeeklyFMSProgressTracker.jsx',
         // Must load before tracker Excel export (browser require() stub does not resolve utils)
         './src/utils/htmlToExcelRichText.js',
+        './src/components/projects/TrackerUIShared.jsx',
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/WeeklyFMSReviewTracker.jsx', // Added as fallback if vite-projects fails
         './src/components/projects/MonthlyFMSReviewTracker.jsx', // Monthly FMS Review tracker
