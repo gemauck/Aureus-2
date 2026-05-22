@@ -145,10 +145,15 @@ const downloadCommentAttachment = (url, filename) => {
 };
 
 const WEEKLY_FMS_STATUS_OPTIONS = [
-    { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600', optionStyle: { backgroundColor: '#ffffff', color: '#374151' } },
-    { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
-    { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#334155' } }
+    { value: 'not-checked', label: 'Not checked', color: 'text-slate-600 font-medium', cellColor: 'bg-slate-50/90 dark:bg-slate-800/50', selectWrap: 'bg-white border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300', optionStyle: { backgroundColor: '#f8fafc', color: '#475569' } },
+    { value: 'checked', label: 'Checked', color: 'text-emerald-800 font-semibold dark:text-emerald-200', cellColor: 'bg-emerald-50/95 dark:bg-emerald-950/40', selectWrap: 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-200', optionStyle: { backgroundColor: '#ecfdf5', color: '#065f46' } },
+    { value: 'issue', label: 'Issue', color: 'text-rose-800 font-semibold dark:text-rose-200', cellColor: 'bg-rose-50/95 dark:bg-rose-950/40', selectWrap: 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-200', optionStyle: { backgroundColor: '#fff1f2', color: '#9f1239' } }
 ];
+
+const weeklyFmsStatusSelectWrap = (status) => {
+    const cfg = getWeeklyFmsStatusConfig(status);
+    return cfg?.selectWrap || 'bg-white border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600';
+};
 
 const getWeeklyFmsStatusConfig = (status) => {
     if (!status || status === '' || status === 'Select Status') return null;
@@ -198,11 +203,11 @@ const WeeklyFMSNotesCell = memo(function WeeklyFMSNotesCell({
         }
     }, [isEditing, notes]);
 
-    const cellBg = statusCellColor || (isWorkingWeek ? 'bg-primary-50' : '');
+    const cellBg = statusCellColor || (isWorkingWeek ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : 'bg-white dark:bg-slate-900');
 
     return (
         <td
-            className={`px-2 py-1 text-xs border-l-2 border-gray-300 ${cellBg} align-top`}
+            className={`px-1.5 py-1.5 text-xs border-l border-slate-200/90 dark:border-slate-700 ${cellBg} align-top`}
             role="gridcell"
             style={{ minWidth: '200px', width: '200px', ...WEEKLY_FMS_CELL_CV_STYLE }}
         >
@@ -215,9 +220,9 @@ const WeeklyFMSNotesCell = memo(function WeeklyFMSNotesCell({
                             defaultValue={notes || ''}
                             onInput={(e) => { draftRef.current = e.target.value; }}
                             onBlur={() => onCommitEdit(cellKey, draftRef.current)}
-                            placeholder="Notes..."
+                            placeholder="Add notes…"
                             rows={4}
-                            className="w-full min-w-0 h-[4.5rem] max-h-[4.5rem] px-2 py-1 text-xs border border-gray-200 rounded resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400 bg-transparent"
+                            className="w-full min-w-0 h-[4.25rem] max-h-[4.25rem] px-2.5 py-2 text-xs leading-relaxed border border-indigo-300 rounded-lg resize-none overflow-y-auto focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400 bg-white shadow-sm dark:bg-slate-800 dark:border-indigo-600 dark:text-slate-100"
                             aria-label={`Notes for ${docName || 'document'} in ${weekLabel} ${selectedYear}`}
                             onClick={(e) => e.stopPropagation()}
                         />
@@ -227,10 +232,14 @@ const WeeklyFMSNotesCell = memo(function WeeklyFMSNotesCell({
                             tabIndex={0}
                             onClick={(e) => { e.stopPropagation(); onStartEdit(cellKey); }}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEdit(cellKey); } }}
-                            className={`h-[4.5rem] max-h-[4.5rem] overflow-y-auto w-full min-w-0 px-2 py-1 text-xs border border-transparent rounded cursor-text hover:border-gray-200 hover:bg-gray-50/50 text-left whitespace-pre-wrap break-words ${notes ? '' : 'text-gray-400'}`}
-                            title="Click to edit"
+                            className={`h-[4.25rem] max-h-[4.25rem] overflow-y-auto w-full min-w-0 px-2.5 py-2 text-xs leading-relaxed rounded-lg border transition-colors cursor-text text-left whitespace-pre-wrap break-words shadow-sm ${
+                                notes
+                                    ? 'border-slate-200/90 bg-white hover:border-indigo-300 hover:shadow dark:border-slate-600 dark:bg-slate-800/80 dark:hover:border-indigo-500 text-slate-700 dark:text-slate-200'
+                                    : 'border-dashed border-slate-200 bg-slate-50/50 text-slate-400 italic hover:border-indigo-300 hover:bg-white dark:border-slate-600 dark:bg-slate-800/40'
+                            }`}
+                            title="Click to edit notes"
                         >
-                            {notes ? linkifyWeeklyFmsNotes(notes) : 'Notes...'}
+                            {notes ? linkifyWeeklyFmsNotes(notes) : 'Click to add notes…'}
                         </div>
                     )}
                 </div>
@@ -258,82 +267,84 @@ const WeeklyFMSStatusCell = memo(function WeeklyFMSStatusCell({
     const statusConfig = status ? getWeeklyFmsStatusConfig(status) : null;
     let cellBackgroundClass = statusConfig
         ? statusConfig.cellColor
-        : (isWorkingWeek ? 'bg-primary-50' : '');
+        : (isWorkingWeek ? 'bg-indigo-50/50 dark:bg-indigo-950/25' : 'bg-white dark:bg-slate-900');
     if (isSelected) {
-        cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
+        cellBackgroundClass = 'bg-indigo-100 ring-2 ring-inset ring-indigo-400 dark:bg-indigo-900/50 dark:ring-indigo-500';
     }
-    const baseTextColorClass = statusConfig && statusConfig.color
-        ? statusConfig.color.split(' ').filter((cls) => cls.startsWith('text-') || cls.startsWith('dark:')).join(' ') || 'text-gray-900 dark:text-gray-100'
-        : 'text-gray-400 dark:text-gray-400';
-    const textColorClass = isSelected ? 'text-white dark:text-gray-100' : baseTextColorClass;
+    const selectWrapClass = weeklyFmsStatusSelectWrap(status);
     const hasComments = commentCount > 0;
 
     return (
         <td
-            className={`px-2 py-0.5 text-xs border-l-4 border-gray-400 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+            className={`px-1.5 py-1.5 text-xs border-l border-slate-200/90 dark:border-slate-700 ${cellBackgroundClass} relative ${isSelected ? '' : ''}`}
             onClick={(e) => cellActionsRef.current.onStatusCellClick(cellKey, sectionId, documentId, week, e)}
             title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
             style={WEEKLY_FMS_CELL_CV_STYLE}
         >
-            <div className="min-w-[180px] w-[180px] relative">
-                <select
-                    value={status || ''}
-                    onChange={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, e.target.value);
-                    }}
-                    onBlur={(e) => {
-                        const newStatus = e.target.value;
-                        if (newStatus !== status) {
-                            cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, newStatus);
-                        }
-                    }}
-                    onMouseDown={(e) => {
-                        if (!e.ctrlKey && !e.metaKey) {
-                            cellActionsRef.current.onStatusSelectMouseDown(cellKey, e);
-                        }
-                    }}
-                    onClick={(e) => {
-                        if (e.ctrlKey || e.metaKey) {
+            <div className="min-w-[168px] w-[168px] flex items-center gap-1">
+                <div className={`relative flex-1 min-w-0 rounded-lg border shadow-sm ${selectWrapClass}`}>
+                    <select
+                        value={status || ''}
+                        onChange={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            cellActionsRef.current.onStatusSelectMultiClick(cellKey, e);
-                        }
-                    }}
-                    aria-label={`Status for ${docName || 'document'} in ${weekLabel} ${selectedYear}`}
-                    role="combobox"
-                    aria-haspopup="listbox"
-                    data-section-id={sectionId}
-                    data-document-id={documentId}
-                    data-week={weekNumber}
-                    data-week-label={weekLabel}
-                    data-year={selectedYear}
-                    className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
-                >
-                    <option value="">—</option>
-                    {WEEKLY_FMS_STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
-                <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
-                    <button
-                        data-comment-cell={cellKey}
-                        onClick={(e) => cellActionsRef.current.onCommentButtonClick(cellKey, sectionId, documentId, weekLabel, e)}
-                        className="text-red-300 hover:text-red-400 transition-colors relative p-1"
-                        title={hasComments ? `${commentCount} comment(s)` : 'Add comment'}
-                        type="button"
+                            cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, e.target.value);
+                        }}
+                        onBlur={(e) => {
+                            const newStatus = e.target.value;
+                            if (newStatus !== status) {
+                                cellActionsRef.current.onStatusSelectChange(cellKey, sectionId, documentId, week, newStatus);
+                            }
+                        }}
+                        onMouseDown={(e) => {
+                            if (!e.ctrlKey && !e.metaKey) {
+                                cellActionsRef.current.onStatusSelectMouseDown(cellKey, e);
+                            }
+                        }}
+                        onClick={(e) => {
+                            if (e.ctrlKey || e.metaKey) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                cellActionsRef.current.onStatusSelectMultiClick(cellKey, e);
+                            }
+                        }}
+                        aria-label={`Status for ${docName || 'document'} in ${weekLabel} ${selectedYear}`}
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        data-section-id={sectionId}
+                        data-document-id={documentId}
+                        data-week={weekNumber}
+                        data-week-label={weekLabel}
+                        data-year={selectedYear}
+                        className="w-full pl-2 pr-6 py-1.5 text-[11px] font-medium rounded-lg border-0 cursor-pointer appearance-none bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
                     >
-                        <i className="fas fa-comment text-base"></i>
-                        {hasComments && (
-                            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                                {commentCount}
-                            </span>
-                        )}
-                    </button>
+                        <option value="">Select status</option>
+                        {WEEKLY_FMS_STATUS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 pointer-events-none" aria-hidden="true" />
                 </div>
+                <button
+                    data-comment-cell={cellKey}
+                    onClick={(e) => cellActionsRef.current.onCommentButtonClick(cellKey, sectionId, documentId, weekLabel, e)}
+                    className={`shrink-0 relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                        hasComments
+                            ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+                            : 'border-slate-200 bg-white text-slate-400 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:text-indigo-300'
+                    } ${isPopupOpen ? 'ring-2 ring-indigo-400' : ''}`}
+                    title={hasComments ? `${commentCount} comment(s)` : 'Add comment'}
+                    type="button"
+                >
+                    <i className={`fas fa-comment text-sm ${hasComments ? '' : 'opacity-70'}`} />
+                    {hasComments && (
+                        <span className="absolute -top-1 -right-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-600 px-0.5 text-[9px] font-bold text-white">
+                            {commentCount}
+                        </span>
+                    )}
+                </button>
             </div>
         </td>
     );
@@ -1861,18 +1872,8 @@ const gridColumns = React.useMemo(() => (
     // STATUS OPTIONS
     // ============================================================
     
-    const statusOptions = [
-        { value: 'not-checked', label: 'Not Checked', color: 'text-gray-700 dark:text-gray-300 font-semibold', cellColor: 'bg-white border border-gray-300 dark:bg-gray-800 dark:border-gray-600', optionStyle: { backgroundColor: '#ffffff', color: '#374151' } },
-        { value: 'checked', label: 'Checked', color: 'bg-emerald-200 text-slate-700 font-semibold dark:bg-emerald-900/60 dark:text-emerald-200', cellColor: 'bg-emerald-200 border-l-4 border-emerald-300 shadow-sm dark:bg-emerald-900/60 dark:border-emerald-500', optionStyle: { backgroundColor: '#a7f3d0', color: '#065f46' } },
-        { value: 'issue', label: 'Issue', color: 'bg-rose-200 text-slate-700 font-semibold dark:bg-rose-900/60 dark:text-rose-200', cellColor: 'bg-rose-200 border-l-4 border-rose-300 shadow-sm dark:bg-rose-900/60 dark:border-rose-500', optionStyle: { backgroundColor: '#fecdd3', color: '#334155' } }
-    ];
-    
-    const getStatusConfig = (status) => {
-        if (!status || status === '' || status === 'Select Status') {
-            return null; // Return null for empty/select status to show white background
-        }
-        return statusOptions.find(opt => opt.value === status) || null;
-    };
+    const statusOptions = WEEKLY_FMS_STATUS_OPTIONS;
+    const getStatusConfig = getWeeklyFmsStatusConfig;
     
     // ============================================================
     // SECTION CRUD
@@ -4488,10 +4489,13 @@ const getAssigneeColor = (identifier, users) => {
     
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50 to-indigo-50/30 p-8 dark:border-slate-700 dark:from-slate-900 dark:to-indigo-950/20">
                 <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-3"></i>
-                    <p className="text-sm text-gray-600">Loading weekly FMS review tracker...</p>
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-md ring-1 ring-slate-200/80 dark:bg-slate-800 dark:ring-slate-600">
+                        <i className="fas fa-spinner fa-spin text-2xl text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Loading weekly FMS review…</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Preparing your checklist</p>
                 </div>
             </div>
         );
@@ -4500,7 +4504,7 @@ const getAssigneeColor = (identifier, users) => {
     notesCellMetaRef.current = new Map();
 
     return (
-        <div ref={scrollSyncRootRef} className="space-y-3" data-scroll-sync-root>
+        <div ref={scrollSyncRootRef} className="space-y-4 rounded-2xl bg-slate-50/60 p-1 sm:p-2 dark:bg-slate-950/40" data-scroll-sync-root>
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
                 // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
@@ -4880,23 +4884,34 @@ const getAssigneeColor = (identifier, users) => {
             })()}
             
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
+            <div
+                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm md:p-5 dark:border-slate-700 dark:bg-slate-900"
+                style={{ backgroundImage: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #eef2ff 100%)' }}
+            >
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start gap-3">
                             <button 
                                 onClick={onBack} 
-                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700"
                             >
-                                <i className="fas fa-arrow-left"></i>
+                                <i className="fas fa-arrow-left text-sm"></i>
                             </button>
-                            <div>
-                                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Weekly FMS Review Tracker</h1>
-                                <p className="text-sm text-gray-500 mt-0.5">
-                                    {project?.name}
-                                    {project?.client && ` • ${project.client}`}
-                                    {' • Facilities: '}
-                                    <span className="font-medium">{getFacilitiesLabel(project) || 'Not specified'}</span>
+                            <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
+                                        <i className="fas fa-calendar-week text-[9px]" aria-hidden="true" />
+                                        Weekly FMS
+                                    </span>
+                                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">{selectedYear}</span>
+                                </div>
+                                <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">Review Tracker</h1>
+                                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                    <span className="font-medium text-slate-800 dark:text-slate-100">{project?.name}</span>
+                                    {project?.client && <span className="text-slate-400 dark:text-slate-500"> · {project.client}</span>}
+                                </p>
+                                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                    Facilities: <span className="font-medium text-slate-700 dark:text-slate-300">{getFacilitiesLabel(project) || 'Not specified'}</span>
                                 </p>
                             </div>
                         </div>
@@ -4914,9 +4929,9 @@ const getAssigneeColor = (identifier, users) => {
                         </button>
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-                            <label className="text-xs font-semibold text-gray-700">Year:</label>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/80 pt-4 dark:border-slate-700">
+                        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-600 dark:bg-slate-800">
+                            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Year</label>
                             <select
                                 value={selectedYear}
                                 onChange={(e) => {
@@ -4952,7 +4967,7 @@ const getAssigneeColor = (identifier, users) => {
                             <i className="fas fa-plus"></i><span>Add Section</span>
                         </button>
 
-                        <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 ml-1">
+                        <div className="flex items-center gap-1.5 border-l border-slate-200 pl-3 ml-0.5 dark:border-slate-600">
                             <div className="relative" ref={templateDropdownRef}>
                                 <button
                                     onClick={() => setIsTemplateDropdownOpen(!isTemplateDropdownOpen)}
@@ -5028,44 +5043,44 @@ const getAssigneeColor = (identifier, users) => {
             </div>
             
             {gridColumns.length > displayGridColumns.length && (
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100">
-                    <span>
-                        Showing weeks {displayGridColumns[0]?.week?.number ?? '—'}–{displayGridColumns[displayGridColumns.length - 1]?.week?.number ?? '—'} ({displayGridColumns.length} of {gridColumns.length}) for faster performance.
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200/80 bg-indigo-50/80 px-4 py-2.5 text-xs text-indigo-950 shadow-sm dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-100">
+                    <span className="flex items-center gap-2">
+                        <i className="fas fa-bolt text-indigo-500" aria-hidden="true" />
+                        Weeks {displayGridColumns[0]?.week?.number ?? '—'}–{displayGridColumns[displayGridColumns.length - 1]?.week?.number ?? '—'}
+                        <span className="text-indigo-600/80 dark:text-indigo-300/80">({displayGridColumns.length} of {gridColumns.length} shown)</span>
                     </span>
                     <button
                         type="button"
                         onClick={() => setShowAllWeekColumns(true)}
-                        className="shrink-0 rounded-md bg-sky-600 px-3 py-1 font-semibold text-white hover:bg-sky-700"
+                        className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700"
                     >
                         Show all weeks
                     </button>
                 </div>
             )}
             {showAllWeekColumns && gridColumns.length > WEEK_COLUMN_VIEW_PAD * 2 + 1 && (
-                <div className="mb-3 flex justify-end">
+                <div className="flex justify-end">
                     <button
                         type="button"
                         onClick={() => setShowAllWeekColumns(false)}
-                        className="text-xs font-semibold text-sky-700 hover:text-sky-900 dark:text-sky-300"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
                     >
-                        Focus on working week (faster)
+                        Focus on working week
                     </button>
                 </div>
             )}
 
             {/* Legend */}
-            <div className="mb-4 rounded-xl border border-gray-200 bg-gradient-to-r from-gray-50 to-white p-3 shadow-sm dark:border-gray-600 dark:from-gray-800 dark:to-gray-900">
-                <div className="flex flex-wrap items-center gap-4">
-                    <span className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Status Legend:</span>
-                    {statusOptions.map((option, idx) => (
-                        <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm dark:border-gray-600 dark:bg-gray-800">
-                                <div className={`w-4 h-4 rounded-full ${option.cellColor || 'bg-gray-200 dark:bg-gray-600'} ring-2 ring-white dark:ring-gray-700 shadow-sm`}></div>
-                                <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{option.label}</span>
-                            </div>
-                            {idx < statusOptions.length - 1 && <i className="fas fa-arrow-right text-xs text-gray-400 dark:text-gray-500"></i>}
-                        </React.Fragment>
+            <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</span>
+                    {statusOptions.map((option) => (
+                        <div key={option.value} className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium shadow-sm ${option.selectWrap || 'border-slate-200 bg-white'}`}>
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${option.value === 'checked' ? 'bg-emerald-500' : option.value === 'issue' ? 'bg-rose-500' : 'bg-slate-300'}`} />
+                            {option.label}
+                        </div>
                     ))}
+                    <span className="ml-auto hidden text-[10px] text-slate-400 sm:inline dark:text-slate-500">Ctrl/Cmd+click cells to multi-select status</span>
                 </div>
             </div>
             
@@ -5093,7 +5108,7 @@ const getAssigneeColor = (identifier, users) => {
                     sections.map((section, sectionIndex) => (
                         <div
                             key={section.id}
-                            className={`rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md cursor-grab active:cursor-grabbing dark:border-gray-700 dark:bg-gray-900 dark:ring-offset-gray-900 overflow-hidden ${dragOverIndex === sectionIndex ? 'ring-2 ring-primary-500 ring-offset-2 border-primary-300 dark:border-primary-500' : ''}`}
+                            className={`overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm transition-shadow hover:shadow-md cursor-grab active:cursor-grabbing dark:border-slate-700 dark:bg-slate-900 ${dragOverIndex === sectionIndex ? 'ring-2 ring-indigo-400 ring-offset-2 dark:ring-offset-slate-950' : ''}`}
                             draggable="true"
                             onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
                             onDragEnd={handleSectionDragEnd}
@@ -5102,12 +5117,12 @@ const getAssigneeColor = (identifier, users) => {
                             onDrop={(e) => handleSectionDrop(e, sectionIndex)}
                         >
                             {/* Section header */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white px-4 py-3 dark:border-gray-700 dark:from-gray-800 dark:to-gray-900">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/90 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/50">
                                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                                    <i className="fas fa-grip-vertical flex-shrink-0 text-sm text-gray-400 dark:text-gray-500"></i>
+                                    <i className="fas fa-grip-vertical flex-shrink-0 text-sm text-slate-400 dark:text-slate-500" aria-hidden="true"></i>
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 text-base font-bold text-gray-900 dark:text-gray-100">
-                                            <span>#{sectionIndex + 1}</span>
+                                        <div className="flex items-center gap-2.5 text-base font-bold text-slate-900 dark:text-slate-100">
+                                            <span className="flex h-7 min-w-[1.75rem] items-center justify-center rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white shadow-sm">{sectionIndex + 1}</span>
                                             <span>{section.name}</span>
                                         </div>
                                         {section.description && (
@@ -5148,28 +5163,27 @@ const getAssigneeColor = (identifier, users) => {
                                     </button>
                                     <button
                                         onClick={(e) => handleDeleteSection(section.id, e)}
-                                        className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200 hover:border-red-300 flex items-center gap-1.5"
+                                        className="flex items-center gap-1 rounded-lg border border-rose-200 p-2 text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/40"
                                         type="button"
                                         title="Delete section"
                                         aria-label="Delete section"
                                     >
                                         <i className="fas fa-trash text-sm"></i>
-                                        <span className="text-xs font-medium">Delete section</span>
                                     </button>
                                 </div>
                             </div>
 
                             {/* Scrollable week/document grid for this section only */}
-                            <div data-scroll-sync className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gradient-to-b from-gray-100 to-gray-50">
+                            <div data-scroll-sync className="overflow-x-auto scrollbar-thin">
+                                <table className="min-w-full border-collapse">
+                                    <thead className="bg-slate-100/90 dark:bg-slate-800/80">
                                         <tr>
                                             <th
                                                 rowSpan={2}
-                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider sticky left-0 bg-gradient-to-b from-gray-100 to-gray-50 z-20 border-r-2 border-gray-300"
+                                                className="sticky left-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
                                                 style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                             >
-                                                Document / Data
+                                                Document / data
                                             </th>
                                             {displayGridColumns.map((col) => {
                                                 const week = col.week;
@@ -5177,16 +5191,20 @@ const getAssigneeColor = (identifier, users) => {
                                                     <th
                                                         key={col.key}
                                                         colSpan={2}
-                                                        className={`px-2 py-2 text-center text-xs font-bold uppercase tracking-wider border-l-4 border-b-2 border-gray-400 ${
+                                                        className={`border-b border-l border-slate-200 px-2 py-2 text-center text-[10px] font-bold uppercase tracking-wide dark:border-slate-600 ${
                                                             workingWeeks.includes(week.number) && selectedYear === currentYear
-                                                                ? 'bg-primary-100 text-primary-800 border-primary-400'
-                                                                : 'text-gray-700'
+                                                                ? 'bg-indigo-100 text-indigo-900 ring-1 ring-inset ring-indigo-300/60 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700'
+                                                                : 'bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400'
                                                         }`}
                                                         title={week.dateRange}
                                                     >
-                                                        <div className="flex flex-col items-center gap-0.5">
-                                                            <span className="text-[10px]">{week.label}</span>
-                                                            <span className="text-[10px] font-semibold text-green-700">
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className="leading-tight">{week.label}</span>
+                                                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tabular-nums ${
+                                                                workingWeeks.includes(week.number) && selectedYear === currentYear
+                                                                    ? 'bg-white/80 text-emerald-700 dark:bg-slate-900/50 dark:text-emerald-300'
+                                                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                                            }`}>
                                                                 {(() => {
                                                                     const wk = getWeekKey(week, selectedYear);
                                                                     const pct = wk ? weekCompletionByKey[wk]?.percent : null;
@@ -5199,7 +5217,7 @@ const getAssigneeColor = (identifier, users) => {
                                             })}
                                             <th
                                                 rowSpan={2}
-                                                className="px-4 py-2 text-left text-xs font-bold text-gray-900 uppercase tracking-wider border-l-4 border-gray-400 bg-gradient-to-b from-gray-100 to-gray-50"
+                                                className="border-b border-l border-slate-200 bg-slate-100 px-3 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400"
                                             >
                                                 Actions
                                             </th>
@@ -5211,16 +5229,16 @@ const getAssigneeColor = (identifier, users) => {
                                                 return (
                                                     <React.Fragment key={col.key}>
                                                         <th
-                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-4 border-t-2 border-gray-400 ${
-                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-400' : 'text-gray-600'
+                                                            className={`border-l border-slate-200 px-2 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:text-slate-400 ${
+                                                                isWorking ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
                                                             }`}
-                                                            style={{ minWidth: '180px', width: '180px' }}
+                                                            style={{ minWidth: '168px', width: '168px' }}
                                                         >
                                                             Status
                                                         </th>
                                                         <th
-                                                            className={`px-2 py-1 text-center text-xs font-semibold uppercase tracking-wider border-l-2 border-t-2 border-gray-300 ${
-                                                                isWorking ? 'bg-primary-50 text-primary-800 border-primary-200' : 'text-gray-600'
+                                                            className={`border-l border-slate-200 px-2 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:text-slate-400 ${
+                                                                isWorking ? 'bg-indigo-50/80 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200' : 'bg-slate-50/50 dark:bg-slate-800/30'
                                                             }`}
                                                             style={{ minWidth: '200px', width: '200px' }}
                                                         >
@@ -5232,7 +5250,7 @@ const getAssigneeColor = (identifier, users) => {
                                         </tr>
                                     </thead>
                                     <tbody
-                                        className="bg-white divide-y-2 divide-gray-300"
+                                        className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900"
                                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                     >
                                         {section.documents.length === 0 ? (
@@ -5259,7 +5277,7 @@ const getAssigneeColor = (identifier, users) => {
                                             section.documents.map((doc, docIndex) => (
                                                 <tr
                                                     key={doc.id}
-                                                    className={`transition-colors border-b-2 border-gray-300 cursor-grab active:cursor-grabbing ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-primary-50 ring-1 ring-primary-200' : 'hover:bg-gray-50'}`}
+                                                    className={`cursor-grab transition-colors active:cursor-grabbing ${docIndex % 2 === 1 ? 'bg-slate-50/40 dark:bg-slate-800/20' : ''} ${dragOverDocumentSectionId === section.id && dragOverDocumentIndex === docIndex ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/30' : 'hover:bg-indigo-50/30 dark:hover:bg-slate-800/40'}`}
                                                     draggable
                                                     onDragStart={(e) => handleDocumentDragStart(section.id, docIndex, e)}
                                                     onDragEnd={handleDocumentDragEnd}
@@ -5268,7 +5286,7 @@ const getAssigneeColor = (identifier, users) => {
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, docIndex)}
                                                 >
                                                     <td
-                                                        className="px-4 py-2 sticky left-0 bg-white z-20 border-r-2 border-gray-300"
+                                                        className={`sticky left-0 z-20 border-r border-slate-200 px-4 py-3 dark:border-slate-600 ${docIndex % 2 === 1 ? 'bg-slate-50/80 dark:bg-slate-800/40' : 'bg-white dark:bg-slate-900'}`}
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW, width: '300px', minWidth: '300px', maxWidth: '300px' }}
                                                     >
                                                         <div className="w-full flex items-start gap-2">
