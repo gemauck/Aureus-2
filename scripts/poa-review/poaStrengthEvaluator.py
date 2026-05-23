@@ -242,6 +242,66 @@ def format_shortfalls(shortfalls: list[str]) -> str:
     return "; ".join(shortfalls)
 
 
+DEFAULT_SHIFT_ADVISORY = (
+    "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
+)
+
+
+def _shift_day_fallback_proofs(
+    data: pd.DataFrame,
+    proof_mask: pd.Series,
+    transaction_mask: pd.Series,
+    label,
+    rules: dict,
+) -> tuple[pd.DataFrame, bool]:
+    """When a batch has no linked proof, reuse same-asset shift/day proof if only one activity."""
+    cfg = rules.get("shiftProofFallback") or {}
+    if cfg.get("enabled") is False:
+        return pd.DataFrame(), False
+
+    direct = data.loc[proof_mask & (data["label"] == label)]
+    if len(direct) > 0:
+        return pd.DataFrame(), False
+
+    txn_rows = data.loc[transaction_mask & (data["label"].astype(str) == str(label))]
+    if len(txn_rows) == 0:
+        return pd.DataFrame(), False
+
+    txn_row = txn_rows.iloc[0]
+    asset = txn_row.get("Asset Number")
+    txn_dt = pd.to_datetime(txn_row.get("Date & Time"), errors="coerce")
+    if pd.isna(txn_dt) or pd.isna(asset):
+        return pd.DataFrame(), False
+
+    window_h = float(cfg.get("windowHours", 24))
+    max_activities = int(cfg.get("maxDistinctActivitiesPerDay", 1))
+
+    asset_proofs = data.loc[proof_mask & (data["Asset Number"] == asset)].copy()
+    if len(asset_proofs) == 0:
+        return pd.DataFrame(), False
+
+    proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
+    txn_day = txn_dt.normalize()
+    window_start = txn_dt - pd.Timedelta(hours=window_h)
+    in_window = asset_proofs[
+        (proof_dt.dt.normalize() == txn_day)
+        | ((proof_dt <= txn_dt) & (proof_dt >= window_start))
+    ]
+    if len(in_window) == 0:
+        return pd.DataFrame(), False
+
+    activities: set[str] = set()
+    for _, row in in_window.iterrows():
+        for col in ("Activity", "Operation Description / Comment", "Comments"):
+            val = _norm(row.get(col))
+            if val:
+                activities.add(val)
+    if len(activities) > max_activities:
+        return pd.DataFrame(), False
+
+    return in_window, True
+
+
 def evaluate_all_labels(
     data: pd.DataFrame,
     proof_mask: pd.Series,
@@ -259,13 +319,33 @@ def evaluate_all_labels(
     for label in labels:
         label_str = str(label)
         proof_rows = data.loc[proof_mask & (data["label"] == label)]
+        shift_applied = False
+        if len(proof_rows) == 0:
+            proof_rows, shift_applied = _shift_day_fallback_proofs(
+                data, proof_mask, transaction_mask, label, rules
+            )
+
         batch = aggregate_proof_batch(proof_rows)
         batch["label"] = label_str
+        batch["shiftProofApplied"] = shift_applied
         if len(proof_rows) > 0:
             first = proof_rows.iloc[0]
             batch["assetNumber"] = str(first.get("Asset Number", ""))
             batch["assetDescription"] = str(first.get("Asset Description", ""))
+        elif len(txn_rows := data.loc[transaction_mask & (data["label"].astype(str) == label_str)]) > 0:
+            first_txn = txn_rows.iloc[0]
+            batch["assetNumber"] = str(first_txn.get("Asset Number", ""))
+            batch["assetDescription"] = str(first_txn.get("Asset Description", ""))
+
         eval_result = evaluate_batch_rules(batch, rules)
+        if shift_applied:
+            advisory = (rules.get("shiftProofFallback") or {}).get("advisoryNote", DEFAULT_SHIFT_ADVISORY)
+            shortfalls = list(eval_result.get("shortfalls") or [])
+            if advisory not in shortfalls:
+                shortfalls.append(advisory)
+            eval_result["shortfalls"] = shortfalls
+            eval_result["shiftProofApplied"] = True
+
         eval_result["batch"] = batch
         results[label_str] = eval_result
 

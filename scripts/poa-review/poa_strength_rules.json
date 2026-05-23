@@ -3,8 +3,9 @@
     "mining", "excavation", "excavating", "drilling", "blasting", "load and haul", "load & haul",
     "haul", "hauling", "loading", "stripping", "overburden removal", "coal extraction",
     "pit production", "face production", "bench mining", "quarrying", "extraction",
-    "reclamation", "topsoil removal", "dozing", "ripping", "grading at pit", "pit operation",
-    "primary production", "production mining", "in-pit", "in pit"
+    "reclamation", "topsoil removal", "dozing", "dozer", "ripping", "grading", "grading at pit",
+    "pit operation", "primary production", "production mining", "in-pit", "in pit",
+    "dewatering", "pumping", "pump"
   ],
   "secondaryActivities": [
     "crushing", "crusher", "screening", "processing plant", "plant operation", "plant feed",
@@ -44,5 +45,11 @@
     "load", "loads", "haul", "hauls", "tonne", "tonnes", "hour", "hours", "hr", "km",
     "shift", "trip", "bucket", "cycle"
   ],
+  "shiftProofFallback": {
+    "enabled": true,
+    "windowHours": 24,
+    "maxDistinctActivitiesPerDay": 1,
+    "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
+  },
   "siteOverrides": {}
 }

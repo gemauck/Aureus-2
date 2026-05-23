@@ -2816,6 +2816,18 @@ app.post('/api/poa-review/process-excel', async (req, res) => {
     throw e
   }
 })
+app.post('/api/dispense-exception-audit/process-excel', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'dispense-exception-audit', 'process-excel.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Dispense Exception Audit process-excel handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
 app.post('/api/poa-review/process-batch', async (req, res) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-batch.js'))
@@ -2930,9 +2942,10 @@ app.use('/api', async (req, res) => {
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel') || req.url.includes('/poa-review/evaluate-strength');
+    const isDispenseExceptionAudit = req.url.includes('/dispense-exception-audit/process-excel');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
-    const timeoutDuration = isPOAReview ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
+    const timeoutDuration = isPOAReview || isDispenseExceptionAudit ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA/dispense audit: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
     
     timeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -3180,7 +3193,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'discussion-replies', 'notes']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'dispense-exception-audit-inputs', 'dispense-exception-audit-outputs', 'discussion-replies', 'notes']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }

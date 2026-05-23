@@ -68,7 +68,9 @@ def _build_system_prompt(rules: dict) -> str:
     return f"""You are an expert South African diesel refund Proof of Activity (POA) evaluator.
 Assess whether proof records between fuel dispenses support primary production under Schedule 6 of the Customs and Excise Act.
 
-Primary production includes in-pit mining, extraction, load-and-haul, drilling, blasting, stripping, overburden removal — NOT secondary plant processing, crushing-only, or workshop activity.
+Primary production includes in-pit mining, extraction, load-and-haul, drilling, blasting, stripping, overburden removal, grading, dozer/dozing, dewatering, and pumping — NOT secondary plant processing, crushing-only, or workshop activity.
+
+When proof describes a single shift/day activity entry, it may support multiple dispenses within 24 hours for the same asset; note gaps but do not reject grading, dozer, dewatering, or pumping as non-primary when clearly at the mine face or pit.
 
 For each batch, decide if ANY proof row satisfies each criterion (multi-source proof aggregates):
 1. activity — primary Schedule 6 production activity (not secondary processing/crushing/plant-only)
