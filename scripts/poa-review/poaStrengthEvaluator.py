@@ -22,7 +22,16 @@ STRENGTH_FILL = {
     STRENGTH_INSUFFICIENT: "F4CCCC",
 }
 
-RULES_PATH = os.path.join(os.path.dirname(__file__), "poa_strength_rules.json")
+def _resolve_rules_path() -> str:
+    """Resolve rules JSON path; Pyodide exec has no __file__."""
+    try:
+        base = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        base = "/tmp"
+    return os.path.join(base, "poa_strength_rules.json")
+
+
+RULES_PATH = _resolve_rules_path()
 
 TEXT_FIELDS = [
     "Activity",

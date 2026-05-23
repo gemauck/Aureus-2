@@ -2828,14 +2828,33 @@ app.post('/api/poa-review/process-batch', async (req, res) => {
     throw e
   }
 })
+app.all('/api/poa-review/evaluate-strength', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'evaluate-strength.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ POA Review evaluate-strength handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
 // Serve standalone Python script for browser (Pyodide) run
 app.get('/api/poa-review/browser-script', (req, res) => {
   try {
     const scriptsDir = path.join(__dirname, 'scripts', 'poa-review')
-    const parts = ['poaStrengthEvaluator.py', 'poa_review_browser.py']
-    const script = parts
-      .map((name) => fs.readFileSync(path.join(scriptsDir, name), 'utf8'))
-      .join('\n\n# --- bundled module ---\n\n')
+    const rulesJson = fs.readFileSync(path.join(scriptsDir, 'poa_strength_rules.json'), 'utf8').trim()
+    // Pyodide has no __file__; write rules before poa_review_browser.run() calls load_rules()
+    const bootstrap = `# --- Pyodide bootstrap ---
+with open("/tmp/poa_strength_rules.json", "w", encoding="utf-8") as _poa_rules_f:
+    _poa_rules_f.write(${JSON.stringify(rulesJson)})
+`
+    const script = [
+      fs.readFileSync(path.join(scriptsDir, 'poaStrengthEvaluator.py'), 'utf8'),
+      bootstrap,
+      fs.readFileSync(path.join(scriptsDir, 'poa_review_browser.py'), 'utf8'),
+    ].join('\n\n# --- bundled module ---\n\n')
     res.type('text/plain').send(script)
   } catch (e) {
     console.error('❌ POA Review browser-script error:', e)
@@ -2909,7 +2928,7 @@ app.use('/api', async (req, res) => {
     
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
-    const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel');
+    const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel') || req.url.includes('/poa-review/evaluate-strength');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
     const timeoutDuration = isPOAReview ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
