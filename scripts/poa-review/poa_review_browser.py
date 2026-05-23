@@ -243,8 +243,12 @@ class POAReview:
             zero_proof = self.transaction_mask & (
                 pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0
             )
-            self.data.loc[zero_proof, "POA Strength"] = STRENGTH_INSUFFICIENT
-            self.data.loc[zero_proof, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+            for label, res in label_results.items():
+                if res.get("shiftProofApplied"):
+                    continue
+                mask = self.transaction_mask & (self.data["label"].astype(str) == str(label))
+                self.data.loc[mask & zero_proof, "POA Strength"] = STRENGTH_INSUFFICIENT
+                self.data.loc[mask & zero_proof, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
         self.strength_summary = summarize_strength_results(label_results)
         return self.data
 

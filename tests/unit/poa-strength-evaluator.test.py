@@ -102,9 +102,67 @@ def test_evaluate_all_labels_dataframe():
     assert results["A1-1"]["strength"] == STRENGTH_STRONG
 
 
+def test_primary_activities_dozer_grading_dewatering():
+    rules = load_rules()
+    for activity in ("Dozer 2 Seam MB", "Grading", "Dewatering", "Pumping water"):
+        batch = {
+            "proofCount": 1,
+            "activities": [activity.lower()],
+            "locations": ["north pit"],
+            "materials": ["coal"],
+            "comments": [],
+            "sources": [],
+            "intensityValues": {"Total SMR Usage": 2.0},
+            "combinedText": f"{activity.lower()} | north pit | coal",
+        }
+        result = evaluate_batch_rules(batch, rules)
+        assert result["criteria"]["activity"] is True, activity
+
+
+def test_shift_day_fallback_second_dispense():
+    rows = [
+        {
+            "Transaction ID": "",
+            "Asset Number": "870-R",
+            "Date & Time": "2026-04-02 00:00:00",
+            "Activity": "Loading 2 Seam MB",
+            "Location.1": "north pit",
+            "Material": "coal",
+            "Total SMR Usage": 8,
+        },
+        {
+            "Transaction ID": "T1",
+            "Asset Number": "870-R",
+            "Date & Time": "2026-04-02 08:48:37",
+            "Activity": "",
+        },
+        {
+            "Transaction ID": "T2",
+            "Asset Number": "870-R",
+            "Date & Time": "2026-04-02 16:39:19",
+            "Activity": "",
+        },
+    ]
+    df = pd.DataFrame(rows)
+    df["Date & Time"] = pd.to_datetime(df["Date & Time"], errors="coerce")
+    txn_id_str = df["Transaction ID"].astype(str).str.strip()
+    txn_mask = df["Transaction ID"].notna() & (txn_id_str != "") & (txn_id_str != "Transaction ID")
+    proof_mask = (~txn_mask) & df["Asset Number"].notna()
+    df.loc[txn_mask & (df["Transaction ID"] == "T1"), "label"] = "870-R-1"
+    df.loc[txn_mask & (df["Transaction ID"] == "T2"), "label"] = "870-R-2"
+    df.loc[proof_mask, "label"] = "870-R-1"
+
+    results = evaluate_all_labels(df, proof_mask, txn_mask)
+    assert results["870-R-2"].get("shiftProofApplied") is True
+    assert results["870-R-2"]["strength"] != STRENGTH_INSUFFICIENT
+    assert any("shift/day" in s.lower() or "verify applicability" in s.lower() for s in results["870-R-2"]["shortfalls"])
+
+
 if __name__ == "__main__":
     test_strong_batch_all_criteria()
     test_insufficient_no_proof()
     test_weak_secondary_plant_only()
     test_evaluate_all_labels_dataframe()
+    test_primary_activities_dozer_grading_dewatering()
+    test_shift_day_fallback_second_dispense()
     print("All POA strength evaluator tests passed.")

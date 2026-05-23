@@ -20,13 +20,22 @@ const COLUMN_SPECS = [
 ];
 
 const DEFAULT_STRENGTH_RULES = {
-    primaryActivities: ['mining', 'excavation', 'load and haul', 'haul', 'hauling', 'loading', 'stripping', 'drilling', 'blasting', 'overburden', 'extraction', 'pit', 'in-pit'],
+    primaryActivities: [
+        'mining', 'excavation', 'load and haul', 'haul', 'hauling', 'loading', 'stripping', 'drilling', 'blasting',
+        'overburden', 'extraction', 'pit', 'in-pit', 'dozing', 'dozer', 'grading', 'dewatering', 'pumping', 'pump',
+    ],
     secondaryActivities: ['crushing', 'crusher', 'screening', 'processing plant', 'plant operation', 'workshop', 'beneficiation', 'chpp'],
     primaryLocations: ['pit', 'north pit', 'south pit', 'open pit', 'opencast', 'quarry', 'face', 'bench', 'rom', 'in-pit', 'bultfontein', 'np1', 'np2'],
     secondaryLocations: ['plant', 'processing plant', 'crusher', 'workshop', 'office', 'depot', 'chpp', 'prep plant', 'stockyard'],
     primaryMaterials: ['coal', 'rom', 'overburden', 'topsoil', 'hards', 'softs', 'waste', 'ore'],
     secondaryMaterials: ['processed', 'crushed', 'screened', 'product coal', 'fines'],
     intensityTextKeywords: ['load', 'loads', 'haul', 'tonne', 'hour', 'hours', 'hr', 'km', 'shift'],
+    shiftProofFallback: {
+        enabled: true,
+        windowHours: 24,
+        maxDistinctActivitiesPerDay: 1,
+        advisoryNote: 'No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability',
+    },
 };
 
 function containsAny(text, terms) {
@@ -46,7 +55,8 @@ function tierFromScore(score) {
 }
 
 function evaluateBatchStrength(batch, rules = DEFAULT_STRENGTH_RULES) {
-    if (!batch.proofCount) {
+    const shiftApplied = batch.shiftProofApplied === true;
+    if (!batch.proofCount && !shiftApplied) {
         return { strength: 'Insufficient', shortfalls: ['No proof-of-activity rows for this batch'], score: 0 };
     }
     const text = batch.combinedText || '';
@@ -105,7 +115,12 @@ function evaluateBatchStrength(batch, rules = DEFAULT_STRENGTH_RULES) {
     if (!intensityOk) shortfalls.push('No usage intensity (loads, SMR, hours, or hauls)');
 
     const score = [activityOk, locationOk, materialOk, intensityOk].filter(Boolean).length;
-    return { strength: tierFromScore(score), shortfalls, score };
+    if (shiftApplied) {
+        const advisory = rules.shiftProofFallback?.advisoryNote
+            || 'No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability';
+        if (!shortfalls.includes(advisory)) shortfalls.push(advisory);
+    }
+    return { strength: tierFromScore(score), shortfalls, score, shiftProofApplied: shiftApplied };
 }
 
 function summarizeStrengthResults(labelResults) {
@@ -130,6 +145,40 @@ function summarizeStrengthResults(labelResults) {
     };
 }
 
+function shiftDayFallbackProofs(records, label, rules = DEFAULT_STRENGTH_RULES) {
+    const cfg = rules.shiftProofFallback || {};
+    if (cfg.enabled === false) return { proofs: [], applied: false };
+
+    const direct = records.filter((r) => r.isProof && r.label === label);
+    if (direct.length) return { proofs: [], applied: false };
+
+    const txns = records.filter((r) => r.isTransaction && r.label === label);
+    if (!txns.length || !txns[0].dt || !txns[0].asset) return { proofs: [], applied: false };
+
+    const txn = txns[0];
+    const windowMs = (cfg.windowHours || 24) * ONE_HOUR_MS;
+    const maxAct = cfg.maxDistinctActivitiesPerDay ?? 1;
+    const txnDayStart = new Date(txn.dt.getFullYear(), txn.dt.getMonth(), txn.dt.getDate()).getTime();
+
+    const assetProofs = records.filter((r) => r.isProof && r.asset === txn.asset && r.dt);
+    const inWindow = assetProofs.filter((p) => {
+        const pDayStart = new Date(p.dt.getFullYear(), p.dt.getMonth(), p.dt.getDate()).getTime();
+        return pDayStart === txnDayStart || (p.dt <= txn.dt && txn.dt - p.dt <= windowMs);
+    });
+    if (!inWindow.length) return { proofs: [], applied: false };
+
+    const activities = new Set();
+    inWindow.forEach((p) => {
+        [p.activity, p.operationComment, p.comments].forEach((v) => {
+            const s = String(v || '').trim().toLowerCase();
+            if (s) activities.add(s);
+        });
+    });
+    if (activities.size > maxAct) return { proofs: [], applied: false };
+
+    return { proofs: inWindow, applied: true };
+}
+
 function evaluatePoaStrengthFromRecords(records) {
     const proofByLabel = {};
     records.filter((r) => r.isProof && r.label).forEach((r) => {
@@ -141,7 +190,15 @@ function evaluatePoaStrengthFromRecords(records) {
     const labelResults = {};
 
     txnLabels.forEach((label) => {
-        const proofs = proofByLabel[label] || [];
+        let proofs = proofByLabel[label] || [];
+        let shiftProofApplied = false;
+        if (!proofs.length) {
+            const fallback = shiftDayFallbackProofs(records, label);
+            if (fallback.applied) {
+                proofs = fallback.proofs;
+                shiftProofApplied = true;
+            }
+        }
         const activities = [];
         const locations = [];
         const materials = [];
@@ -166,6 +223,7 @@ function evaluatePoaStrengthFromRecords(records) {
             matText: materials.join(' | '),
             combinedText,
             intensityValues,
+            shiftProofApplied,
         };
         labelResults[label] = evaluateBatchStrength(batch);
     });
