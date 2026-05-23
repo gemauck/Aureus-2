@@ -4,6 +4,7 @@ Reads /tmp/input.csv, options from /tmp/options.json, writes /tmp/output.xlsx.
 Bundled with poaStrengthEvaluator.py via /api/poa-review/browser-script.
 """
 import json
+import os
 import pandas as pd
 import numpy as np
 from poaStrengthEvaluator import (
@@ -392,6 +393,8 @@ def run_phase2():
     if os.path.isfile(merged_path):
         with open(merged_path, "r", encoding="utf-8") as f:
             api_out = json.load(f)
+        if isinstance(api_out, dict) and isinstance(api_out.get("data"), dict):
+            api_out = api_out["data"]
         label_results = _merge_api_label_results(label_results, api_out.get("labelResults") or {})
 
     review._apply_label_results(label_results)

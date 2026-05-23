@@ -921,17 +921,22 @@ const POAReview = () => {
                     csvLines[i + 1] = line;
                 }
                 const csvString = csvLines.join('\n');
-                const optionsJson = JSON.stringify({ sources: sources || ['Inmine: Daily Diesel Issues'] });
+                const optionsJson = JSON.stringify({
+                    sources: sources || ['Inmine: Daily Diesel Issues'],
+                    useAIStrength: useAIStrength === true,
+                });
                 setProcessingProgress(`Starting Python (tab will stay responsive)…`);
                 setProcessingProgressPercent(15);
                 await new Promise(r => setTimeout(r, 0));
                 const origin = (window.location.origin || '').replace(/\/$/, '');
                 const scriptUrl = origin + '/api/poa-review/browser-script';
                 const pyodideBase = origin + '/api/poa-review/pyodide';
+                const authToken = window.storage?.getToken?.() || '';
+                const browserUseAI = useAIStrength === true;
                 const workerCode = `
 importScripts('${pyodideBase}/pyodide.js');
 self.onmessage = async (e) => {
-  const { csv, optionsJson, scriptUrl } = e.data;
+  const { csv, optionsJson, scriptUrl, origin, authToken, useAIStrength } = e.data;
   try {
     self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
     const pyodide = await self.loadPyodide({ indexURL: '${pyodideBase}/' });
@@ -946,6 +951,30 @@ self.onmessage = async (e) => {
     const res = await fetch(scriptUrl);
     const script = await res.text();
     pyodide.runPython(script);
+    pyodide.runPython('run_phase1()');
+    if (useAIStrength) {
+      self.postMessage({ type: 'progress', message: 'Running AI strength evaluation (batch summaries only)…' });
+      try {
+        const payloadText = pyodide.FS.readFile('/tmp/llm_payload.json', { encoding: 'utf8' });
+        const aiRes = await fetch(origin + '/api/poa-review/evaluate-strength', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (authToken || ''),
+          },
+          credentials: 'include',
+          body: payloadText,
+        });
+        if (aiRes.ok) {
+          pyodide.FS.writeFile('/tmp/strength_merged.json', await aiRes.text());
+        } else {
+          self.postMessage({ type: 'progress', message: 'AI unavailable — using rules-only strength…' });
+        }
+      } catch (aiErr) {
+        self.postMessage({ type: 'progress', message: 'AI step failed — using rules-only strength…' });
+      }
+    }
+    pyodide.runPython('run_phase2()');
     const outBytes = pyodide.FS.readFile('/tmp/output.xlsx', { encoding: 'binary' });
     self.postMessage({ type: 'done', outBytes });
   } catch (err) {
@@ -964,6 +993,7 @@ self.onmessage = async (e) => {
                             setProcessingProgress(d.message);
                             if (d.message.includes('Loading')) setProcessingProgressPercent(20);
                             else if (d.message.includes('Installing')) setProcessingProgressPercent(30);
+                            else if (d.message.includes('AI')) setProcessingProgressPercent(55);
                             else setProcessingProgressPercent(40);
                         } else if (d.type === 'done') {
                             try {
@@ -991,7 +1021,14 @@ self.onmessage = async (e) => {
                         worker.terminate();
                         reject(err.message ? new Error(err.message) : new Error('Worker failed'));
                     };
-                    worker.postMessage({ csv: csvString, optionsJson, scriptUrl });
+                    worker.postMessage({
+                        csv: csvString,
+                        optionsJson,
+                        scriptUrl,
+                        origin,
+                        authToken,
+                        useAIStrength: browserUseAI,
+                    });
                 });
                 return;
             }
@@ -1348,7 +1385,6 @@ self.onmessage = async (e) => {
                 </p>
             </div>
 
-            {!runLocally && (
             <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                 <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
                     <input
@@ -1361,10 +1397,11 @@ self.onmessage = async (e) => {
                     <span className="text-sm">Use AI strength evaluation</span>
                 </label>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.
+                    {runLocally
+                        ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
+                        : 'Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.'}
                 </p>
             </div>
-            )}
 
             {/* Error Display */}
             {error && (
