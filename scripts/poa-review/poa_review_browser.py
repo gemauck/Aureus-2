@@ -7,13 +7,18 @@ import json
 import os
 import pandas as pd
 import numpy as np
-from poaStrengthEvaluator import (
-    STRENGTH_FILL,
-    STRENGTH_INSUFFICIENT,
-    evaluate_all_labels,
-    format_shortfalls,
-    summarize_strength_results,
-)
+
+try:
+    from poaStrengthEvaluator import (
+        STRENGTH_FILL,
+        STRENGTH_INSUFFICIENT,
+        evaluate_all_labels,
+        format_shortfalls,
+        summarize_strength_results,
+    )
+except ModuleNotFoundError:
+    # Pyodide bundle: evaluator code is exec'd in the same namespace above this import.
+    pass
 
 INPUT_CSV = "/tmp/input.csv"
 OPTIONS_JSON = "/tmp/options.json"
@@ -414,5 +419,5 @@ def run():
     run_phase2()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and not globals().get("__POA_PYODIDE_WORKER__"):
     run()

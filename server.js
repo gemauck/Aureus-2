@@ -2847,6 +2847,7 @@ app.get('/api/poa-review/browser-script', (req, res) => {
     const rulesJson = fs.readFileSync(path.join(scriptsDir, 'poa_strength_rules.json'), 'utf8').trim()
     // Pyodide has no __file__; write rules before poa_review_browser.run() calls load_rules()
     const bootstrap = `# --- Pyodide bootstrap ---
+__POA_PYODIDE_WORKER__ = True
 with open("/tmp/poa_strength_rules.json", "w", encoding="utf-8") as _poa_rules_f:
     _poa_rules_f.write(${JSON.stringify(rulesJson)})
 `
