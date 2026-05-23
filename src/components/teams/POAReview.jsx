@@ -29,6 +29,226 @@ const SOURCE_DETECT_MAX_ROWS = 250000;
 // Max rows when running in browser (Pyodide); larger files use server
 const MAX_ROWS_BROWSER = 500000;
 
+function runPoaAnalysis(rows, sources) {
+    const analyze = typeof window !== 'undefined' && window.analyzePoaRows;
+    if (!analyze || !rows?.length) return null;
+    return analyze(rows, {
+        sources: sources || [],
+        analyzedRowCount: rows.length,
+        fileRowHint: rows.length,
+    });
+}
+
+function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
+    if (loading) {
+        return (
+            <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Analyzing file…
+                </p>
+            </div>
+        );
+    }
+    if (!preflight) return null;
+
+    const statClass = `text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`;
+    const labelClass = `text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`;
+
+    return (
+        <div className={`rounded-lg border p-4 space-y-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-start justify-between gap-2">
+                <h4 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                    <i className={`fas fa-clipboard-check mr-2 ${preflight.ok ? 'text-green-500' : 'text-amber-500'}`}></i>
+                    Pre-flight check
+                </h4>
+                {preflight.ok ? (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-800'}`}>
+                        Ready to process
+                    </span>
+                ) : (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-amber-900/40 text-amber-200' : 'bg-amber-100 text-amber-900'}`}>
+                        Fix issues below
+                    </span>
+                )}
+            </div>
+
+            {preflight.errors.length > 0 && (
+                <ul className={`text-xs space-y-1 rounded p-2 ${isDark ? 'bg-red-900/30 text-red-200' : 'bg-red-50 text-red-800'}`}>
+                    {preflight.errors.map((msg, i) => (
+                        <li key={i}>• {msg}</li>
+                    ))}
+                </ul>
+            )}
+
+            {preflight.warnings.length > 0 && (
+                <ul className={`text-xs space-y-1 rounded p-2 ${isDark ? 'bg-amber-900/20 text-amber-200' : 'bg-amber-50 text-amber-900'}`}>
+                    {preflight.warnings.map((msg, i) => (
+                        <li key={i}>• {msg}</li>
+                    ))}
+                </ul>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                    <p className={labelClass}>Data rows</p>
+                    <p className={statClass}>{preflight.analyzedRowCount.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className={labelClass}>Transactions</p>
+                    <p className={statClass}>{preflight.transactionCount.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className={labelClass}>Proof records</p>
+                    <p className={statClass}>{preflight.proofCount.toLocaleString()}</p>
+                </div>
+                <div>
+                    <p className={labelClass}>Unique assets</p>
+                    <p className={statClass}>{preflight.uniqueAssets.toLocaleString()}</p>
+                </div>
+                <div className="col-span-2 sm:col-span-4">
+                    <p className={labelClass}>Date range</p>
+                    <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        {preflight.dateRangeLabel}
+                    </p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-dashed border-slate-600/40">
+                <div>
+                    <p className={labelClass}>Transactions with proof (preview)</p>
+                    <p className={statClass}>{preflight.transactionCompliancePct}%</p>
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                        {preflight.transactionsWithProof.toLocaleString()} with proof ·{' '}
+                        {preflight.transactionsWithZeroProof.toLocaleString()} without
+                    </p>
+                </div>
+                <div>
+                    <p className={labelClass}>Assets with any proof</p>
+                    <p className={statClass}>{preflight.assetCompliancePct}%</p>
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                        {preflight.noPoaAssetCount.toLocaleString()} asset(s) with no proof rows
+                    </p>
+                </div>
+            </div>
+
+            {sourcesSelected > 0 && preflight.smrTotalSelectedSources > 0 && (
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                    Total SMR (selected sources, preview):{' '}
+                    <span className="font-medium">{preflight.smrTotalSelectedSources.toLocaleString()}</span>
+                </p>
+            )}
+
+            {preflight.noPoaAssetsSample.length > 0 && (
+                <div>
+                    <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        Sample assets with no proof rows
+                    </p>
+                    <p className={`text-xs font-mono ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                        {preflight.noPoaAssetsSample.join(', ')}
+                        {preflight.noPoaAssetCount > preflight.noPoaAssetsSample.length
+                            ? ` (+${preflight.noPoaAssetCount - preflight.noPoaAssetsSample.length} more)`
+                            : ''}
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ReportSummaryPanel({ summary, isDark, completedInText }) {
+    if (!summary) return null;
+
+    const statClass = `text-xl font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`;
+    const labelClass = `text-xs uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-gray-500'}`;
+
+    return (
+        <div className={`rounded-lg border p-4 space-y-4 ${isDark ? 'bg-slate-800 border-green-800/50' : 'bg-white border-green-200'}`}>
+            <div className="flex items-center justify-between gap-2">
+                <h4 className={`text-sm font-semibold ${isDark ? 'text-green-300' : 'text-green-800'}`}>
+                    <i className="fas fa-chart-pie mr-2"></i>
+                    Report summary
+                </h4>
+                {completedInText && (
+                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        Completed in {completedInText}
+                    </span>
+                )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700/80' : 'bg-gray-50'}`}>
+                    <p className={labelClass}>Transaction compliance</p>
+                    <p className={statClass}>{summary.transactionCompliancePct}%</p>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        {summary.transactionsWithProof.toLocaleString()} / {summary.transactionCount.toLocaleString()} with proof
+                    </p>
+                </div>
+                <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700/80' : 'bg-gray-50'}`}>
+                    <p className={labelClass}>No-proof assets</p>
+                    <p className={`${statClass} ${summary.noPoaAssetCount > 0 ? (isDark ? 'text-amber-300' : 'text-amber-700') : ''}`}>
+                        {summary.noPoaAssetCount.toLocaleString()}
+                    </p>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        {summary.transactionsOnNoPoaAssets.toLocaleString()} transactions on those assets
+                    </p>
+                </div>
+                <div className={`rounded-lg p-3 col-span-2 sm:col-span-1 ${isDark ? 'bg-slate-700/80' : 'bg-gray-50'}`}>
+                    <p className={labelClass}>Total SMR (selected sources)</p>
+                    <p className={statClass}>{summary.smrTotalSelectedSources.toLocaleString()}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+                <div>
+                    <p className={labelClass}>Transactions</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        {summary.transactionCount.toLocaleString()}
+                    </p>
+                </div>
+                <div>
+                    <p className={labelClass}>Proof rows</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        {summary.proofCount.toLocaleString()}
+                    </p>
+                </div>
+                <div>
+                    <p className={labelClass}>Period</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        {summary.dateRangeLabel}
+                    </p>
+                </div>
+                <div>
+                    <p className={labelClass}>Median hrs since proof</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                        {summary.medianHoursSinceProof != null ? summary.medianHoursSinceProof : '—'}
+                    </p>
+                </div>
+            </div>
+
+            {summary.topGapAssets.length > 0 && (
+                <div>
+                    <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        Largest time gaps (hours since last proof)
+                    </p>
+                    <ul className={`text-xs space-y-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                        {summary.topGapAssets.map((item) => (
+                            <li key={item.asset} className="flex justify-between gap-2">
+                                <span className="truncate" title={item.label}>{item.label}</span>
+                                <span className="font-mono shrink-0">{item.hours}h</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                Download the Excel report for row-level detail and conditional formatting.
+            </p>
+        </div>
+    );
+}
+
 const POAReview = () => {
     const { isDark } = window.useTheme || (() => ({ isDark: false }));
     
@@ -45,37 +265,22 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
+    const [preflight, setPreflight] = useState(null);
+    const [preflightLoading, setPreflightLoading] = useState(false);
+    const [reportSummary, setReportSummary] = useState(null);
+    const parsedRowsRef = useRef(null);
 
-    const handleFileSelect = useCallback((event) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            const validExtensions = ['.xlsx', '.xls', '.csv'];
-            const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-            if (!validExtensions.includes(fileExtension)) {
-                setError('Please upload an Excel file (.xlsx, .xls) or CSV file');
-                return;
-            }
-            const maxSize = MAX_FILE_SIZE_MB * 1024 * 1024;
-            if (file.size > maxSize) {
-                setError(`File size must be less than ${MAX_FILE_SIZE_MB}MB to avoid server overload.`);
-                return;
-            }
-            setUploadedFile(file);
-            setError(null);
-            setDownloadUrl(null);
-            setDocumentSources([]);
-            setSources([]);
-            setSourcesDetecting(true);
-            // Detect sources from document (sample) then update documentSources
-            detectSourcesFromFile(file).then((unique) => {
-                setDocumentSources(unique);
-                setSourcesDetecting(false);
-            }).catch((err) => {
-                console.warn('POA Review - Source detection failed:', err);
-                setDocumentSources([]);
-                setSourcesDetecting(false);
-            });
-        }
+    const applyPreflightForSources = useCallback((rows, selectedSources) => {
+        const result = runPoaAnalysis(rows, selectedSources);
+        if (result) setPreflight(result);
+        return result;
+    }, []);
+
+    const finalizeReportSummary = useCallback((selectedSources) => {
+        const rows = parsedRowsRef.current;
+        if (!rows?.length) return;
+        const summary = runPoaAnalysis(rows, selectedSources);
+        if (summary) setReportSummary(summary);
     }, []);
 
     // Parse Excel/CSV file client-side and convert to JSON rows (optional maxRows to limit for source detection)
@@ -304,10 +509,70 @@ const POAReview = () => {
         return Array.from(set).sort().filter(s => !/^source$/i.test(s));
     }, []);
 
-    const detectSourcesFromFile = useCallback(async (file) => {
-        const rows = await parseFileToRows(file, SOURCE_DETECT_MAX_ROWS);
-        return getUniqueSourceValuesFromRows(rows);
-    }, [parseFileToRows, getUniqueSourceValuesFromRows]);
+    const handleFileSelect = useCallback((event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const validExtensions = ['.xlsx', '.xls', '.csv'];
+        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+        if (!validExtensions.includes(fileExtension)) {
+            setError('Please upload an Excel file (.xlsx, .xls) or CSV file');
+            return;
+        }
+        const maxSize = MAX_FILE_SIZE_MB * 1024 * 1024;
+        if (file.size > maxSize) {
+            setError(`File size must be less than ${MAX_FILE_SIZE_MB}MB to avoid server overload.`);
+            return;
+        }
+        setUploadedFile(file);
+        setError(null);
+        setDownloadUrl(null);
+        setReportSummary(null);
+        setPreflight(null);
+        parsedRowsRef.current = null;
+        setDocumentSources([]);
+        setSources([]);
+        setSourcesDetecting(true);
+        setPreflightLoading(true);
+
+        (async () => {
+            try {
+                const rows = await parseFileToRows(file, SOURCE_DETECT_MAX_ROWS);
+                parsedRowsRef.current = rows;
+                const unique = getUniqueSourceValuesFromRows(rows);
+                setDocumentSources(unique);
+                applyPreflightForSources(rows, []);
+            } catch (err) {
+                console.warn('POA Review - Pre-flight analysis failed:', err);
+                setDocumentSources([]);
+                setPreflight({
+                    ok: false,
+                    errors: [err.message || 'Could not read file for pre-flight check'],
+                    warnings: [],
+                    analyzedRowCount: 0,
+                    transactionCount: 0,
+                    proofCount: 0,
+                    uniqueAssets: 0,
+                    dateRangeLabel: '—',
+                    transactionCompliancePct: 0,
+                    assetCompliancePct: 0,
+                    noPoaAssetCount: 0,
+                    noPoaAssetsSample: [],
+                    transactionsWithZeroProof: 0,
+                    transactionsWithProof: 0,
+                    smrTotalSelectedSources: 0,
+                });
+            } finally {
+                setSourcesDetecting(false);
+                setPreflightLoading(false);
+            }
+        })();
+    }, [parseFileToRows, getUniqueSourceValuesFromRows, applyPreflightForSources]);
+
+    React.useEffect(() => {
+        const rows = parsedRowsRef.current;
+        if (!rows?.length || preflightLoading) return;
+        applyPreflightForSources(rows, sources);
+    }, [sources, applyPreflightForSources, preflightLoading]);
 
     // Server limit (must match api/poa-review/process-batch.js MAX_TOTAL_ROWS)
     const MAX_POA_ROWS = 250000;
@@ -523,6 +788,7 @@ const POAReview = () => {
                         setProcessingProgress('Complete!');
                         setProcessingProgressPercent(100);
                         setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
+                        finalizeReportSummary(sources && sources.length > 0 ? sources : []);
                         console.log('POA Review - Processing complete, download URL set');
                         return;
                     } else {
@@ -540,7 +806,7 @@ const POAReview = () => {
             console.error('POA Review - Chunked processing error:', error);
             throw error;
         }
-    }, [sources]);
+    }, [sources, finalizeReportSummary]);
 
     const toggleDocumentSource = useCallback((sourceName) => {
         setSources(prev => prev.includes(sourceName) ? prev.filter(s => s !== sourceName) : [...prev, sourceName]);
@@ -565,9 +831,14 @@ const POAReview = () => {
             setError('Select at least one SMR source to include (from the list above or add one manually).');
             return;
         }
+        if (preflight && !preflight.ok) {
+            setError('Fix pre-flight issues before processing (see checklist above).');
+            return;
+        }
 
         setIsProcessing(true);
         setError(null);
+        setReportSummary(null);
         setProcessingProgressPercent(0);
         setCompletedInText(null);
         processingStartRef.current = Date.now();
@@ -576,7 +847,9 @@ const POAReview = () => {
             // Run in browser (Pyodide) — no file sent to server
             if (runLocally) {
                 setProcessingProgress('Reading file...');
-                const rows = await parseFileToRows(uploadedFile);
+                const rows = parsedRowsRef.current?.length
+                    ? parsedRowsRef.current
+                    : await parseFileToRows(uploadedFile);
                 if (rows.length === 0) throw new Error('No data rows found in file');
                 if (rows.length > MAX_ROWS_BROWSER) {
                     throw new Error(
@@ -663,6 +936,7 @@ self.onmessage = async (e) => {
                             setProcessingProgress('Complete! Report downloaded.');
                             setProcessingProgressPercent(100);
                             setCompletedInText(elapsed);
+                            finalizeReportSummary(sources);
                             worker.terminate();
                             resolve();
                         } else if (d.type === 'error') {
@@ -751,6 +1025,7 @@ self.onmessage = async (e) => {
                     setProcessingProgress('Complete!');
                     setProcessingProgressPercent(100);
                     setCompletedInText(formatElapsed(Date.now() - (processingStartRef.current || Date.now())));
+                    finalizeReportSummary(sources);
                 } else {
                     throw new Error('No download URL received from server');
                 }
@@ -759,7 +1034,9 @@ self.onmessage = async (e) => {
             
             // For smaller files or CSV, use client-side parsing
             setProcessingProgress('Reading file...');
-            const rows = await parseFileToRows(uploadedFile);
+            const rows = parsedRowsRef.current?.length
+                ? parsedRowsRef.current
+                : await parseFileToRows(uploadedFile);
             
             console.log('POA Review - File parsed, rows:', rows.length);
             
@@ -786,7 +1063,7 @@ self.onmessage = async (e) => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload]);
+    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -868,6 +1145,9 @@ self.onmessage = async (e) => {
                                 setCompletedInText(null);
                                 setDocumentSources([]);
                                 setSources([]);
+                                setPreflight(null);
+                                setReportSummary(null);
+                                parsedRowsRef.current = null;
                             }}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                                 isDark 
@@ -881,6 +1161,15 @@ self.onmessage = async (e) => {
                     )}
                 </div>
             </div>
+
+            {uploadedFile && (
+                <PreflightPanel
+                    preflight={preflight}
+                    loading={preflightLoading || sourcesDetecting}
+                    isDark={isDark}
+                    sourcesSelected={sources.length}
+                />
+            )}
 
             {/* Sources Configuration */}
             <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -1058,10 +1347,23 @@ self.onmessage = async (e) => {
             <div className="flex flex-col sm:flex-row gap-3">
                 <button
                     onClick={handleUpload}
-                    disabled={!uploadedFile || isProcessing || !sources || sources.length === 0}
-                    title={uploadedFile && sources.length === 0 ? 'Select at least one SMR source above' : undefined}
+                    disabled={
+                        !uploadedFile ||
+                        isProcessing ||
+                        !sources ||
+                        sources.length === 0 ||
+                        preflightLoading ||
+                        (preflight && !preflight.ok)
+                    }
+                    title={
+                        preflight && !preflight.ok
+                            ? 'Fix pre-flight issues above'
+                            : uploadedFile && sources.length === 0
+                                ? 'Select at least one SMR source above'
+                                : undefined
+                    }
                     className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition ${
-                        uploadedFile && !isProcessing && sources && sources.length > 0
+                        uploadedFile && !isProcessing && sources && sources.length > 0 && !(preflight && !preflight.ok) && !preflightLoading
                             ? isDark
                                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                                 : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -1104,6 +1406,14 @@ self.onmessage = async (e) => {
                     </div>
                 )}
             </div>
+
+            {reportSummary && (
+                <ReportSummaryPanel
+                    summary={reportSummary}
+                    isDark={isDark}
+                    completedInText={completedInText}
+                />
+            )}
 
             {/* Info Section */}
             <div className={`rounded-lg border p-4 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>

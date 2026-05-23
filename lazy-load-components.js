@@ -60,6 +60,7 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
         './src/components/teams/TeamDiscussions.jsx',
         './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/SarsMonitoring.jsx',
+        './src/utils/poaAnalyze.js',
         './src/components/teams/POAReview.jsx',
         './src/components/manufacturing/JobCardVoiceNoteTextarea.jsx',
         './src/components/teams/JobCardModal.jsx',

@@ -160,6 +160,7 @@
         'components/teams/TeamDiscussions.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
         'components/teams/SarsMonitoring.jsx',
+        'utils/poaAnalyze.js',
         'components/teams/POAReview.jsx',
         'components/teams/TeamModals.jsx',
         'components/teams/TeamsEnhanced.jsx',
