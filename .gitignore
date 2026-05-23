@@ -32,6 +32,9 @@ dist/
 build/
 out/
 
+# POA Review server-side Python (created on deploy via scripts/poa-review/setup-venv.sh)
+venv-poareview/
+
 # IDE
 .vscode/
 .idea/

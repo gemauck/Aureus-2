@@ -159,6 +159,17 @@ if [ ! -f "${VITE_PROJECTS_ENTRY}" ]; then
 fi
 echo "  ✓ Vite projects bundle present"
 
+if [ -f scripts/poa-review/setup-venv.sh ]; then
+  echo
+  echo "-> Ensuring POA Review Python venv (pandas, openpyxl)..."
+  if bash scripts/poa-review/setup-venv.sh; then
+    echo "  ✓ POA Review venv ready"
+  else
+    echo "  ⚠️  POA Review venv setup failed — server-side POA Excel/batch processing will not work until fixed."
+    echo "     Run manually: bash scripts/poa-review/setup-venv.sh"
+  fi
+fi
+
 if [ -f add-stock-movement-movement-id-unique-migration.sql ]; then
   echo
   echo "-> Applying migration (dedupe + unique StockMovement.movementId)..."
