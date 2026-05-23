@@ -128,6 +128,7 @@ async function handler(req, res) {
             fileName: outputFileName,
             summary: payload.summary || {},
             findings: payload.findings || [],
+            reviewTransactions: payload.review_transactions || [],
             criticalFindings,
         });
     } catch (error) {

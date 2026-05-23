@@ -375,6 +375,84 @@ def audit_economy_outliers(
     return findings
 
 
+SEVERITY_RANK = {'error': 3, 'warning': 2, 'info': 1, 'none': 0}
+
+
+def build_review_transactions(
+    transactions: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    review_queue: list[dict[str, Any]],
+    include_info: bool = False,
+) -> list[dict[str, Any]]:
+    """Build one row per transaction that needs analyst review, with grouped findings."""
+    txn_by_id = {
+        str(t['transaction_id']): t
+        for t in transactions
+        if t.get('transaction_id')
+    }
+    queued_ids = {
+        str(r['transaction_id'])
+        for r in review_queue
+        if r.get('transaction_id')
+    }
+
+    findings_by_txn: dict[str, list[dict[str, Any]]] = {}
+    max_severity: dict[str, str] = {}
+
+    for finding in findings:
+        tid = str(finding.get('transaction_id') or '').strip()
+        if not tid:
+            continue
+        findings_by_txn.setdefault(tid, []).append(finding)
+        sev = finding.get('severity') or 'info'
+        if SEVERITY_RANK.get(sev, 0) > SEVERITY_RANK.get(max_severity.get(tid, 'none'), 0):
+            max_severity[tid] = sev
+
+    for tid in queued_ids:
+        findings_by_txn.setdefault(tid, [])
+
+    review_rows: list[dict[str, Any]] = []
+    for tid, txn_findings in findings_by_txn.items():
+        critical = [f for f in txn_findings if f.get('severity') != 'info']
+        if not include_info and not critical and tid not in queued_ids:
+            continue
+
+        row = txn_by_id.get(tid, {})
+        dt = row.get('date_time')
+        if hasattr(dt, 'isoformat'):
+            date_str = dt.isoformat(sep=' ', timespec='seconds')
+        elif dt:
+            date_str = str(dt)
+        else:
+            date_str = ''
+
+        review_rows.append({
+            'transaction_id': tid,
+            'asset_number': row.get('asset_number') or '',
+            'asset_description': row.get('asset_description') or '',
+            'date_time': date_str,
+            'litres': row.get('litres'),
+            'department': row.get('department') or '',
+            'abco_comment': row.get('abco_comment') or '',
+            'refund_eligibility': row.get('refund_eligibility') or '',
+            'exception_60': row.get('exception_60') or '',
+            'in_review_queue': tid in queued_ids,
+            'max_severity': max_severity.get(tid, 'none' if not txn_findings else 'info'),
+            'findings': txn_findings,
+        })
+
+    def sort_key(item: dict[str, Any]) -> tuple:
+        return (
+            0 if item.get('in_review_queue') else 1,
+            -SEVERITY_RANK.get(item.get('max_severity'), 0),
+            item.get('date_time') or '',
+            item.get('transaction_id') or '',
+        )
+
+    review_rows.sort(key=sort_key)
+    return review_rows
+
+
 def run_all_audits(
     workbook_data: dict[str, Any],
     economy_threshold: float = DEFAULT_ECONOMY_VARIANCE_THRESHOLD,
@@ -421,6 +499,9 @@ def run_all_audits(
 
     return {
         'findings': all_findings,
+        'review_transactions': build_review_transactions(
+            transactions, all_findings, review_queue, include_info=False
+        ),
         'summary': {
             'transaction_count': len(transactions),
             'exception_flagged_count': exception_60_flagged,

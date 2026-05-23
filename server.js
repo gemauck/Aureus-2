@@ -2828,6 +2828,18 @@ app.post('/api/dispense-exception-audit/process-excel', async (req, res) => {
     throw e
   }
 })
+app.post('/api/dispense-exception-audit/export-comments', async (req, res) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'dispense-exception-audit', 'export-comments.js'))
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Dispense Exception Audit export-comments handler error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
+    }
+    throw e
+  }
+})
 app.post('/api/poa-review/process-batch', async (req, res) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-batch.js'))
@@ -2942,7 +2954,8 @@ app.use('/api', async (req, res) => {
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel') || req.url.includes('/poa-review/evaluate-strength');
-    const isDispenseExceptionAudit = req.url.includes('/dispense-exception-audit/process-excel');
+    const isDispenseExceptionAudit = req.url.includes('/dispense-exception-audit/process-excel')
+      || req.url.includes('/dispense-exception-audit/export-comments');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
     const timeoutDuration = isPOAReview || isDispenseExceptionAudit ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA/dispense audit: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s

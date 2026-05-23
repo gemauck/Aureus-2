@@ -2,9 +2,10 @@
  * Dispense Exception Audit — verify manual decisions in InsightWare exception workbooks.
  */
 
-const { useState, useCallback, useRef } = React;
+const { useState, useCallback, useRef, useEffect } = React;
 
 const MAX_FILE_SIZE_MB = 50;
+const COMMENTS_STORAGE_PREFIX = 'dispenseExceptionAudit_comments_';
 
 function formatElapsed(ms) {
     if (ms < 0 || !Number.isFinite(ms)) return '';
@@ -121,6 +122,158 @@ function SummaryPanel({ summary, isDark }) {
     );
 }
 
+function loadStoredComments(fileName) {
+    if (!fileName) return {};
+    try {
+        const raw = localStorage.getItem(`${COMMENTS_STORAGE_PREFIX}${fileName}`);
+        return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function saveStoredComments(fileName, comments) {
+    if (!fileName) return;
+    try {
+        localStorage.setItem(`${COMMENTS_STORAGE_PREFIX}${fileName}`, JSON.stringify(comments));
+    } catch (_) {}
+}
+
+function severityBadgeClass(severity, isDark) {
+    if (severity === 'error') return isDark ? 'text-red-300 bg-red-900/30' : 'text-red-800 bg-red-50';
+    if (severity === 'warning') return isDark ? 'text-amber-200 bg-amber-900/30' : 'text-amber-900 bg-amber-50';
+    if (severity === 'info') return isDark ? 'text-slate-300 bg-slate-700/50' : 'text-gray-600 bg-gray-50';
+    return isDark ? 'text-slate-400 bg-slate-800' : 'text-gray-500 bg-gray-100';
+}
+
+function TransactionReviewList({
+    reviewTransactions,
+    comments,
+    onCommentChange,
+    filterMode,
+    isDark,
+}) {
+    const filtered = (reviewTransactions || []).filter((txn) => {
+        if (filterMode === 'review_queue') return txn.in_review_queue;
+        if (filterMode === 'warnings') return txn.max_severity === 'error' || txn.max_severity === 'warning';
+        return true;
+    });
+
+    if (!filtered.length) {
+        return (
+            <p className={`text-sm py-4 text-center ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                No transactions match this filter.
+            </p>
+        );
+    }
+
+    const labelClass = `text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-gray-400'}`;
+
+    return (
+        <div className="space-y-3 max-h-[32rem] overflow-y-auto pr-1">
+            {filtered.map((txn) => {
+                const tid = txn.transaction_id;
+                const criticalFindings = (txn.findings || []).filter((f) => f.severity !== 'info');
+                return (
+                    <div
+                        key={tid}
+                        className={`rounded-lg border p-3 space-y-2 ${isDark ? 'border-slate-600 bg-slate-900/40' : 'border-gray-200 bg-gray-50'}`}
+                    >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                    {txn.asset_number || '—'}
+                                    {txn.asset_description ? (
+                                        <span className={`font-normal ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                            {' '}· {txn.asset_description}
+                                        </span>
+                                    ) : null}
+                                </p>
+                                <p className={`text-xs font-mono truncate ${isDark ? 'text-slate-400' : 'text-gray-500'}`} title={tid}>
+                                    {tid}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-1 shrink-0">
+                                {txn.max_severity && txn.max_severity !== 'none' && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${severityBadgeClass(txn.max_severity, isDark)}`}>
+                                        {txn.max_severity}
+                                    </span>
+                                )}
+                                {txn.in_review_queue && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-blue-900/40 text-blue-200' : 'bg-blue-100 text-blue-800'}`}>
+                                        review queue
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div>
+                                <p className={labelClass}>Date</p>
+                                <p className={isDark ? 'text-slate-200' : 'text-gray-800'}>{txn.date_time || '—'}</p>
+                            </div>
+                            <div>
+                                <p className={labelClass}>Litres</p>
+                                <p className={isDark ? 'text-slate-200' : 'text-gray-800'}>
+                                    {txn.litres != null ? Number(txn.litres).toLocaleString() : '—'}
+                                </p>
+                            </div>
+                            <div>
+                                <p className={labelClass}>Refund</p>
+                                <p className={isDark ? 'text-slate-200' : 'text-gray-800'}>{txn.refund_eligibility || '—'}</p>
+                            </div>
+                            <div>
+                                <p className={labelClass}>Department</p>
+                                <p className={isDark ? 'text-slate-200' : 'text-gray-800'}>{txn.department || '—'}</p>
+                            </div>
+                        </div>
+
+                        {txn.abco_comment ? (
+                            <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                <span className={labelClass}>Abco comment · </span>
+                                {txn.abco_comment}
+                            </p>
+                        ) : null}
+
+                        {txn.exception_60 ? (
+                            <p className={`text-xs ${isDark ? 'text-amber-200/90' : 'text-amber-900'}`}>
+                                <span className={labelClass}>Exception · </span>
+                                {txn.exception_60}
+                            </p>
+                        ) : null}
+
+                        {criticalFindings.length > 0 && (
+                            <ul className={`text-xs space-y-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                {criticalFindings.map((f, i) => (
+                                    <li key={`${f.check}-${i}`} className="flex gap-2">
+                                        <span className={`shrink-0 px-1 rounded ${severityBadgeClass(f.severity, isDark)}`}>{f.check}</span>
+                                        <span className="min-w-0">{f.expected_value || f.manual_value}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                        <div>
+                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                Your auditor comment
+                            </label>
+                            <textarea
+                                rows={2}
+                                value={comments[tid] || ''}
+                                onChange={(e) => onCommentChange(tid, e.target.value)}
+                                placeholder="Explain why the manual decision is acceptable, or what follow-up is needed…"
+                                className={`w-full text-xs rounded-md border px-2 py-1.5 resize-y min-h-[2.5rem] ${isDark
+                                    ? 'bg-slate-800 border-slate-600 text-slate-100 placeholder:text-slate-500'
+                                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+                            />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 function FindingsTable({ findings, filterSeverity, filterCheck, isDark }) {
     const filtered = (findings || []).filter((f) => {
         if (filterSeverity && filterSeverity !== 'all' && f.severity !== filterSeverity) return false;
@@ -187,11 +340,31 @@ const DispenseExceptionAudit = () => {
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [summary, setSummary] = useState(null);
     const [findings, setFindings] = useState([]);
+    const [reviewTransactions, setReviewTransactions] = useState([]);
+    const [auditFileName, setAuditFileName] = useState(null);
+    const [comments, setComments] = useState({});
+    const [viewMode, setViewMode] = useState('transactions');
+    const [txnFilterMode, setTxnFilterMode] = useState('all');
+    const [exportingComments, setExportingComments] = useState(false);
     const [filterSeverity, setFilterSeverity] = useState('all');
     const [filterCheck, setFilterCheck] = useState('all');
     const [completedInText, setCompletedInText] = useState(null);
     const processingStartRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (uploadedFile?.name) {
+            setComments(loadStoredComments(uploadedFile.name));
+        }
+    }, [uploadedFile?.name]);
+
+    const handleCommentChange = useCallback((transactionId, text) => {
+        setComments((prev) => {
+            const next = { ...prev, [transactionId]: text };
+            if (uploadedFile?.name) saveStoredComments(uploadedFile.name, next);
+            return next;
+        });
+    }, [uploadedFile?.name]);
 
     const runPreflight = useCallback(async (file) => {
         setPreflightLoading(true);
@@ -241,6 +414,9 @@ const DispenseExceptionAudit = () => {
         setDownloadUrl(null);
         setSummary(null);
         setFindings([]);
+        setReviewTransactions([]);
+        setAuditFileName(null);
+        setViewMode('transactions');
         runPreflight(file);
     }, [runPreflight]);
 
@@ -251,6 +427,8 @@ const DispenseExceptionAudit = () => {
         setDownloadUrl(null);
         setSummary(null);
         setFindings([]);
+        setReviewTransactions([]);
+        setAuditFileName(null);
         processingStartRef.current = Date.now();
         setCompletedInText(null);
 
@@ -278,8 +456,13 @@ const DispenseExceptionAudit = () => {
 
             const body = data.data || data;
             setDownloadUrl(body.downloadUrl);
+            setAuditFileName(body.fileName || null);
             setSummary(body.summary || {});
             setFindings(body.findings || []);
+            setReviewTransactions(body.reviewTransactions || []);
+            if (uploadedFile?.name) {
+                setComments(loadStoredComments(uploadedFile.name));
+            }
             setCompletedInText(formatElapsed(Date.now() - processingStartRef.current));
         } catch (err) {
             setError(err.message || 'Audit failed');
@@ -288,7 +471,57 @@ const DispenseExceptionAudit = () => {
         }
     }, [uploadedFile]);
 
+    const handleExportComments = useCallback(async () => {
+        if (!auditFileName) {
+            setError('Run the audit first before saving comments to the report.');
+            return;
+        }
+        const hasComments = Object.values(comments).some((c) => String(c || '').trim());
+        if (!hasComments) {
+            setError('Add at least one auditor comment before exporting.');
+            return;
+        }
+
+        setExportingComments(true);
+        setError(null);
+        try {
+            const token = window.storage?.getToken?.() || '';
+            const response = await fetch('/api/dispense-exception-audit/export-comments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    fileName: auditFileName,
+                    comments,
+                    reviewTransactions,
+                }),
+            });
+
+            const text = await response.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch (_) {
+                throw new Error(text || `Server error (${response.status})`);
+            }
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || data.error || data.message || `Request failed (${response.status})`);
+            }
+
+            const body = data.data || data;
+            if (body.downloadUrl) setDownloadUrl(body.downloadUrl);
+        } catch (err) {
+            setError(err.message || 'Failed to save comments to report');
+        } finally {
+            setExportingComments(false);
+        }
+    }, [auditFileName, comments, reviewTransactions]);
+
     const checkTypes = [...new Set(findings.map((f) => f.check))].sort();
+    const commentCount = Object.values(comments).filter((c) => String(c || '').trim()).length;
+    const hasResults = findings.length > 0 || reviewTransactions.length > 0;
 
     return (
         <div className={`max-w-5xl mx-auto p-4 sm:p-6 space-y-6 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
@@ -361,35 +594,107 @@ const DispenseExceptionAudit = () => {
 
             <SummaryPanel summary={summary} isDark={isDark} />
 
-            {findings.length > 0 && (
+            {hasResults && (
                 <div className={`rounded-xl border p-4 space-y-3 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <h4 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Findings</h4>
-                    <div className="flex flex-wrap gap-2">
-                        <select
-                            value={filterSeverity}
-                            onChange={(e) => setFilterSeverity(e.target.value)}
-                            className={`text-xs rounded border px-2 py-1 ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`}
-                        >
-                            <option value="all">All severities</option>
-                            <option value="error">Errors</option>
-                            <option value="warning">Warnings</option>
-                            <option value="info">Info</option>
-                        </select>
-                        <select
-                            value={filterCheck}
-                            onChange={(e) => setFilterCheck(e.target.value)}
-                            className={`text-xs rounded border px-2 py-1 ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`}
-                        >
-                            <option value="all">All checks</option>
-                            {checkTypes.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                            Audit review
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('transactions')}
+                                className={`text-xs px-3 py-1 rounded-md border ${viewMode === 'transactions'
+                                    ? (isDark ? 'bg-primary-600 border-primary-500 text-white' : 'bg-primary-600 border-primary-600 text-white')
+                                    : (isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50')}`}
+                            >
+                                Transactions ({reviewTransactions.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('findings')}
+                                className={`text-xs px-3 py-1 rounded-md border ${viewMode === 'findings'
+                                    ? (isDark ? 'bg-primary-600 border-primary-500 text-white' : 'bg-primary-600 border-primary-600 text-white')
+                                    : (isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50')}`}
+                            >
+                                All findings ({findings.length})
+                            </button>
+                        </div>
                     </div>
-                    <FindingsTable
-                        findings={findings}
-                        filterSeverity={filterSeverity}
-                        filterCheck={filterCheck}
-                        isDark={isDark}
-                    />
+
+                    {viewMode === 'transactions' ? (
+                        <>
+                            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                Comment on transactions flagged for review or with audit warnings. Comments are saved in your browser and can be merged into the Excel report.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <select
+                                    value={txnFilterMode}
+                                    onChange={(e) => setTxnFilterMode(e.target.value)}
+                                    className={`text-xs rounded border px-2 py-1 ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`}
+                                >
+                                    <option value="all">All flagged transactions</option>
+                                    <option value="review_queue">Review queue only</option>
+                                    <option value="warnings">Errors &amp; warnings only</option>
+                                </select>
+                                {commentCount > 0 && (
+                                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                        {commentCount} comment{commentCount !== 1 ? 's' : ''} drafted
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={handleExportComments}
+                                    disabled={exportingComments || !auditFileName || commentCount === 0}
+                                    className={`ml-auto text-xs px-3 py-1.5 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed ${isDark
+                                        ? 'border-slate-600 text-slate-200 hover:bg-slate-700'
+                                        : 'border-gray-300 text-gray-800 hover:bg-gray-50'}`}
+                                >
+                                    {exportingComments ? (
+                                        <><i className="fas fa-spinner fa-spin mr-1"></i>Saving…</>
+                                    ) : (
+                                        <><i className="fas fa-file-export mr-1"></i>Save comments to report</>
+                                    )}
+                                </button>
+                            </div>
+                            <TransactionReviewList
+                                reviewTransactions={reviewTransactions}
+                                comments={comments}
+                                onCommentChange={handleCommentChange}
+                                filterMode={txnFilterMode}
+                                isDark={isDark}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex flex-wrap gap-2">
+                                <select
+                                    value={filterSeverity}
+                                    onChange={(e) => setFilterSeverity(e.target.value)}
+                                    className={`text-xs rounded border px-2 py-1 ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`}
+                                >
+                                    <option value="all">All severities</option>
+                                    <option value="error">Errors</option>
+                                    <option value="warning">Warnings</option>
+                                    <option value="info">Info</option>
+                                </select>
+                                <select
+                                    value={filterCheck}
+                                    onChange={(e) => setFilterCheck(e.target.value)}
+                                    className={`text-xs rounded border px-2 py-1 ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`}
+                                >
+                                    <option value="all">All checks</option>
+                                    {checkTypes.map((c) => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <FindingsTable
+                                findings={findings}
+                                filterSeverity={filterSeverity}
+                                filterCheck={filterCheck}
+                                isDark={isDark}
+                            />
+                        </>
+                    )}
                 </div>
             )}
         </div>

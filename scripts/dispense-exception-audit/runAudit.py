@@ -50,6 +50,40 @@ def write_audit_excel(input_path: str, output_path: str, audit_result: dict) -> 
         pd.DataFrame(summary_rows).to_excel(writer, sheet_name='Audit Summary', index=False)
 
 
+def merge_auditor_comments(
+    output_path: str,
+    comments: dict[str, str],
+    review_transactions: list[dict] | None = None,
+) -> None:
+    """Append or replace Auditor Comments sheet on an existing audit workbook."""
+    comment_map = {str(k): (v or '').strip() for k, v in (comments or {}).items()}
+    rows = []
+
+    if review_transactions:
+        for txn in review_transactions:
+            tid = str(txn.get('transaction_id') or '')
+            rows.append({
+                'Transaction ID': tid,
+                'Asset Number': txn.get('asset_number') or '',
+                'Date & Time': txn.get('date_time') or '',
+                'Litres': txn.get('litres'),
+                'Abco Comment (workbook)': txn.get('abco_comment') or '',
+                'Refund Eligibility': txn.get('refund_eligibility') or '',
+                'Exception (60 min)': txn.get('exception_60') or '',
+                'In Review Queue': 'Yes' if txn.get('in_review_queue') else 'No',
+                'Max Severity': txn.get('max_severity') or '',
+                'Auditor Comment': comment_map.get(tid, ''),
+            })
+    else:
+        for tid, text in sorted(comment_map.items()):
+            if not text:
+                continue
+            rows.append({'Transaction ID': tid, 'Auditor Comment': text})
+
+    with pd.ExcelWriter(output_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+        pd.DataFrame(rows).to_excel(writer, sheet_name='Auditor Comments', index=False)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Audit dispense exception workbook manual decisions')
     parser.add_argument('input', help='Input .xlsx workbook path')
@@ -77,6 +111,7 @@ def main() -> int:
     payload = {
         'summary': audit_result['summary'],
         'findings': audit_result['findings'],
+        'review_transactions': audit_result.get('review_transactions') or [],
         'output_path': output_path,
     }
     print(json.dumps(payload['summary']))
