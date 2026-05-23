@@ -11,7 +11,167 @@ const COLUMN_SPECS = [
     { key: 'totalSmrUsage', label: 'Total SMR Usage', aliases: ['total smr usage', 'total smr'] },
     { key: 'assetDescription', label: 'Asset Description', aliases: ['asset description'] },
     { key: 'assetGroup', label: 'Asset Group', aliases: ['asset group'] },
+    { key: 'activity', label: 'Activity', aliases: ['activity'] },
+    { key: 'location', label: 'Location.1', aliases: ['location.1', 'location'] },
+    { key: 'material', label: 'Material', aliases: ['material'] },
+    { key: 'loadsTonnes', label: 'Loads / Tonnes', aliases: ['loads / tonnes', 'loads/tonnes'] },
+    { key: 'operationComment', label: 'Operation Description / Comment', aliases: ['operation description / comment'] },
+    { key: 'comments', label: 'Comments', aliases: ['comments'] },
 ];
+
+const DEFAULT_STRENGTH_RULES = {
+    primaryActivities: ['mining', 'excavation', 'load and haul', 'haul', 'hauling', 'loading', 'stripping', 'drilling', 'blasting', 'overburden', 'extraction', 'pit', 'in-pit'],
+    secondaryActivities: ['crushing', 'crusher', 'screening', 'processing plant', 'plant operation', 'workshop', 'beneficiation', 'chpp'],
+    primaryLocations: ['pit', 'north pit', 'south pit', 'open pit', 'opencast', 'quarry', 'face', 'bench', 'rom', 'in-pit', 'bultfontein', 'np1', 'np2'],
+    secondaryLocations: ['plant', 'processing plant', 'crusher', 'workshop', 'office', 'depot', 'chpp', 'prep plant', 'stockyard'],
+    primaryMaterials: ['coal', 'rom', 'overburden', 'topsoil', 'hards', 'softs', 'waste', 'ore'],
+    secondaryMaterials: ['processed', 'crushed', 'screened', 'product coal', 'fines'],
+    intensityTextKeywords: ['load', 'loads', 'haul', 'tonne', 'hour', 'hours', 'hr', 'km', 'shift'],
+};
+
+function containsAny(text, terms) {
+    const t = String(text || '').toLowerCase();
+    if (!t) return null;
+    for (const term of terms) {
+        if (term && t.includes(String(term).toLowerCase())) return term;
+    }
+    return null;
+}
+
+function tierFromScore(score) {
+    if (score >= 4) return 'Strong';
+    if (score === 3) return 'Moderate';
+    if (score >= 1) return 'Weak';
+    return 'Insufficient';
+}
+
+function evaluateBatchStrength(batch, rules = DEFAULT_STRENGTH_RULES) {
+    if (!batch.proofCount) {
+        return { strength: 'Insufficient', shortfalls: ['No proof-of-activity rows for this batch'], score: 0 };
+    }
+    const text = batch.combinedText || '';
+    const activityText = batch.activityText || '';
+    const shortfalls = [];
+
+    const secAct = containsAny(activityText || text, rules.secondaryActivities);
+    const priAct = containsAny(activityText || text, rules.primaryActivities);
+    let activityOk;
+    if (secAct && !priAct) {
+        activityOk = false;
+        shortfalls.push(`Secondary/non-primary activity detected (${secAct})`);
+    } else if (priAct) activityOk = true;
+    else if (activityText || text.trim()) {
+        activityOk = false;
+        shortfalls.push('No primary Schedule 6 production activity identified');
+    } else {
+        activityOk = false;
+        shortfalls.push('No activity description in proof records');
+    }
+
+    const locText = batch.locText || '';
+    const secLoc = containsAny(locText || text, rules.secondaryLocations);
+    const priLoc = containsAny(locText || text, rules.primaryLocations);
+    let locationOk;
+    if (!locText.trim() && !containsAny(text, rules.primaryLocations)) {
+        locationOk = false;
+        shortfalls.push('No mine/pit location on proof records');
+    } else if (secLoc && !priLoc) {
+        locationOk = false;
+        shortfalls.push(`Secondary location only (${secLoc})`);
+    } else if (priLoc || locText.trim()) locationOk = true;
+    else {
+        locationOk = false;
+        shortfalls.push('No primary mine location identified');
+    }
+
+    const matText = batch.matText || '';
+    const secMat = containsAny(matText || text, rules.secondaryMaterials);
+    const priMat = containsAny(matText || text, rules.primaryMaterials);
+    let materialOk;
+    if (!matText.trim()) {
+        materialOk = false;
+        shortfalls.push('No material type on proof records');
+    } else if (secMat && !priMat) {
+        materialOk = false;
+        shortfalls.push(`Secondary/processed material only (${secMat})`);
+    } else if (priMat || matText.trim()) materialOk = true;
+    else {
+        materialOk = false;
+        shortfalls.push('No primary production material identified');
+    }
+
+    let intensityOk = Object.keys(batch.intensityValues || {}).length > 0;
+    if (!intensityOk && containsAny(text, rules.intensityTextKeywords)) intensityOk = true;
+    if (!intensityOk) shortfalls.push('No usage intensity (loads, SMR, hours, or hauls)');
+
+    const score = [activityOk, locationOk, materialOk, intensityOk].filter(Boolean).length;
+    return { strength: tierFromScore(score), shortfalls, score };
+}
+
+function summarizeStrengthResults(labelResults) {
+    const tiers = { Strong: 0, Moderate: 0, Weak: 0, Insufficient: 0 };
+    const shortfallCounts = {};
+    labelResults.forEach((res) => {
+        tiers[res.strength] = (tiers[res.strength] || 0) + 1;
+        (res.shortfalls || []).forEach((sf) => {
+            shortfallCounts[sf] = (shortfallCounts[sf] || 0) + 1;
+        });
+    });
+    const total = Object.values(tiers).reduce((a, b) => a + b, 0) || 1;
+    const topShortfalls = Object.entries(shortfallCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([text, count]) => ({ text, count }));
+    return {
+        tierCounts: tiers,
+        tierPct: Object.fromEntries(Object.entries(tiers).map(([k, v]) => [k, Math.round((v / total) * 1000) / 10])),
+        topShortfalls,
+        totalBatches: total,
+    };
+}
+
+function evaluatePoaStrengthFromRecords(records) {
+    const proofByLabel = {};
+    records.filter((r) => r.isProof && r.label).forEach((r) => {
+        if (!proofByLabel[r.label]) proofByLabel[r.label] = [];
+        proofByLabel[r.label].push(r);
+    });
+
+    const txnLabels = new Set(records.filter((r) => r.isTransaction && r.label).map((r) => r.label));
+    const labelResults = {};
+
+    txnLabels.forEach((label) => {
+        const proofs = proofByLabel[label] || [];
+        const activities = [];
+        const locations = [];
+        const materials = [];
+        const comments = [];
+        const intensityValues = {};
+
+        proofs.forEach((p) => {
+            if (p.activity) activities.push(p.activity);
+            if (p.location) locations.push(p.location);
+            if (p.material) materials.push(p.material);
+            if (p.comments) comments.push(p.comments);
+            if (p.operationComment) comments.push(p.operationComment);
+            if (p.loadsTonnes > 0) intensityValues['Loads / Tonnes'] = (intensityValues['Loads / Tonnes'] || 0) + p.loadsTonnes;
+            if (p.smrUsage > 0) intensityValues['Total SMR Usage'] = (intensityValues['Total SMR Usage'] || 0) + p.smrUsage;
+        });
+
+        const combinedText = [...activities, ...locations, ...materials, ...comments].join(' | ');
+        const batch = {
+            proofCount: proofs.length,
+            activityText: activities.join(' | '),
+            locText: locations.join(' | '),
+            matText: materials.join(' | '),
+            combinedText,
+            intensityValues,
+        };
+        labelResults[label] = evaluateBatchStrength(batch);
+    });
+
+    return summarizeStrengthResults(Object.values(labelResults));
+}
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -91,6 +251,7 @@ export function analyzePoaRows(rows, options = {}) {
         smrTotalSelectedSources: 0,
         medianHoursSinceProof: null,
         topGapAssets: [],
+        strengthSummary: null,
     };
 
     if (!rows || rows.length === 0) return empty;
@@ -125,6 +286,12 @@ export function analyzePoaRows(rows, options = {}) {
             smrUsage: parseFloat(String(cellVal(row, cols.totalSmrUsage) || '').replace(/,/g, '')) || 0,
             assetDescription: cellVal(row, cols.assetDescription),
             assetGroup: cellVal(row, cols.assetGroup),
+            activity: cellVal(row, cols.activity),
+            location: cellVal(row, cols.location),
+            material: cellVal(row, cols.material),
+            comments: cellVal(row, cols.comments),
+            operationComment: cellVal(row, cols.operationComment),
+            loadsTonnes: parseFloat(String(cellVal(row, cols.loadsTonnes) || '').replace(/,/g, '')) || 0,
             label: null,
         });
     }
@@ -309,6 +476,8 @@ export function analyzePoaRows(rows, options = {}) {
         );
     }
 
+    const strengthSummary = evaluatePoaStrengthFromRecords(records);
+
     return {
         ok: errors.length === 0,
         errors,
@@ -338,9 +507,11 @@ export function analyzePoaRows(rows, options = {}) {
         smrTotalSelectedSources: Math.round(smrTotalSelectedSources * 100) / 100,
         medianHoursSinceProof,
         topGapAssets,
+        strengthSummary,
     };
 }
 
 if (typeof window !== 'undefined') {
     window.analyzePoaRows = analyzePoaRows;
+    window.evaluatePoaStrengthFromRecords = evaluatePoaStrengthFromRecords;
 }

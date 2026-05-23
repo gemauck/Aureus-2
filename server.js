@@ -2831,8 +2831,11 @@ app.post('/api/poa-review/process-batch', async (req, res) => {
 // Serve standalone Python script for browser (Pyodide) run
 app.get('/api/poa-review/browser-script', (req, res) => {
   try {
-    const scriptPath = path.join(__dirname, 'scripts', 'poa-review', 'poa_review_browser.py')
-    const script = fs.readFileSync(scriptPath, 'utf8')
+    const scriptsDir = path.join(__dirname, 'scripts', 'poa-review')
+    const parts = ['poaStrengthEvaluator.py', 'poa_review_browser.py']
+    const script = parts
+      .map((name) => fs.readFileSync(path.join(scriptsDir, name), 'utf8'))
+      .join('\n\n# --- bundled module ---\n\n')
     res.type('text/plain').send(script)
   } catch (e) {
     console.error('❌ POA Review browser-script error:', e)

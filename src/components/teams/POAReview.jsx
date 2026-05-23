@@ -139,6 +139,15 @@ function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
                 </p>
             )}
 
+            {preflight.strengthSummary && preflight.strengthSummary.totalBatches > 0 && (
+                <div className={`rounded p-2 text-xs ${isDark ? 'bg-slate-700/60 text-slate-300' : 'bg-gray-50 text-gray-700'}`}>
+                    <p className="font-medium mb-1">POA strength preview (rules)</p>
+                    <p>
+                        Strong {preflight.strengthSummary.tierCounts?.Strong || 0} · Moderate {preflight.strengthSummary.tierCounts?.Moderate || 0} · Weak {preflight.strengthSummary.tierCounts?.Weak || 0} · Insufficient {preflight.strengthSummary.tierCounts?.Insufficient || 0}
+                    </p>
+                </div>
+            )}
+
             {preflight.noPoaAssetsSample.length > 0 && (
                 <div>
                     <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
@@ -156,7 +165,7 @@ function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
     );
 }
 
-function ReportSummaryPanel({ summary, isDark, completedInText }) {
+function ReportSummaryPanel({ summary, isDark, completedInText, useAIStrength }) {
     if (!summary) return null;
 
     const statClass = `text-xl font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`;
@@ -226,6 +235,37 @@ function ReportSummaryPanel({ summary, isDark, completedInText }) {
                 </div>
             </div>
 
+            {summary.strengthSummary && summary.strengthSummary.totalBatches > 0 && (
+                <div>
+                    <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        POA strength by batch{useAIStrength ? ' (rules preview; server report may use AI)' : ' (rules)'}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        {['Strong', 'Moderate', 'Weak', 'Insufficient'].map((tier) => (
+                            <div key={tier} className={`rounded p-2 ${isDark ? 'bg-slate-700/80' : 'bg-gray-50'}`}>
+                                <span className={labelClass}>{tier}</span>
+                                <p className={`font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                    {summary.strengthSummary.tierCounts?.[tier] || 0}
+                                    <span className={`ml-1 font-normal ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                        ({summary.strengthSummary.tierPct?.[tier] || 0}%)
+                                    </span>
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                    {summary.strengthSummary.topShortfalls?.length > 0 && (
+                        <ul className={`text-xs mt-2 space-y-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                            {summary.strengthSummary.topShortfalls.map((item) => (
+                                <li key={item.text} className="flex justify-between gap-2">
+                                    <span className="truncate" title={item.text}>{item.text}</span>
+                                    <span className="font-mono shrink-0">{item.count}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+
             {summary.topGapAssets.length > 0 && (
                 <div>
                     <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
@@ -265,6 +305,7 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
+    const [useAIStrength, setUseAIStrength] = useState(true);
     const [preflight, setPreflight] = useState(null);
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [reportSummary, setReportSummary] = useState(null);
@@ -688,7 +729,8 @@ const POAReview = () => {
                                 rows: batch,
                                 sources: sources && sources.length > 0 ? sources : [],
                                 fileName,
-                                isFinal
+                                isFinal,
+                                useAIStrength: useAIStrength === true,
                             })
                         });
                         
@@ -712,7 +754,8 @@ const POAReview = () => {
                                         rows: batch,
                                         sources: sources && sources.length > 0 ? sources : [],
                                         fileName,
-                                        isFinal
+                                        isFinal,
+                                        useAIStrength: useAIStrength === true,
                                     })
                                 });
                             }
@@ -806,7 +849,7 @@ const POAReview = () => {
             console.error('POA Review - Chunked processing error:', error);
             throw error;
         }
-    }, [sources, finalizeReportSummary]);
+    }, [sources, finalizeReportSummary, useAIStrength]);
 
     const toggleDocumentSource = useCallback((sourceName) => {
         setSources(prev => prev.includes(sourceName) ? prev.filter(s => s !== sourceName) : [...prev, sourceName]);
@@ -965,6 +1008,7 @@ self.onmessage = async (e) => {
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
+                formData.append('useAIStrength', useAIStrength ? 'true' : 'false');
 
                 const token = window.storage?.getToken?.() || '';
                 const maxRetries = 2;
@@ -980,6 +1024,7 @@ self.onmessage = async (e) => {
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
+                            retryFormData.append('useAIStrength', useAIStrength ? 'true' : 'false');
                             formData = retryFormData;
                         }
                         response = await fetch('/api/poa-review/process-excel', {
@@ -1063,7 +1108,7 @@ self.onmessage = async (e) => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
+    }, [uploadedFile, sources, runLocally, useAIStrength, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -1303,6 +1348,24 @@ self.onmessage = async (e) => {
                 </p>
             </div>
 
+            {!runLocally && (
+            <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
+                    <input
+                        type="checkbox"
+                        checked={useAIStrength}
+                        onChange={(e) => setUseAIStrength(e.target.checked)}
+                        disabled={isProcessing}
+                        className="rounded border-gray-400"
+                    />
+                    <span className="text-sm">Use AI strength evaluation</span>
+                </label>
+                <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                    Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.
+                </p>
+            </div>
+            )}
+
             {/* Error Display */}
             {error && (
                 <div className={`rounded-lg border p-3 ${isDark ? 'bg-red-900/30 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
@@ -1412,6 +1475,7 @@ self.onmessage = async (e) => {
                     summary={reportSummary}
                     isDark={isDark}
                     completedInText={completedInText}
+                    useAIStrength={useAIStrength}
                 />
             )}
 
@@ -1427,6 +1491,8 @@ self.onmessage = async (e) => {
                     <li>• Groups consecutive transactions within 1 hour</li>
                     <li>• Calculates time gaps between proof records and transactions</li>
                     <li>• Generates formatted Excel reports with conditional formatting</li>
+                    <li>• Scores POA strength per dispense batch (Strong / Moderate / Weak / Insufficient) with shortfall notes</li>
+                    <li>• Optional AI evaluation for Schedule 6 primary production activity (server-side)</li>
                 </ul>
             </div>
         </div>

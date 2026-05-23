@@ -54,6 +54,7 @@ async function handler(req, res) {
         let safeFileName = '';
         let timestamp = 0;
         let sources = ['Inmine: Daily Diesel Issues'];
+        let useAIStrength = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -111,6 +112,9 @@ async function handler(req, res) {
                     try {
                         sources = JSON.parse(value);
                     } catch (e) { /* keep default */ }
+                }
+                if (name === 'useAIStrength') {
+                    useAIStrength = value === 'true' || value === true;
                 }
             });
 
@@ -278,6 +282,8 @@ from ProofReview import POAReview, format_review, review_cols
 input_file = r'${tempCsvPath.replace(/\\/g, '/')}'
 output_file = r'${outputFilePath.replace(/\\/g, '/')}'
 sources = ${JSON.stringify(sources)}
+use_llm_strength = ${useAIStrength ? 'True' : 'False'}
+cache_dir = r'${path.join(rootDir, 'uploads', 'poa-review-temp').replace(/\\/g, '/')}'
 
 # Read CSV directly (pandas is optimized for this, faster than Node.js parsing)
 print("Reading CSV file...")
@@ -350,6 +356,7 @@ review.time_since_last_activity()
 if "label" not in review.data.columns:
     review.label_rows()
 review.total_smr(sources)
+review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
 
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
 format_review(review.data, os.path.basename(input_file), output_file, original_columns)

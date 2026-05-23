@@ -1,11 +1,18 @@
 """
 POA Review - standalone script for Pyodide (browser).
 Reads /tmp/input.csv, options from /tmp/options.json, writes /tmp/output.xlsx.
-No server; runs entirely in the browser. Uses openpyxl write_only only (no FormatExcel).
+Bundled with poaStrengthEvaluator.py via /api/poa-review/browser-script.
 """
 import json
 import pandas as pd
 import numpy as np
+from poaStrengthEvaluator import (
+    STRENGTH_FILL,
+    STRENGTH_INSUFFICIENT,
+    evaluate_all_labels,
+    format_shortfalls,
+    summarize_strength_results,
+)
 
 INPUT_CSV = "/tmp/input.csv"
 OPTIONS_JSON = "/tmp/options.json"
@@ -17,7 +24,7 @@ REVIEW_COLS = [
     "Total Fuel Used (L)", "Operation Description / Comment", "Refund Eligibility", "Opening SMR",
     "Closing SMR", "Total SMR Usage", "Material", "Location.1", "Loads / Tonnes", "Activity",
     "Comments", "Source", "Custom Attribute", "No POA Asset", "Count of proof before transaction",
-    "Time since last activity", "total smr"
+    "Time since last activity", "total smr", "POA Strength", "POA Shortfalls"
 ]
 
 
@@ -35,13 +42,27 @@ def find_column(df, target_name):
     return None
 
 
-def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index=15):
+def _write_only_excel(
+    review,
+    output_path,
+    output_cols,
+    bold_rows,
+    green_rows,
+    yellow_col16,
+    yellow_col_index=15,
+    strength_col_index=-1,
+    strength_row_fills=None,
+):
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import PatternFill, Font, Alignment, Color
     fill_header = PatternFill(patternType="solid", fgColor=Color(rgb="CCDAF5"))
     fill_green = PatternFill(patternType="solid", fgColor=Color(rgb="D9EAD3"))
     fill_yellow = PatternFill(patternType="solid", fgColor=Color(rgb="FFF2CC"))
+    strength_fills = {
+        hex_color: PatternFill(patternType="solid", fgColor=Color(rgb=hex_color))
+        for hex_color in STRENGTH_FILL.values()
+    }
     font_9 = Font(size=9)
     font_9_bold = Font(size=9, bold=True)
     align_left = Alignment(horizontal="left")
@@ -60,6 +81,7 @@ def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, y
     bold_arr = bold_rows.values
     green_arr = green_rows.values
     yellow_arr = yellow_col16.values
+    strength_arr = strength_row_fills.values if strength_row_fills is not None else None
     for i in range(len(review)):
         row_vals = data_arr[i]
         bold_i = bold_arr[i]
@@ -77,6 +99,10 @@ def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, y
                 c.fill = fill_green
             if j == yellow_col_index and yellow_i:
                 c.fill = fill_yellow
+            if strength_col_index >= 0 and j == strength_col_index and strength_arr is not None:
+                hex_color = strength_arr[i]
+                if hex_color and hex_color in strength_fills:
+                    c.fill = strength_fills[hex_color]
             row_cells.append(c)
         ws.append(row_cells)
     wb.save(output_path)
@@ -85,13 +111,13 @@ def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, y
 class POAReview:
     def __init__(self, per_asset_report):
         self.data = per_asset_report
+        txn_id_str = self.data["Transaction ID"].astype(str).str.strip()
         self.transaction_mask = (
             self.data["Transaction ID"].notna()
-            & (self.data["Transaction ID"].astype(str).str.strip() != "Transaction ID")
+            & (txn_id_str != "")
+            & (txn_id_str != "Transaction ID")
         )
-        self.proof_mask = (
-            self.data["Transaction ID"].isna() & self.data["Asset Number"].notna()
-        )
+        self.proof_mask = (~self.transaction_mask) & self.data["Asset Number"].notna()
         self.data["Date & Time"] = pd.to_datetime(
             self.data["Date & Time"], yearfirst=True, errors="coerce"
         )
@@ -154,7 +180,7 @@ class POAReview:
         mask = self.transaction_mask | self.proof_mask
         self.data.loc[mask, "Last Empty Time"] = self.data.loc[
             mask, "Date & Time"
-        ].where(self.data.loc[mask, "Transaction ID"].isna())
+        ].where(self.proof_mask.loc[mask])
         self.data.loc[mask, "Last Empty Time"] = (
             self.data.loc[mask, :].groupby("Asset Number")["Last Empty Time"].ffill()
         )
@@ -186,6 +212,42 @@ class POAReview:
             pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
         )
         return self.data
+
+    def evaluate_poa_strength(self, use_llm=False, cache_dir=None):
+        if "label" not in self.data.columns:
+            self.label_rows()
+        label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
+        strength_map = {label: res["strength"] for label, res in label_results.items()}
+        shortfall_map = {
+            label: format_shortfalls(res.get("shortfalls") or [])
+            for label, res in label_results.items()
+        }
+        self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        for label, strength in strength_map.items():
+            mask = self.transaction_mask & (self.data["label"].astype(str) == str(label))
+            self.data.loc[mask, "POA Strength"] = strength
+            self.data.loc[mask, "POA Shortfalls"] = shortfall_map.get(label, "")
+        if "Count of proof before transaction" in self.data.columns:
+            zero_proof = self.transaction_mask & (
+                pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0
+            )
+            self.data.loc[zero_proof, "POA Strength"] = STRENGTH_INSUFFICIENT
+            self.data.loc[zero_proof, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+        self.strength_summary = summarize_strength_results(label_results)
+        return self.data
+
+
+def _strength_fill_series(review, output_cols):
+    if "POA Strength" not in output_cols or "POA Strength" not in review.columns:
+        return None
+    fills = []
+    for val in review["POA Strength"]:
+        if pd.isna(val) or val is None or str(val).strip() == "":
+            fills.append(None)
+        else:
+            fills.append(STRENGTH_FILL.get(str(val).strip(), STRENGTH_FILL[STRENGTH_INSUFFICIENT]))
+    return pd.Series(fills, index=review.index)
 
 
 def run():
@@ -228,9 +290,16 @@ def run():
     review.count_proof_before_transaction()
     review.time_since_last_activity()
     review.total_smr(sources)
+    review.evaluate_poa_strength(use_llm=False)
 
-    # Output: exact original columns (same order) + only the 4 computed review columns (no "label", no extra REVIEW_COLS)
-    COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
+    COMPUTED_COLS = [
+        "No POA Asset",
+        "Count of proof before transaction",
+        "Time since last activity",
+        "total smr",
+        "POA Strength",
+        "POA Shortfalls",
+    ]
     output_cols = [c for c in original_columns if c in review.data.columns] + [
         c for c in COMPUTED_COLS if c in review.data.columns
     ]
@@ -247,9 +316,19 @@ def run():
     green_rows = has_txn & is_ts
     yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
     yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
+    strength_col_index = output_cols.index("POA Strength") if "POA Strength" in output_cols else -1
+    strength_row_fills = _strength_fill_series(review.data, output_cols)
 
     _write_only_excel(
-        review.data, OUTPUT_XLSX, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index
+        review.data,
+        OUTPUT_XLSX,
+        output_cols,
+        bold_rows,
+        green_rows,
+        yellow_col16,
+        yellow_col_index,
+        strength_col_index,
+        strength_row_fills,
     )
 
 

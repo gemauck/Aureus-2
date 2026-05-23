@@ -1,0 +1,48 @@
+{
+  "primaryActivities": [
+    "mining", "excavation", "excavating", "drilling", "blasting", "load and haul", "load & haul",
+    "haul", "hauling", "loading", "stripping", "overburden removal", "coal extraction",
+    "pit production", "face production", "bench mining", "quarrying", "extraction",
+    "reclamation", "topsoil removal", "dozing", "ripping", "grading at pit", "pit operation",
+    "primary production", "production mining", "in-pit", "in pit"
+  ],
+  "secondaryActivities": [
+    "crushing", "crusher", "screening", "processing plant", "plant operation", "plant feed",
+    "stockpile", "stacking", "reclaim", "reclaiming", "workshop", "maintenance",
+    "refuelling", "refueling", "wash bay", "weighbridge", "secondary processing",
+    "beneficiation", "washing plant", "chpp", "prep plant"
+  ],
+  "primaryLocations": [
+    "pit", "north pit", "south pit", "east pit", "west pit", "open pit", "opencast",
+    "quarry", "face", "bench", "strip", "mining area", "extraction area", "rom pad",
+    "in-pit", "in pit", "np1", "np2", "sp", "area 1", "area 9", "luhlanga", "kwazubuka",
+    "emalahleni", "bultfontein", "hards", "softs", "topsoil"
+  ],
+  "secondaryLocations": [
+    "plant", "processing plant", "crusher", "crushing", "workshop", "office", "depot",
+    "stockyard", "stock yard", "chpp", "prep plant", "wash plant", "weighbridge",
+    "maintenance bay", "fuel bay", "secondary"
+  ],
+  "primaryMaterials": [
+    "coal", "rom", "run of mine", "overburden", "topsoil", "hards", "softs", "waste",
+    "ob", "interburden", "ore", "mineral", "aggregate", "stripping", "burden"
+  ],
+  "secondaryMaterials": [
+    "processed", "crushed", "screened", "product coal", "fines", "chips", "lump export",
+    "secondary", "plant feed", "middlings"
+  ],
+  "intensityColumns": [
+    "Loads / Tonnes",
+    "Total SMR Usage",
+    "Total Usage Km/Hr",
+    "Opening SMR",
+    "Closing SMR",
+    "Litres",
+    "Total Fuel Used (L)"
+  ],
+  "intensityTextKeywords": [
+    "load", "loads", "haul", "hauls", "tonne", "tonnes", "hour", "hours", "hr", "km",
+    "shift", "trip", "bucket", "cycle"
+  ],
+  "siteOverrides": {}
+}

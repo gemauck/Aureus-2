@@ -26,18 +26,48 @@ import pandas as pd
 import numpy as np
 from FormatExcel import Formatter
 from os import listdir
+from poaStrengthEvaluator import (
+	STRENGTH_FILL,
+	STRENGTH_INSUFFICIENT,
+	evaluate_all_labels,
+	format_shortfalls,
+	summarize_strength_results,
+)
 
 # Use streaming Excel write for large files to avoid OOM (openpyxl holds ~50x file size in RAM otherwise)
 LARGE_FILE_THRESHOLD = 50000
 
+COMPUTED_COLS = [
+	"No POA Asset",
+	"Count of proof before transaction",
+	"Time since last activity",
+	"total smr",
+	"POA Strength",
+	"POA Shortfalls",
+]
+
 # Styles for write_only path (avoid loading full sheet into memory)
-def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index=15):
+def _write_only_excel(
+	review,
+	output_path,
+	output_cols,
+	bold_rows,
+	green_rows,
+	yellow_col16,
+	yellow_col_index=15,
+	strength_col_index=-1,
+	strength_row_fills=None,
+):
 	from openpyxl import Workbook
 	from openpyxl.cell import WriteOnlyCell
 	from openpyxl.styles import PatternFill, Font, Alignment, Color
 	fill_header = PatternFill(patternType="solid", fgColor=Color(rgb="CCDAF5"))
 	fill_green = PatternFill(patternType="solid", fgColor=Color(rgb="D9EAD3"))
 	fill_yellow = PatternFill(patternType="solid", fgColor=Color(rgb="FFF2CC"))
+	strength_fills = {
+		hex_color: PatternFill(patternType="solid", fgColor=Color(rgb=hex_color))
+		for hex_color in STRENGTH_FILL.values()
+	}
 	font_9 = Font(size=9)
 	font_9_bold = Font(size=9, bold=True)
 	align_left = Alignment(horizontal="left")
@@ -58,6 +88,7 @@ def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, y
 	bold_arr = bold_rows.values
 	green_arr = green_rows.values
 	yellow_arr = yellow_col16.values
+	strength_arr = strength_row_fills.values if strength_row_fills is not None else None
 	for i in range(len(review)):
 		row_vals = data_arr[i]
 		row_cells = []
@@ -72,6 +103,10 @@ def _write_only_excel(review, output_path, output_cols, bold_rows, green_rows, y
 				c.fill = fill_green
 			if j == yellow_col_index and yellow_arr[i]:
 				c.fill = fill_yellow
+			if strength_col_index >= 0 and j == strength_col_index and strength_arr is not None:
+				hex_color = strength_arr[i]
+				if hex_color and hex_color in strength_fills:
+					c.fill = strength_fills[hex_color]
 			row_cells.append(c)
 		ws.append(row_cells)
 	wb.save(output_path)
@@ -81,7 +116,8 @@ review_cols = [
     "Date & Time","Transaction ID","Asset Description","Asset Number","Asset Group","Asset Tank Size (L)","Asset Meter Type (Hr/Km)",
     "Storage Tank","Fuel Pump","Litres","Total Fuel Used (L)","Operation Description / Comment","Refund Eligibility","Opening SMR",
     "Closing SMR","Total SMR Usage","Material","Location.1","Loads / Tonnes","Activity","Comments","Source","Custom Attribute",
-    "No POA Asset","Count of proof before transaction","Time since last activity","total smr"
+    "No POA Asset","Count of proof before transaction","Time since last activity","total smr",
+    "POA Strength","POA Shortfalls"
 ]
 
 class POAReview:
@@ -120,11 +156,16 @@ class POAReview:
 		self.data = per_asset_report
 		
 		# Create masks to identify different record types
-		# Transactions: Have a Transaction ID (but not the header "Transaction ID")
-		self.transaction_mask = (self.data["Transaction ID"].notna()) & (self.data["Transaction ID"].astype(str).str.strip() != "Transaction ID")
+		# Transactions: Have a non-empty Transaction ID (exclude header row label)
+		txn_id_str = self.data["Transaction ID"].astype(str).str.strip()
+		self.transaction_mask = (
+			self.data["Transaction ID"].notna()
+			& (txn_id_str != "")
+			& (txn_id_str != "Transaction ID")
+		)
 		
-		# Proof records: No Transaction ID, but have an Asset Number
-		self.proof_mask = (self.data["Transaction ID"].isna()) & (self.data["Asset Number"].notna())
+		# Proof records: No Transaction ID (blank or missing), but have an Asset Number
+		self.proof_mask = (~self.transaction_mask) & (self.data["Asset Number"].notna())
 		
 		# Convert "Date & Time" to datetime (single pass)
 		self.data["Date & Time"] = pd.to_datetime(self.data["Date & Time"], yearfirst=True, errors="coerce")
@@ -285,7 +326,7 @@ class POAReview:
 		# .where() keeps values where condition is True, sets others to NaN
 		self.data.loc[self.transaction_mask | self.proof_mask, "Last Empty Time"] = (
 			self.data.loc[self.transaction_mask | self.proof_mask, "Date & Time"]
-			.where(self.data.loc[self.transaction_mask | self.proof_mask, "Transaction ID"].isna())
+			.where(self.proof_mask.loc[self.transaction_mask | self.proof_mask])
 		)
 
 		# Step 2: Forward-fill proof timestamps by asset
@@ -345,6 +386,59 @@ class POAReview:
 		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
 		return self.data
 
+	def evaluate_poa_strength(self, use_llm=False, cache_dir=None):
+		"""Score POA strength per dispense batch (label) and map to transaction rows."""
+		if "label" not in self.data.columns:
+			self.label_rows()
+
+		label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
+		label_batches = {label: res["batch"] for label, res in label_results.items()}
+
+		if use_llm:
+			try:
+				from poaStrengthLLM import evaluate_labels_with_llm
+				label_results = evaluate_labels_with_llm(
+					label_batches,
+					label_results,
+					cache_dir=cache_dir,
+				)
+			except Exception as e:
+				print(f"POA Strength LLM skipped, using rules only: {e}", flush=True)
+
+		strength_map = {label: res["strength"] for label, res in label_results.items()}
+		shortfall_map = {label: format_shortfalls(res.get("shortfalls") or []) for label, res in label_results.items()}
+
+		self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+
+		for label, strength in strength_map.items():
+			mask = self.transaction_mask & (self.data["label"].astype(str) == str(label))
+			self.data.loc[mask, "POA Strength"] = strength
+			self.data.loc[mask, "POA Shortfalls"] = shortfall_map.get(label, "")
+
+		if "Count of proof before transaction" in self.data.columns:
+			zero_proof = self.transaction_mask & (
+				pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0
+			)
+			self.data.loc[zero_proof, "POA Strength"] = STRENGTH_INSUFFICIENT
+			self.data.loc[zero_proof, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+
+		self.strength_summary = summarize_strength_results(label_results)
+		return self.data
+
+def _strength_fill_series(review, output_cols):
+	"""Map POA Strength tier to fill hex per row (transaction rows only)."""
+	if "POA Strength" not in output_cols:
+		return None
+	strength_col = review["POA Strength"] if "POA Strength" in review.columns else pd.Series([None] * len(review))
+	fills = []
+	for val in strength_col:
+		if pd.isna(val) or val is None or str(val).strip() == "":
+			fills.append(None)
+		else:
+			fills.append(STRENGTH_FILL.get(str(val).strip(), STRENGTH_FILL[STRENGTH_INSUFFICIENT]))
+	return pd.Series(fills, index=review.index)
+
 def format_review(review, filename, output_path=None, original_columns=None):
 	"""
 	Format and export the review data to an Excel file with conditional formatting.
@@ -362,7 +456,14 @@ def format_review(review, filename, output_path=None, original_columns=None):
 		original_columns (list, optional): If provided, output keeps these columns in order, then appends
 			the 4 computed columns (No POA Asset, etc.). No extra columns and no internal "label" column.
 	"""
-	COMPUTED_COLS = ["No POA Asset", "Count of proof before transaction", "Time since last activity", "total smr"]
+	COMPUTED_COLS = [
+		"No POA Asset",
+		"Count of proof before transaction",
+		"Time since last activity",
+		"total smr",
+		"POA Strength",
+		"POA Shortfalls",
+	]
 	if original_columns is not None:
 		# Output = original columns (same order) + 4 computed only
 		output_cols = [c for c in original_columns if c in review.columns] + [
@@ -408,10 +509,23 @@ def format_review(review, filename, output_path=None, original_columns=None):
 	yellow_col16 = is_ts & ((smr_empty & ~has_txn) | (smr_numeric == 0))
 	yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
 	yellow_col_1based = (yellow_col_index + 1) if yellow_col_index >= 0 else 16
+	strength_col_index = output_cols.index("POA Strength") if "POA Strength" in output_cols else -1
+	strength_row_fills = _strength_fill_series(review, output_cols)
+	strength_col_1based = (strength_col_index + 1) if strength_col_index >= 0 else -1
 
 	if n > LARGE_FILE_THRESHOLD:
 		# Streaming write: minimal memory so large files don't OOM the server
-		_write_only_excel(review, output_path, output_cols, bold_rows, green_rows, yellow_col16, yellow_col_index)
+		_write_only_excel(
+			review,
+			output_path,
+			output_cols,
+			bold_rows,
+			green_rows,
+			yellow_col16,
+			yellow_col_index,
+			strength_col_index,
+			strength_row_fills,
+		)
 	else:
 		# Standard path with Formatter (full sheet in memory)
 		with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
@@ -441,6 +555,17 @@ def format_review(review, filename, output_path=None, original_columns=None):
 			if yellow_col_1based <= num_cols:
 				for start, num_rows in contiguous_ranges(yellow_col16):
 					format_review.fill_cells(row_start=start, num_rows=num_rows, column_start=yellow_col_1based, num_columns=1, color="FFF2CC")
+			if strength_col_1based > 0 and strength_row_fills is not None:
+				for tier, hex_color in STRENGTH_FILL.items():
+					tier_mask = strength_row_fills == hex_color
+					for start, num_rows in contiguous_ranges(tier_mask):
+						format_review.fill_cells(
+							row_start=start,
+							num_rows=num_rows,
+							column_start=strength_col_1based,
+							num_columns=1,
+							color=hex_color,
+						)
 
 # ============================================================================
 # MAIN EXECUTION SCRIPT
