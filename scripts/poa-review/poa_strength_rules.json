@@ -28,7 +28,13 @@
   "sectors": {
     "mining": {
       "label": "Mining",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(f) — mining on land",
+      "schedule6": {
+        "item": "670.04",
+        "note": "6",
+        "paragraph": "f",
+        "heading": "Mining on land",
+        "refundExtentParagraph": "b(i)"
+      },
       "locationLabel": "mine/pit/quarry",
       "primaryActivities": [
         "exploration", "prospecting", "overburden removal", "overburden", "site preparation",
@@ -78,7 +84,13 @@
     },
     "forestry": {
       "label": "Forestry",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(g) — forestry",
+      "schedule6": {
+        "item": "670.04",
+        "note": "6",
+        "paragraph": "g",
+        "heading": "Forestry",
+        "refundExtentParagraph": "b(i)"
+      },
       "locationLabel": "forest/plantation",
       "primaryActivities": [
         "land preparation", "clearing land", "clearing", "ploughing", "plough", "discing", "disc",
@@ -120,7 +132,13 @@
     },
     "farming": {
       "label": "Farming",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(h) — farming",
+      "schedule6": {
+        "item": "670.04",
+        "note": "6",
+        "paragraph": "h",
+        "heading": "Farming",
+        "refundExtentParagraph": "b(i)"
+      },
       "locationLabel": "farm/farming property",
       "primaryActivities": [
         "growing crops", "crop production", "harvesting", "harvest", "storing crops", "horticulture",

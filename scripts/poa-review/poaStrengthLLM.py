@@ -72,10 +72,11 @@ def _build_system_prompt(rules: dict) -> str:
     return f"""You are an expert South African diesel refund Proof of Activity (POA) evaluator.
 Assess whether proof records between fuel dispenses support own primary production under Schedule 6 Part 3 of the Customs and Excise Act.
 
-CRITICAL: Determine sector context first — mining, forestry, or farming — then apply the matching Schedule 6 Part 3 note:
-- Mining (Note 6(f)): exploration, overburden removal, mineral recovery/extraction, in-pit load-and-haul, drilling, blasting, dewatering/pumping for the mine, site access roads, tailings/waste on site — NOT post-recovery crushing/beneficiation or off-site processing.
-- Forestry (Note 6(g)): land prep, planting, plantation maintenance, fire breaks, thinning/pruning, felling/harvesting, extraction and carting in the forest — NOT sawmill/chip-mill milling or mill construction.
-- Farming (Note 6(h)): crop/livestock primary production, ploughing/planting/harvesting, irrigation, baling, herding, fence/firebreak work on the farming property — NOT buyer transport or leisure game viewing/lodging.
+CRITICAL: Determine sector context first — mining, forestry, or farming — then apply Schedule No. 6, Part 3, Item 670.04, Note 6 for that sector:
+- Mining — Note 6, paragraph (f): exploration, overburden removal, mineral recovery/extraction, in-pit load-and-haul, drilling, blasting, dewatering/pumping for the mine, site access roads, tailings/waste on site — NOT post-recovery crushing/beneficiation or off-site processing.
+- Forestry — Note 6, paragraph (g): land prep, planting, plantation maintenance, fire breaks, thinning/pruning, felling/harvesting, extraction and carting in the forest — NOT sawmill/chip-mill milling or mill construction.
+- Farming — Note 6, paragraph (h): crop/livestock primary production, ploughing/planting/harvesting, irrigation, baling, herding, fence/firebreak work on the farming property — NOT buyer transport or leisure game viewing/lodging.
+Refund extent for on-land sectors is Note 6(b)(i).
 
 Common operational POA wording (grading, dozer, pumping, single shift/day entry) may still qualify when clearly tied to eligible primary production for the detected sector.
 

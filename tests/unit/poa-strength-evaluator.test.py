@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"
 from poaStrengthEvaluator import (
     aggregate_proof_batch,
     detect_sector,
+    format_schedule6_citation,
     evaluate_batch_rules,
     evaluate_all_labels,
     load_rules,
@@ -163,6 +164,17 @@ def test_farming_harvest_strong():
     assert result["strength"] == STRENGTH_STRONG
 
 
+def test_schedule6_citation_format():
+    cite = format_schedule6_citation(
+        {"item": "670.04", "note": "6", "paragraph": "f", "heading": "Mining on land"}
+    )
+    assert "Item 670.04" in cite
+    assert "Note 6" in cite
+    assert "para (f)" in cite
+    assert "Mining on land" in cite
+    assert "Note 6(f)" not in cite.replace("para (f)", "")
+
+
 def test_detect_sector_forestry_over_mining_default():
     rules = load_rules()
     batch = {
@@ -177,6 +189,8 @@ def test_detect_sector_forestry_over_mining_default():
     }
     ctx = detect_sector(batch, rules)
     assert ctx["sector"] == "forestry"
+    assert "Item 670.04" in ctx["schedule6Citation"]
+    assert "para (g)" in ctx["schedule6Citation"]
 
 
 def test_shift_day_fallback_second_dispense():
@@ -226,6 +240,7 @@ if __name__ == "__main__":
     test_primary_activities_dozer_grading_dewatering()
     test_forestry_harvesting_strong()
     test_farming_harvest_strong()
+    test_schedule6_citation_format()
     test_detect_sector_forestry_over_mining_default()
     test_shift_day_fallback_second_dispense()
     print("All POA strength evaluator tests passed.")

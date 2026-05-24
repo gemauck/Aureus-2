@@ -102,14 +102,7 @@ def detect_sector(batch: dict, rules: dict) -> dict:
     explicit = batch.get("sector")
     if explicit and str(explicit) in sectors:
         cfg = sectors[str(explicit)]
-        return {
-            "sector": str(explicit),
-            "confidence": "explicit",
-            "label": cfg.get("label", str(explicit).title()),
-            "schedule6Ref": cfg.get("schedule6Ref", ""),
-            "locationLabel": cfg.get("locationLabel", "production site"),
-            "advisory": None,
-        }
+        return _sector_context_from_cfg(str(explicit), cfg, confidence="explicit", advisory=None)
 
     text = batch.get("combinedText", "")
     asset_desc = _norm(batch.get("assetDescription"))
@@ -119,14 +112,7 @@ def detect_sector(batch: dict, rules: dict) -> dict:
     override_sector = _sector_from_site_overrides(text, rules)
     if override_sector and override_sector in sectors:
         cfg = sectors[override_sector]
-        return {
-            "sector": override_sector,
-            "confidence": "site",
-            "label": cfg.get("label", override_sector.title()),
-            "schedule6Ref": cfg.get("schedule6Ref", ""),
-            "locationLabel": cfg.get("locationLabel", "production site"),
-            "advisory": None,
-        }
+        return _sector_context_from_cfg(override_sector, cfg, confidence="site", advisory=None)
 
     scores = _score_sector_keywords(text, rules)
     for sector_key, sector_cfg in sectors.items():
@@ -147,38 +133,68 @@ def detect_sector(batch: dict, rules: dict) -> dict:
             sorted_scores = sorted(scores.values(), reverse=True)
             if sorted_scores[0] == sorted_scores[1]:
                 cfg = sectors.get(default_sector, {})
-                return {
-                    "sector": default_sector,
-                    "confidence": "ambiguous",
-                    "label": cfg.get("label", default_sector.title()),
-                    "schedule6Ref": cfg.get("schedule6Ref", ""),
-                    "locationLabel": cfg.get("locationLabel", "production site"),
-                    "advisory": (
+                return _sector_context_from_cfg(
+                    default_sector,
+                    cfg,
+                    confidence="ambiguous",
+                    advisory=(
                         f"Sector context unclear (mixed {', '.join(sorted(scores))} signals) "
                         f"— evaluated as {cfg.get('label', default_sector)}; confirm mining/forestry/farming"
                     ),
-                }
+                )
         cfg = sectors.get(best_sector, {})
-        return {
-            "sector": best_sector,
-            "confidence": "detected",
-            "label": cfg.get("label", best_sector.title()),
-            "schedule6Ref": cfg.get("schedule6Ref", ""),
-            "locationLabel": cfg.get("locationLabel", "production site"),
-            "advisory": None,
-        }
+        return _sector_context_from_cfg(best_sector, cfg, confidence="detected", advisory=None)
 
     cfg = sectors.get(default_sector, {})
-    return {
-        "sector": default_sector,
-        "confidence": "default",
-        "label": cfg.get("label", default_sector.title()),
-        "schedule6Ref": cfg.get("schedule6Ref", ""),
-        "locationLabel": cfg.get("locationLabel", "production site"),
-        "advisory": (
+    return _sector_context_from_cfg(
+        default_sector,
+        cfg,
+        confidence="default",
+        advisory=(
             f"No sector context detected — evaluated as {cfg.get('label', default_sector)}; "
             "confirm mining/forestry/farming applicability"
         ),
+    )
+
+
+def format_schedule6_citation(schedule6: dict | None, *, short: bool = True) -> str:
+    """Format Item 670.04 / Note 6 / paragraph reference per Schedule 6 Part 3 structure."""
+    if not schedule6 or not isinstance(schedule6, dict):
+        return ""
+    item = str(schedule6.get("item") or "670.04").strip()
+    note = str(schedule6.get("note") or "6").strip()
+    para = str(schedule6.get("paragraph") or "").strip().lower()
+    heading = str(schedule6.get("heading") or "").strip()
+    if not para:
+        return ""
+    para_disp = f"({para})"
+    if short:
+        base = f"Sch. 6, Part 3, Item {item}, Note {note}, para {para_disp}"
+    else:
+        base = f"Schedule No. 6, Part 3, Item {item}, Note {note}, paragraph {para_disp}"
+    if heading:
+        return f"{base} — {heading}"
+    return base
+
+
+def sector_schedule6_citation(sector_cfg: dict, *, short: bool = True) -> str:
+    schedule6 = sector_cfg.get("schedule6")
+    if isinstance(schedule6, dict):
+        return format_schedule6_citation(schedule6, short=short)
+    legacy = sector_cfg.get("schedule6Ref")
+    return str(legacy).strip() if legacy else ""
+
+
+def _sector_context_from_cfg(sector: str, cfg: dict, **extra) -> dict:
+    schedule6 = cfg.get("schedule6") if isinstance(cfg.get("schedule6"), dict) else None
+    return {
+        "sector": sector,
+        "label": cfg.get("label", sector.title()),
+        "schedule6": schedule6,
+        "schedule6Citation": sector_schedule6_citation(cfg, short=True),
+        "schedule6CitationLong": sector_schedule6_citation(cfg, short=False),
+        "locationLabel": cfg.get("locationLabel", "production site"),
+        **extra,
     }
 
 
@@ -304,21 +320,20 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
 
     if excluded and not pri_act:
         activity_ok = False
-        shortfalls.append(
-            f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})"
-        )
+        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+        shortfalls.append(f"Non-eligible {sector_label.lower()} activity under {cite} ({excluded})")
     elif sec_act and not pri_act:
         activity_ok = False
+        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
         shortfalls.append(
-            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production per Schedule 6 Part 3"
+            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production under {cite}"
         )
     elif pri_act:
         activity_ok = True
     elif activity_text or text.strip():
         activity_ok = False
-        shortfalls.append(
-            f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified"
-        )
+        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+        shortfalls.append(f"No primary {sector_label.lower()} production activity under {cite}")
     else:
         activity_ok = False
         shortfalls.append("No activity description in proof records")
@@ -431,13 +446,16 @@ def build_compliance_points(
 
     sector_ctx = sector_context or {}
     sector_label = sector_ctx.get("label")
-    schedule_ref = sector_ctx.get("schedule6Ref")
+    schedule_ref = (
+        sector_ctx.get("schedule6Citation")
+        or sector_ctx.get("schedule6CitationLong")
+        or sector_ctx.get("schedule6Ref")
+    )
     location_label = sector_ctx.get("locationLabel") or "production site"
-    if sector_label:
-        if schedule_ref:
-            points.append(f"Sector context: {sector_label} ({schedule_ref})")
-        else:
-            points.append(f"Sector context: {sector_label}")
+    if sector_label and schedule_ref:
+        points.append(f"Sector: {sector_label} — {schedule_ref}")
+    elif sector_label:
+        points.append(f"Sector: {sector_label}")
 
     if strength == STRENGTH_STRONG:
         points.append("Strong overall compliance (4/4 criteria met)")
@@ -451,7 +469,8 @@ def build_compliance_points(
         if detail:
             points.append(f"Primary {sector_name} activity identified ({detail})")
         else:
-            points.append(f"Primary Schedule 6 Part 3 {sector_name} activity identified")
+            cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+            points.append(f"Primary production under {cite}")
 
     if criteria.get("location"):
         locs = batch.get("locations") or []
