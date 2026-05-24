@@ -238,6 +238,46 @@ function toHandlerPath(urlPath) {
   return path.join(apiDir, 'health.js')
 }
 
+/** Run an API handler with timeout and consistent async error handling (explicit routes). */
+async function runLoadedHandler(req, res, handlerPath, { timeoutMs = 30000, routeLabel = 'API' } = {}) {
+  let timeout
+  try {
+    const handler = await loadHandler(handlerPath)
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end()
+    }
+    timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        console.error(`⏰ Request timeout for: ${req.method} ${req.url} (${routeLabel}, ${timeoutMs}ms)`)
+        res.status(504).json({
+          error: {
+            code: 'REQUEST_TIMEOUT',
+            message: 'Request timed out. Large POA files can take several minutes — try again or split the file.',
+          },
+          path: req.url,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    }, timeoutMs)
+    const handlerPromise = handler(req, res)
+    if (handlerPromise && typeof handlerPromise.then === 'function') {
+      await handlerPromise
+    }
+    clearTimeout(timeout)
+  } catch (e) {
+    clearTimeout(timeout)
+    console.error(`❌ ${routeLabel} handler error:`, e)
+    if (!res.headersSent && !res.writableEnded) {
+      return res.status(500).json({
+        error: { code: 'HANDLER_ERROR', message: e.message || 'Internal server error' },
+        path: req.url,
+        timestamp: new Date().toISOString(),
+      })
+    }
+    throw e
+  }
+}
+
 async function loadHandler(handlerPath) {
   // Retry logic for handler loading (handles transient import failures)
   const MAX_RETRIES = 2
@@ -2804,66 +2844,26 @@ app.all('/api/users', async (req, res, next) => {
 // This route is handled by the dynamic route resolution below
 
 // POA Review: explicit routes so handlers load reliably (avoids dynamic path resolution issues)
-app.post('/api/poa-review/process-excel', async (req, res) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-excel.js'))
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ POA Review process-excel handler error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
-    }
-    throw e
-  }
-})
-app.post('/api/dispense-exception-audit/process-excel', async (req, res) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'dispense-exception-audit', 'process-excel.js'))
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ Dispense Exception Audit process-excel handler error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
-    }
-    throw e
-  }
-})
-app.post('/api/dispense-exception-audit/export-comments', async (req, res) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'dispense-exception-audit', 'export-comments.js'))
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ Dispense Exception Audit export-comments handler error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
-    }
-    throw e
-  }
-})
-app.post('/api/poa-review/process-batch', async (req, res) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'process-batch.js'))
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ POA Review process-batch handler error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
-    }
-    throw e
-  }
-})
-app.all('/api/poa-review/evaluate-strength', async (req, res) => {
-  try {
-    const handler = await loadHandler(path.join(apiDir, 'poa-review', 'evaluate-strength.js'))
-    return handler(req, res)
-  } catch (e) {
-    console.error('❌ POA Review evaluate-strength handler error:', e)
-    if (!res.headersSent) {
-      return res.status(500).json({ error: 'Handler failed to load', path: req.url, timestamp: new Date().toISOString() })
-    }
-    throw e
-  }
-})
+const POA_REVIEW_TIMEOUT_MS = 900000 // 15m — Excel convert (5m) + process (10m)
+const POA_BATCH_TIMEOUT_MS = 360000 // 6m per batch
+app.post('/api/poa-review/process-excel', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'process-excel.js'), {
+    timeoutMs: POA_REVIEW_TIMEOUT_MS,
+    routeLabel: 'POA Review process-excel',
+  })
+)
+app.post('/api/poa-review/process-batch', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'process-batch.js'), {
+    timeoutMs: POA_BATCH_TIMEOUT_MS,
+    routeLabel: 'POA Review process-batch',
+  })
+)
+app.all('/api/poa-review/evaluate-strength', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'evaluate-strength.js'), {
+    timeoutMs: POA_BATCH_TIMEOUT_MS,
+    routeLabel: 'POA Review evaluate-strength',
+  })
+)
 // Serve standalone Python script for browser (Pyodide) run
 app.get('/api/poa-review/browser-script', (req, res) => {
   try {
@@ -2954,11 +2954,10 @@ app.use('/api', async (req, res) => {
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel') || req.url.includes('/poa-review/evaluate-strength');
-    const isDispenseExceptionAudit = req.url.includes('/dispense-exception-audit/process-excel')
-      || req.url.includes('/dispense-exception-audit/export-comments');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
-    const timeoutDuration = isPOAReview || isDispenseExceptionAudit ? 360000 : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA/dispense audit: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
+    const isPoaExcel = req.url.includes('/poa-review/process-excel')
+    const timeoutDuration = isPoaExcel ? POA_REVIEW_TIMEOUT_MS : isPOAReview ? POA_BATCH_TIMEOUT_MS : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA Excel: 15m; POA batch: 6m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
     
     timeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -3206,7 +3205,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'dispense-exception-audit-inputs', 'dispense-exception-audit-outputs', 'discussion-replies', 'notes']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'discussion-replies', 'notes']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }

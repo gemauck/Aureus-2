@@ -326,7 +326,7 @@ export function analyzePoaRows(rows, options = {}) {
     const hasPoaSource = headerNorm.some((h) => h === 'source');
     if ((hasException120 || hasException60) && !hasPoaActivity && !hasPoaSource) {
         errors.push(
-            'This workbook looks like an InsightWare Dispense Exception report (Exception Reason columns, no Activity/Source). Use Data Analytics → Dispense Exception Audit instead of POA Review.'
+            'This workbook looks like an InsightWare Dispense Exception report (Exception Reason columns, no Activity/Source). POA Review is not the right tool for this file.'
         );
     }
 

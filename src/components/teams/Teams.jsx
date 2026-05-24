@@ -4,14 +4,6 @@ const storage = window.storage;
 const DiscussionModal = window.DiscussionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
-/** Must match api/_lib/dispenseExceptionAuditAccess.js */
-const DISPENSE_EXCEPTION_AUDIT_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
-
-function dispenseExceptionAuditAllowedForUser(user) {
-    const email = (user?.email || '').trim().toLowerCase();
-    return email === DISPENSE_EXCEPTION_AUDIT_ALLOWED_EMAIL.toLowerCase();
-}
-
 /** On-demand dist scripts — keeps ~380KB of meeting notes + process hub out of the global lazy-loader batches. */
 const teamsDistScriptInflight = new Map();
 function teamsCompiledScriptUrl(componentBaseName) {
@@ -251,11 +243,6 @@ const Teams = () => {
         return normalizedPermissions.some((perm) => adminPermissionKeys.includes(perm));
     }, [currentUser]);
 
-    const canAccessDispenseExceptionAudit = useMemo(
-        () => dispenseExceptionAuditAllowedForUser(currentUser),
-        [currentUser]
-    );
-
     const isTeamAccessible = useCallback(
         (teamId) => {
             if (teamId === 'management') {
@@ -309,7 +296,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'dispense-exception-audit', 'sars-monitoring', 'members'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'sars-monitoring', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -325,22 +312,6 @@ const Teams = () => {
     useEffect(() => {
         activeTabRef.current = activeTab;
     }, [activeTab]);
-
-    useEffect(() => {
-        if (activeTab !== 'dispense-exception-audit' || canAccessDispenseExceptionAudit) return;
-        setActiveTabState('overview');
-        if (selectedTeam && window.RouteState) {
-            const searchParams = new URLSearchParams();
-            searchParams.set('tab', 'overview');
-            window.RouteState.navigate({
-                page: 'teams',
-                segments: [String(selectedTeam.id)],
-                search: `?${searchParams.toString()}`,
-                preserveSearch: false,
-                preserveHash: false,
-            });
-        }
-    }, [activeTab, canAccessDispenseExceptionAudit, selectedTeam]);
     
     // Wrapper for setActiveTab that BLOCKS navigation until saves complete
     const setActiveTab = useCallback(async (newTab) => {
@@ -966,20 +937,6 @@ const Teams = () => {
                                     <span className="sm:hidden">POA</span>
                                 </button>
                             )}
-                            {selectedTeam?.id === 'data-analytics' && canAccessDispenseExceptionAudit && (
-                                <button
-                                    onClick={() => setActiveTab('dispense-exception-audit')}
-                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                        activeTab === 'dispense-exception-audit'
-                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <i className="fas fa-balance-scale mr-1.5"></i>
-                                    <span className="hidden sm:inline">Exception Audit</span>
-                                    <span className="sm:hidden">Audit</span>
-                                </button>
-                            )}
                             {(selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (
                                 <button
                                     onClick={() => setActiveTab('sars-monitoring')}
@@ -1201,30 +1158,6 @@ const Teams = () => {
                                 );
                             }
                             
-                            return (
-                                <div>
-                                    <ComponentToRender />
-                                </div>
-                            );
-                        })()}
-
-                        {activeTab === 'dispense-exception-audit' && selectedTeam?.id === 'data-analytics' && canAccessDispenseExceptionAudit && (() => {
-                            const ComponentToRender = window.DispenseExceptionAudit;
-
-                            if (!ComponentToRender) {
-                                return (
-                                    <div className="text-center py-12">
-                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
-                                            Loading Dispense Exception Audit...
-                                        </p>
-                                        <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                            Please wait while the component loads.
-                                        </p>
-                                    </div>
-                                );
-                            }
-
                             return (
                                 <div>
                                     <ComponentToRender />
