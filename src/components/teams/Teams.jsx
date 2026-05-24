@@ -315,6 +315,10 @@ const Teams = () => {
     
     // ALL useState hooks must be declared before any useEffect hooks
     const [activeTab, setActiveTabState] = useState(getTabFromURL());
+    const [selectedTeam, setSelectedTeam] = useState(() => {
+        // Initialize from URL if available (will be updated after teams load)
+        return null;
+    });
     
     // Ref to track current tab for async operations
     const activeTabRef = useRef(activeTab);
@@ -377,12 +381,7 @@ const Teams = () => {
                 preserveHash: false
             });
         }
-    }, []);
-    const [selectedTeam, setSelectedTeam] = useState(() => {
-        // Initialize from URL if available (will be updated after teams load)
-        // Return null initially - team will be set in useEffect after teams are loaded
-        return null;
-    });
+    }, [selectedTeam]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isReady, setIsReady] = useState(false);
     
