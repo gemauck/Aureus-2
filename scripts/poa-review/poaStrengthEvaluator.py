@@ -8,6 +8,15 @@ import os
 import re
 from typing import Any
 
+# Columns that may carry activity / operation wording (not location or material).
+ACTIVITY_EVIDENCE_COLUMNS = (
+    "Activity",
+    "Operation Description / Comment",
+    "Comments",
+    "Asset Description",
+    "Custom Attribute",
+)
+
 import pandas as pd
 
 STRENGTH_STRONG = "Strong"
@@ -54,14 +63,97 @@ def _norm(s: Any) -> str:
     return str(s).strip().lower()
 
 
+def _term_in_text(text: str, term: str) -> bool:
+    """Match multi-word phrases as substrings; single tokens use word boundaries."""
+    t = term.lower().strip()
+    if not t or not text:
+        return False
+    if re.search(r"[\s\-&/]", t):
+        return t in text
+    return re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", text) is not None
+
+
 def _contains_any(text: str, terms: list[str]) -> str | None:
     if not text:
         return None
     for term in terms:
         t = term.lower().strip()
-        if t and t in text:
+        if t and _term_in_text(text, t):
             return term
     return None
+
+
+def _activity_evidence_from_batch(batch: dict) -> str:
+    if batch.get("activityEvidenceText"):
+        return str(batch["activityEvidenceText"])
+    parts: list[str] = []
+    for key in ("activities", "activityDescriptions", "comments"):
+        parts.extend(batch.get(key) or [])
+    return " | ".join(parts)
+
+
+def _activity_display_from_batch(batch: dict, evidence: str) -> str:
+    if batch.get("activityDisplay"):
+        return str(batch["activityDisplay"]).strip()
+    acts = batch.get("activities") or []
+    if acts:
+        return str(acts[0]).strip()
+    descriptions = batch.get("activityDescriptions") or []
+    if descriptions:
+        return str(descriptions[0]).strip()
+    return evidence.split(" | ")[0].strip() if evidence else ""
+
+
+def evaluate_activity_criterion(batch: dict, sector_rules: dict) -> dict:
+    """Assess activity using operation fields only (not location/material in combined text)."""
+    evidence = _activity_evidence_from_batch(batch).lower()
+    display = _activity_display_from_batch(batch, evidence)
+
+    if not evidence.strip():
+        return {
+            "ok": False,
+            "reason": "missing",
+            "display": "",
+            "evidence": "",
+            "matchedTerm": None,
+        }
+
+    excluded = _contains_any(evidence, sector_rules.get("excludedActivities", []))
+    secondary = _contains_any(evidence, sector_rules.get("secondaryActivities", []))
+    primary = _contains_any(evidence, sector_rules.get("primaryActivities", []))
+
+    if excluded and not primary:
+        return {
+            "ok": False,
+            "reason": "excluded",
+            "display": display or evidence[:120],
+            "evidence": evidence,
+            "matchedTerm": excluded,
+        }
+    if secondary and not primary:
+        return {
+            "ok": False,
+            "reason": "secondary",
+            "display": display or evidence[:120],
+            "evidence": evidence,
+            "matchedTerm": secondary,
+        }
+    if primary:
+        return {
+            "ok": True,
+            "reason": "primary",
+            "display": display or evidence[:120],
+            "evidence": evidence,
+            "matchedTerm": primary,
+        }
+
+    return {
+        "ok": False,
+        "reason": "unrecognised",
+        "display": display or evidence[:120],
+        "evidence": evidence,
+        "matchedTerm": None,
+    }
 
 
 def _sector_from_site_overrides(text: str, rules: dict) -> str | None:
@@ -229,6 +321,9 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         return {
             "proofCount": 0,
             "activities": [],
+            "activityDescriptions": [],
+            "activityEvidenceText": "",
+            "activityDisplay": "",
             "locations": [],
             "materials": [],
             "sources": [],
@@ -237,17 +332,19 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "combinedText": "",
         }
 
-    activities, locations, materials, sources, comments = [], [], [], [], []
+    activities, activity_descriptions, locations, materials, sources, comments = [], [], [], [], [], []
     intensity_values: dict[str, float] = {}
 
     for _, row in proof_df.iterrows():
-        for col in ("Activity", "Operation Description / Comment", "Comments"):
+        for col in ACTIVITY_EVIDENCE_COLUMNS:
             v = _norm(row.get(col))
-            if v:
-                if col == "Activity":
-                    activities.append(v)
-                else:
-                    comments.append(v)
+            if not v:
+                continue
+            activity_descriptions.append(v)
+            if col == "Activity":
+                activities.append(v)
+            elif col in ("Operation Description / Comment", "Comments"):
+                comments.append(v)
         for col in ("Location.1", "Location"):
             v = _norm(row.get(col))
             if v:
@@ -269,12 +366,17 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             except Exception:
                 pass
 
-    combined_parts = activities + locations + materials + comments + sources
+    combined_parts = activities + activity_descriptions + locations + materials + comments + sources
     combined_text = " | ".join(combined_parts)
+    activity_evidence_text = " | ".join(dict.fromkeys(activity_descriptions))
+    activity_display = activities[0] if activities else (activity_descriptions[0] if activity_descriptions else "")
 
     return {
         "proofCount": len(proof_df),
         "activities": list(dict.fromkeys(activities)),
+        "activityDescriptions": list(dict.fromkeys(activity_descriptions)),
+        "activityEvidenceText": activity_evidence_text,
+        "activityDisplay": activity_display,
         "locations": list(dict.fromkeys(locations)),
         "materials": list(dict.fromkeys(materials)),
         "sources": list(dict.fromkeys(sources)),
@@ -312,31 +414,26 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     location_label = sector_ctx.get("locationLabel") or sector_rules.get("locationLabel", "production site")
 
     text = batch.get("combinedText", "")
-    activity_text = " | ".join(batch.get("activities", []) + batch.get("comments", []))
+    activity_match = evaluate_activity_criterion(batch, sector_rules)
+    activity_ok = bool(activity_match.get("ok"))
+    cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
 
-    excluded = _contains_any(activity_text or text, sector_rules.get("excludedActivities", []))
-    sec_act = _contains_any(activity_text or text, sector_rules.get("secondaryActivities", []))
-    pri_act = _contains_any(activity_text or text, sector_rules.get("primaryActivities", []))
-
-    if excluded and not pri_act:
-        activity_ok = False
-        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
-        shortfalls.append(f"Non-eligible {sector_label.lower()} activity under {cite} ({excluded})")
-    elif sec_act and not pri_act:
-        activity_ok = False
-        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+    if activity_match.get("reason") == "excluded":
         shortfalls.append(
-            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production under {cite}"
+            f"Non-eligible {sector_label.lower()} activity under {cite} ({activity_match.get('matchedTerm')})"
         )
-    elif pri_act:
-        activity_ok = True
-    elif activity_text or text.strip():
-        activity_ok = False
-        cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
-        shortfalls.append(f"No primary {sector_label.lower()} production activity under {cite}")
-    else:
-        activity_ok = False
-        shortfalls.append("No activity description in proof records")
+    elif activity_match.get("reason") == "secondary":
+        shortfalls.append(
+            f"Secondary/non-primary {sector_label.lower()} activity ({activity_match.get('matchedTerm')}) "
+            f"— not own primary production under {cite}"
+        )
+    elif activity_match.get("reason") == "unrecognised":
+        detail = activity_match.get("display") or "see POA activity/operation fields"
+        shortfalls.append(
+            f"No eligible primary {sector_label.lower()} production activity under {cite} (recorded: {detail})"
+        )
+    elif activity_match.get("reason") == "missing":
+        shortfalls.append("No activity or operation description on proof records")
 
     loc_text = " | ".join(batch.get("locations", []))
     sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []))
@@ -397,7 +494,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
     compliance_points = build_compliance_points(
-        batch, criteria, strength, sector_context=sector_ctx, matched_activity=pri_act
+        batch, criteria, strength, sector_context=sector_ctx, activity_match=activity_match
     )
 
     return {
@@ -409,6 +506,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "method": "rules",
         "sector": sector,
         "sectorContext": sector_ctx,
+        "activityMatch": activity_match,
     }
 
 
@@ -434,7 +532,7 @@ def build_compliance_points(
     strength: str | None = None,
     shift_applied: bool = False,
     sector_context: dict | None = None,
-    matched_activity: str | None = None,
+    activity_match: dict | None = None,
 ) -> list[str]:
     """Human-readable positives for criteria met and linked proof context."""
     points: list[str] = []
@@ -462,15 +560,30 @@ def build_compliance_points(
     elif strength == STRENGTH_MODERATE:
         points.append("Moderate compliance (3/4 criteria met)")
 
-    if criteria.get("activity"):
-        acts = batch.get("activities") or []
-        detail = acts[0] if acts else matched_activity
-        sector_name = (sector_label or "primary production").lower()
-        if detail:
-            points.append(f"Primary {sector_name} activity identified ({detail})")
+    am = activity_match or {}
+    cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+    if am.get("ok"):
+        detail = am.get("display") or am.get("matchedTerm") or "primary production"
+        term = am.get("matchedTerm")
+        if term and term.lower() not in str(detail).lower():
+            points.append(
+                f"Eligible primary production activity identified: {detail} (matched Schedule 6 term: {term})"
+            )
         else:
-            cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
-            points.append(f"Primary production under {cite}")
+            points.append(f"Eligible primary production activity identified: {detail}")
+    elif am.get("reason") == "secondary":
+        detail = am.get("display") or am.get("evidence") or "on proof"
+        points.append(
+            f"Activity on proof is secondary/non-primary ({am.get('matchedTerm')}): {detail}"
+        )
+    elif am.get("reason") == "unrecognised":
+        detail = am.get("display") or am.get("evidence") or "see POA fields"
+        points.append(f"Activity on proof not recognised as eligible primary production: {detail}")
+    elif am.get("reason") == "excluded":
+        detail = am.get("display") or am.get("evidence") or "on proof"
+        points.append(f"Activity on proof is excluded for diesel refund: {detail}")
+    else:
+        points.append("No activity or operation description on linked POA records")
 
     if criteria.get("location"):
         locs = batch.get("locations") or []
@@ -520,6 +633,8 @@ def compliance_points_from_result(eval_result: dict) -> str:
             eval_result.get("criteria") or {},
             eval_result.get("strength"),
             bool(eval_result.get("shiftProofApplied")),
+            sector_context=eval_result.get("sectorContext"),
+            activity_match=eval_result.get("activityMatch"),
         )
     )
 
@@ -531,13 +646,13 @@ DEFAULT_SHIFT_ADVISORY = (
 
 def _collect_text_activities(df: pd.DataFrame, max_activities: int):
     activities: set[str] = set()
-    for col in ("Activity", "Operation Description / Comment", "Comments"):
+    for col in ACTIVITY_EVIDENCE_COLUMNS:
         if col not in df.columns:
             continue
         for val in df[col].dropna().astype(str).str.strip():
             if not val:
                 continue
-            activities.add(val)
+            activities.add(val.lower())
             if len(activities) > max_activities:
                 return None
     return activities
@@ -656,6 +771,7 @@ def evaluate_all_labels(
                 eval_result.get("strength"),
                 shift_applied=True,
                 sector_context=eval_result.get("sectorContext"),
+                activity_match=eval_result.get("activityMatch"),
             )
 
         eval_result["batch"] = batch
@@ -692,6 +808,7 @@ def merge_llm_result(rules_result: dict, llm_result: dict | None) -> dict:
             tier_from_score(score),
             bool(rules_result.get("shiftProofApplied")),
             sector_context=rules_result.get("sectorContext"),
+            activity_match=rules_result.get("activityMatch"),
         )
 
     return {

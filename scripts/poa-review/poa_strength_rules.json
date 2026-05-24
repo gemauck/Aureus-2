@@ -46,7 +46,11 @@
         "access road", "private access road", "tailings", "tailings dam", "waste removal",
         "waste disposal", "rehabilitation", "coal stockpiling", "stockpiling coal",
         "in-pit transport", "site transport", "grading", "grading at pit", "dozer", "dozing",
-        "ripping", "primary production", "production mining",
+        "ripping", "primary production", "production mining", "production", "operating", "operation",
+        "utilisation", "utilization", "working", "work", "seam", "rehandle", "re-handling",
+        "shovel", "excavator", "dragline", "continuous miner", "lhd", "adt", "rdt", "dump truck",
+        "tipping", "tip", "tramming", "bogging", "bolting", "roof bolting", "general work",
+        "site work", "mine work", "pit work",
         "service and maintenance", "maintenance at pit", "workshop at pit",
         "transport to siding", "railway siding"
       ],
