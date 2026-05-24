@@ -54,7 +54,7 @@ def convert_excel_to_csv(input_file: str, output_csv: str, chunk_size: int = 500
         while True:
             chunk = pd.read_excel(
                 input_file,
-                skiprows=range(skip_rows) if skip_rows else None,
+                skiprows=skip_rows,
                 nrows=chunk_size,
                 header=None,
             )
