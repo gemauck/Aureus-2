@@ -102,3 +102,4 @@ android/.cxx/
 *.jks
 *.keystore
 !android/app/src/main/assets/public/.gitkeep
+scripts/poa-review/__pycache__/
