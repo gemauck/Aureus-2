@@ -1063,7 +1063,13 @@ self.onmessage = async (e) => {
             // Excel: always upload to server — native pandas is far faster than browser XLSX parse + JSON batches
             if (isExcel) {
                 console.log('POA Review - Excel file, using server-side processing (native pandas)...');
-                setProcessingProgress('Uploading file to server for processing...');
+                const rowHint = parsedRowsRef.current?.length || 0;
+                const largeNote = rowHint > 50000
+                    ? ' Large file — processing may take 5–15 minutes; keep this tab open and do not upload another file until complete.'
+                    : rowHint > 15000
+                        ? ' Processing may take several minutes; keep this tab open.'
+                        : '';
+                setProcessingProgress(`Uploading file to server for processing...${largeNote}`);
 
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
@@ -1071,8 +1077,8 @@ self.onmessage = async (e) => {
                 formData.append('useAIStrength', useAIStrength ? 'true' : 'false');
 
                 const token = window.storage?.getToken?.() || '';
-                const maxRetries = 2;
-                const retryDelay = 2000;
+                const maxRetries = 3;
+                const retryDelay = 3000;
                 let response = null;
 
                 for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -1080,7 +1086,6 @@ self.onmessage = async (e) => {
                         if (attempt > 0) {
                             setProcessingProgress(`Retrying upload (${attempt}/${maxRetries})...`);
                             await new Promise(r => setTimeout(r, retryDelay * attempt));
-                            // FormData body is consumed after first fetch; recreate for retry
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
@@ -1094,6 +1099,11 @@ self.onmessage = async (e) => {
                             },
                             body: formData
                         });
+                        const retryableStatus = response.status === 502 || response.status === 503 || response.status === 504;
+                        if (retryableStatus && attempt < maxRetries) {
+                            console.warn(`POA Review - process-excel got ${response.status}, retrying (${attempt + 1}/${maxRetries})...`);
+                            continue;
+                        }
                         break;
                     } catch (fetchErr) {
                         const isNetworkError = fetchErr?.message === 'Failed to fetch' ||
@@ -1103,22 +1113,30 @@ self.onmessage = async (e) => {
                             continue;
                         }
                         const friendlyMsg = isNetworkError
-                            ? 'Network request was interrupted (e.g. tab in background or connection lost). Please keep this tab active and try again.'
+                            ? 'Network request was interrupted (e.g. tab in background, connection lost, or server gateway timeout). Please keep this tab active and try again.'
                             : (fetchErr?.message || 'Upload failed');
                         throw new Error(friendlyMsg);
                     }
                 }
 
                 if (!response?.ok) {
-                    const errorData = await response.json().catch(() => ({ message: response?.statusText || 'Unknown error' }));
+                    const rawText = await response.text().catch(() => '');
+                    let errorData = {};
+                    try {
+                        errorData = rawText ? JSON.parse(rawText) : {};
+                    } catch (_) {
+                        errorData = { message: rawText?.slice(0, 200) || response?.statusText || 'Unknown error' };
+                    }
                     const msg = (typeof errorData.error === 'object' && errorData.error?.message)
                         ? errorData.error.message
                         : (typeof errorData.error === 'string' ? errorData.error : null)
                         || errorData.message
                         || (typeof errorData.errorDetails === 'object' && errorData.errorDetails?.message)
                         || (typeof errorData.errorDetails === 'string' ? errorData.errorDetails : null)
-                        || 'Failed to process file';
-                    console.error('POA Review process-excel API error:', errorData);
+                        || (response.status === 502 || response.status === 504
+                            ? 'Server gateway timeout (502/504). Large Excel files can take several minutes — wait and retry, or split the file by month.'
+                            : 'Failed to process file');
+                    console.error('POA Review process-excel API error:', errorData, 'status:', response?.status);
                     throw new Error(msg);
                 }
 

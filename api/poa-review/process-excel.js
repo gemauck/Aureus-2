@@ -24,7 +24,41 @@ const MAX_ROWS = 500000; // Reject if CSV/Excel has more rows to avoid OOM
 
 const execAsync = promisify(exec);
 
+// One Excel job at a time — parallel large uploads can OOM-kill the Node/Python worker (nginx 502).
+let poaExcelProcessing = false;
+
+async function verifyPythonRuntime(pythonExec) {
+    const cmd = `${pythonExec} -c "import pandas; import openpyxl" 2>&1`;
+    try {
+        const result = await execAsync(cmd, { timeout: 20000, maxBuffer: 1024 * 1024 });
+        if (result.stderr && /ModuleNotFoundError|ImportError/i.test(result.stderr)) {
+            throw new Error(result.stderr.trim());
+        }
+        return true;
+    } catch (execError) {
+        const detail = [execError.stdout, execError.stderr, execError.message].filter(Boolean).join('\n').trim();
+        const hint = detail.includes('venv-poareview')
+            ? detail
+            : `${detail}\n\nServer setup: from project root run ./scripts/poa-review/setup-venv.sh then restart the app (pm2 restart abcotronics-erp).`;
+        throw new Error(`POA Review Python environment is not ready.\n${hint}`);
+    }
+}
+
 async function handler(req, res) {
+    if (poaExcelProcessing) {
+        if (!res.headersSent) {
+            res.statusCode = 409;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+                error: {
+                    code: 'POA_BUSY',
+                    message: 'Another POA Excel file is already being processed on the server. Wait for it to finish, then try again.',
+                },
+            }));
+        }
+        return;
+    }
+    poaExcelProcessing = true;
     try {
         if (req.method !== 'POST') {
             return badRequest(res, 'Method not allowed');
@@ -160,6 +194,8 @@ async function handler(req, res) {
         const processScriptPath = path.join(scriptsDir, 'process_poa_csv.py');
         const pythonExec = venvPython === 'python3' ? 'python3' : `"${venvPython}"`;
 
+        await verifyPythonRuntime(pythonExec);
+
         const runPythonScript = async (scriptArgs, { timeout = 600000, label = 'Python' } = {}) => {
             const quoted = scriptArgs.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
             const cmd = `${pythonExec} ${quoted} 2>&1`;
@@ -249,6 +285,7 @@ async function handler(req, res) {
         const isTooManyRows = msg.includes('too many rows') || (msg.includes('Maximum') && msg.includes('rows are supported'));
         // Exit code 137 = process killed (SIGKILL), usually by OOM killer when file is too large for server memory
         const isKilledOOM = msg.includes('exit code 137') || msg.includes('Killed');
+        const isPythonEnv = msg.includes('Python environment is not ready') || msg.includes('ModuleNotFoundError') || msg.includes('setup-venv.sh');
         if (isKilledOOM) {
             msg = 'This file is too large for the server to process (it ran out of memory). Please use a smaller file, or split your data into multiple files (e.g. by month), then run POA Review on each.';
         }
@@ -277,6 +314,14 @@ async function handler(req, res) {
                 }));
                 return;
             }
+            if (isPythonEnv) {
+                res.statusCode = 503;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    error: { code: 'POA_PYTHON_ENV', message: msg }
+                }));
+                return;
+            }
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({
@@ -285,6 +330,8 @@ async function handler(req, res) {
             return;
         }
         return serverError(res, `Failed to process Excel file: ${msg}`);
+    } finally {
+        poaExcelProcessing = false;
     }
 }
 
