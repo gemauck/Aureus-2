@@ -315,6 +315,16 @@ def load_rules(rules_path: str | None = None) -> dict:
         return json.load(f)
 
 
+def _unique_nonempty_strings(series: pd.Series) -> list[str]:
+    if series is None or series.empty:
+        return []
+    vals = series.dropna().astype(str).str.strip()
+    vals = vals[vals != ""]
+    if vals.empty:
+        return []
+    return list(dict.fromkeys(vals.tolist()))
+
+
 def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
     """Combine proof rows for one label into a single evaluation payload."""
     if proof_df is None or len(proof_df) == 0:
@@ -332,29 +342,33 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "combinedText": "",
         }
 
-    activities, activity_descriptions, locations, materials, sources, comments = [], [], [], [], [], []
+    activities: list[str] = []
+    activity_descriptions: list[str] = []
+    locations: list[str] = []
+    materials: list[str] = []
+    sources: list[str] = []
+    comments: list[str] = []
     intensity_values: dict[str, float] = {}
 
-    for _, row in proof_df.iterrows():
-        for col in ACTIVITY_EVIDENCE_COLUMNS:
-            v = _norm(row.get(col))
-            if not v:
-                continue
-            activity_descriptions.append(v)
-            if col == "Activity":
-                activities.append(v)
-            elif col in ("Operation Description / Comment", "Comments"):
-                comments.append(v)
-        for col in ("Location.1", "Location"):
-            v = _norm(row.get(col))
-            if v:
-                locations.append(v)
-        m = _norm(row.get("Material"))
-        if m:
-            materials.append(m)
-        s = _norm(row.get("Source"))
-        if s:
-            sources.append(s)
+    for col in ACTIVITY_EVIDENCE_COLUMNS:
+        if col not in proof_df.columns:
+            continue
+        vals = _unique_nonempty_strings(proof_df[col])
+        if not vals:
+            continue
+        activity_descriptions.extend(vals)
+        if col == "Activity":
+            activities.extend(vals)
+        elif col in ("Operation Description / Comment", "Comments"):
+            comments.extend(vals)
+
+    for col in ("Location.1", "Location"):
+        if col in proof_df.columns:
+            locations.extend(_unique_nonempty_strings(proof_df[col]))
+    if "Material" in proof_df.columns:
+        materials.extend(_unique_nonempty_strings(proof_df["Material"]))
+    if "Source" in proof_df.columns:
+        sources.extend(_unique_nonempty_strings(proof_df["Source"]))
 
     for col in proof_df.columns:
         if col in ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr", "Opening SMR", "Closing SMR"):
@@ -658,9 +672,23 @@ def _collect_text_activities(df: pd.DataFrame, max_activities: int):
     return activities
 
 
+def _build_asset_proof_index(
+    proof_df: pd.DataFrame,
+) -> dict[str, tuple[pd.DataFrame, pd.Series]]:
+    """Pre-parse proof datetimes once per asset (avoids repeated to_datetime on large files)."""
+    if proof_df is None or len(proof_df) == 0:
+        return {}
+    index: dict[str, tuple[pd.DataFrame, pd.Series]] = {}
+    for asset, grp in proof_df.groupby("Asset Number", observed=True, sort=False):
+        if pd.isna(asset):
+            continue
+        index[str(asset)] = (grp, pd.to_datetime(grp["Date & Time"], errors="coerce"))
+    return index
+
+
 def _shift_day_fallback_proofs(
     txn_rows: pd.DataFrame,
-    proofs_by_asset: dict[str, pd.DataFrame],
+    proofs_by_asset: dict[str, pd.DataFrame] | dict[str, tuple[pd.DataFrame, pd.Series]],
     rules: dict,
 ) -> tuple[pd.DataFrame, bool]:
     """When a batch has no linked proof, reuse same-asset shift/day proof if only one activity."""
@@ -680,11 +708,21 @@ def _shift_day_fallback_proofs(
     window_h = float(cfg.get("windowHours", 24))
     max_activities = int(cfg.get("maxDistinctActivitiesPerDay", 1))
 
-    asset_proofs = proofs_by_asset.get(str(asset))
-    if asset_proofs is None or len(asset_proofs) == 0:
+    asset_key = str(asset)
+    cached = proofs_by_asset.get(asset_key)
+    if cached is None:
+        return pd.DataFrame(), False
+    if isinstance(cached, tuple):
+        asset_proofs, proof_dt = cached
+    else:
+        asset_proofs = cached
+        if len(asset_proofs) == 0:
+            return pd.DataFrame(), False
+        proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
+
+    if len(asset_proofs) == 0:
         return pd.DataFrame(), False
 
-    proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
     txn_day = txn_dt.normalize()
     window_start = txn_dt - pd.Timedelta(hours=window_h)
     in_window = asset_proofs[
@@ -706,6 +744,8 @@ def evaluate_all_labels(
     proof_mask: pd.Series,
     transaction_mask: pd.Series,
     rules: dict | None = None,
+    *,
+    keep_batches: bool = True,
 ) -> dict[str, dict]:
     """Evaluate every label that appears on transaction or proof rows."""
     rules = rules or load_rules()
@@ -718,27 +758,26 @@ def evaluate_all_labels(
         return {}
 
     labels = relevant.unique()
-    proof_groups = {
-        str(label): grp
-        for label, grp in data.loc[proof_mask].groupby("label", observed=True, sort=False)
-    }
-    txn_groups = {
-        str(label): grp
-        for label, grp in data.loc[transaction_mask].groupby("label", observed=True, sort=False)
-    }
-    proofs_by_asset = {
-        str(asset): grp
-        for asset, grp in data.loc[proof_mask].groupby("Asset Number", observed=True, sort=False)
-    }
+    proof_df = data.loc[proof_mask]
+    txn_df = data.loc[transaction_mask]
+    proof_by_label = proof_df.groupby("label", observed=True, sort=False) if len(proof_df) else None
+    txn_by_label = txn_df.groupby("label", observed=True, sort=False) if len(txn_df) else None
+    proofs_by_asset = _build_asset_proof_index(proof_df)
+
+    def _group_rows(grouper, label_key) -> pd.DataFrame:
+        if grouper is None:
+            return pd.DataFrame()
+        try:
+            return grouper.get_group(label_key)
+        except KeyError:
+            return pd.DataFrame()
 
     for label in labels:
         label_str = str(label)
-        proof_rows = proof_groups.get(label_str)
-        if proof_rows is None:
-            proof_rows = pd.DataFrame()
+        proof_rows = _group_rows(proof_by_label, label)
         shift_applied = False
         if len(proof_rows) == 0:
-            txn_rows = txn_groups.get(label_str, pd.DataFrame())
+            txn_rows = _group_rows(txn_by_label, label)
             proof_rows, shift_applied = _shift_day_fallback_proofs(
                 txn_rows, proofs_by_asset, rules
             )
@@ -751,8 +790,8 @@ def evaluate_all_labels(
             batch["assetNumber"] = str(first.get("Asset Number", ""))
             batch["assetDescription"] = str(first.get("Asset Description", ""))
         else:
-            txn_rows = txn_groups.get(label_str)
-            if txn_rows is not None and len(txn_rows) > 0:
+            txn_rows = _group_rows(txn_by_label, label)
+            if len(txn_rows) > 0:
                 first_txn = txn_rows.iloc[0]
                 batch["assetNumber"] = str(first_txn.get("Asset Number", ""))
                 batch["assetDescription"] = str(first_txn.get("Asset Description", ""))
@@ -774,7 +813,8 @@ def evaluate_all_labels(
                 activity_match=eval_result.get("activityMatch"),
             )
 
-        eval_result["batch"] = batch
+        if keep_batches:
+            eval_result["batch"] = batch
         results[label_str] = eval_result
 
     return results

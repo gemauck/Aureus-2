@@ -20,6 +20,8 @@ from poaStrengthEvaluator import (
 DEFAULT_MODEL = "gpt-4o-mini"
 CHUNK_SIZE = 18
 CACHE_DIR_NAME = "strength-cache"
+# Cap LLM calls so large mines do not run for hours / OOM with batch payloads in memory.
+MAX_LLM_LABELS = 400
 
 
 def _cache_dir(base_temp: str | None = None) -> str:
@@ -158,6 +160,14 @@ def evaluate_labels_with_llm(
     cache_root = _cache_dir(cache_dir)
     merged = dict(rules_results)
     labels = [l for l in label_batches.keys() if label_batches[l].get("proofCount", 0) > 0]
+
+    if len(labels) > MAX_LLM_LABELS:
+        print(
+            f"POA Strength LLM skipped: {len(labels)} proof batches exceeds limit {MAX_LLM_LABELS}. "
+            "Using rules-only.",
+            flush=True,
+        )
+        return rules_results
 
     for i in range(0, len(labels), CHUNK_SIZE):
         chunk_labels = labels[i : i + CHUNK_SIZE]

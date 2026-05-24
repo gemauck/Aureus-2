@@ -91,13 +91,14 @@ def _write_only_excel(
         c.alignment = align_left
         header_cells.append(c)
     ws.append(header_cells)
-    data_arr = review[output_cols].values
+    col_arrays = [review[col] for col in output_cols]
     bold_arr = bold_rows.values
     green_arr = green_rows.values
     yellow_arr = yellow_col16.values
     strength_list = strength_row_fills.tolist() if strength_row_fills is not None else None
-    for i in range(len(review)):
-        row_vals = data_arr[i]
+    n_rows = len(review)
+    for i in range(n_rows):
+        row_vals = tuple(col_arrays[j].iat[i] for j in range(num_cols))
         is_bold = bool(bold_arr[i])
         is_green = bool(green_arr[i])
         is_yellow_smr = bool(yellow_arr[i])
@@ -257,7 +258,12 @@ class POAReview:
     def evaluate_poa_strength(self, use_llm=False, cache_dir=None):
         if "label" not in self.data.columns:
             self.label_rows()
-        label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
+        label_results = evaluate_all_labels(
+            self.data,
+            self.proof_mask,
+            self.transaction_mask,
+            keep_batches=use_llm,
+        )
         self._label_results = label_results
         self._apply_label_results(label_results)
         return self.data
@@ -272,14 +278,11 @@ class POAReview:
             label: compliance_points_from_result(res)
             for label, res in label_results.items()
         }
-        self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
-        self.data[POA_COMPLIANCE_POINTS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
-        self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
-        labels_str = self.data["label"].astype(str)
+        labels_str = self.data.loc[self.transaction_mask, "label"].astype(str)
         txn_idx = self.data.index[self.transaction_mask]
-        self.data.loc[txn_idx, "POA Strength"] = labels_str.loc[txn_idx].map(strength_map)
-        self.data.loc[txn_idx, POA_COMPLIANCE_POINTS_COL] = labels_str.loc[txn_idx].map(compliance_map)
-        self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.loc[txn_idx].map(shortfall_map)
+        self.data.loc[txn_idx, "POA Strength"] = labels_str.map(strength_map).values
+        self.data.loc[txn_idx, POA_COMPLIANCE_POINTS_COL] = labels_str.map(compliance_map).values
+        self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.map(shortfall_map).values
         if "Count of proof before transaction" in self.data.columns:
             zero_proof = self.transaction_mask & (
                 pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0

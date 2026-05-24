@@ -293,6 +293,21 @@ async function handler(req, res) {
         console.log('POA Review Excel API - Conversion output:', convertOutput.substring(0, 500));
 
         // Step 2: Process CSV with shared POA pipeline script
+        const LARGE_FILE_LLM_MAX_ROWS = 15000;
+        let useLlmForProcess = useAIStrength;
+        try {
+            const csvLines = fs.readFileSync(tempCsvPath, { encoding: 'utf8', flag: 'r' });
+            const dataRowEstimate = Math.max(0, csvLines.split('\n').length - 2);
+            if (useAIStrength && dataRowEstimate > LARGE_FILE_LLM_MAX_ROWS) {
+                console.log(
+                    `POA Review Excel API - AI strength disabled (${dataRowEstimate} rows > ${LARGE_FILE_LLM_MAX_ROWS}); rules-only`
+                );
+                useLlmForProcess = false;
+            }
+        } catch (_) {
+            /* row estimate optional */
+        }
+
         console.log('POA Review Excel API - Processing CSV with Python...');
         const processRun = await runPythonScript(
             [
@@ -300,7 +315,7 @@ async function handler(req, res) {
                 tempCsvPath,
                 outputFilePath,
                 JSON.stringify(sources),
-                useAIStrength ? 'true' : 'false',
+                useLlmForProcess ? 'true' : 'false',
                 cacheDir,
                 String(MAX_ROWS),
             ],

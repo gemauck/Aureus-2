@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run POA Review pipeline on a CSV file and write formatted Excel output."""
+import gc
 import json
 import os
 import sys
@@ -9,6 +10,8 @@ import pandas as pd
 from ProofReview import POAReview, format_review
 
 MAX_ROWS_DEFAULT = 500000
+# OpenAI batch scoring does not scale to 70k+ row workbooks (thousands of labels × API latency).
+LARGE_FILE_LLM_MAX_ROWS = 15000
 
 
 def normalize_column_name(col_name):
@@ -154,6 +157,14 @@ def run_pipeline(
     original_columns = list(data.columns)
     print('Prepared dataframe', flush=True)
 
+    if use_llm_strength and len(data) > LARGE_FILE_LLM_MAX_ROWS:
+        print(
+            f'AI strength disabled for large files ({len(data)} rows > {LARGE_FILE_LLM_MAX_ROWS}). '
+            'Using rules-only (fast). Split by month for AI on smaller extracts.',
+            flush=True,
+        )
+        use_llm_strength = False
+
     review = POAReview(data)
     print('POAReview initialized', flush=True)
     review.mark_consecutive_transactions()
@@ -166,8 +177,10 @@ def run_pipeline(
     print('Core POA metrics computed', flush=True)
     review.total_smr(sources)
     print('Total SMR computed', flush=True)
+    gc.collect()
     review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
     print('POA strength evaluated', flush=True)
+    gc.collect()
 
     os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
     print('Writing Excel output...', flush=True)

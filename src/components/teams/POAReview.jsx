@@ -307,7 +307,7 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
-    const [useAIStrength, setUseAIStrength] = useState(true);
+    const [useAIStrength, setUseAIStrength] = useState(false);
     const [preflight, setPreflight] = useState(null);
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [reportSummary, setReportSummary] = useState(null);
@@ -332,6 +332,7 @@ const POAReview = () => {
                 result.warnings = [
                     ...(result.warnings || []),
                     `Large file (${rowCount.toLocaleString()} rows). Server processing supports up to ${MAX_ROWS.toLocaleString()} rows; keep this tab open until complete.`,
+                    `AI strength is off for files over ${BROWSER_ROWS_RECOMMENDED.toLocaleString()} rows (rules-only ~2–3 min). Split by month for AI on smaller extracts.`,
                 ];
             }
             setPreflight(result);
@@ -1064,17 +1065,22 @@ self.onmessage = async (e) => {
             if (isExcel) {
                 console.log('POA Review - Excel file, using server-side processing (native pandas)...');
                 const rowHint = parsedRowsRef.current?.length || 0;
-                const largeNote = rowHint > 50000
-                    ? ' Large file — processing may take 5–15 minutes; keep this tab open and do not upload another file until complete.'
-                    : rowHint > 15000
-                        ? ' Processing may take several minutes; keep this tab open.'
+                const aiOn = useAIStrength === true && rowHint <= BROWSER_ROWS_RECOMMENDED;
+                const largeNote = rowHint > BROWSER_ROWS_RECOMMENDED
+                    ? ' Large file — rules-only on server (~2–3 min). AI is disabled above 15k rows; keep this tab open.'
+                    : rowHint > 5000
+                        ? aiOn
+                            ? ' Server processing with AI may take several minutes; keep this tab open.'
+                            : ' Server processing ~1–3 min; keep this tab open.'
                         : '';
-                setProcessingProgress(`Uploading file to server for processing...${largeNote}`);
+                setProcessingProgress(`Uploading to server…${largeNote}`);
+                setProcessingProgressPercent(5);
 
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
-                formData.append('useAIStrength', useAIStrength ? 'true' : 'false');
+                const sendAi = useAIStrength === true && rowHint <= BROWSER_ROWS_RECOMMENDED;
+                formData.append('useAIStrength', sendAi ? 'true' : 'false');
 
                 const token = window.storage?.getToken?.() || '';
                 const maxRetries = 3;
@@ -1083,13 +1089,19 @@ self.onmessage = async (e) => {
 
                 for (let attempt = 0; attempt <= maxRetries; attempt++) {
                     try {
+                        if (attempt === 0) {
+                            setProcessingProgress(
+                                `Server processing${aiOn ? ' (rules + AI)' : ' (rules)'}…${largeNote} Do not close this tab.`
+                            );
+                            setProcessingProgressPercent(15);
+                        }
                         if (attempt > 0) {
-                            setProcessingProgress(`Retrying upload (${attempt}/${maxRetries})...`);
+                            setProcessingProgress(`Retrying (${attempt}/${maxRetries})…`);
                             await new Promise(r => setTimeout(r, retryDelay * attempt));
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
-                            retryFormData.append('useAIStrength', useAIStrength ? 'true' : 'false');
+                            retryFormData.append('useAIStrength', sendAi ? 'true' : 'false');
                             formData = retryFormData;
                         }
                         response = await fetch('/api/poa-review/process-excel', {
@@ -1429,20 +1441,22 @@ self.onmessage = async (e) => {
             </div>
 
             <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
+                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'} ${(parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED ? 'opacity-60' : ''}`}>
                     <input
                         type="checkbox"
-                        checked={useAIStrength}
+                        checked={useAIStrength && (parsedRowsRef.current?.length || 0) <= BROWSER_ROWS_RECOMMENDED}
                         onChange={(e) => setUseAIStrength(e.target.checked)}
-                        disabled={isProcessing}
+                        disabled={isProcessing || (parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED}
                         className="rounded border-gray-400"
                     />
                     <span className="text-sm">Use AI strength evaluation</span>
                 </label>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    {runLocally
-                        ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
-                        : 'Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.'}
+                    {(parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED
+                        ? `Disabled for files over ${BROWSER_ROWS_RECOMMENDED.toLocaleString()} rows — server uses fast rules-only (POA Strength, Compliance Points, Shortfalls still populated).`
+                        : runLocally
+                            ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
+                            : 'Optional OpenAI pass for Schedule 6 context. Recommended for files under 15k rows; large workbooks should use rules-only.'}
                 </p>
             </div>
 
