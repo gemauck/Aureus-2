@@ -20,7 +20,7 @@ import { Readable } from 'stream';
 
 // Limits to prevent server crash from huge documents
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB (matches UI)
-const MAX_ROWS = 400000; // Reject if CSV/Excel has more rows to avoid OOM
+const MAX_ROWS = 500000; // Reject if CSV/Excel has more rows to avoid OOM
 
 const execAsync = promisify(exec);
 

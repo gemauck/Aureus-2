@@ -21,7 +21,7 @@ import { parseJsonBody } from '../_lib/body.js';
 const execAsync = promisify(exec);
 
 // Limits: large files use streaming Excel write (write_only) to stay within server memory
-const MAX_TOTAL_ROWS = 250000;   // Allow up to ~250k rows when using write_only path in ProofReview
+const MAX_TOTAL_ROWS = 500000;
 const MAX_ROWS_PER_BATCH = 25000; // Reject single batch if it has more rows
 
 // Store batch metadata only (no row data); batches are streamed to disk

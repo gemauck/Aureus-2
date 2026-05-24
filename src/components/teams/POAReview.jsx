@@ -22,12 +22,13 @@ function formatElapsed(ms) {
 
 // Must match server limits (api/poa-review/process-excel.js and process-batch.js)
 const MAX_FILE_SIZE_MB = 50;
-const MAX_ROWS = 400000;
+const MAX_ROWS = 500000;
 
 // Max rows to scan when detecting sources from uploaded file (scan full allowed file so we find all unique sources)
 const SOURCE_DETECT_MAX_ROWS = 250000;
-// Max rows when running in browser (Pyodide); larger files use server
-const MAX_ROWS_BROWSER = 15000;
+// Browser (Pyodide) is much slower than server Python — cap to avoid multi-hour runs / tab hangs
+const MAX_ROWS_BROWSER = 50000;
+const BROWSER_ROWS_RECOMMENDED = 15000;
 
 function runPoaAnalysis(rows, sources, extraOptions = {}) {
     const analyze = typeof window !== 'undefined' && window.analyzePoaRows;
@@ -319,13 +320,18 @@ const POAReview = () => {
             if (browserRun && rowCount > MAX_ROWS_BROWSER) {
                 result.errors = [
                     ...(result.errors || []),
-                    `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer (this file has ${rowCount.toLocaleString()}). Uncheck "Run in my browser" to process on the server.`,
+                    `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer (this file has ${rowCount.toLocaleString()}). Uncheck "Run in my browser" — the server supports up to ${MAX_ROWS.toLocaleString()} rows and is much faster.`,
                 ];
                 result.ok = false;
-            } else if (rowCount > MAX_ROWS_BROWSER) {
+            } else if (browserRun && rowCount > BROWSER_ROWS_RECOMMENDED) {
                 result.warnings = [
                     ...(result.warnings || []),
-                    `Large file (${rowCount.toLocaleString()} rows). Browser processing is limited to ${MAX_ROWS_BROWSER.toLocaleString()} rows — leave "Run in my browser" unchecked for server processing.`,
+                    `Large file for browser processing (${rowCount.toLocaleString()} rows). Pyodide may take 10+ minutes — uncheck "Run in my browser" for faster server processing (up to ${MAX_ROWS.toLocaleString()} rows).`,
+                ];
+            } else if (!browserRun && rowCount > BROWSER_ROWS_RECOMMENDED) {
+                result.warnings = [
+                    ...(result.warnings || []),
+                    `Large file (${rowCount.toLocaleString()} rows). Server processing supports up to ${MAX_ROWS.toLocaleString()} rows; keep this tab open until complete.`,
                 ];
             }
             setPreflight(result);
@@ -632,9 +638,9 @@ const POAReview = () => {
     }, [sources, runLocally, applyPreflightForSources, preflightLoading]);
 
     // Server limit (must match api/poa-review/process-batch.js MAX_TOTAL_ROWS)
-    const MAX_POA_ROWS = 250000;
+    const MAX_POA_ROWS = 500000;
 
-    // Process file in chunks using batch API
+    // Process file in chunks using batch API (CSV uploads only — Excel uses process-excel)
     const handleChunkedUpload = useCallback(async (rows, fileName) => {
         const totalRows = rows.length;
         if (totalRows > MAX_POA_ROWS) {
@@ -644,12 +650,14 @@ const POAReview = () => {
             setProcessingProgressPercent(0);
             return;
         }
-        // Use larger batch size for large files to reduce round-trips (server allows up to 25k/ batch)
-        let BATCH_SIZE = 500; // Default batch size
-        if (totalRows > 50000) {
-            BATCH_SIZE = 3500; // Fewer requests for very large files, still safe for server
+        // Larger batches = fewer round-trips (server allows up to 25k per batch)
+        let BATCH_SIZE = 2000;
+        if (totalRows > 200000) {
+            BATCH_SIZE = 25000;
+        } else if (totalRows > 50000) {
+            BATCH_SIZE = 15000;
         } else if (totalRows > 10000) {
-            BATCH_SIZE = 1000;
+            BATCH_SIZE = 5000;
         }
         const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
         const batchId = `poa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -912,7 +920,7 @@ const POAReview = () => {
                 if (rows.length === 0) throw new Error('No data rows found in file');
                 if (rows.length > MAX_ROWS_BROWSER) {
                     throw new Error(
-                        `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer. This file has ${rows.length.toLocaleString()} rows — uncheck "Run in my browser" to process on the server.`
+                        `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer. This file has ${rows.length.toLocaleString()} rows — uncheck "Run in my browser" for server processing (up to ${MAX_ROWS.toLocaleString()} rows, much faster).`
                     );
                 }
                 setProcessingProgress('Building data...');
@@ -1051,11 +1059,10 @@ self.onmessage = async (e) => {
 
             const fileName = uploadedFile.name.toLowerCase();
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-            const isLargeFile = uploadedFile.size > 10 * 1024 * 1024; // 10MB threshold
-            
-            // For large Excel files, use server-side processing (much faster)
-            if (isExcel && isLargeFile) {
-                console.log('POA Review - Large Excel file detected, using server-side processing...');
+
+            // Excel: always upload to server — native pandas is far faster than browser XLSX parse + JSON batches
+            if (isExcel) {
+                console.log('POA Review - Excel file, using server-side processing (native pandas)...');
                 setProcessingProgress('Uploading file to server for processing...');
 
                 let formData = new FormData();
@@ -1130,7 +1137,7 @@ self.onmessage = async (e) => {
                 return;
             }
             
-            // For smaller files or CSV, use client-side parsing
+            // CSV only: parse in browser then stream batches to server
             setProcessingProgress('Reading file...');
             const rows = parsedRowsRef.current?.length
                 ? parsedRowsRef.current
@@ -1397,7 +1404,7 @@ self.onmessage = async (e) => {
                     <span className="text-sm">Run in my browser</span>
                 </label>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    Process data on your device (no upload). Tab stays responsive; best for files under {MAX_ROWS_BROWSER.toLocaleString()} rows.
+                    Process on your device (no upload). Best for files under {BROWSER_ROWS_RECOMMENDED.toLocaleString()} rows; hard limit {MAX_ROWS_BROWSER.toLocaleString()}. For larger files, leave unchecked — server supports up to {MAX_ROWS.toLocaleString()} rows and is much faster.
                 </p>
             </div>
 
