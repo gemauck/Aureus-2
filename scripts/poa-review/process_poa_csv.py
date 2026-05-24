@@ -145,7 +145,7 @@ def run_pipeline(
     # Drop prior computed columns if re-processing an already-reviewed export
     for col in (
         'No POA Asset', 'Count of proof before transaction', 'Time since last activity',
-        'total smr', 'POA Strength', 'POA Shortfalls', 'label', 'is consec',
+        'total smr', 'POA Strength', 'POA Compliance Points', 'POA Shortfalls', 'label', 'is consec',
     ):
         if col in data.columns:
             data = data.drop(columns=[col])

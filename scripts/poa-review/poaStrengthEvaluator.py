@@ -22,6 +22,10 @@ STRENGTH_FILL = {
     STRENGTH_INSUFFICIENT: "F4CCCC",
 }
 
+POA_COMPLIANCE_POINTS_COL = "POA Compliance Points"
+COMPLIANCE_POINTS_FILL = "D9EAD3"
+SHORTFALLS_COLUMN_FILL = "F4CCCC"
+
 def _resolve_rules_path() -> str:
     """Resolve rules JSON path; Pyodide exec has no __file__."""
     try:
@@ -142,6 +146,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
             "score": 0,
             "strength": STRENGTH_INSUFFICIENT,
             "shortfalls": ["No proof-of-activity rows for this batch"],
+            "compliancePoints": [],
             "method": "rules",
         }
 
@@ -216,12 +221,14 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     }
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
+    compliance_points = build_compliance_points(batch, criteria, strength)
 
     return {
         "criteria": criteria,
         "score": score,
         "strength": strength,
         "shortfalls": shortfalls,
+        "compliancePoints": compliance_points,
         "method": "rules",
     }
 
@@ -240,6 +247,84 @@ def format_shortfalls(shortfalls: list[str]) -> str:
     if not shortfalls:
         return ""
     return "; ".join(shortfalls)
+
+
+def build_compliance_points(
+    batch: dict,
+    criteria: dict,
+    strength: str | None = None,
+    shift_applied: bool = False,
+) -> list[str]:
+    """Human-readable positives for criteria met and linked proof context."""
+    points: list[str] = []
+    proof_count = int(batch.get("proofCount") or 0)
+    if proof_count <= 0:
+        return points
+
+    points.append(f"{proof_count} linked POA record{'s' if proof_count != 1 else ''}")
+
+    if strength == STRENGTH_STRONG:
+        points.append("Strong overall compliance (4/4 criteria met)")
+    elif strength == STRENGTH_MODERATE:
+        points.append("Moderate compliance (3/4 criteria met)")
+
+    if criteria.get("activity"):
+        acts = batch.get("activities") or []
+        detail = acts[0] if acts else None
+        if detail:
+            points.append(f"Primary production activity identified ({detail})")
+        else:
+            points.append("Primary Schedule 6 production activity identified")
+
+    if criteria.get("location"):
+        locs = batch.get("locations") or []
+        detail = locs[0] if locs else None
+        if detail:
+            points.append(f"Mine/pit location documented ({detail})")
+        else:
+            points.append("Mine/pit location documented on proof")
+
+    if criteria.get("material"):
+        mats = batch.get("materials") or []
+        detail = mats[0] if mats else None
+        if detail:
+            points.append(f"Production material specified ({detail})")
+        else:
+            points.append("Production material specified on proof")
+
+    if criteria.get("intensity"):
+        intensity_vals = batch.get("intensityValues") or {}
+        if intensity_vals:
+            parts = [f"{col}: {float(val):g}" for col, val in list(intensity_vals.items())[:2]]
+            points.append(f"Usage intensity recorded ({', '.join(parts)})")
+        else:
+            points.append("Usage intensity evidenced (loads, SMR, hours, or haulage)")
+
+    if shift_applied:
+        points.append("Shift/day POA fallback applied (single activity on asset/day)")
+
+    return points
+
+
+def format_compliance_points(points: list[str] | None) -> str:
+    if not points:
+        return ""
+    return "; ".join(points)
+
+
+def compliance_points_from_result(eval_result: dict) -> str:
+    """Format compliance points from an evaluation result dict."""
+    if eval_result.get("compliancePoints"):
+        return format_compliance_points(list(eval_result["compliancePoints"]))
+    batch = eval_result.get("batch") or {}
+    return format_compliance_points(
+        build_compliance_points(
+            batch,
+            eval_result.get("criteria") or {},
+            eval_result.get("strength"),
+            bool(eval_result.get("shiftProofApplied")),
+        )
+    )
 
 
 DEFAULT_SHIFT_ADVISORY = (
@@ -368,6 +453,12 @@ def evaluate_all_labels(
                 shortfalls.append(advisory)
             eval_result["shortfalls"] = shortfalls
             eval_result["shiftProofApplied"] = True
+            eval_result["compliancePoints"] = build_compliance_points(
+                batch,
+                eval_result.get("criteria") or {},
+                eval_result.get("strength"),
+                shift_applied=True,
+            )
 
         eval_result["batch"] = batch
         results[label_str] = eval_result
@@ -395,11 +486,21 @@ def merge_llm_result(rules_result: dict, llm_result: dict | None) -> dict:
     if not shortfalls or not isinstance(shortfalls, list):
         shortfalls = rules_result.get("shortfalls", [])
 
+    compliance_points = llm_result.get("compliancePoints")
+    if not compliance_points or not isinstance(compliance_points, list):
+        compliance_points = build_compliance_points(
+            rules_result.get("batch") or {},
+            merged_criteria,
+            tier_from_score(score),
+            bool(rules_result.get("shiftProofApplied")),
+        )
+
     return {
         "criteria": merged_criteria,
         "score": score,
         "strength": tier_from_score(score),
         "shortfalls": shortfalls,
+        "compliancePoints": compliance_points,
         "method": "llm",
     }
 

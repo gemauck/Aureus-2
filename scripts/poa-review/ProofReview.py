@@ -29,8 +29,12 @@ from os import listdir
 from poaStrengthEvaluator import (
 	STRENGTH_FILL,
 	STRENGTH_INSUFFICIENT,
+	COMPLIANCE_POINTS_FILL,
+	SHORTFALLS_COLUMN_FILL,
+	POA_COMPLIANCE_POINTS_COL,
 	evaluate_all_labels,
 	format_shortfalls,
+	compliance_points_from_result,
 	summarize_strength_results,
 )
 
@@ -43,6 +47,7 @@ COMPUTED_COLS = [
 	"Time since last activity",
 	"total smr",
 	"POA Strength",
+	POA_COMPLIANCE_POINTS_COL,
 	"POA Shortfalls",
 ]
 
@@ -85,6 +90,14 @@ def _excel_cell_value(val):
 	return val
 
 
+def _cell_has_text(val):
+	v = _excel_cell_value(val)
+	if v is None:
+		return False
+	s = str(v).strip()
+	return bool(s) and s.lower() != "nan"
+
+
 def _write_only_excel(
 	review,
 	output_path,
@@ -95,6 +108,8 @@ def _write_only_excel(
 	yellow_col_index=15,
 	strength_col_index=-1,
 	strength_row_fills=None,
+	compliance_col_index=-1,
+	shortfalls_col_index=-1,
 ):
 	from openpyxl import Workbook
 	from openpyxl.cell import WriteOnlyCell
@@ -106,6 +121,8 @@ def _write_only_excel(
 		hex_color: PatternFill(patternType="solid", fgColor=Color(rgb=hex_color))
 		for hex_color in STRENGTH_FILL.values()
 	}
+	fill_compliance = PatternFill(patternType="solid", fgColor=Color(rgb=COMPLIANCE_POINTS_FILL))
+	fill_shortfalls = PatternFill(patternType="solid", fgColor=Color(rgb=SHORTFALLS_COLUMN_FILL))
 	font_9 = Font(size=9)
 	font_9_bold = Font(size=9, bold=True)
 	align_left = Alignment(horizontal="left")
@@ -134,9 +151,11 @@ def _write_only_excel(
 		is_yellow_smr = bool(yellow_arr[i])
 		hex_color = _scalar_hex_fill(strength_list[i]) if strength_list is not None else None
 		has_strength = strength_col_index >= 0 and hex_color in strength_fills
+		has_compliance_fill = compliance_col_index >= 0 and _cell_has_text(row_vals[compliance_col_index])
+		has_shortfalls_fill = shortfalls_col_index >= 0 and _cell_has_text(row_vals[shortfalls_col_index])
 
 		# Plain row when no conditional formatting applies (keeps large files fast)
-		if not (is_bold or is_green or is_yellow_smr or has_strength):
+		if not (is_bold or is_green or is_yellow_smr or has_strength or has_compliance_fill or has_shortfalls_fill):
 			ws.append([_excel_cell_value(row_vals[j]) for j in range(num_cols)])
 			continue
 
@@ -147,6 +166,8 @@ def _write_only_excel(
 				is_bold or is_green
 				or (j == yellow_col_index and is_yellow_smr)
 				or (j == strength_col_index and has_strength)
+				or (j == compliance_col_index and has_compliance_fill)
+				or (j == shortfalls_col_index and has_shortfalls_fill)
 			)
 			if not needs_cell_style:
 				row_cells.append(val)
@@ -160,6 +181,10 @@ def _write_only_excel(
 				c.fill = fill_yellow
 			if j == strength_col_index and has_strength:
 				c.fill = strength_fills[hex_color]
+			if j == compliance_col_index and has_compliance_fill:
+				c.fill = fill_compliance
+			if j == shortfalls_col_index and has_shortfalls_fill:
+				c.fill = fill_shortfalls
 			row_cells.append(c)
 		ws.append(row_cells)
 	wb.save(output_path)
@@ -170,7 +195,7 @@ review_cols = [
     "Storage Tank","Fuel Pump","Litres","Total Fuel Used (L)","Operation Description / Comment","Refund Eligibility","Opening SMR",
     "Closing SMR","Total SMR Usage","Material","Location.1","Loads / Tonnes","Activity","Comments","Source","Custom Attribute",
     "No POA Asset","Count of proof before transaction","Time since last activity","total smr",
-    "POA Strength","POA Shortfalls"
+    "POA Strength", POA_COMPLIANCE_POINTS_COL, "POA Shortfalls"
 ]
 
 class POAReview:
@@ -460,13 +485,16 @@ class POAReview:
 
 		strength_map = {label: res["strength"] for label, res in label_results.items()}
 		shortfall_map = {label: format_shortfalls(res.get("shortfalls") or []) for label, res in label_results.items()}
+		compliance_map = {label: compliance_points_from_result(res) for label, res in label_results.items()}
 
 		self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data[POA_COMPLIANCE_POINTS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 		self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 
 		labels_str = self.data["label"].astype(str)
 		txn_idx = self.data.index[self.transaction_mask]
 		self.data.loc[txn_idx, "POA Strength"] = labels_str.loc[txn_idx].map(strength_map)
+		self.data.loc[txn_idx, POA_COMPLIANCE_POINTS_COL] = labels_str.loc[txn_idx].map(compliance_map)
 		self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.loc[txn_idx].map(shortfall_map)
 
 		if "Count of proof before transaction" in self.data.columns:
@@ -478,6 +506,7 @@ class POAReview:
 			}
 			override_mask = zero_proof & labels_str.isin(no_shift_labels)
 			self.data.loc[override_mask, "POA Strength"] = STRENGTH_INSUFFICIENT
+			self.data.loc[override_mask, POA_COMPLIANCE_POINTS_COL] = None
 			self.data.loc[override_mask, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
 
 		self.strength_summary = summarize_strength_results(label_results)
@@ -531,6 +560,7 @@ def format_review(review, filename, output_path=None, original_columns=None):
 		"Time since last activity",
 		"total smr",
 		"POA Strength",
+		POA_COMPLIANCE_POINTS_COL,
 		"POA Shortfalls",
 	]
 	if original_columns is not None:
@@ -578,8 +608,24 @@ def format_review(review, filename, output_path=None, original_columns=None):
 	yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
 	yellow_col_1based = (yellow_col_index + 1) if yellow_col_index >= 0 else 16
 	strength_col_index = output_cols.index("POA Strength") if "POA Strength" in output_cols else -1
+	compliance_col_index = output_cols.index(POA_COMPLIANCE_POINTS_COL) if POA_COMPLIANCE_POINTS_COL in output_cols else -1
+	shortfalls_col_index = output_cols.index("POA Shortfalls") if "POA Shortfalls" in output_cols else -1
 	strength_row_fills = _strength_fill_series(review, output_cols)
 	strength_col_1based = (strength_col_index + 1) if strength_col_index >= 0 else -1
+	compliance_col_1based = (compliance_col_index + 1) if compliance_col_index >= 0 else -1
+	shortfalls_col_1based = (shortfalls_col_index + 1) if shortfalls_col_index >= 0 else -1
+	compliance_has_text = (
+		_series_column(review, POA_COMPLIANCE_POINTS_COL).astype(str).str.strip().ne("")
+		& _series_column(review, POA_COMPLIANCE_POINTS_COL).notna()
+		if compliance_col_index >= 0
+		else pd.Series([False] * len(review), index=review.index)
+	)
+	shortfalls_has_text = (
+		_series_column(review, "POA Shortfalls").astype(str).str.strip().ne("")
+		& _series_column(review, "POA Shortfalls").notna()
+		if shortfalls_col_index >= 0
+		else pd.Series([False] * len(review), index=review.index)
+	)
 
 	if n > LARGE_FILE_THRESHOLD:
 		# Streaming write: minimal memory so large files don't OOM the server
@@ -593,6 +639,8 @@ def format_review(review, filename, output_path=None, original_columns=None):
 			yellow_col_index,
 			strength_col_index,
 			strength_row_fills,
+			compliance_col_index,
+			shortfalls_col_index,
 		)
 	else:
 		# Standard path with Formatter (full sheet in memory)
@@ -634,6 +682,24 @@ def format_review(review, filename, output_path=None, original_columns=None):
 							num_columns=1,
 							color=hex_color,
 						)
+			if compliance_col_1based > 0:
+				for start, num_rows in contiguous_ranges(compliance_has_text):
+					format_review.fill_cells(
+						row_start=start,
+						num_rows=num_rows,
+						column_start=compliance_col_1based,
+						num_columns=1,
+						color=COMPLIANCE_POINTS_FILL,
+					)
+			if shortfalls_col_1based > 0:
+				for start, num_rows in contiguous_ranges(shortfalls_has_text):
+					format_review.fill_cells(
+						row_start=start,
+						num_rows=num_rows,
+						column_start=shortfalls_col_1based,
+						num_columns=1,
+						color=SHORTFALLS_COLUMN_FILL,
+					)
 
 # ============================================================================
 # MAIN EXECUTION SCRIPT

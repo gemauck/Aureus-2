@@ -9,6 +9,7 @@ from poaStrengthEvaluator import (
     evaluate_batch_rules,
     evaluate_all_labels,
     load_rules,
+    compliance_points_from_result,
     STRENGTH_INSUFFICIENT,
     STRENGTH_STRONG,
     STRENGTH_MODERATE,
@@ -36,6 +37,9 @@ def test_strong_batch_all_criteria():
     assert result["strength"] == STRENGTH_STRONG
     assert result["score"] == 4
     assert result["shortfalls"] == []
+    assert len(result["compliancePoints"]) >= 4
+    joined = " ".join(result["compliancePoints"])
+    assert "Primary production activity identified" in joined
 
 
 def test_insufficient_no_proof():
@@ -100,6 +104,8 @@ def test_evaluate_all_labels_dataframe():
     results = evaluate_all_labels(df, proof_mask, txn_mask)
     assert "A1-1" in results
     assert results["A1-1"]["strength"] == STRENGTH_STRONG
+    assert compliance_points_from_result(results["A1-1"])
+    assert results["A1-1"]["shortfalls"] == [] or isinstance(results["A1-1"]["shortfalls"], list)
 
 
 def test_primary_activities_dozer_grading_dewatering():
