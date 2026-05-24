@@ -4,6 +4,14 @@ const storage = window.storage;
 const DiscussionModal = window.DiscussionModal;
 const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
+/** Must match api/_lib/dispenseExceptionAuditAccess.js */
+const DISPENSE_EXCEPTION_AUDIT_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
+
+function dispenseExceptionAuditAllowedForUser(user) {
+    const email = (user?.email || '').trim().toLowerCase();
+    return email === DISPENSE_EXCEPTION_AUDIT_ALLOWED_EMAIL.toLowerCase();
+}
+
 /** On-demand dist scripts — keeps ~380KB of meeting notes + process hub out of the global lazy-loader batches. */
 const teamsDistScriptInflight = new Map();
 function teamsCompiledScriptUrl(componentBaseName) {
@@ -243,6 +251,11 @@ const Teams = () => {
         return normalizedPermissions.some((perm) => adminPermissionKeys.includes(perm));
     }, [currentUser]);
 
+    const canAccessDispenseExceptionAudit = useMemo(
+        () => dispenseExceptionAuditAllowedForUser(currentUser),
+        [currentUser]
+    );
+
     const isTeamAccessible = useCallback(
         (teamId) => {
             if (teamId === 'management') {
@@ -308,6 +321,22 @@ const Teams = () => {
     useEffect(() => {
         activeTabRef.current = activeTab;
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'dispense-exception-audit' || canAccessDispenseExceptionAudit) return;
+        setActiveTabState('overview');
+        if (selectedTeam && window.RouteState) {
+            const searchParams = new URLSearchParams();
+            searchParams.set('tab', 'overview');
+            window.RouteState.navigate({
+                page: 'teams',
+                segments: [String(selectedTeam.id)],
+                search: `?${searchParams.toString()}`,
+                preserveSearch: false,
+                preserveHash: false,
+            });
+        }
+    }, [activeTab, canAccessDispenseExceptionAudit, selectedTeam]);
     
     // Wrapper for setActiveTab that BLOCKS navigation until saves complete
     const setActiveTab = useCallback(async (newTab) => {
@@ -938,7 +967,7 @@ const Teams = () => {
                                     <span className="sm:hidden">POA</span>
                                 </button>
                             )}
-                            {selectedTeam?.id === 'data-analytics' && (
+                            {selectedTeam?.id === 'data-analytics' && canAccessDispenseExceptionAudit && (
                                 <button
                                     onClick={() => setActiveTab('dispense-exception-audit')}
                                     className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
@@ -1180,7 +1209,7 @@ const Teams = () => {
                             );
                         })()}
 
-                        {activeTab === 'dispense-exception-audit' && selectedTeam?.id === 'data-analytics' && (() => {
+                        {activeTab === 'dispense-exception-audit' && selectedTeam?.id === 'data-analytics' && canAccessDispenseExceptionAudit && (() => {
                             const ComponentToRender = window.DispenseExceptionAudit;
 
                             if (!ComponentToRender) {

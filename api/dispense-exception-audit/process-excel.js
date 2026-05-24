@@ -11,6 +11,7 @@ import { withHttp } from '../_lib/withHttp.js';
 import { withLogging } from '../_lib/logger.js';
 import { authRequired } from '../_lib/authRequired.js';
 import { badRequest, serverError, ok } from '../_lib/response.js';
+import { requireDispenseExceptionAuditAccess } from '../_lib/dispenseExceptionAuditAccess.js';
 import { createWriteStream } from 'fs';
 
 const execAsync = promisify(exec);
@@ -20,6 +21,10 @@ async function handler(req, res) {
     try {
         if (req.method !== 'POST') {
             return badRequest(res, 'Method not allowed');
+        }
+
+        if (!(await requireDispenseExceptionAuditAccess(req, res))) {
+            return;
         }
 
         const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
