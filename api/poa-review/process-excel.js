@@ -183,13 +183,15 @@ async function handler(req, res) {
         const throwIfPythonFailed = (run, stepLabel) => {
             const combined = [run.stdout, run.stderr].filter(Boolean).join('\n').trim();
             if (run.exitCode === 0) return combined;
+            const tail = combined.length > 4000 ? combined.slice(-4000) : combined;
             console.error(`POA Review Excel API - ${stepLabel} failed:`, {
                 exitCode: run.exitCode,
                 message: run.message,
-                output: combined.substring(0, 4000),
+                output: tail,
             });
-            const detail = combined || run.message || 'Unknown Python error';
-            throw new Error(`${stepLabel} failed (exit code ${run.exitCode}):\n${detail.substring(0, 2000)}`);
+            const detail = tail || run.message || 'Unknown Python error';
+            const snippet = detail.length > 3000 ? detail.slice(-3000) : detail;
+            throw new Error(`${stepLabel} failed (exit code ${run.exitCode}):\n${snippet}`);
         };
 
         // Step 1: Convert Excel to CSV (header row detection matches browser pre-flight)

@@ -247,11 +247,23 @@ DEFAULT_SHIFT_ADVISORY = (
 )
 
 
+def _collect_text_activities(df: pd.DataFrame, max_activities: int):
+    activities: set[str] = set()
+    for col in ("Activity", "Operation Description / Comment", "Comments"):
+        if col not in df.columns:
+            continue
+        for val in df[col].dropna().astype(str).str.strip():
+            if not val:
+                continue
+            activities.add(val)
+            if len(activities) > max_activities:
+                return None
+    return activities
+
+
 def _shift_day_fallback_proofs(
-    data: pd.DataFrame,
-    proof_mask: pd.Series,
-    transaction_mask: pd.Series,
-    label,
+    txn_rows: pd.DataFrame,
+    proofs_by_asset: dict[str, pd.DataFrame],
     rules: dict,
 ) -> tuple[pd.DataFrame, bool]:
     """When a batch has no linked proof, reuse same-asset shift/day proof if only one activity."""
@@ -259,11 +271,6 @@ def _shift_day_fallback_proofs(
     if cfg.get("enabled") is False:
         return pd.DataFrame(), False
 
-    direct = data.loc[proof_mask & (data["label"] == label)]
-    if len(direct) > 0:
-        return pd.DataFrame(), False
-
-    txn_rows = data.loc[transaction_mask & (data["label"].astype(str) == str(label))]
     if len(txn_rows) == 0:
         return pd.DataFrame(), False
 
@@ -276,8 +283,8 @@ def _shift_day_fallback_proofs(
     window_h = float(cfg.get("windowHours", 24))
     max_activities = int(cfg.get("maxDistinctActivitiesPerDay", 1))
 
-    asset_proofs = data.loc[proof_mask & (data["Asset Number"] == asset)].copy()
-    if len(asset_proofs) == 0:
+    asset_proofs = proofs_by_asset.get(str(asset))
+    if asset_proofs is None or len(asset_proofs) == 0:
         return pd.DataFrame(), False
 
     proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
@@ -290,13 +297,8 @@ def _shift_day_fallback_proofs(
     if len(in_window) == 0:
         return pd.DataFrame(), False
 
-    activities: set[str] = set()
-    for _, row in in_window.iterrows():
-        for col in ("Activity", "Operation Description / Comment", "Comments"):
-            val = _norm(row.get(col))
-            if val:
-                activities.add(val)
-    if len(activities) > max_activities:
+    activities = _collect_text_activities(in_window, max_activities)
+    if activities is None:
         return pd.DataFrame(), False
 
     return in_window, True
@@ -314,15 +316,34 @@ def evaluate_all_labels(
         return {}
 
     results: dict[str, dict] = {}
-    labels = data.loc[proof_mask | transaction_mask, "label"].dropna().unique()
+    relevant = data.loc[proof_mask | transaction_mask, "label"].dropna()
+    if relevant.empty:
+        return {}
+
+    labels = relevant.unique()
+    proof_groups = {
+        str(label): grp
+        for label, grp in data.loc[proof_mask].groupby("label", observed=True, sort=False)
+    }
+    txn_groups = {
+        str(label): grp
+        for label, grp in data.loc[transaction_mask].groupby("label", observed=True, sort=False)
+    }
+    proofs_by_asset = {
+        str(asset): grp
+        for asset, grp in data.loc[proof_mask].groupby("Asset Number", observed=True, sort=False)
+    }
 
     for label in labels:
         label_str = str(label)
-        proof_rows = data.loc[proof_mask & (data["label"] == label)]
+        proof_rows = proof_groups.get(label_str)
+        if proof_rows is None:
+            proof_rows = pd.DataFrame()
         shift_applied = False
         if len(proof_rows) == 0:
+            txn_rows = txn_groups.get(label_str, pd.DataFrame())
             proof_rows, shift_applied = _shift_day_fallback_proofs(
-                data, proof_mask, transaction_mask, label, rules
+                txn_rows, proofs_by_asset, rules
             )
 
         batch = aggregate_proof_batch(proof_rows)
@@ -332,10 +353,12 @@ def evaluate_all_labels(
             first = proof_rows.iloc[0]
             batch["assetNumber"] = str(first.get("Asset Number", ""))
             batch["assetDescription"] = str(first.get("Asset Description", ""))
-        elif len(txn_rows := data.loc[transaction_mask & (data["label"].astype(str) == label_str)]) > 0:
-            first_txn = txn_rows.iloc[0]
-            batch["assetNumber"] = str(first_txn.get("Asset Number", ""))
-            batch["assetDescription"] = str(first_txn.get("Asset Description", ""))
+        else:
+            txn_rows = txn_groups.get(label_str)
+            if txn_rows is not None and len(txn_rows) > 0:
+                first_txn = txn_rows.iloc[0]
+                batch["assetNumber"] = str(first_txn.get("Asset Number", ""))
+                batch["assetDescription"] = str(first_txn.get("Asset Description", ""))
 
         eval_result = evaluate_batch_rules(batch, rules)
         if shift_applied:

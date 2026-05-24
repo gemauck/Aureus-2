@@ -36,6 +36,8 @@ from poaStrengthEvaluator import (
 
 # Use streaming Excel write for large files to avoid OOM (openpyxl holds ~50x file size in RAM otherwise)
 LARGE_FILE_THRESHOLD = 50000
+# Full row styling (green/bold/yellow) is very slow in write_only mode at scale
+ROW_STYLING_THRESHOLD = 25000
 
 COMPUTED_COLS = [
 	"No POA Asset",
@@ -89,8 +91,35 @@ def _write_only_excel(
 	green_arr = green_rows.values
 	yellow_arr = yellow_col16.values
 	strength_arr = strength_row_fills.values if strength_row_fills is not None else None
+	style_rows = len(review) <= ROW_STYLING_THRESHOLD
 	for i in range(len(review)):
 		row_vals = data_arr[i]
+		if not style_rows:
+			# Fast path: plain values; only style POA Strength column when present
+			if strength_col_index >= 0 and strength_arr is not None:
+				row_cells = []
+				for j in range(num_cols):
+					val = row_vals[j]
+					if pd.isna(val):
+						val = None
+					if j == strength_col_index:
+						c = WriteOnlyCell(ws, value=val)
+						c.font = font_9
+						c.alignment = align_left
+						hex_color = strength_arr[i]
+						if hex_color and hex_color in strength_fills:
+							c.fill = strength_fills[hex_color]
+						row_cells.append(c)
+					else:
+						row_cells.append(None if val is None or (isinstance(val, float) and pd.isna(val)) else val)
+				ws.append(row_cells)
+			else:
+				row_list = []
+				for j in range(num_cols):
+					val = row_vals[j]
+					row_list.append(None if val is None or (isinstance(val, float) and pd.isna(val)) else val)
+				ws.append(row_list)
+			continue
 		row_cells = []
 		for j in range(num_cols):
 			val = row_vals[j]
@@ -411,21 +440,21 @@ class POAReview:
 		self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 		self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 
-		for label, strength in strength_map.items():
-			mask = self.transaction_mask & (self.data["label"].astype(str) == str(label))
-			self.data.loc[mask, "POA Strength"] = strength
-			self.data.loc[mask, "POA Shortfalls"] = shortfall_map.get(label, "")
+		labels_str = self.data["label"].astype(str)
+		txn_idx = self.data.index[self.transaction_mask]
+		self.data.loc[txn_idx, "POA Strength"] = labels_str.loc[txn_idx].map(strength_map)
+		self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.loc[txn_idx].map(shortfall_map)
 
 		if "Count of proof before transaction" in self.data.columns:
 			zero_proof = self.transaction_mask & (
 				pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0
 			)
-			for label, res in label_results.items():
-				if res.get("shiftProofApplied"):
-					continue
-				mask = self.transaction_mask & (self.data["label"].astype(str) == str(label))
-				self.data.loc[mask & zero_proof, "POA Strength"] = STRENGTH_INSUFFICIENT
-				self.data.loc[mask & zero_proof, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+			no_shift_labels = {
+				str(label) for label, res in label_results.items() if not res.get("shiftProofApplied")
+			}
+			override_mask = zero_proof & labels_str.isin(no_shift_labels)
+			self.data.loc[override_mask, "POA Strength"] = STRENGTH_INSUFFICIENT
+			self.data.loc[override_mask, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
 
 		self.strength_summary = summarize_strength_results(label_results)
 		return self.data
@@ -435,13 +464,17 @@ def _strength_fill_series(review, output_cols):
 	if "POA Strength" not in output_cols:
 		return None
 	strength_col = review["POA Strength"] if "POA Strength" in review.columns else pd.Series([None] * len(review))
-	fills = []
-	for val in strength_col:
-		if pd.isna(val) or val is None or str(val).strip() == "":
-			fills.append(None)
-		else:
-			fills.append(STRENGTH_FILL.get(str(val).strip(), STRENGTH_FILL[STRENGTH_INSUFFICIENT]))
-	return pd.Series(fills, index=review.index)
+	default = STRENGTH_FILL[STRENGTH_INSUFFICIENT]
+
+	def _tier_fill(val):
+		if pd.isna(val) or val is None:
+			return None
+		s = str(val).strip()
+		if not s or s.lower() == "nan":
+			return None
+		return STRENGTH_FILL.get(s, default)
+
+	return strength_col.map(_tier_fill)
 
 def format_review(review, filename, output_path=None, original_columns=None):
 	"""

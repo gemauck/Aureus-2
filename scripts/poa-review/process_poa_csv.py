@@ -25,6 +25,32 @@ def find_column(df, target_name):
     return None
 
 
+SKIP_CATEGORY_COLS = frozenset({
+    'Transaction ID', 'Asset Number', 'Date & Time', 'Source', 'Activity',
+    'Asset Description', 'Comments', 'Operation Description / Comment',
+})
+
+
+def drop_empty_rows(data: pd.DataFrame) -> pd.DataFrame:
+    """Match browser pre-flight: drop rows where every cell is blank."""
+    if data.empty:
+        return data
+
+    def row_has_value(row: pd.Series) -> bool:
+        for v in row:
+            if pd.isna(v):
+                continue
+            if str(v).strip():
+                return True
+        return False
+
+    keep = data.apply(row_has_value, axis=1)
+    dropped = int((~keep).sum())
+    if dropped:
+        print(f'Filtered {dropped} completely empty rows', flush=True)
+    return data.loc[keep].reset_index(drop=True)
+
+
 def prepare_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     required_columns = {
         'Transaction ID': ['transaction id', 'transactionid', 'txn id', 'txnid'],
@@ -73,13 +99,18 @@ def prepare_dataframe(data: pd.DataFrame) -> pd.DataFrame:
             except Exception:
                 pass
 
-    for col in data.columns:
-        if data[col].dtype == object or data[col].dtype.name == 'string':
-            try:
-                if data[col].nunique() < len(data) * 0.5:
-                    data[col] = data[col].astype('category')
-            except Exception:
-                pass
+    # Category conversion saves memory on large files but nunique() per column is costly.
+    use_categories = len(data) <= 25000
+    if use_categories:
+        for col in data.columns:
+            if col in SKIP_CATEGORY_COLS:
+                continue
+            if data[col].dtype == object or data[col].dtype.name == 'string':
+                try:
+                    if data[col].nunique() < len(data) * 0.5:
+                        data[col] = data[col].astype('category')
+                except Exception:
+                    pass
 
     for col in data.select_dtypes(include=['floating']).columns:
         try:
@@ -108,10 +139,15 @@ def run_pipeline(
             f'Maximum {max_rows} rows are supported. Please split your file.'
         )
 
+    data = drop_empty_rows(data)
+    print(f'After empty-row filter: {len(data)} rows', flush=True)
+
     data = prepare_dataframe(data)
     original_columns = list(data.columns)
+    print('Prepared dataframe', flush=True)
 
     review = POAReview(data)
+    print('POAReview initialized', flush=True)
     review.mark_consecutive_transactions()
     review.label_rows()
     review.mark_no_poa_assets()
@@ -119,10 +155,14 @@ def run_pipeline(
     review.time_since_last_activity()
     if 'label' not in review.data.columns:
         review.label_rows()
+    print('Core POA metrics computed', flush=True)
     review.total_smr(sources)
+    print('Total SMR computed', flush=True)
     review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
+    print('POA strength evaluated', flush=True)
 
     os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
+    print('Writing Excel output...', flush=True)
     format_review(
         review.data,
         os.path.basename(input_file),
