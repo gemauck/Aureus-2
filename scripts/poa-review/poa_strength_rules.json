@@ -42,8 +42,20 @@
         "in-pit transport", "site transport", "grading", "grading at pit", "dozer", "dozing",
         "ripping", "primary production", "production mining",
         "service and maintenance", "maintenance at pit", "workshop at pit",
-        "transport to siding", "railway siding"
+        "transport to siding", "railway siding",
+        "transporting materials", "transport materials", "transporting material",
+        "travel distance laden", "travel distance", "laden", "laden haul",
+        "moving material", "material transport", "dump truck"
       ],
+      "activityInference": {
+        "haulageWithPrimaryMaterialAndLocation": {
+          "description": "Haul/transport wording plus primary ROM/material and pit/field location counts as in-pit primary production",
+          "activityPatterns": [
+            "transport", "haul", "hauling", "laden", "travel distance", "dump truck",
+            "carting", "moving material", "transporting material", "loading", "loaded"
+          ]
+        }
+      },
       "secondaryActivities": [
         "crushing", "crusher", "screening", "sorting", "washing plant", "washing",
         "processing plant", "plant operation", "plant feed", "beneficiation", "chpp", "prep plant",

@@ -45,7 +45,24 @@ TEXT_FIELDS = [
     "Location.1",
     "Location",
     "Source",
+    "Asset Description",
+    "Custom Attribute",
 ]
+
+# Columns used to read activity holistically (not location/material alone for the activity criterion).
+HOLISTIC_ACTIVITY_COLUMNS = (
+    "Activity",
+    "Operation Description / Comment",
+    "Comments",
+    "Asset Description",
+    "Custom Attribute",
+)
+
+HOLISTIC_CONTEXT_COLUMNS = (
+    "Material",
+    "Location.1",
+    "Location",
+)
 
 
 def _norm(s: Any) -> str:
@@ -57,11 +74,136 @@ def _norm(s: Any) -> str:
 def _contains_any(text: str, terms: list[str]) -> str | None:
     if not text:
         return None
+    lowered = text.lower()
     for term in terms:
         t = term.lower().strip()
-        if t and t in text:
+        if not t:
+            continue
+        if re.search(r"[\s\-&/]", t):
+            if t in lowered:
+                return term
+        elif re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", lowered):
             return term
     return None
+
+
+def _build_holistic_activity_text(batch: dict) -> str:
+    """All descriptive proof fields — activity is judged in full row context."""
+    parts: list[str] = []
+    for key in ("activities", "comments", "materials", "locations", "sources"):
+        parts.extend(batch.get(key) or [])
+    return " | ".join(dict.fromkeys(p for p in parts if p))
+
+
+def _activity_label_text(batch: dict) -> str:
+    """Wording from activity / operation fields only (for secondary & excluded checks)."""
+    return " | ".join(batch.get("activities", []) + batch.get("comments", []))
+
+
+def _haulage_activity_patterns(sector_rules: dict) -> list[str]:
+    cfg = sector_rules.get("activityInference") or {}
+    haul = cfg.get("haulageWithPrimaryMaterialAndLocation") or {}
+    patterns = haul.get("activityPatterns")
+    if patterns:
+        return list(patterns)
+    return [
+        "transport", "haul", "hauling", "laden", "travel distance", "dump truck",
+        "carting", "moving material", "transporting material", "loading", "loaded",
+    ]
+
+
+def _infer_primary_haulage_activity(
+    batch: dict,
+    sector: str,
+    sector_rules: dict,
+    holistic_text: str,
+) -> str | None:
+    """
+    When Activity says e.g. 'Transporting Materials' but Material=Coal and Location=Pit,
+    treat as primary in-pit production (Schedule 6 mining haulage).
+    """
+    if sector != "mining":
+        return None
+
+    mat_text = " | ".join(batch.get("materials", []))
+    loc_text = " | ".join(batch.get("locations", []))
+    label_text = _activity_label_text(batch) or holistic_text
+
+    pri_mat = _contains_any(mat_text or holistic_text, sector_rules.get("primaryMaterials", []))
+    pri_loc = _contains_any(loc_text or holistic_text, sector_rules.get("primaryLocations", []))
+    if not pri_mat or not pri_loc:
+        return None
+
+    if not _contains_any(label_text, _haulage_activity_patterns(sector_rules)):
+        return None
+
+    return "in-pit transport / haul (inferred from material, location, and haul activity)"
+
+
+def evaluate_activity_criterion(
+    batch: dict,
+    sector: str,
+    sector_rules: dict,
+    sector_label: str,
+    holistic_text: str,
+) -> dict:
+    """Assess activity using full proof context, not the Activity column alone."""
+    activity_label = _activity_label_text(batch)
+    holistic = holistic_text or _build_holistic_activity_text(batch)
+
+    excluded = _contains_any(
+        activity_label or holistic,
+        sector_rules.get("excludedActivities", []),
+    )
+    # Secondary processing terms: check stated activity/comment first to avoid plant-only ops.
+    sec_act = _contains_any(activity_label, sector_rules.get("secondaryActivities", []))
+    pri_act = _contains_any(holistic, sector_rules.get("primaryActivities", []))
+    inference = None
+
+    if not pri_act and not excluded:
+        inference = _infer_primary_haulage_activity(batch, sector, sector_rules, holistic)
+        if inference:
+            pri_act = inference
+
+    if excluded and not pri_act:
+        return {
+            "ok": False,
+            "matchedTerm": None,
+            "inference": None,
+            "shortfall": f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})",
+        }
+    if sec_act and not pri_act:
+        return {
+            "ok": False,
+            "matchedTerm": sec_act,
+            "inference": None,
+            "shortfall": (
+                f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — "
+                "not own primary production per Schedule 6 Part 3"
+            ),
+        }
+    if pri_act:
+        display = (batch.get("activities") or [None])[0] or activity_label.split(" | ")[0] or pri_act
+        return {
+            "ok": True,
+            "matchedTerm": pri_act,
+            "inference": inference,
+            "display": str(display).strip(),
+            "shortfall": None,
+        }
+    if activity_label.strip() or holistic.strip():
+        return {
+            "ok": False,
+            "matchedTerm": None,
+            "inference": None,
+            "shortfall": f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified",
+        }
+    return {
+        "ok": False,
+        "matchedTerm": None,
+        "inference": None,
+        "shortfall": "No activity description in proof records",
+    }
 
 
 def _sector_from_site_overrides(text: str, rules: dict) -> str | None:
@@ -219,19 +361,21 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "comments": [],
             "intensityValues": {},
             "combinedText": "",
+            "holisticText": "",
         }
 
     activities, locations, materials, sources, comments = [], [], [], [], []
     intensity_values: dict[str, float] = {}
 
     for _, row in proof_df.iterrows():
-        for col in ("Activity", "Operation Description / Comment", "Comments"):
+        for col in HOLISTIC_ACTIVITY_COLUMNS:
             v = _norm(row.get(col))
-            if v:
-                if col == "Activity":
-                    activities.append(v)
-                else:
-                    comments.append(v)
+            if not v:
+                continue
+            if col == "Activity":
+                activities.append(v)
+            else:
+                comments.append(v)
         for col in ("Location.1", "Location"):
             v = _norm(row.get(col))
             if v:
@@ -255,6 +399,9 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
 
     combined_parts = activities + locations + materials + comments + sources
     combined_text = " | ".join(combined_parts)
+    holistic_text = " | ".join(
+        dict.fromkeys(activities + comments + materials + locations)
+    )
 
     return {
         "proofCount": len(proof_df),
@@ -265,6 +412,7 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         "comments": list(dict.fromkeys(comments)),
         "intensityValues": intensity_values,
         "combinedText": combined_text,
+        "holisticText": holistic_text,
     }
 
 
@@ -296,32 +444,15 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     location_label = sector_ctx.get("locationLabel") or sector_rules.get("locationLabel", "production site")
 
     text = batch.get("combinedText", "")
-    activity_text = " | ".join(batch.get("activities", []) + batch.get("comments", []))
+    holistic_text = batch.get("holisticText") or _build_holistic_activity_text(batch) or text
 
-    excluded = _contains_any(activity_text or text, sector_rules.get("excludedActivities", []))
-    sec_act = _contains_any(activity_text or text, sector_rules.get("secondaryActivities", []))
-    pri_act = _contains_any(activity_text or text, sector_rules.get("primaryActivities", []))
-
-    if excluded and not pri_act:
-        activity_ok = False
-        shortfalls.append(
-            f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})"
-        )
-    elif sec_act and not pri_act:
-        activity_ok = False
-        shortfalls.append(
-            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production per Schedule 6 Part 3"
-        )
-    elif pri_act:
-        activity_ok = True
-    elif activity_text or text.strip():
-        activity_ok = False
-        shortfalls.append(
-            f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified"
-        )
-    else:
-        activity_ok = False
-        shortfalls.append("No activity description in proof records")
+    activity_eval = evaluate_activity_criterion(
+        batch, sector, sector_rules, sector_label, holistic_text
+    )
+    activity_ok = bool(activity_eval.get("ok"))
+    pri_act = activity_eval.get("matchedTerm")
+    if activity_eval.get("shortfall"):
+        shortfalls.append(activity_eval["shortfall"])
 
     loc_text = " | ".join(batch.get("locations", []))
     sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []))
@@ -382,7 +513,12 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
     compliance_points = build_compliance_points(
-        batch, criteria, strength, sector_context=sector_ctx, matched_activity=pri_act
+        batch,
+        criteria,
+        strength,
+        sector_context=sector_ctx,
+        matched_activity=pri_act,
+        activity_eval=activity_eval,
     )
 
     return {
@@ -394,6 +530,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "method": "rules",
         "sector": sector,
         "sectorContext": sector_ctx,
+        "activityMatch": activity_eval,
     }
 
 
@@ -420,6 +557,7 @@ def build_compliance_points(
     shift_applied: bool = False,
     sector_context: dict | None = None,
     matched_activity: str | None = None,
+    activity_eval: dict | None = None,
 ) -> list[str]:
     """Human-readable positives for criteria met and linked proof context."""
     points: list[str] = []
@@ -446,10 +584,22 @@ def build_compliance_points(
 
     if criteria.get("activity"):
         acts = batch.get("activities") or []
-        detail = acts[0] if acts else matched_activity
+        activity_eval = activity_eval or {}
+        detail = activity_eval.get("display") or (acts[0] if acts else None) or matched_activity
         sector_name = (sector_label or "primary production").lower()
-        if detail:
+        matched_rule = activity_eval.get("matchedTerm") or matched_activity
+        if detail and matched_rule and str(matched_rule).startswith("in-pit transport"):
+            mats = batch.get("materials") or []
+            locs = batch.get("locations") or []
+            context = ", ".join(filter(None, [mats[0] if mats else None, locs[0] if locs else None]))
+            points.append(
+                f"Primary {sector_name} activity identified: {detail}"
+                + (f" (in-pit haul — {context})" if context else " (in-pit haul from material & location)")
+            )
+        elif detail:
             points.append(f"Primary {sector_name} activity identified ({detail})")
+        elif matched_rule:
+            points.append(f"Primary {sector_name} activity identified (matched: {matched_rule})")
         else:
             points.append(f"Primary Schedule 6 Part 3 {sector_name} activity identified")
 

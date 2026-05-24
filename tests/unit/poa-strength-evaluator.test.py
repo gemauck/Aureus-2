@@ -110,6 +110,35 @@ def test_evaluate_all_labels_dataframe():
     assert results["A1-1"]["shortfalls"] == [] or isinstance(results["A1-1"]["shortfalls"], list)
 
 
+def test_transporting_materials_coal_pit_holistic_primary():
+    """Activity column alone may say 'Transporting Materials'; coal + pit context is primary haul."""
+    rules = load_rules()
+    batch = {
+        "proofCount": 39,
+        "activities": ["transporting materials (dump truck)"],
+        "locations": ["pit 3 coal-crush and st", "pit 3 coal-pit1_rehab"],
+        "materials": ["coal"],
+        "comments": ["travel distance laden"],
+        "sources": ["ava belfast apr 2026"],
+        "intensityValues": {"Loads / Tonnes": 19.784},
+        "combinedText": (
+            "transporting materials (dump truck) | pit 3 coal-crush and st | coal | travel distance laden"
+        ),
+        "holisticText": (
+            "transporting materials (dump truck) | travel distance laden | coal | "
+            "pit 3 coal-crush and st | pit 3 coal-pit1_rehab"
+        ),
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is True
+    assert result["criteria"]["material"] is True
+    assert result["criteria"]["location"] is True
+    assert result["strength"] == STRENGTH_STRONG
+    joined = " ".join(result["compliancePoints"])
+    assert "Primary mining activity identified" in joined
+    assert "No primary Schedule" not in " ".join(result.get("shortfalls") or [])
+
+
 def test_primary_activities_dozer_grading_dewatering():
     rules = load_rules()
     for activity in ("Dozer 2 Seam MB", "Grading", "Dewatering", "Pumping water"):
