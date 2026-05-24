@@ -501,9 +501,10 @@ def format_review(review, filename, output_path=None, original_columns=None):
 	col_txn = review["Transaction ID"]
 	col_smr = review["Total SMR Usage"]
 	smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
-	# Fast path when column is already datetime64
-	if pd.api.types.is_datetime64_any_dtype(col_dt):
-		is_ts = col_dt.notna()
+	# Fast path: parse datetimes once instead of per-row isinstance (large files)
+	parsed_dt = pd.to_datetime(col_dt, errors="coerce")
+	if parsed_dt.notna().any():
+		is_ts = parsed_dt.notna()
 	else:
 		is_ts = pd.Series([isinstance(x, pd.Timestamp) for x in col_dt], index=review.index)
 	has_txn = col_txn.notna() & (col_txn.astype(str).str.strip() != "")
