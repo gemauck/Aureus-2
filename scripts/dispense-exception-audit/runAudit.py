@@ -14,6 +14,7 @@ import pandas as pd
 from openpyxl import load_workbook as load_openpyxl_workbook
 
 from auditDecisions import run_all_audits
+from detailsSheetAudit import apply_audit_columns_to_details_sheet
 from parseWorkbook import detect_workbook, load_workbook
 
 
@@ -49,6 +50,11 @@ def write_audit_excel(input_path: str, output_path: str, audit_result: dict) -> 
             summary_rows.append({'metric': f'findings_{check}', 'value': count})
         pd.DataFrame(summary_rows).to_excel(writer, sheet_name='Audit Summary', index=False)
 
+    apply_audit_columns_to_details_sheet(
+        output_path,
+        audit_result.get('review_transactions') or [],
+    )
+
 
 def merge_auditor_comments(
     output_path: str,
@@ -82,6 +88,14 @@ def merge_auditor_comments(
 
     with pd.ExcelWriter(output_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         pd.DataFrame(rows).to_excel(writer, sheet_name='Auditor Comments', index=False)
+
+    if review_transactions:
+        apply_audit_columns_to_details_sheet(
+            output_path,
+            review_transactions,
+            comments,
+            comments_only=False,
+        )
 
 
 def main() -> int:

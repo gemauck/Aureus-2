@@ -625,7 +625,8 @@ const DispenseExceptionAudit = () => {
                     {viewMode === 'transactions' ? (
                         <>
                             <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                                Comment on transactions flagged for review or with audit warnings. Comments are saved in your browser and can be merged into the Excel report.
+                                Comment on transactions flagged for review or with audit warnings. Comments are saved in your browser and written to
+                                {' '}<strong>Audit Severity</strong>, <strong>Audit Findings</strong>, and <strong>Auditor Comment</strong> columns on the Details as Assets sheet when you save to the report.
                             </p>
                             <div className="flex flex-wrap items-center gap-2">
                                 <select

@@ -27,15 +27,16 @@ const MAX_ROWS = 400000;
 // Max rows to scan when detecting sources from uploaded file (scan full allowed file so we find all unique sources)
 const SOURCE_DETECT_MAX_ROWS = 250000;
 // Max rows when running in browser (Pyodide); larger files use server
-const MAX_ROWS_BROWSER = 500000;
+const MAX_ROWS_BROWSER = 15000;
 
-function runPoaAnalysis(rows, sources) {
+function runPoaAnalysis(rows, sources, extraOptions = {}) {
     const analyze = typeof window !== 'undefined' && window.analyzePoaRows;
     if (!analyze || !rows?.length) return null;
     return analyze(rows, {
         sources: sources || [],
         analyzedRowCount: rows.length,
         fileRowHint: rows.length,
+        ...extraOptions,
     });
 }
 
@@ -311,11 +312,26 @@ const POAReview = () => {
     const [reportSummary, setReportSummary] = useState(null);
     const parsedRowsRef = useRef(null);
 
-    const applyPreflightForSources = useCallback((rows, selectedSources) => {
+    const applyPreflightForSources = useCallback((rows, selectedSources, browserRun = runLocally) => {
         const result = runPoaAnalysis(rows, selectedSources);
-        if (result) setPreflight(result);
+        if (result) {
+            const rowCount = rows.length;
+            if (browserRun && rowCount > MAX_ROWS_BROWSER) {
+                result.errors = [
+                    ...(result.errors || []),
+                    `For "Run in my browser", use ${MAX_ROWS_BROWSER.toLocaleString()} rows or fewer (this file has ${rowCount.toLocaleString()}). Uncheck "Run in my browser" to process on the server.`,
+                ];
+                result.ok = false;
+            } else if (rowCount > MAX_ROWS_BROWSER) {
+                result.warnings = [
+                    ...(result.warnings || []),
+                    `Large file (${rowCount.toLocaleString()} rows). Browser processing is limited to ${MAX_ROWS_BROWSER.toLocaleString()} rows — leave "Run in my browser" unchecked for server processing.`,
+                ];
+            }
+            setPreflight(result);
+        }
         return result;
-    }, []);
+    }, [runLocally]);
 
     const finalizeReportSummary = useCallback((selectedSources) => {
         const rows = parsedRowsRef.current;
@@ -581,7 +597,7 @@ const POAReview = () => {
                 parsedRowsRef.current = rows;
                 const unique = getUniqueSourceValuesFromRows(rows);
                 setDocumentSources(unique);
-                applyPreflightForSources(rows, []);
+                applyPreflightForSources(rows, [], runLocally);
             } catch (err) {
                 console.warn('POA Review - Pre-flight analysis failed:', err);
                 setDocumentSources([]);
@@ -612,8 +628,8 @@ const POAReview = () => {
     React.useEffect(() => {
         const rows = parsedRowsRef.current;
         if (!rows?.length || preflightLoading) return;
-        applyPreflightForSources(rows, sources);
-    }, [sources, applyPreflightForSources, preflightLoading]);
+        applyPreflightForSources(rows, sources, runLocally);
+    }, [sources, runLocally, applyPreflightForSources, preflightLoading]);
 
     // Server limit (must match api/poa-review/process-batch.js MAX_TOTAL_ROWS)
     const MAX_POA_ROWS = 250000;

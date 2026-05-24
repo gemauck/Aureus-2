@@ -319,6 +319,17 @@ export function analyzePoaRows(rows, options = {}) {
     const errors = [];
     const warnings = [];
 
+    const headerNorm = headers.map((h) => String(h || '').trim().toLowerCase());
+    const hasException120 = headerNorm.some((h) => h.includes('exception reason (120'));
+    const hasException60 = headerNorm.some((h) => h.includes('exception reason (60'));
+    const hasPoaActivity = headerNorm.some((h) => h === 'activity');
+    const hasPoaSource = headerNorm.some((h) => h === 'source');
+    if ((hasException120 || hasException60) && !hasPoaActivity && !hasPoaSource) {
+        errors.push(
+            'This workbook looks like an InsightWare Dispense Exception report (Exception Reason columns, no Activity/Source). Use Data Analytics → Dispense Exception Audit instead of POA Review.'
+        );
+    }
+
     if (!cols.transactionId) errors.push('Missing column: Transaction ID');
     if (!cols.assetNumber) errors.push('Missing column: Asset Number');
     if (!cols.dateTime) errors.push('Missing column: Date & Time');
