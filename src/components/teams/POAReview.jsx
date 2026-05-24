@@ -1133,8 +1133,10 @@ self.onmessage = async (e) => {
                         || errorData.message
                         || (typeof errorData.errorDetails === 'object' && errorData.errorDetails?.message)
                         || (typeof errorData.errorDetails === 'string' ? errorData.errorDetails : null)
-                        || (response.status === 502 || response.status === 504
-                            ? 'Server gateway timeout (502/504). Large Excel files can take several minutes — wait and retry, or split the file by month.'
+                        || (response.status === 502
+                            ? 'Server error (502): processing crashed or the app restarted (often out of memory on large Excel files). Wait 60 seconds, upload one file at a time, then retry — or split the workbook by month.'
+                            : response.status === 504
+                            ? 'Server gateway timeout (504). Large Excel files can take several minutes — keep this tab active and retry, or split the file by month.'
                             : 'Failed to process file');
                     console.error('POA Review process-excel API error:', errorData, 'status:', response?.status);
                     throw new Error(msg);

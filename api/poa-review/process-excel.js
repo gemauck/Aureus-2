@@ -8,7 +8,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { withHttp } from '../_lib/withHttp.js';
 import { withLogging } from '../_lib/logger.js';
@@ -197,23 +197,76 @@ async function handler(req, res) {
         await verifyPythonRuntime(pythonExec);
 
         const runPythonScript = async (scriptArgs, { timeout = 600000, label = 'Python' } = {}) => {
-            const quoted = scriptArgs.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
-            const cmd = `${pythonExec} ${quoted} 2>&1`;
-            try {
-                const result = await execAsync(cmd, {
+            const pythonBin = venvPython === 'python3' ? 'python3' : venvPython;
+            const maxLogChars = 120000;
+
+            return new Promise((resolve) => {
+                let stdout = '';
+                let stderr = '';
+                let killed = false;
+
+                const proc = spawn(pythonBin, scriptArgs, {
                     cwd: scriptsDir,
-                    maxBuffer: 20 * 1024 * 1024,
-                    timeout,
+                    env: { ...process.env, PYTHONUNBUFFERED: '1' },
                 });
-                return { stdout: result.stdout || '', stderr: result.stderr || '', exitCode: 0 };
-            } catch (execError) {
-                return {
-                    stdout: execError.stdout || '',
-                    stderr: execError.stderr || '',
-                    exitCode: execError.code || 1,
-                    message: execError.message || '',
+
+                const appendTail = (target, chunk) => {
+                    const next = target + chunk.toString();
+                    return next.length > maxLogChars ? next.slice(-maxLogChars) : next;
                 };
-            }
+
+                proc.stdout.on('data', (chunk) => {
+                    stdout = appendTail(stdout, chunk);
+                    const line = chunk.toString().trim();
+                    if (line) console.log(`POA Review Excel API - ${label}:`, line.slice(0, 200));
+                });
+                proc.stderr.on('data', (chunk) => {
+                    stderr = appendTail(stderr, chunk);
+                });
+
+                const timer = setTimeout(() => {
+                    killed = true;
+                    proc.kill('SIGKILL');
+                }, timeout);
+
+                proc.on('error', (err) => {
+                    clearTimeout(timer);
+                    resolve({
+                        stdout,
+                        stderr,
+                        exitCode: 1,
+                        message: err.message || String(err),
+                    });
+                });
+
+                proc.on('close', (code, signal) => {
+                    clearTimeout(timer);
+                    if (killed) {
+                        resolve({
+                            stdout,
+                            stderr,
+                            exitCode: 137,
+                            message: `${label} timed out after ${timeout}ms`,
+                        });
+                        return;
+                    }
+                    if (signal === 'SIGKILL' || code === 137) {
+                        resolve({
+                            stdout,
+                            stderr,
+                            exitCode: 137,
+                            message: `${label} was killed (often out of memory on the server)`,
+                        });
+                        return;
+                    }
+                    resolve({
+                        stdout,
+                        stderr,
+                        exitCode: code ?? 1,
+                        message: code === 0 ? '' : `${label} exited with code ${code}`,
+                    });
+                });
+            });
         };
 
         const throwIfPythonFailed = (run, stepLabel) => {
@@ -287,7 +340,7 @@ async function handler(req, res) {
         const isKilledOOM = msg.includes('exit code 137') || msg.includes('Killed');
         const isPythonEnv = msg.includes('Python environment is not ready') || msg.includes('ModuleNotFoundError') || msg.includes('setup-venv.sh');
         if (isKilledOOM) {
-            msg = 'This file is too large for the server to process (it ran out of memory). Please use a smaller file, or split your data into multiple files (e.g. by month), then run POA Review on each.';
+            msg = 'The server ran out of memory while processing this Excel file (the Node process was restarted). Try again in a minute with only one file at a time, split the workbook by month, or use a file under ~30,000 rows on this server.';
         }
         if (!res.headersSent && !res.writableEnded) {
             if (isFileTooLarge) {

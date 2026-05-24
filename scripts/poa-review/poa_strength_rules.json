@@ -206,6 +206,7 @@
     "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
   },
   "siteOverrides": {
+    "belfast": { "sector": "mining" },
     "bultfontein": { "sector": "mining" },
     "emalahleni": { "sector": "mining" },
     "ritluka": { "sector": "mining" },
