@@ -8,15 +8,6 @@ import os
 import re
 from typing import Any
 
-# Columns that may carry activity / operation wording (not location or material).
-ACTIVITY_EVIDENCE_COLUMNS = (
-    "Activity",
-    "Operation Description / Comment",
-    "Comments",
-    "Asset Description",
-    "Custom Attribute",
-)
-
 import pandas as pd
 
 STRENGTH_STRONG = "Strong"
@@ -63,97 +54,14 @@ def _norm(s: Any) -> str:
     return str(s).strip().lower()
 
 
-def _term_in_text(text: str, term: str) -> bool:
-    """Match multi-word phrases as substrings; single tokens use word boundaries."""
-    t = term.lower().strip()
-    if not t or not text:
-        return False
-    if re.search(r"[\s\-&/]", t):
-        return t in text
-    return re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", text) is not None
-
-
 def _contains_any(text: str, terms: list[str]) -> str | None:
     if not text:
         return None
     for term in terms:
         t = term.lower().strip()
-        if t and _term_in_text(text, t):
+        if t and t in text:
             return term
     return None
-
-
-def _activity_evidence_from_batch(batch: dict) -> str:
-    if batch.get("activityEvidenceText"):
-        return str(batch["activityEvidenceText"])
-    parts: list[str] = []
-    for key in ("activities", "activityDescriptions", "comments"):
-        parts.extend(batch.get(key) or [])
-    return " | ".join(parts)
-
-
-def _activity_display_from_batch(batch: dict, evidence: str) -> str:
-    if batch.get("activityDisplay"):
-        return str(batch["activityDisplay"]).strip()
-    acts = batch.get("activities") or []
-    if acts:
-        return str(acts[0]).strip()
-    descriptions = batch.get("activityDescriptions") or []
-    if descriptions:
-        return str(descriptions[0]).strip()
-    return evidence.split(" | ")[0].strip() if evidence else ""
-
-
-def evaluate_activity_criterion(batch: dict, sector_rules: dict) -> dict:
-    """Assess activity using operation fields only (not location/material in combined text)."""
-    evidence = _activity_evidence_from_batch(batch).lower()
-    display = _activity_display_from_batch(batch, evidence)
-
-    if not evidence.strip():
-        return {
-            "ok": False,
-            "reason": "missing",
-            "display": "",
-            "evidence": "",
-            "matchedTerm": None,
-        }
-
-    excluded = _contains_any(evidence, sector_rules.get("excludedActivities", []))
-    secondary = _contains_any(evidence, sector_rules.get("secondaryActivities", []))
-    primary = _contains_any(evidence, sector_rules.get("primaryActivities", []))
-
-    if excluded and not primary:
-        return {
-            "ok": False,
-            "reason": "excluded",
-            "display": display or evidence[:120],
-            "evidence": evidence,
-            "matchedTerm": excluded,
-        }
-    if secondary and not primary:
-        return {
-            "ok": False,
-            "reason": "secondary",
-            "display": display or evidence[:120],
-            "evidence": evidence,
-            "matchedTerm": secondary,
-        }
-    if primary:
-        return {
-            "ok": True,
-            "reason": "primary",
-            "display": display or evidence[:120],
-            "evidence": evidence,
-            "matchedTerm": primary,
-        }
-
-    return {
-        "ok": False,
-        "reason": "unrecognised",
-        "display": display or evidence[:120],
-        "evidence": evidence,
-        "matchedTerm": None,
-    }
 
 
 def _sector_from_site_overrides(text: str, rules: dict) -> str | None:
@@ -194,7 +102,14 @@ def detect_sector(batch: dict, rules: dict) -> dict:
     explicit = batch.get("sector")
     if explicit and str(explicit) in sectors:
         cfg = sectors[str(explicit)]
-        return _sector_context_from_cfg(str(explicit), cfg, confidence="explicit", advisory=None)
+        return {
+            "sector": str(explicit),
+            "confidence": "explicit",
+            "label": cfg.get("label", str(explicit).title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
 
     text = batch.get("combinedText", "")
     asset_desc = _norm(batch.get("assetDescription"))
@@ -204,7 +119,14 @@ def detect_sector(batch: dict, rules: dict) -> dict:
     override_sector = _sector_from_site_overrides(text, rules)
     if override_sector and override_sector in sectors:
         cfg = sectors[override_sector]
-        return _sector_context_from_cfg(override_sector, cfg, confidence="site", advisory=None)
+        return {
+            "sector": override_sector,
+            "confidence": "site",
+            "label": cfg.get("label", override_sector.title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
 
     scores = _score_sector_keywords(text, rules)
     for sector_key, sector_cfg in sectors.items():
@@ -225,68 +147,38 @@ def detect_sector(batch: dict, rules: dict) -> dict:
             sorted_scores = sorted(scores.values(), reverse=True)
             if sorted_scores[0] == sorted_scores[1]:
                 cfg = sectors.get(default_sector, {})
-                return _sector_context_from_cfg(
-                    default_sector,
-                    cfg,
-                    confidence="ambiguous",
-                    advisory=(
+                return {
+                    "sector": default_sector,
+                    "confidence": "ambiguous",
+                    "label": cfg.get("label", default_sector.title()),
+                    "schedule6Ref": cfg.get("schedule6Ref", ""),
+                    "locationLabel": cfg.get("locationLabel", "production site"),
+                    "advisory": (
                         f"Sector context unclear (mixed {', '.join(sorted(scores))} signals) "
                         f"— evaluated as {cfg.get('label', default_sector)}; confirm mining/forestry/farming"
                     ),
-                )
+                }
         cfg = sectors.get(best_sector, {})
-        return _sector_context_from_cfg(best_sector, cfg, confidence="detected", advisory=None)
+        return {
+            "sector": best_sector,
+            "confidence": "detected",
+            "label": cfg.get("label", best_sector.title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
 
     cfg = sectors.get(default_sector, {})
-    return _sector_context_from_cfg(
-        default_sector,
-        cfg,
-        confidence="default",
-        advisory=(
+    return {
+        "sector": default_sector,
+        "confidence": "default",
+        "label": cfg.get("label", default_sector.title()),
+        "schedule6Ref": cfg.get("schedule6Ref", ""),
+        "locationLabel": cfg.get("locationLabel", "production site"),
+        "advisory": (
             f"No sector context detected — evaluated as {cfg.get('label', default_sector)}; "
             "confirm mining/forestry/farming applicability"
         ),
-    )
-
-
-def format_schedule6_citation(schedule6: dict | None, *, short: bool = True) -> str:
-    """Format Item 670.04 / Note 6 / paragraph reference per Schedule 6 Part 3 structure."""
-    if not schedule6 or not isinstance(schedule6, dict):
-        return ""
-    item = str(schedule6.get("item") or "670.04").strip()
-    note = str(schedule6.get("note") or "6").strip()
-    para = str(schedule6.get("paragraph") or "").strip().lower()
-    heading = str(schedule6.get("heading") or "").strip()
-    if not para:
-        return ""
-    para_disp = f"({para})"
-    if short:
-        base = f"Sch. 6, Part 3, Item {item}, Note {note}, para {para_disp}"
-    else:
-        base = f"Schedule No. 6, Part 3, Item {item}, Note {note}, paragraph {para_disp}"
-    if heading:
-        return f"{base} — {heading}"
-    return base
-
-
-def sector_schedule6_citation(sector_cfg: dict, *, short: bool = True) -> str:
-    schedule6 = sector_cfg.get("schedule6")
-    if isinstance(schedule6, dict):
-        return format_schedule6_citation(schedule6, short=short)
-    legacy = sector_cfg.get("schedule6Ref")
-    return str(legacy).strip() if legacy else ""
-
-
-def _sector_context_from_cfg(sector: str, cfg: dict, **extra) -> dict:
-    schedule6 = cfg.get("schedule6") if isinstance(cfg.get("schedule6"), dict) else None
-    return {
-        "sector": sector,
-        "label": cfg.get("label", sector.title()),
-        "schedule6": schedule6,
-        "schedule6Citation": sector_schedule6_citation(cfg, short=True),
-        "schedule6CitationLong": sector_schedule6_citation(cfg, short=False),
-        "locationLabel": cfg.get("locationLabel", "production site"),
-        **extra,
     }
 
 
@@ -315,25 +207,12 @@ def load_rules(rules_path: str | None = None) -> dict:
         return json.load(f)
 
 
-def _unique_nonempty_strings(series: pd.Series) -> list[str]:
-    if series is None or series.empty:
-        return []
-    vals = series.dropna().astype(str).str.strip()
-    vals = vals[vals != ""]
-    if vals.empty:
-        return []
-    return list(dict.fromkeys(vals.tolist()))
-
-
 def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
     """Combine proof rows for one label into a single evaluation payload."""
     if proof_df is None or len(proof_df) == 0:
         return {
             "proofCount": 0,
             "activities": [],
-            "activityDescriptions": [],
-            "activityEvidenceText": "",
-            "activityDisplay": "",
             "locations": [],
             "materials": [],
             "sources": [],
@@ -342,33 +221,27 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "combinedText": "",
         }
 
-    activities: list[str] = []
-    activity_descriptions: list[str] = []
-    locations: list[str] = []
-    materials: list[str] = []
-    sources: list[str] = []
-    comments: list[str] = []
+    activities, locations, materials, sources, comments = [], [], [], [], []
     intensity_values: dict[str, float] = {}
 
-    for col in ACTIVITY_EVIDENCE_COLUMNS:
-        if col not in proof_df.columns:
-            continue
-        vals = _unique_nonempty_strings(proof_df[col])
-        if not vals:
-            continue
-        activity_descriptions.extend(vals)
-        if col == "Activity":
-            activities.extend(vals)
-        elif col in ("Operation Description / Comment", "Comments"):
-            comments.extend(vals)
-
-    for col in ("Location.1", "Location"):
-        if col in proof_df.columns:
-            locations.extend(_unique_nonempty_strings(proof_df[col]))
-    if "Material" in proof_df.columns:
-        materials.extend(_unique_nonempty_strings(proof_df["Material"]))
-    if "Source" in proof_df.columns:
-        sources.extend(_unique_nonempty_strings(proof_df["Source"]))
+    for _, row in proof_df.iterrows():
+        for col in ("Activity", "Operation Description / Comment", "Comments"):
+            v = _norm(row.get(col))
+            if v:
+                if col == "Activity":
+                    activities.append(v)
+                else:
+                    comments.append(v)
+        for col in ("Location.1", "Location"):
+            v = _norm(row.get(col))
+            if v:
+                locations.append(v)
+        m = _norm(row.get("Material"))
+        if m:
+            materials.append(m)
+        s = _norm(row.get("Source"))
+        if s:
+            sources.append(s)
 
     for col in proof_df.columns:
         if col in ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr", "Opening SMR", "Closing SMR"):
@@ -380,17 +253,12 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             except Exception:
                 pass
 
-    combined_parts = activities + activity_descriptions + locations + materials + comments + sources
+    combined_parts = activities + locations + materials + comments + sources
     combined_text = " | ".join(combined_parts)
-    activity_evidence_text = " | ".join(dict.fromkeys(activity_descriptions))
-    activity_display = activities[0] if activities else (activity_descriptions[0] if activity_descriptions else "")
 
     return {
         "proofCount": len(proof_df),
         "activities": list(dict.fromkeys(activities)),
-        "activityDescriptions": list(dict.fromkeys(activity_descriptions)),
-        "activityEvidenceText": activity_evidence_text,
-        "activityDisplay": activity_display,
         "locations": list(dict.fromkeys(locations)),
         "materials": list(dict.fromkeys(materials)),
         "sources": list(dict.fromkeys(sources)),
@@ -428,26 +296,32 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     location_label = sector_ctx.get("locationLabel") or sector_rules.get("locationLabel", "production site")
 
     text = batch.get("combinedText", "")
-    activity_match = evaluate_activity_criterion(batch, sector_rules)
-    activity_ok = bool(activity_match.get("ok"))
-    cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
+    activity_text = " | ".join(batch.get("activities", []) + batch.get("comments", []))
 
-    if activity_match.get("reason") == "excluded":
+    excluded = _contains_any(activity_text or text, sector_rules.get("excludedActivities", []))
+    sec_act = _contains_any(activity_text or text, sector_rules.get("secondaryActivities", []))
+    pri_act = _contains_any(activity_text or text, sector_rules.get("primaryActivities", []))
+
+    if excluded and not pri_act:
+        activity_ok = False
         shortfalls.append(
-            f"Non-eligible {sector_label.lower()} activity under {cite} ({activity_match.get('matchedTerm')})"
+            f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})"
         )
-    elif activity_match.get("reason") == "secondary":
+    elif sec_act and not pri_act:
+        activity_ok = False
         shortfalls.append(
-            f"Secondary/non-primary {sector_label.lower()} activity ({activity_match.get('matchedTerm')}) "
-            f"— not own primary production under {cite}"
+            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production per Schedule 6 Part 3"
         )
-    elif activity_match.get("reason") == "unrecognised":
-        detail = activity_match.get("display") or "see POA activity/operation fields"
+    elif pri_act:
+        activity_ok = True
+    elif activity_text or text.strip():
+        activity_ok = False
         shortfalls.append(
-            f"No eligible primary {sector_label.lower()} production activity under {cite} (recorded: {detail})"
+            f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified"
         )
-    elif activity_match.get("reason") == "missing":
-        shortfalls.append("No activity or operation description on proof records")
+    else:
+        activity_ok = False
+        shortfalls.append("No activity description in proof records")
 
     loc_text = " | ".join(batch.get("locations", []))
     sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []))
@@ -508,7 +382,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
     compliance_points = build_compliance_points(
-        batch, criteria, strength, sector_context=sector_ctx, activity_match=activity_match
+        batch, criteria, strength, sector_context=sector_ctx, matched_activity=pri_act
     )
 
     return {
@@ -520,7 +394,6 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "method": "rules",
         "sector": sector,
         "sectorContext": sector_ctx,
-        "activityMatch": activity_match,
     }
 
 
@@ -546,7 +419,7 @@ def build_compliance_points(
     strength: str | None = None,
     shift_applied: bool = False,
     sector_context: dict | None = None,
-    activity_match: dict | None = None,
+    matched_activity: str | None = None,
 ) -> list[str]:
     """Human-readable positives for criteria met and linked proof context."""
     points: list[str] = []
@@ -558,46 +431,27 @@ def build_compliance_points(
 
     sector_ctx = sector_context or {}
     sector_label = sector_ctx.get("label")
-    schedule_ref = (
-        sector_ctx.get("schedule6Citation")
-        or sector_ctx.get("schedule6CitationLong")
-        or sector_ctx.get("schedule6Ref")
-    )
+    schedule_ref = sector_ctx.get("schedule6Ref")
     location_label = sector_ctx.get("locationLabel") or "production site"
-    if sector_label and schedule_ref:
-        points.append(f"Sector: {sector_label} — {schedule_ref}")
-    elif sector_label:
-        points.append(f"Sector: {sector_label}")
+    if sector_label:
+        if schedule_ref:
+            points.append(f"Sector context: {sector_label} ({schedule_ref})")
+        else:
+            points.append(f"Sector context: {sector_label}")
 
     if strength == STRENGTH_STRONG:
         points.append("Strong overall compliance (4/4 criteria met)")
     elif strength == STRENGTH_MODERATE:
         points.append("Moderate compliance (3/4 criteria met)")
 
-    am = activity_match or {}
-    cite = sector_ctx.get("schedule6Citation") or "Item 670.04, Note 6"
-    if am.get("ok"):
-        detail = am.get("display") or am.get("matchedTerm") or "primary production"
-        term = am.get("matchedTerm")
-        if term and term.lower() not in str(detail).lower():
-            points.append(
-                f"Eligible primary production activity identified: {detail} (matched Schedule 6 term: {term})"
-            )
+    if criteria.get("activity"):
+        acts = batch.get("activities") or []
+        detail = acts[0] if acts else matched_activity
+        sector_name = (sector_label or "primary production").lower()
+        if detail:
+            points.append(f"Primary {sector_name} activity identified ({detail})")
         else:
-            points.append(f"Eligible primary production activity identified: {detail}")
-    elif am.get("reason") == "secondary":
-        detail = am.get("display") or am.get("evidence") or "on proof"
-        points.append(
-            f"Activity on proof is secondary/non-primary ({am.get('matchedTerm')}): {detail}"
-        )
-    elif am.get("reason") == "unrecognised":
-        detail = am.get("display") or am.get("evidence") or "see POA fields"
-        points.append(f"Activity on proof not recognised as eligible primary production: {detail}")
-    elif am.get("reason") == "excluded":
-        detail = am.get("display") or am.get("evidence") or "on proof"
-        points.append(f"Activity on proof is excluded for diesel refund: {detail}")
-    else:
-        points.append("No activity or operation description on linked POA records")
+            points.append(f"Primary Schedule 6 Part 3 {sector_name} activity identified")
 
     if criteria.get("location"):
         locs = batch.get("locations") or []
@@ -647,8 +501,6 @@ def compliance_points_from_result(eval_result: dict) -> str:
             eval_result.get("criteria") or {},
             eval_result.get("strength"),
             bool(eval_result.get("shiftProofApplied")),
-            sector_context=eval_result.get("sectorContext"),
-            activity_match=eval_result.get("activityMatch"),
         )
     )
 
@@ -660,35 +512,21 @@ DEFAULT_SHIFT_ADVISORY = (
 
 def _collect_text_activities(df: pd.DataFrame, max_activities: int):
     activities: set[str] = set()
-    for col in ACTIVITY_EVIDENCE_COLUMNS:
+    for col in ("Activity", "Operation Description / Comment", "Comments"):
         if col not in df.columns:
             continue
         for val in df[col].dropna().astype(str).str.strip():
             if not val:
                 continue
-            activities.add(val.lower())
+            activities.add(val)
             if len(activities) > max_activities:
                 return None
     return activities
 
 
-def _build_asset_proof_index(
-    proof_df: pd.DataFrame,
-) -> dict[str, tuple[pd.DataFrame, pd.Series]]:
-    """Pre-parse proof datetimes once per asset (avoids repeated to_datetime on large files)."""
-    if proof_df is None or len(proof_df) == 0:
-        return {}
-    index: dict[str, tuple[pd.DataFrame, pd.Series]] = {}
-    for asset, grp in proof_df.groupby("Asset Number", observed=True, sort=False):
-        if pd.isna(asset):
-            continue
-        index[str(asset)] = (grp, pd.to_datetime(grp["Date & Time"], errors="coerce"))
-    return index
-
-
 def _shift_day_fallback_proofs(
     txn_rows: pd.DataFrame,
-    proofs_by_asset: dict[str, pd.DataFrame] | dict[str, tuple[pd.DataFrame, pd.Series]],
+    proofs_by_asset: dict[str, pd.DataFrame],
     rules: dict,
 ) -> tuple[pd.DataFrame, bool]:
     """When a batch has no linked proof, reuse same-asset shift/day proof if only one activity."""
@@ -708,21 +546,11 @@ def _shift_day_fallback_proofs(
     window_h = float(cfg.get("windowHours", 24))
     max_activities = int(cfg.get("maxDistinctActivitiesPerDay", 1))
 
-    asset_key = str(asset)
-    cached = proofs_by_asset.get(asset_key)
-    if cached is None:
-        return pd.DataFrame(), False
-    if isinstance(cached, tuple):
-        asset_proofs, proof_dt = cached
-    else:
-        asset_proofs = cached
-        if len(asset_proofs) == 0:
-            return pd.DataFrame(), False
-        proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
-
-    if len(asset_proofs) == 0:
+    asset_proofs = proofs_by_asset.get(str(asset))
+    if asset_proofs is None or len(asset_proofs) == 0:
         return pd.DataFrame(), False
 
+    proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
     txn_day = txn_dt.normalize()
     window_start = txn_dt - pd.Timedelta(hours=window_h)
     in_window = asset_proofs[
@@ -744,8 +572,6 @@ def evaluate_all_labels(
     proof_mask: pd.Series,
     transaction_mask: pd.Series,
     rules: dict | None = None,
-    *,
-    keep_batches: bool = True,
 ) -> dict[str, dict]:
     """Evaluate every label that appears on transaction or proof rows."""
     rules = rules or load_rules()
@@ -758,26 +584,27 @@ def evaluate_all_labels(
         return {}
 
     labels = relevant.unique()
-    proof_df = data.loc[proof_mask]
-    txn_df = data.loc[transaction_mask]
-    proof_by_label = proof_df.groupby("label", observed=True, sort=False) if len(proof_df) else None
-    txn_by_label = txn_df.groupby("label", observed=True, sort=False) if len(txn_df) else None
-    proofs_by_asset = _build_asset_proof_index(proof_df)
-
-    def _group_rows(grouper, label_key) -> pd.DataFrame:
-        if grouper is None:
-            return pd.DataFrame()
-        try:
-            return grouper.get_group(label_key)
-        except KeyError:
-            return pd.DataFrame()
+    proof_groups = {
+        str(label): grp
+        for label, grp in data.loc[proof_mask].groupby("label", observed=True, sort=False)
+    }
+    txn_groups = {
+        str(label): grp
+        for label, grp in data.loc[transaction_mask].groupby("label", observed=True, sort=False)
+    }
+    proofs_by_asset = {
+        str(asset): grp
+        for asset, grp in data.loc[proof_mask].groupby("Asset Number", observed=True, sort=False)
+    }
 
     for label in labels:
         label_str = str(label)
-        proof_rows = _group_rows(proof_by_label, label)
+        proof_rows = proof_groups.get(label_str)
+        if proof_rows is None:
+            proof_rows = pd.DataFrame()
         shift_applied = False
         if len(proof_rows) == 0:
-            txn_rows = _group_rows(txn_by_label, label)
+            txn_rows = txn_groups.get(label_str, pd.DataFrame())
             proof_rows, shift_applied = _shift_day_fallback_proofs(
                 txn_rows, proofs_by_asset, rules
             )
@@ -790,8 +617,8 @@ def evaluate_all_labels(
             batch["assetNumber"] = str(first.get("Asset Number", ""))
             batch["assetDescription"] = str(first.get("Asset Description", ""))
         else:
-            txn_rows = _group_rows(txn_by_label, label)
-            if len(txn_rows) > 0:
+            txn_rows = txn_groups.get(label_str)
+            if txn_rows is not None and len(txn_rows) > 0:
                 first_txn = txn_rows.iloc[0]
                 batch["assetNumber"] = str(first_txn.get("Asset Number", ""))
                 batch["assetDescription"] = str(first_txn.get("Asset Description", ""))
@@ -810,11 +637,9 @@ def evaluate_all_labels(
                 eval_result.get("strength"),
                 shift_applied=True,
                 sector_context=eval_result.get("sectorContext"),
-                activity_match=eval_result.get("activityMatch"),
             )
 
-        if keep_batches:
-            eval_result["batch"] = batch
+        eval_result["batch"] = batch
         results[label_str] = eval_result
 
     return results
@@ -848,7 +673,6 @@ def merge_llm_result(rules_result: dict, llm_result: dict | None) -> dict:
             tier_from_score(score),
             bool(rules_result.get("shiftProofApplied")),
             sector_context=rules_result.get("sectorContext"),
-            activity_match=rules_result.get("activityMatch"),
         )
 
     return {

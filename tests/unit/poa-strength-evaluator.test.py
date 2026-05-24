@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"
 from poaStrengthEvaluator import (
     aggregate_proof_batch,
     detect_sector,
-    format_schedule6_citation,
     evaluate_batch_rules,
     evaluate_all_labels,
     load_rules,
@@ -31,8 +30,6 @@ def test_strong_batch_all_criteria():
         "sources": ["fms"],
         "intensityValues": {"Loads / Tonnes": 12.0},
         "combinedText": "load and haul in north pit | north pit | coal rom",
-        "activityEvidenceText": "load and haul in north pit",
-        "activityDisplay": "load and haul in north pit",
         "activityText": "load and haul in north pit",
         "locText": "north pit",
         "matText": "coal rom",
@@ -43,7 +40,7 @@ def test_strong_batch_all_criteria():
     assert result["shortfalls"] == []
     assert len(result["compliancePoints"]) >= 4
     joined = " ".join(result["compliancePoints"])
-    assert "Eligible primary production activity identified" in joined
+    assert "Primary mining activity identified" in joined
     assert result["sector"] == "mining"
 
 
@@ -166,58 +163,6 @@ def test_farming_harvest_strong():
     assert result["strength"] == STRENGTH_STRONG
 
 
-def test_operation_description_counts_as_activity():
-    rules = load_rules()
-    rows = [
-        {
-            "Transaction ID": "",
-            "Asset Number": "EX-1",
-            "Date & Time": "2026-04-01 08:00:00",
-            "Activity": "",
-            "Operation Description / Comment": "Dozer 2 Seam overburden",
-            "Location.1": "north pit",
-            "Material": "overburden",
-            "Total SMR Usage": 3,
-        },
-    ]
-    batch = aggregate_proof_batch(pd.DataFrame(rows))
-    result = evaluate_batch_rules(batch, rules)
-    assert result["criteria"]["activity"] is True
-    joined = " ".join(result["compliancePoints"])
-    assert "Eligible primary production activity identified" in joined
-    assert "Dozer" in joined or "dozer" in joined.lower()
-
-
-def test_compliance_always_reports_activity_assessment():
-    rules = load_rules()
-    batch = {
-        "proofCount": 1,
-        "activities": [],
-        "activityDescriptions": [],
-        "activityEvidenceText": "",
-        "locations": ["all pits"],
-        "materials": [],
-        "comments": [],
-        "intensityValues": {"Opening SMR": 1.0, "Closing SMR": 2.0},
-        "combinedText": "all pits",
-    }
-    result = evaluate_batch_rules(batch, rules)
-    joined = " ".join(result["compliancePoints"])
-    assert "activity" in joined.lower()
-    assert result["criteria"]["activity"] is False
-
-
-def test_schedule6_citation_format():
-    cite = format_schedule6_citation(
-        {"item": "670.04", "note": "6", "paragraph": "f", "heading": "Mining on land"}
-    )
-    assert "Item 670.04" in cite
-    assert "Note 6" in cite
-    assert "para (f)" in cite
-    assert "Mining on land" in cite
-    assert "Note 6(f)" not in cite.replace("para (f)", "")
-
-
 def test_detect_sector_forestry_over_mining_default():
     rules = load_rules()
     batch = {
@@ -232,8 +177,6 @@ def test_detect_sector_forestry_over_mining_default():
     }
     ctx = detect_sector(batch, rules)
     assert ctx["sector"] == "forestry"
-    assert "Item 670.04" in ctx["schedule6Citation"]
-    assert "para (g)" in ctx["schedule6Citation"]
 
 
 def test_shift_day_fallback_second_dispense():
@@ -283,9 +226,6 @@ if __name__ == "__main__":
     test_primary_activities_dozer_grading_dewatering()
     test_forestry_harvesting_strong()
     test_farming_harvest_strong()
-    test_operation_description_counts_as_activity()
-    test_compliance_always_reports_activity_assessment()
-    test_schedule6_citation_format()
     test_detect_sector_forestry_over_mining_default()
     test_shift_day_fallback_second_dispense()
     print("All POA strength evaluator tests passed.")

@@ -307,7 +307,7 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
-    const [useAIStrength, setUseAIStrength] = useState(false);
+    const [useAIStrength, setUseAIStrength] = useState(true);
     const [preflight, setPreflight] = useState(null);
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [reportSummary, setReportSummary] = useState(null);
@@ -332,7 +332,6 @@ const POAReview = () => {
                 result.warnings = [
                     ...(result.warnings || []),
                     `Large file (${rowCount.toLocaleString()} rows). Server processing supports up to ${MAX_ROWS.toLocaleString()} rows; keep this tab open until complete.`,
-                    `AI strength is off for files over ${BROWSER_ROWS_RECOMMENDED.toLocaleString()} rows (rules-only ~2–3 min). Split by month for AI on smaller extracts.`,
                 ];
             }
             setPreflight(result);
@@ -1064,44 +1063,28 @@ self.onmessage = async (e) => {
             // Excel: always upload to server — native pandas is far faster than browser XLSX parse + JSON batches
             if (isExcel) {
                 console.log('POA Review - Excel file, using server-side processing (native pandas)...');
-                const rowHint = parsedRowsRef.current?.length || 0;
-                const aiOn = useAIStrength === true && rowHint <= BROWSER_ROWS_RECOMMENDED;
-                const largeNote = rowHint > BROWSER_ROWS_RECOMMENDED
-                    ? ' Large file — rules-only on server (~2–3 min). AI is disabled above 15k rows; keep this tab open.'
-                    : rowHint > 5000
-                        ? aiOn
-                            ? ' Server processing with AI may take several minutes; keep this tab open.'
-                            : ' Server processing ~1–3 min; keep this tab open.'
-                        : '';
-                setProcessingProgress(`Uploading to server…${largeNote}`);
-                setProcessingProgressPercent(5);
+                setProcessingProgress('Uploading file to server for processing...');
 
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
-                const sendAi = useAIStrength === true && rowHint <= BROWSER_ROWS_RECOMMENDED;
-                formData.append('useAIStrength', sendAi ? 'true' : 'false');
+                formData.append('useAIStrength', useAIStrength ? 'true' : 'false');
 
                 const token = window.storage?.getToken?.() || '';
-                const maxRetries = 3;
-                const retryDelay = 3000;
+                const maxRetries = 2;
+                const retryDelay = 2000;
                 let response = null;
 
                 for (let attempt = 0; attempt <= maxRetries; attempt++) {
                     try {
-                        if (attempt === 0) {
-                            setProcessingProgress(
-                                `Server processing${aiOn ? ' (rules + AI)' : ' (rules)'}…${largeNote} Do not close this tab.`
-                            );
-                            setProcessingProgressPercent(15);
-                        }
                         if (attempt > 0) {
-                            setProcessingProgress(`Retrying (${attempt}/${maxRetries})…`);
+                            setProcessingProgress(`Retrying upload (${attempt}/${maxRetries})...`);
                             await new Promise(r => setTimeout(r, retryDelay * attempt));
+                            // FormData body is consumed after first fetch; recreate for retry
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
-                            retryFormData.append('useAIStrength', sendAi ? 'true' : 'false');
+                            retryFormData.append('useAIStrength', useAIStrength ? 'true' : 'false');
                             formData = retryFormData;
                         }
                         response = await fetch('/api/poa-review/process-excel', {
@@ -1111,11 +1094,6 @@ self.onmessage = async (e) => {
                             },
                             body: formData
                         });
-                        const retryableStatus = response.status === 502 || response.status === 503 || response.status === 504;
-                        if (retryableStatus && attempt < maxRetries) {
-                            console.warn(`POA Review - process-excel got ${response.status}, retrying (${attempt + 1}/${maxRetries})...`);
-                            continue;
-                        }
                         break;
                     } catch (fetchErr) {
                         const isNetworkError = fetchErr?.message === 'Failed to fetch' ||
@@ -1125,32 +1103,22 @@ self.onmessage = async (e) => {
                             continue;
                         }
                         const friendlyMsg = isNetworkError
-                            ? 'Network request was interrupted (e.g. tab in background, connection lost, or server gateway timeout). Please keep this tab active and try again.'
+                            ? 'Network request was interrupted (e.g. tab in background or connection lost). Please keep this tab active and try again.'
                             : (fetchErr?.message || 'Upload failed');
                         throw new Error(friendlyMsg);
                     }
                 }
 
                 if (!response?.ok) {
-                    const rawText = await response.text().catch(() => '');
-                    let errorData = {};
-                    try {
-                        errorData = rawText ? JSON.parse(rawText) : {};
-                    } catch (_) {
-                        errorData = { message: rawText?.slice(0, 200) || response?.statusText || 'Unknown error' };
-                    }
+                    const errorData = await response.json().catch(() => ({ message: response?.statusText || 'Unknown error' }));
                     const msg = (typeof errorData.error === 'object' && errorData.error?.message)
                         ? errorData.error.message
                         : (typeof errorData.error === 'string' ? errorData.error : null)
                         || errorData.message
                         || (typeof errorData.errorDetails === 'object' && errorData.errorDetails?.message)
                         || (typeof errorData.errorDetails === 'string' ? errorData.errorDetails : null)
-                        || (response.status === 502
-                            ? 'Server error (502): processing crashed or the app restarted (often out of memory on large Excel files). Wait 60 seconds, upload one file at a time, then retry — or split the workbook by month.'
-                            : response.status === 504
-                            ? 'Server gateway timeout (504). Large Excel files can take several minutes — keep this tab active and retry, or split the file by month.'
-                            : 'Failed to process file');
-                    console.error('POA Review process-excel API error:', errorData, 'status:', response?.status);
+                        || 'Failed to process file';
+                    console.error('POA Review process-excel API error:', errorData);
                     throw new Error(msg);
                 }
 
@@ -1441,22 +1409,20 @@ self.onmessage = async (e) => {
             </div>
 
             <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'} ${(parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED ? 'opacity-60' : ''}`}>
+                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
                     <input
                         type="checkbox"
-                        checked={useAIStrength && (parsedRowsRef.current?.length || 0) <= BROWSER_ROWS_RECOMMENDED}
+                        checked={useAIStrength}
                         onChange={(e) => setUseAIStrength(e.target.checked)}
-                        disabled={isProcessing || (parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED}
+                        disabled={isProcessing}
                         className="rounded border-gray-400"
                     />
                     <span className="text-sm">Use AI strength evaluation</span>
                 </label>
                 <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    {(parsedRowsRef.current?.length || 0) > BROWSER_ROWS_RECOMMENDED
-                        ? `Disabled for files over ${BROWSER_ROWS_RECOMMENDED.toLocaleString()} rows — server uses fast rules-only (POA Strength, Compliance Points, Shortfalls still populated).`
-                        : runLocally
-                            ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
-                            : 'Optional OpenAI pass for Schedule 6 context. Recommended for files under 15k rows; large workbooks should use rules-only.'}
+                    {runLocally
+                        ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
+                        : 'Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.'}
                 </p>
             </div>
 

@@ -20,8 +20,6 @@ from poaStrengthEvaluator import (
 DEFAULT_MODEL = "gpt-4o-mini"
 CHUNK_SIZE = 18
 CACHE_DIR_NAME = "strength-cache"
-# Cap LLM calls so large mines do not run for hours / OOM with batch payloads in memory.
-MAX_LLM_LABELS = 400
 
 
 def _cache_dir(base_temp: str | None = None) -> str:
@@ -74,11 +72,10 @@ def _build_system_prompt(rules: dict) -> str:
     return f"""You are an expert South African diesel refund Proof of Activity (POA) evaluator.
 Assess whether proof records between fuel dispenses support own primary production under Schedule 6 Part 3 of the Customs and Excise Act.
 
-CRITICAL: Determine sector context first — mining, forestry, or farming — then apply Schedule No. 6, Part 3, Item 670.04, Note 6 for that sector:
-- Mining — Note 6, paragraph (f): exploration, overburden removal, mineral recovery/extraction, in-pit load-and-haul, drilling, blasting, dewatering/pumping for the mine, site access roads, tailings/waste on site — NOT post-recovery crushing/beneficiation or off-site processing.
-- Forestry — Note 6, paragraph (g): land prep, planting, plantation maintenance, fire breaks, thinning/pruning, felling/harvesting, extraction and carting in the forest — NOT sawmill/chip-mill milling or mill construction.
-- Farming — Note 6, paragraph (h): crop/livestock primary production, ploughing/planting/harvesting, irrigation, baling, herding, fence/firebreak work on the farming property — NOT buyer transport or leisure game viewing/lodging.
-Refund extent for on-land sectors is Note 6(b)(i).
+CRITICAL: Determine sector context first — mining, forestry, or farming — then apply the matching Schedule 6 Part 3 note:
+- Mining (Note 6(f)): exploration, overburden removal, mineral recovery/extraction, in-pit load-and-haul, drilling, blasting, dewatering/pumping for the mine, site access roads, tailings/waste on site — NOT post-recovery crushing/beneficiation or off-site processing.
+- Forestry (Note 6(g)): land prep, planting, plantation maintenance, fire breaks, thinning/pruning, felling/harvesting, extraction and carting in the forest — NOT sawmill/chip-mill milling or mill construction.
+- Farming (Note 6(h)): crop/livestock primary production, ploughing/planting/harvesting, irrigation, baling, herding, fence/firebreak work on the farming property — NOT buyer transport or leisure game viewing/lodging.
 
 Common operational POA wording (grading, dozer, pumping, single shift/day entry) may still qualify when clearly tied to eligible primary production for the detected sector.
 
@@ -160,14 +157,6 @@ def evaluate_labels_with_llm(
     cache_root = _cache_dir(cache_dir)
     merged = dict(rules_results)
     labels = [l for l in label_batches.keys() if label_batches[l].get("proofCount", 0) > 0]
-
-    if len(labels) > MAX_LLM_LABELS:
-        print(
-            f"POA Strength LLM skipped: {len(labels)} proof batches exceeds limit {MAX_LLM_LABELS}. "
-            "Using rules-only.",
-            flush=True,
-        )
-        return rules_results
 
     for i in range(0, len(labels), CHUNK_SIZE):
         chunk_labels = labels[i : i + CHUNK_SIZE]

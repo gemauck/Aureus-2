@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 
 
-def find_header_row_preview(input_file: str, max_scan: int = 8) -> tuple[int, list[str]]:
+def find_header_row(input_file: str, max_scan: int = 8) -> tuple[int, list[str]]:
     preview = pd.read_excel(input_file, header=None, nrows=max_scan)
     for i in range(len(preview)):
         cells = [str(v).strip() if pd.notna(v) else '' for v in preview.iloc[i].values]
@@ -38,57 +38,12 @@ def normalize_headers(headers: list[str]) -> list[str]:
     return out
 
 
-def _cell_str(value) -> str:
-    if value is None:
-        return ''
-    if isinstance(value, float) and pd.isna(value):
-        return ''
-    return str(value).strip()
-
-
-def convert_xlsx_streaming(input_file: str, output_csv: str, header_idx: int, header_row: list[str]) -> int:
-    """Low-memory .xlsx → CSV using openpyxl read_only (avoids OOM on large exports)."""
-    from openpyxl import load_workbook
-
+def convert_excel_to_csv(input_file: str, output_csv: str, chunk_size: int = 50000) -> int:
+    header_idx, header_row = find_header_row(input_file)
+    header_row = normalize_headers(header_row)
     n_cols = len(header_row)
-    total_rows = 0
-    log_every = 25000
+    print(f'Header row index: {header_idx}, columns: {n_cols}', flush=True)
 
-    wb = load_workbook(input_file, read_only=True, data_only=True)
-    try:
-        ws = wb.active
-        with open(output_csv, 'w', encoding='utf-8', newline='') as csv_file:
-            writer = csv.writer(csv_file)
-            writer.writerow(header_row[:n_cols])
-
-            for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
-                if row_idx <= header_idx:
-                    continue
-                values = [_cell_str(v) for v in row[:n_cols]]
-                if len(values) < n_cols:
-                    values.extend([''] * (n_cols - len(values)))
-                if not any(values):
-                    continue
-                writer.writerow(values)
-                total_rows += 1
-                if total_rows % log_every == 0:
-                    print(f'Converted {total_rows} data rows...', flush=True)
-    finally:
-        wb.close()
-
-    print(f'Success! CSV created with {total_rows} data rows', flush=True)
-    return total_rows
-
-
-def convert_excel_pandas_chunks(
-    input_file: str,
-    output_csv: str,
-    header_idx: int,
-    header_row: list[str],
-    chunk_size: int = 50000,
-) -> int:
-    """Fallback for .xls and environments without openpyxl read_only."""
-    n_cols = len(header_row)
     skip_rows = header_idx + 1
     total_rows = 0
 
@@ -123,22 +78,6 @@ def convert_excel_pandas_chunks(
 
     print(f'Success! CSV created with {total_rows} data rows', flush=True)
     return total_rows
-
-
-def convert_excel_to_csv(input_file: str, output_csv: str, chunk_size: int = 50000) -> int:
-    header_idx, header_row = find_header_row_preview(input_file)
-    header_row = normalize_headers(header_row)
-    n_cols = len(header_row)
-    print(f'Header row index: {header_idx}, columns: {n_cols}', flush=True)
-
-    ext = input_file.lower().rsplit('.', 1)[-1] if '.' in input_file else ''
-    if ext == 'xlsx':
-        try:
-            return convert_xlsx_streaming(input_file, output_csv, header_idx, header_row)
-        except Exception as exc:
-            print(f'openpyxl streaming failed ({exc}); falling back to pandas chunks', flush=True)
-
-    return convert_excel_pandas_chunks(input_file, output_csv, header_idx, header_row, chunk_size)
 
 
 def main() -> int:

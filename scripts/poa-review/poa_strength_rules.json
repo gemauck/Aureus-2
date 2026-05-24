@@ -28,13 +28,7 @@
   "sectors": {
     "mining": {
       "label": "Mining",
-      "schedule6": {
-        "item": "670.04",
-        "note": "6",
-        "paragraph": "f",
-        "heading": "Mining on land",
-        "refundExtentParagraph": "b(i)"
-      },
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(f) — mining on land",
       "locationLabel": "mine/pit/quarry",
       "primaryActivities": [
         "exploration", "prospecting", "overburden removal", "overburden", "site preparation",
@@ -46,11 +40,7 @@
         "access road", "private access road", "tailings", "tailings dam", "waste removal",
         "waste disposal", "rehabilitation", "coal stockpiling", "stockpiling coal",
         "in-pit transport", "site transport", "grading", "grading at pit", "dozer", "dozing",
-        "ripping", "primary production", "production mining", "production", "operating", "operation",
-        "utilisation", "utilization", "working", "work", "seam", "rehandle", "re-handling",
-        "shovel", "excavator", "dragline", "continuous miner", "lhd", "adt", "rdt", "dump truck",
-        "tipping", "tip", "tramming", "bogging", "bolting", "roof bolting", "general work",
-        "site work", "mine work", "pit work",
+        "ripping", "primary production", "production mining",
         "service and maintenance", "maintenance at pit", "workshop at pit",
         "transport to siding", "railway siding"
       ],
@@ -88,13 +78,7 @@
     },
     "forestry": {
       "label": "Forestry",
-      "schedule6": {
-        "item": "670.04",
-        "note": "6",
-        "paragraph": "g",
-        "heading": "Forestry",
-        "refundExtentParagraph": "b(i)"
-      },
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(g) — forestry",
       "locationLabel": "forest/plantation",
       "primaryActivities": [
         "land preparation", "clearing land", "clearing", "ploughing", "plough", "discing", "disc",
@@ -136,13 +120,7 @@
     },
     "farming": {
       "label": "Farming",
-      "schedule6": {
-        "item": "670.04",
-        "note": "6",
-        "paragraph": "h",
-        "heading": "Farming",
-        "refundExtentParagraph": "b(i)"
-      },
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(h) — farming",
       "locationLabel": "farm/farming property",
       "primaryActivities": [
         "growing crops", "crop production", "harvesting", "harvest", "storing crops", "horticulture",
@@ -206,7 +184,6 @@
     "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
   },
   "siteOverrides": {
-    "belfast": { "sector": "mining" },
     "bultfontein": { "sector": "mining" },
     "emalahleni": { "sector": "mining" },
     "ritluka": { "sector": "mining" },
