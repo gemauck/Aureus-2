@@ -36,8 +36,6 @@ from poaStrengthEvaluator import (
 
 # Use streaming Excel write for large files to avoid OOM (openpyxl holds ~50x file size in RAM otherwise)
 LARGE_FILE_THRESHOLD = 50000
-# Full row styling (green/bold/yellow) is very slow in write_only mode at scale
-ROW_STYLING_THRESHOLD = 25000
 
 COMPUTED_COLS = [
 	"No POA Asset",
@@ -77,6 +75,14 @@ def _series_column(df, col_name):
 	if isinstance(col, pd.DataFrame):
 		return col.iloc[:, -1]
 	return col
+
+
+def _excel_cell_value(val):
+	if val is None:
+		return None
+	if isinstance(val, float) and pd.isna(val):
+		return None
+	return val
 
 
 def _write_only_excel(
@@ -121,51 +127,39 @@ def _write_only_excel(
 	green_arr = green_rows.values
 	yellow_arr = yellow_col16.values
 	strength_list = strength_row_fills.tolist() if strength_row_fills is not None else None
-	style_rows = len(review) <= ROW_STYLING_THRESHOLD
 	for i in range(len(review)):
 		row_vals = data_arr[i]
-		if not style_rows:
-			# Fast path: plain values; only style POA Strength column when present
-			if strength_col_index >= 0 and strength_list is not None:
-				row_cells = []
-				for j in range(num_cols):
-					val = row_vals[j]
-					if pd.isna(val):
-						val = None
-					if j == strength_col_index:
-						c = WriteOnlyCell(ws, value=val)
-						c.font = font_9
-						c.alignment = align_left
-						hex_color = _scalar_hex_fill(strength_list[i])
-						if hex_color in strength_fills:
-							c.fill = strength_fills[hex_color]
-						row_cells.append(c)
-					else:
-						row_cells.append(None if val is None or (isinstance(val, float) and pd.isna(val)) else val)
-				ws.append(row_cells)
-			else:
-				row_list = []
-				for j in range(num_cols):
-					val = row_vals[j]
-					row_list.append(None if val is None or (isinstance(val, float) and pd.isna(val)) else val)
-				ws.append(row_list)
+		is_bold = bool(bold_arr[i])
+		is_green = bool(green_arr[i])
+		is_yellow_smr = bool(yellow_arr[i])
+		hex_color = _scalar_hex_fill(strength_list[i]) if strength_list is not None else None
+		has_strength = strength_col_index >= 0 and hex_color in strength_fills
+
+		# Plain row when no conditional formatting applies (keeps large files fast)
+		if not (is_bold or is_green or is_yellow_smr or has_strength):
+			ws.append([_excel_cell_value(row_vals[j]) for j in range(num_cols)])
 			continue
+
 		row_cells = []
 		for j in range(num_cols):
-			val = row_vals[j]
-			if pd.isna(val):
-				val = None
+			val = _excel_cell_value(row_vals[j])
+			needs_cell_style = (
+				is_bold or is_green
+				or (j == yellow_col_index and is_yellow_smr)
+				or (j == strength_col_index and has_strength)
+			)
+			if not needs_cell_style:
+				row_cells.append(val)
+				continue
 			c = WriteOnlyCell(ws, value=val)
-			c.font = font_9_bold if bool(bold_arr[i]) else font_9
+			c.font = font_9_bold if is_bold else font_9
 			c.alignment = align_left
-			if bool(green_arr[i]):
+			if is_green:
 				c.fill = fill_green
-			if j == yellow_col_index and bool(yellow_arr[i]):
+			if j == yellow_col_index and is_yellow_smr:
 				c.fill = fill_yellow
-			if strength_col_index >= 0 and j == strength_col_index and strength_list is not None:
-				hex_color = _scalar_hex_fill(strength_list[i])
-				if hex_color in strength_fills:
-					c.fill = strength_fills[hex_color]
+			if j == strength_col_index and has_strength:
+				c.fill = strength_fills[hex_color]
 			row_cells.append(c)
 		ws.append(row_cells)
 	wb.save(output_path)
