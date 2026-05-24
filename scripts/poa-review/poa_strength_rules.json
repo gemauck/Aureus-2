@@ -1,37 +1,169 @@
 {
-  "primaryActivities": [
-    "mining", "excavation", "excavating", "drilling", "blasting", "load and haul", "load & haul",
-    "haul", "hauling", "loading", "stripping", "overburden removal", "coal extraction",
-    "pit production", "face production", "bench mining", "quarrying", "extraction",
-    "reclamation", "topsoil removal", "dozing", "dozer", "ripping", "grading", "grading at pit",
-    "pit operation", "primary production", "production mining", "in-pit", "in pit",
-    "dewatering", "pumping", "pump"
-  ],
-  "secondaryActivities": [
-    "crushing", "crusher", "screening", "processing plant", "plant operation", "plant feed",
-    "stockpile", "stacking", "reclaim", "reclaiming", "workshop", "maintenance",
-    "refuelling", "refueling", "wash bay", "weighbridge", "secondary processing",
-    "beneficiation", "washing plant", "chpp", "prep plant"
-  ],
-  "primaryLocations": [
-    "pit", "north pit", "south pit", "east pit", "west pit", "open pit", "opencast",
-    "quarry", "face", "bench", "strip", "mining area", "extraction area", "rom pad",
-    "in-pit", "in pit", "np1", "np2", "sp", "area 1", "area 9", "luhlanga", "kwazubuka",
-    "emalahleni", "bultfontein", "hards", "softs", "topsoil"
-  ],
-  "secondaryLocations": [
-    "plant", "processing plant", "crusher", "crushing", "workshop", "office", "depot",
-    "stockyard", "stock yard", "chpp", "prep plant", "wash plant", "weighbridge",
-    "maintenance bay", "fuel bay", "secondary"
-  ],
-  "primaryMaterials": [
-    "coal", "rom", "run of mine", "overburden", "topsoil", "hards", "softs", "waste",
-    "ob", "interburden", "ore", "mineral", "aggregate", "stripping", "burden"
-  ],
-  "secondaryMaterials": [
-    "processed", "crushed", "screened", "product coal", "fines", "chips", "lump export",
-    "secondary", "plant feed", "middlings"
-  ],
+  "defaultSector": "mining",
+  "sectorDetection": {
+    "mining": {
+      "keywords": [
+        "mine", "mining", "pit", "open pit", "opencast", "quarry", "face", "bench", "strip",
+        "overburden", "rom", "coal", "ore", "mineral", "extraction", "load and haul", "load & haul",
+        "drilling", "blasting", "dewatering", "tailings", "bultfontein", "emalahleni", "hards", "softs",
+        "np1", "np2", "excavator", "dozer", "truck fleet", "dump truck"
+      ]
+    },
+    "forestry": {
+      "keywords": [
+        "forestry", "forest", "plantation", "timber", "log", "logs", "felling", "thinning", "pruning",
+        "seedling", "nursery", "compartment", "stand", "pulpwood", "chip-mill", "sawmill", "fire break",
+        "firebreak", "extraction road", "carting", "crosscut", "debarking", "stacking timber", "silviculture"
+      ]
+    },
+    "farming": {
+      "keywords": [
+        "farm", "farming", "field", "crop", "harvest", "plough", "ploughing", "planting", "livestock",
+        "cattle", "sheep", "goats", "herding", "pasture", "orchard", "vineyard", "irrigation", "baler",
+        "baling", "hay", "silage", "maize", "wheat", "sugarcane", "cane", "tractor", "spray", "spraying",
+        "kraal", "feedlot", "paddock", "apiculture", "beekeeping", "game farm"
+      ]
+    }
+  },
+  "sectors": {
+    "mining": {
+      "label": "Mining",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(f) — mining on land",
+      "locationLabel": "mine/pit/quarry",
+      "primaryActivities": [
+        "exploration", "prospecting", "overburden removal", "overburden", "site preparation",
+        "stripping", "topsoil removal", "mining", "mineral recovery", "recovery of minerals",
+        "extraction", "quarrying", "load and haul", "load & haul", "loading", "hauling", "haul",
+        "drilling", "blasting", "excavation", "excavating", "face production", "bench mining",
+        "pit production", "pit operation", "in-pit", "in pit", "open pit", "opencast",
+        "dewatering", "pumping", "pump", "water supply", "groundwater",
+        "access road", "private access road", "tailings", "tailings dam", "waste removal",
+        "waste disposal", "rehabilitation", "coal stockpiling", "stockpiling coal",
+        "in-pit transport", "site transport", "grading", "grading at pit", "dozer", "dozing",
+        "ripping", "primary production", "production mining",
+        "service and maintenance", "maintenance at pit", "workshop at pit",
+        "transport to siding", "railway siding"
+      ],
+      "secondaryActivities": [
+        "crushing", "crusher", "screening", "sorting", "washing plant", "washing",
+        "processing plant", "plant operation", "plant feed", "beneficiation", "chpp", "prep plant",
+        "secondary processing", "post-mining processing", "post-recovery processing",
+        "workshop", "refuelling", "refueling", "wash bay", "weighbridge", "office",
+        "administration", "milling", "smelting off site"
+      ],
+      "primaryLocations": [
+        "pit", "north pit", "south pit", "east pit", "west pit", "open pit", "opencast",
+        "quarry", "face", "bench", "strip", "mining area", "extraction area", "rom pad",
+        "in-pit", "in pit", "np1", "np2", "sp", "area 1", "area 9", "luhlanga", "kwazubuka",
+        "emalahleni", "bultfontein", "hards", "softs", "topsoil", "mine", "mining site",
+        "tailings", "waste dump", "overburden dump"
+      ],
+      "secondaryLocations": [
+        "plant", "processing plant", "crusher", "crushing", "workshop", "office", "depot",
+        "stockyard", "stock yard", "chpp", "prep plant", "wash plant", "weighbridge",
+        "maintenance bay", "fuel bay", "secondary", "siding office"
+      ],
+      "primaryMaterials": [
+        "coal", "rom", "run of mine", "overburden", "topsoil", "hards", "softs", "waste",
+        "ob", "interburden", "ore", "mineral", "aggregate", "stripping", "burden", "salt",
+        "sand", "stone", "rock", "clay", "gravel", "limestone"
+      ],
+      "secondaryMaterials": [
+        "processed", "crushed", "screened", "product coal", "fines", "chips", "lump export",
+        "secondary", "plant feed", "middlings", "beneficiated"
+      ],
+      "excludedActivities": [
+        "passenger transport", "commuting", "road transport to market"
+      ]
+    },
+    "forestry": {
+      "label": "Forestry",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(g) — forestry",
+      "locationLabel": "forest/plantation",
+      "primaryActivities": [
+        "land preparation", "clearing land", "clearing", "ploughing", "plough", "discing", "disc",
+        "hoeing", "initial access road", "access road", "fire break", "firebreak", "fire control road",
+        "planting", "plantation establishment", "seedling transport", "planting pits", "line seeding",
+        "herbicide", "herbicides", "fertilisation", "fertilizing", "fertiliser", "blanking",
+        "weeding", "pruning", "thinning", "thinning trees", "tree removal", "maintenance of plantation",
+        "road maintenance", "infrastructure maintenance", "extraction road", "harvesting",
+        "felling", "manual felling", "mechanical felling", "bark stripping", "stripping bark",
+        "stacking", "stacking timber", "crosscutting", "log lengths", "extraction", "extraction to roadside",
+        "carting", "carting logs", "transport in forest", "transport to sawmill", "transport to chip-mill",
+        "transport to siding", "growing trees", "cutting trees", "cutting", "silviculture",
+        "locomotive", "generating electricity"
+      ],
+      "secondaryActivities": [
+        "mill construction", "constructing mill", "processing facility", "sawmill operation",
+        "chip-mill operation", "milling timber", "dressing wood", "planing", "shaping wood",
+        "producing board", "board production", "road building supplies", "office", "administration"
+      ],
+      "primaryLocations": [
+        "forest", "plantation", "compartment", "stand", "block", "nursery", "silviculture block",
+        "extraction road", "fire break", "firebreak", "roadside", "in field", "plantation road",
+        "harvest block", "felling area", "thinning block", "planting block"
+      ],
+      "secondaryLocations": [
+        "sawmill", "chip-mill", "chip mill", "mill yard", "processing plant", "board plant",
+        "office", "depot", "workshop off site"
+      ],
+      "primaryMaterials": [
+        "timber", "log", "logs", "seedling", "seedlings", "pulpwood", "poles", "trees", "pulp",
+        "felled timber", "stacked timber"
+      ],
+      "secondaryMaterials": [
+        "processed timber", "board", "chips", "planed wood", "milled timber", "finished product"
+      ],
+      "excludedActivities": [
+        "milling at sawmill", "milling at chip-mill", "dressing timber", "planing timber"
+      ]
+    },
+    "farming": {
+      "label": "Farming",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(h) — farming",
+      "locationLabel": "farm/farming property",
+      "primaryActivities": [
+        "growing crops", "crop production", "harvesting", "harvest", "storing crops", "horticulture",
+        "pasturage", "apiculture", "beekeeping", "fish breeding", "oyster farming",
+        "breeding animals", "caring for animals", "livestock", "shearing", "milking",
+        "rounding up", "herding", "herd", "transport livestock", "baling hay", "baler", "baling",
+        "planting", "tending fruit trees", "soil conservation", "water conservation",
+        "fire fighting", "firefighting", "fence construction", "fence maintenance",
+        "firebreak construction", "firebreak maintenance", "service and maintenance",
+        "maintenance of equipment", "shed construction", "silo construction", "silage pit",
+        "dam construction", "irrigation", "drainage", "earthworks", "groundwater search",
+        "pumping water", "water supply", "storage of farming products", "packing",
+        "weed control", "pest control", "disease control", "spraying", "hunting", "trapping",
+        "game farming", "ploughing", "plough", "discing", "disc", "hoeing", "cultivation",
+        "flood management", "locomotive", "generating electricity", "transport farming products",
+        "transport farming requirements", "fertilising", "fertilizing", "spread fertiliser"
+      ],
+      "secondaryActivities": [
+        "game viewing", "lodging", "leisure", "tourism", "office", "administration",
+        "transport to purchaser premises", "buyer transport"
+      ],
+      "primaryLocations": [
+        "farm", "farming property", "field", "lands", "camp", "paddock", "pasture", "orchard",
+        "vineyard", "dam", "kraal", "feedlot", "silo", "shed", "plantation farm", "crop field",
+        "maize lands", "wheat lands", "sugarcane field", "cane lands"
+      ],
+      "secondaryLocations": [
+        "market", "buyer premises", "town", "office", "supplier depot off farm"
+      ],
+      "primaryMaterials": [
+        "hay", "silage", "grain", "maize", "wheat", "crop", "crops", "livestock", "cattle", "sheep",
+        "goats", "seed", "fertiliser", "fertilizer", "fruit", "vegetables", "sugarcane", "cane",
+        "wool", "milk", "eggs", "hides", "flowers", "nursery products", "farming products",
+        "farming requirements"
+      ],
+      "secondaryMaterials": [
+        "retail product", "packaged for market off farm"
+      ],
+      "excludedActivities": [
+        "game viewing", "tourist lodging", "leisure activities"
+      ]
+    }
+  },
   "intensityColumns": [
     "Loads / Tonnes",
     "Total SMR Usage",
@@ -43,7 +175,7 @@
   ],
   "intensityTextKeywords": [
     "load", "loads", "haul", "hauls", "tonne", "tonnes", "hour", "hours", "hr", "km",
-    "shift", "trip", "bucket", "cycle"
+    "shift", "trip", "bucket", "cycle", "hectare", "ha", "bale", "bales", "head", "litre"
   ],
   "shiftProofFallback": {
     "enabled": true,
@@ -51,5 +183,13 @@
     "maxDistinctActivitiesPerDay": 1,
     "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
   },
-  "siteOverrides": {}
+  "siteOverrides": {
+    "bultfontein": { "sector": "mining" },
+    "emalahleni": { "sector": "mining" },
+    "ritluka": { "sector": "mining" },
+    "luhlanga": { "sector": "mining" },
+    "kwazubuka": { "sector": "mining" },
+    "north pit": { "sector": "mining" },
+    "south pit": { "sector": "mining" }
+  }
 }

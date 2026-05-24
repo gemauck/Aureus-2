@@ -64,6 +64,143 @@ def _contains_any(text: str, terms: list[str]) -> str | None:
     return None
 
 
+def _sector_from_site_overrides(text: str, rules: dict) -> str | None:
+    overrides = rules.get("siteOverrides") or {}
+    if not text or not overrides:
+        return None
+    for site_key, cfg in overrides.items():
+        if not isinstance(cfg, dict):
+            continue
+        sector = cfg.get("sector")
+        if sector and site_key.lower().strip() in text:
+            return str(sector)
+    return None
+
+
+def _score_sector_keywords(text: str, rules: dict) -> dict[str, int]:
+    scores: dict[str, int] = {}
+    detection = rules.get("sectorDetection") or {}
+    for sector, cfg in detection.items():
+        if not isinstance(cfg, dict):
+            continue
+        score = 0
+        for kw in cfg.get("keywords") or []:
+            if kw and str(kw).lower().strip() in text:
+                score += 1
+        if score:
+            scores[str(sector)] = score
+    return scores
+
+
+def detect_sector(batch: dict, rules: dict) -> dict:
+    """Determine mining / forestry / farming context before applying Schedule 6 Part 3 rules."""
+    sectors = rules.get("sectors") or {}
+    default_sector = rules.get("defaultSector") or "mining"
+    if default_sector not in sectors and sectors:
+        default_sector = next(iter(sectors.keys()))
+
+    explicit = batch.get("sector")
+    if explicit and str(explicit) in sectors:
+        cfg = sectors[str(explicit)]
+        return {
+            "sector": str(explicit),
+            "confidence": "explicit",
+            "label": cfg.get("label", str(explicit).title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
+
+    text = batch.get("combinedText", "")
+    asset_desc = _norm(batch.get("assetDescription"))
+    if asset_desc:
+        text = f"{text} | {asset_desc}"
+
+    override_sector = _sector_from_site_overrides(text, rules)
+    if override_sector and override_sector in sectors:
+        cfg = sectors[override_sector]
+        return {
+            "sector": override_sector,
+            "confidence": "site",
+            "label": cfg.get("label", override_sector.title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
+
+    scores = _score_sector_keywords(text, rules)
+    for sector_key, sector_cfg in sectors.items():
+        if not isinstance(sector_cfg, dict):
+            continue
+        for term in (
+            (sector_cfg.get("primaryActivities") or [])
+            + (sector_cfg.get("primaryLocations") or [])
+            + (sector_cfg.get("primaryMaterials") or [])
+        ):
+            t = str(term).lower().strip()
+            if t and t in text:
+                scores[sector_key] = scores.get(sector_key, 0) + 1
+
+    if scores:
+        best_sector = max(scores, key=lambda k: scores[k])
+        if len(scores) > 1:
+            sorted_scores = sorted(scores.values(), reverse=True)
+            if sorted_scores[0] == sorted_scores[1]:
+                cfg = sectors.get(default_sector, {})
+                return {
+                    "sector": default_sector,
+                    "confidence": "ambiguous",
+                    "label": cfg.get("label", default_sector.title()),
+                    "schedule6Ref": cfg.get("schedule6Ref", ""),
+                    "locationLabel": cfg.get("locationLabel", "production site"),
+                    "advisory": (
+                        f"Sector context unclear (mixed {', '.join(sorted(scores))} signals) "
+                        f"— evaluated as {cfg.get('label', default_sector)}; confirm mining/forestry/farming"
+                    ),
+                }
+        cfg = sectors.get(best_sector, {})
+        return {
+            "sector": best_sector,
+            "confidence": "detected",
+            "label": cfg.get("label", best_sector.title()),
+            "schedule6Ref": cfg.get("schedule6Ref", ""),
+            "locationLabel": cfg.get("locationLabel", "production site"),
+            "advisory": None,
+        }
+
+    cfg = sectors.get(default_sector, {})
+    return {
+        "sector": default_sector,
+        "confidence": "default",
+        "label": cfg.get("label", default_sector.title()),
+        "schedule6Ref": cfg.get("schedule6Ref", ""),
+        "locationLabel": cfg.get("locationLabel", "production site"),
+        "advisory": (
+            f"No sector context detected — evaluated as {cfg.get('label', default_sector)}; "
+            "confirm mining/forestry/farming applicability"
+        ),
+    }
+
+
+def get_sector_rules(rules: dict, sector: str) -> dict:
+    sectors = rules.get("sectors") or {}
+    if sector in sectors:
+        return sectors[sector]
+    # Legacy flat rules fallback for older JSON copies.
+    return {
+        "label": sector.title(),
+        "schedule6Ref": "",
+        "locationLabel": "mine/pit",
+        "primaryActivities": rules.get("primaryActivities", []),
+        "secondaryActivities": rules.get("secondaryActivities", []),
+        "primaryLocations": rules.get("primaryLocations", []),
+        "secondaryLocations": rules.get("secondaryLocations", []),
+        "primaryMaterials": rules.get("primaryMaterials", []),
+        "secondaryMaterials": rules.get("secondaryMaterials", []),
+        "excludedActivities": [],
+    }
+
+
 def load_rules(rules_path: str | None = None) -> dict:
     path = rules_path or RULES_PATH
     with open(path, "r", encoding="utf-8") as f:
@@ -148,61 +285,81 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
             "shortfalls": ["No proof-of-activity rows for this batch"],
             "compliancePoints": [],
             "method": "rules",
+            "sector": None,
+            "sectorContext": None,
         }
+
+    sector_ctx = detect_sector(batch, rules)
+    sector = sector_ctx["sector"]
+    sector_rules = get_sector_rules(rules, sector)
+    sector_label = sector_ctx.get("label") or sector_rules.get("label", sector.title())
+    location_label = sector_ctx.get("locationLabel") or sector_rules.get("locationLabel", "production site")
 
     text = batch.get("combinedText", "")
     activity_text = " | ".join(batch.get("activities", []) + batch.get("comments", []))
 
-    sec_act = _contains_any(activity_text or text, rules.get("secondaryActivities", []))
-    pri_act = _contains_any(activity_text or text, rules.get("primaryActivities", []))
+    excluded = _contains_any(activity_text or text, sector_rules.get("excludedActivities", []))
+    sec_act = _contains_any(activity_text or text, sector_rules.get("secondaryActivities", []))
+    pri_act = _contains_any(activity_text or text, sector_rules.get("primaryActivities", []))
 
-    if sec_act and not pri_act:
+    if excluded and not pri_act:
         activity_ok = False
-        shortfalls.append(f"Secondary/non-primary activity detected ({sec_act})")
+        shortfalls.append(
+            f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})"
+        )
+    elif sec_act and not pri_act:
+        activity_ok = False
+        shortfalls.append(
+            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production per Schedule 6 Part 3"
+        )
     elif pri_act:
         activity_ok = True
     elif activity_text or text.strip():
         activity_ok = False
-        shortfalls.append("No primary Schedule 6 production activity identified")
+        shortfalls.append(
+            f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified"
+        )
     else:
         activity_ok = False
         shortfalls.append("No activity description in proof records")
 
     loc_text = " | ".join(batch.get("locations", []))
-    sec_loc = _contains_any(loc_text or text, rules.get("secondaryLocations", []))
-    pri_loc = _contains_any(loc_text or text, rules.get("primaryLocations", []))
+    sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []))
+    pri_loc = _contains_any(loc_text or text, sector_rules.get("primaryLocations", []))
 
-    if not loc_text.strip() and not _contains_any(text, rules.get("primaryLocations", [])):
+    if not loc_text.strip() and not _contains_any(text, sector_rules.get("primaryLocations", [])):
         location_ok = False
-        shortfalls.append("No mine/pit location on proof records")
+        shortfalls.append(f"No {location_label} location on proof records")
     elif sec_loc and not pri_loc:
         location_ok = False
-        shortfalls.append(f"Secondary location only ({sec_loc})")
+        shortfalls.append(f"Secondary/non-primary {sector_label.lower()} location only ({sec_loc})")
     elif pri_loc:
         location_ok = True
     elif loc_text.strip():
         location_ok = True
     else:
         location_ok = False
-        shortfalls.append("No primary mine location identified")
+        shortfalls.append(f"No primary {sector_label.lower()} location identified")
 
     mat_text = " | ".join(batch.get("materials", []))
-    sec_mat = _contains_any(mat_text or text, rules.get("secondaryMaterials", []))
-    pri_mat = _contains_any(mat_text or text, rules.get("primaryMaterials", []))
+    sec_mat = _contains_any(mat_text or text, sector_rules.get("secondaryMaterials", []))
+    pri_mat = _contains_any(mat_text or text, sector_rules.get("primaryMaterials", []))
 
     if not mat_text.strip():
         material_ok = False
         shortfalls.append("No material type on proof records")
     elif sec_mat and not pri_mat:
         material_ok = False
-        shortfalls.append(f"Secondary/processed material only ({sec_mat})")
+        shortfalls.append(
+            f"Secondary/processed {sector_label.lower()} material only ({sec_mat})"
+        )
     elif pri_mat:
         material_ok = True
     elif mat_text.strip():
         material_ok = True
     else:
         material_ok = False
-        shortfalls.append("No primary production material identified")
+        shortfalls.append(f"No primary {sector_label.lower()} production material identified")
 
     intensity_vals = batch.get("intensityValues") or {}
     intensity_ok = len(intensity_vals) > 0
@@ -213,6 +370,9 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     if not intensity_ok:
         shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
 
+    if sector_ctx.get("advisory"):
+        shortfalls.append(sector_ctx["advisory"])
+
     criteria = {
         "activity": activity_ok,
         "location": location_ok,
@@ -221,7 +381,9 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     }
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
-    compliance_points = build_compliance_points(batch, criteria, strength)
+    compliance_points = build_compliance_points(
+        batch, criteria, strength, sector_context=sector_ctx, matched_activity=pri_act
+    )
 
     return {
         "criteria": criteria,
@@ -230,6 +392,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "shortfalls": shortfalls,
         "compliancePoints": compliance_points,
         "method": "rules",
+        "sector": sector,
+        "sectorContext": sector_ctx,
     }
 
 
@@ -254,6 +418,8 @@ def build_compliance_points(
     criteria: dict,
     strength: str | None = None,
     shift_applied: bool = False,
+    sector_context: dict | None = None,
+    matched_activity: str | None = None,
 ) -> list[str]:
     """Human-readable positives for criteria met and linked proof context."""
     points: list[str] = []
@@ -263,6 +429,16 @@ def build_compliance_points(
 
     points.append(f"{proof_count} linked POA record{'s' if proof_count != 1 else ''}")
 
+    sector_ctx = sector_context or {}
+    sector_label = sector_ctx.get("label")
+    schedule_ref = sector_ctx.get("schedule6Ref")
+    location_label = sector_ctx.get("locationLabel") or "production site"
+    if sector_label:
+        if schedule_ref:
+            points.append(f"Sector context: {sector_label} ({schedule_ref})")
+        else:
+            points.append(f"Sector context: {sector_label}")
+
     if strength == STRENGTH_STRONG:
         points.append("Strong overall compliance (4/4 criteria met)")
     elif strength == STRENGTH_MODERATE:
@@ -270,27 +446,29 @@ def build_compliance_points(
 
     if criteria.get("activity"):
         acts = batch.get("activities") or []
-        detail = acts[0] if acts else None
+        detail = acts[0] if acts else matched_activity
+        sector_name = (sector_label or "primary production").lower()
         if detail:
-            points.append(f"Primary production activity identified ({detail})")
+            points.append(f"Primary {sector_name} activity identified ({detail})")
         else:
-            points.append("Primary Schedule 6 production activity identified")
+            points.append(f"Primary Schedule 6 Part 3 {sector_name} activity identified")
 
     if criteria.get("location"):
         locs = batch.get("locations") or []
         detail = locs[0] if locs else None
         if detail:
-            points.append(f"Mine/pit location documented ({detail})")
+            points.append(f"{location_label.title()} location documented ({detail})")
         else:
-            points.append("Mine/pit location documented on proof")
+            points.append(f"{location_label.title()} location documented on proof")
 
     if criteria.get("material"):
         mats = batch.get("materials") or []
         detail = mats[0] if mats else None
+        sector_name = (sector_label or "production").lower()
         if detail:
-            points.append(f"Production material specified ({detail})")
+            points.append(f"{sector_name.title()} material specified ({detail})")
         else:
-            points.append("Production material specified on proof")
+            points.append(f"{sector_name.title()} material specified on proof")
 
     if criteria.get("intensity"):
         intensity_vals = batch.get("intensityValues") or {}
@@ -458,6 +636,7 @@ def evaluate_all_labels(
                 eval_result.get("criteria") or {},
                 eval_result.get("strength"),
                 shift_applied=True,
+                sector_context=eval_result.get("sectorContext"),
             )
 
         eval_result["batch"] = batch
@@ -493,6 +672,7 @@ def merge_llm_result(rules_result: dict, llm_result: dict | None) -> dict:
             merged_criteria,
             tier_from_score(score),
             bool(rules_result.get("shiftProofApplied")),
+            sector_context=rules_result.get("sectorContext"),
         )
 
     return {

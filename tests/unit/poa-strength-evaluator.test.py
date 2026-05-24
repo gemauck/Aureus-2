@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"
 
 from poaStrengthEvaluator import (
     aggregate_proof_batch,
+    detect_sector,
     evaluate_batch_rules,
     evaluate_all_labels,
     load_rules,
@@ -39,7 +40,8 @@ def test_strong_batch_all_criteria():
     assert result["shortfalls"] == []
     assert len(result["compliancePoints"]) >= 4
     joined = " ".join(result["compliancePoints"])
-    assert "Primary production activity identified" in joined
+    assert "Primary mining activity identified" in joined
+    assert result["sector"] == "mining"
 
 
 def test_insufficient_no_proof():
@@ -125,6 +127,58 @@ def test_primary_activities_dozer_grading_dewatering():
         assert result["criteria"]["activity"] is True, activity
 
 
+def test_forestry_harvesting_strong():
+    rules = load_rules()
+    batch = {
+        "proofCount": 1,
+        "activities": ["felling and extraction to roadside"],
+        "locations": ["compartment 12 plantation"],
+        "materials": ["timber logs"],
+        "comments": [],
+        "sources": [],
+        "intensityValues": {"Total SMR Usage": 6.0},
+        "combinedText": "felling and extraction to roadside | compartment 12 plantation | timber logs",
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["sector"] == "forestry"
+    assert result["criteria"]["activity"] is True
+    assert result["strength"] == STRENGTH_STRONG
+
+
+def test_farming_harvest_strong():
+    rules = load_rules()
+    batch = {
+        "proofCount": 1,
+        "activities": ["baler baling hay"],
+        "locations": ["north field farm"],
+        "materials": ["hay"],
+        "comments": [],
+        "sources": [],
+        "intensityValues": {"Total SMR Usage": 4.0},
+        "combinedText": "baler baling hay | north field farm | hay",
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["sector"] == "farming"
+    assert result["criteria"]["activity"] is True
+    assert result["strength"] == STRENGTH_STRONG
+
+
+def test_detect_sector_forestry_over_mining_default():
+    rules = load_rules()
+    batch = {
+        "proofCount": 1,
+        "activities": ["thinning compartment"],
+        "locations": ["pine plantation"],
+        "materials": ["pulpwood"],
+        "comments": [],
+        "sources": [],
+        "intensityValues": {},
+        "combinedText": "thinning compartment | pine plantation | pulpwood",
+    }
+    ctx = detect_sector(batch, rules)
+    assert ctx["sector"] == "forestry"
+
+
 def test_shift_day_fallback_second_dispense():
     rows = [
         {
@@ -170,5 +224,8 @@ if __name__ == "__main__":
     test_weak_secondary_plant_only()
     test_evaluate_all_labels_dataframe()
     test_primary_activities_dozer_grading_dewatering()
+    test_forestry_harvesting_strong()
+    test_farming_harvest_strong()
+    test_detect_sector_forestry_over_mining_default()
     test_shift_day_fallback_second_dispense()
     print("All POA strength evaluator tests passed.")

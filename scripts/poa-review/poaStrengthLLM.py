@@ -65,24 +65,32 @@ def _write_cache(cache_path: str, data: dict) -> None:
 
 
 def _build_system_prompt(rules: dict) -> str:
+    sectors = rules.get("sectors") or {}
+    mining = sectors.get("mining", {})
+    forestry = sectors.get("forestry", {})
+    farming = sectors.get("farming", {})
     return f"""You are an expert South African diesel refund Proof of Activity (POA) evaluator.
-Assess whether proof records between fuel dispenses support primary production under Schedule 6 of the Customs and Excise Act.
+Assess whether proof records between fuel dispenses support own primary production under Schedule 6 Part 3 of the Customs and Excise Act.
 
-Primary production includes in-pit mining, extraction, load-and-haul, drilling, blasting, stripping, overburden removal, grading, dozer/dozing, dewatering, and pumping — NOT secondary plant processing, crushing-only, or workshop activity.
+CRITICAL: Determine sector context first — mining, forestry, or farming — then apply the matching Schedule 6 Part 3 note:
+- Mining (Note 6(f)): exploration, overburden removal, mineral recovery/extraction, in-pit load-and-haul, drilling, blasting, dewatering/pumping for the mine, site access roads, tailings/waste on site — NOT post-recovery crushing/beneficiation or off-site processing.
+- Forestry (Note 6(g)): land prep, planting, plantation maintenance, fire breaks, thinning/pruning, felling/harvesting, extraction and carting in the forest — NOT sawmill/chip-mill milling or mill construction.
+- Farming (Note 6(h)): crop/livestock primary production, ploughing/planting/harvesting, irrigation, baling, herding, fence/firebreak work on the farming property — NOT buyer transport or leisure game viewing/lodging.
 
-When proof describes a single shift/day activity entry, it may support multiple dispenses within 24 hours for the same asset; note gaps but do not reject grading, dozer, dewatering, or pumping as non-primary when clearly at the mine face or pit.
+Common operational POA wording (grading, dozer, pumping, single shift/day entry) may still qualify when clearly tied to eligible primary production for the detected sector.
+
+When proof describes a single shift/day activity entry, it may support multiple dispenses within 24 hours for the same asset; note gaps but do not reject eligible site activities without cause.
 
 For each batch, decide if ANY proof row satisfies each criterion (multi-source proof aggregates):
-1. activity — primary Schedule 6 production activity (not secondary processing/crushing/plant-only)
-2. location — mine/pit area (not Plant, Workshop, Crusher, processing plant as the only location)
-3. material — primary materials (coal, ROM, overburden, hards, softs) not only processed product
-4. intensity — loads, tonnes, SMR hours, km/hr, or similar usage intensity present
+1. activity — primary Schedule 6 Part 3 production activity for the detected sector (not secondary processing/milling/office-only)
+2. location — sector-appropriate production site (mine/pit, forest/plantation, or farm — not only plant/workshop/sawmill as sole location)
+3. material — primary sector materials (e.g. ROM/coal/overburden; timber/logs/seedlings; crops/hay/livestock) not only processed product
+4. intensity — loads, tonnes, SMR hours, km/hr, bales, or similar usage intensity present
 
 Hint keywords (not exhaustive):
-- Primary activities: {", ".join(rules.get("primaryActivities", [])[:15])}...
-- Secondary activities: {", ".join(rules.get("secondaryActivities", [])[:10])}...
-- Primary locations: {", ".join(rules.get("primaryLocations", [])[:12])}...
-- Secondary locations: {", ".join(rules.get("secondaryLocations", [])[:10])}...
+- Mining primary: {", ".join((mining.get("primaryActivities") or [])[:12])}...
+- Forestry primary: {", ".join((forestry.get("primaryActivities") or [])[:12])}...
+- Farming primary: {", ".join((farming.get("primaryActivities") or [])[:12])}...
 
 Return ONLY valid JSON array. Each element:
 {{"label": string, "criteria": {{"activity": bool, "location": bool, "material": bool, "intensity": bool}}, "shortfalls": [string]}}
