@@ -49,6 +49,36 @@ COMPUTED_COLS = [
 ]
 
 # Styles for write_only path (avoid loading full sheet into memory)
+def _scalar_hex_fill(val):
+	"""Normalize tier fill to a single hex string (or None) for openpyxl."""
+	if val is None:
+		return None
+	if isinstance(val, np.ndarray):
+		if val.size == 0:
+			return None
+		if val.size == 1:
+			val = val.item()
+		else:
+			return None
+	try:
+		if pd.isna(val):
+			return None
+	except (TypeError, ValueError):
+		pass
+	s = str(val).strip()
+	if not s or s.lower() == "nan":
+		return None
+	return s
+
+
+def _series_column(df, col_name):
+	"""Return one Series even when duplicate column labels exist."""
+	col = df[col_name]
+	if isinstance(col, pd.DataFrame):
+		return col.iloc[:, -1]
+	return col
+
+
 def _write_only_excel(
 	review,
 	output_path,
@@ -90,13 +120,13 @@ def _write_only_excel(
 	bold_arr = bold_rows.values
 	green_arr = green_rows.values
 	yellow_arr = yellow_col16.values
-	strength_arr = strength_row_fills.values if strength_row_fills is not None else None
+	strength_list = strength_row_fills.tolist() if strength_row_fills is not None else None
 	style_rows = len(review) <= ROW_STYLING_THRESHOLD
 	for i in range(len(review)):
 		row_vals = data_arr[i]
 		if not style_rows:
 			# Fast path: plain values; only style POA Strength column when present
-			if strength_col_index >= 0 and strength_arr is not None:
+			if strength_col_index >= 0 and strength_list is not None:
 				row_cells = []
 				for j in range(num_cols):
 					val = row_vals[j]
@@ -106,8 +136,8 @@ def _write_only_excel(
 						c = WriteOnlyCell(ws, value=val)
 						c.font = font_9
 						c.alignment = align_left
-						hex_color = strength_arr[i]
-						if hex_color and hex_color in strength_fills:
+						hex_color = _scalar_hex_fill(strength_list[i])
+						if hex_color in strength_fills:
 							c.fill = strength_fills[hex_color]
 						row_cells.append(c)
 					else:
@@ -126,15 +156,15 @@ def _write_only_excel(
 			if pd.isna(val):
 				val = None
 			c = WriteOnlyCell(ws, value=val)
-			c.font = font_9_bold if bold_arr[i] else font_9
+			c.font = font_9_bold if bool(bold_arr[i]) else font_9
 			c.alignment = align_left
-			if green_arr[i]:
+			if bool(green_arr[i]):
 				c.fill = fill_green
-			if j == yellow_col_index and yellow_arr[i]:
+			if j == yellow_col_index and bool(yellow_arr[i]):
 				c.fill = fill_yellow
-			if strength_col_index >= 0 and j == strength_col_index and strength_arr is not None:
-				hex_color = strength_arr[i]
-				if hex_color and hex_color in strength_fills:
+			if strength_col_index >= 0 and j == strength_col_index and strength_list is not None:
+				hex_color = _scalar_hex_fill(strength_list[i])
+				if hex_color in strength_fills:
 					c.fill = strength_fills[hex_color]
 			row_cells.append(c)
 		ws.append(row_cells)
@@ -463,12 +493,20 @@ def _strength_fill_series(review, output_cols):
 	"""Map POA Strength tier to fill hex per row (transaction rows only)."""
 	if "POA Strength" not in output_cols:
 		return None
-	strength_col = review["POA Strength"] if "POA Strength" in review.columns else pd.Series([None] * len(review))
+	strength_col = _series_column(review, "POA Strength")
 	default = STRENGTH_FILL[STRENGTH_INSUFFICIENT]
 
 	def _tier_fill(val):
-		if pd.isna(val) or val is None:
-			return None
+		if isinstance(val, np.ndarray):
+			if val.size == 0:
+				return None
+			val = val.item() if val.size == 1 else None
+		try:
+			if val is None or pd.isna(val):
+				return None
+		except (TypeError, ValueError):
+			if val is None:
+				return None
 		s = str(val).strip()
 		if not s or s.lower() == "nan":
 			return None
@@ -502,8 +540,8 @@ def format_review(review, filename, output_path=None, original_columns=None):
 		"POA Shortfalls",
 	]
 	if original_columns is not None:
-		# Output = original columns (same order) + 4 computed only
-		output_cols = [c for c in original_columns if c in review.columns] + [
+		# Output = original columns (same order) + computed only; avoid duplicate computed cols
+		output_cols = [c for c in original_columns if c in review.columns and c not in COMPUTED_COLS] + [
 			c for c in COMPUTED_COLS if c in review.columns
 		]
 	else:
@@ -513,26 +551,24 @@ def format_review(review, filename, output_path=None, original_columns=None):
 			for c in missing:
 				review[c] = np.nan
 		output_cols = list(review_cols) + [c for c in review.columns if c not in review_cols and c != "label"]
-	review = review.reindex(columns=output_cols)
+	review = review.loc[:, output_cols]
 
 	# Generate output path if not provided
 	if output_path is None:
-		# Generate output filename (remove .csv extension if present, add .xlsx)
 		import os
 		output_dir = "./Output/Isibonelo Current"
 		os.makedirs(output_dir, exist_ok=True)
 		output_path = os.path.join(output_dir, filename.rstrip(".csv") + ".xlsx")
-	
-	# Ensure output directory exists
+
 	import os
-	os.makedirs(os.path.dirname(output_path), exist_ok=True)
+	os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
 	n = len(review)
 	num_cols = len(output_cols)
 	# Precompute format flags once (used by both paths)
-	col_dt = review["Date & Time"]
-	col_txn = review["Transaction ID"]
-	col_smr = review["Total SMR Usage"]
+	col_dt = _series_column(review, "Date & Time")
+	col_txn = _series_column(review, "Transaction ID")
+	col_smr = _series_column(review, "Total SMR Usage")
 	smr_numeric = pd.to_numeric(col_smr, errors="coerce").fillna(0)
 	# Fast path: parse datetimes once instead of per-row isinstance (large files)
 	parsed_dt = pd.to_datetime(col_dt, errors="coerce")

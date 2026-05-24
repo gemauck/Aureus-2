@@ -142,6 +142,14 @@ def run_pipeline(
     data = drop_empty_rows(data)
     print(f'After empty-row filter: {len(data)} rows', flush=True)
 
+    # Drop prior computed columns if re-processing an already-reviewed export
+    for col in (
+        'No POA Asset', 'Count of proof before transaction', 'Time since last activity',
+        'total smr', 'POA Strength', 'POA Shortfalls', 'label', 'is consec',
+    ):
+        if col in data.columns:
+            data = data.drop(columns=[col])
+
     data = prepare_dataframe(data)
     original_columns = list(data.columns)
     print('Prepared dataframe', flush=True)
