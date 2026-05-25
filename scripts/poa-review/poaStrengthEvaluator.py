@@ -236,32 +236,151 @@ def _flex_contains_term(text: str, term: str, match_cfg: dict) -> bool:
     return _fuzzy_phrase_match(term, text, fuzzy_ratio)
 
 
+def _quick_term_hit(lowered: str, norm_text: str | None, term_lower: str, norm_term: str) -> bool:
+    if re.search(r"[\s\-&/]", term_lower):
+        if term_lower in lowered:
+            return True
+    elif re.search(rf"(?<![a-z0-9]){re.escape(term_lower)}(?![a-z0-9])", lowered):
+        return True
+    if norm_term:
+        if norm_text is None:
+            norm_text = ""  # caller must pass computed norm_text
+        if norm_term in norm_text:
+            return True
+    return False
+
+
+class TermMatcher:
+    """Token-indexed term lookup: substring/token overlap first; fuzzy only when needed."""
+
+    __slots__ = ("cfg", "_entries", "_by_token", "_fuzzy_terms")
+
+    def __init__(self, terms: list[str], match_cfg: dict | None = None):
+        self.cfg = dict(match_cfg or MATCH_CFG_DEFAULT)
+        self._entries: list[tuple[str, str, str]] = []
+        self._by_token: dict[str, list[int]] = {}
+        self._fuzzy_terms: list[str] = []
+        seen: set[str] = set()
+
+        for term in terms:
+            if not term:
+                continue
+            orig = str(term)
+            key = orig.lower().strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            norm = _normalize_for_match(orig)
+            idx = len(self._entries)
+            self._entries.append((orig, key, norm))
+            if len(norm) >= 8:
+                self._fuzzy_terms.append(orig)
+            tokens = _match_tokens(orig, 3)
+            if tokens:
+                for tok in tokens[:4]:
+                    self._by_token.setdefault(tok, []).append(idx)
+            else:
+                self._by_token.setdefault("", []).append(idx)
+
+    def find(self, text: str) -> str | None:
+        if not text or not self._entries:
+            return None
+        lowered = text.lower()
+        norm_text = _normalize_for_match(text)
+        text_tokens = set(_match_tokens(text, 2))
+        min_overlap = int(self.cfg.get("minTokenOverlap", 2))
+
+        candidate_idx: set[int] = set()
+        for tok in text_tokens:
+            for idx in self._by_token.get(tok, []):
+                candidate_idx.add(idx)
+        if not candidate_idx:
+            for idx in self._by_token.get("", []):
+                candidate_idx.add(idx)
+        if not candidate_idx:
+            candidate_idx = set(range(len(self._entries)))
+
+        for idx in sorted(candidate_idx):
+            orig, term_lower, norm_term = self._entries[idx]
+            if _quick_term_hit(lowered, norm_text, term_lower, norm_term):
+                return orig
+            if _token_overlap_match(orig, text, min_overlap):
+                return orig
+
+        fuzzy_ratio = float(self.cfg.get("fuzzyMinRatio", 0.86))
+        for orig in self._fuzzy_terms:
+            term_tokens = [t for t in _match_tokens(orig, 3) if len(t) >= 3]
+            if term_tokens and not any(_token_equivalent(t, text_tokens) for t in term_tokens):
+                continue
+            if _fuzzy_phrase_match(orig, text, fuzzy_ratio):
+                return orig
+        return None
+
+
+_MATCHER_FIELDS = (
+    "primaryActivities",
+    "secondaryActivities",
+    "excludedActivities",
+    "primaryLocations",
+    "secondaryLocations",
+    "primaryMaterials",
+    "secondaryMaterials",
+)
+
+
+def _sector_matcher(sector_rules: dict, field: str) -> TermMatcher:
+    matchers = sector_rules.get("_matchers") or {}
+    matcher = matchers.get(field)
+    if matcher is not None:
+        return matcher
+    return TermMatcher(sector_rules.get(field) or [], MATCH_CFG_DEFAULT)
+
+
+def _prepare_sector_detection_index(rules: dict) -> None:
+    hits: list[tuple[str, str]] = []
+    for sector_key, sector_cfg in (rules.get("sectors") or {}).items():
+        if not isinstance(sector_cfg, dict):
+            continue
+        for field in ("primaryActivities", "primaryLocations", "primaryMaterials"):
+            for term in sector_cfg.get(field) or []:
+                t = str(term).lower().strip()
+                if len(t) >= 2:
+                    hits.append((t, str(sector_key)))
+    rules["_sectorDetectionHits"] = hits
+
+
 def _prepare_rules_matching(rules: dict) -> None:
-    """Expand activity term lists once: initial rules + spreadsheet + alias groups."""
+    """Expand activity term lists once and build token indexes for fast batch scoring."""
     alias_root = rules.get("activityAliasGroups") or {}
+    match_cfg = _matching_cfg(rules)
     for sector, cfg in (rules.get("sectors") or {}).items():
         if not isinstance(cfg, dict):
             continue
         groups = alias_root.get(sector, []) if isinstance(alias_root, dict) else []
-        for field in ("primaryActivities", "secondaryActivities", "excludedActivities"):
+        matchers: dict[str, TermMatcher] = {}
+        for field in _MATCHER_FIELDS:
             raw = cfg.get(field) or []
-            cfg[field] = _expand_activity_terms(raw, groups)
+            if field in ("primaryActivities", "secondaryActivities", "excludedActivities"):
+                cfg[field] = _expand_activity_terms(raw, groups)
+            matchers[field] = TermMatcher(cfg.get(field) or [], match_cfg)
+        cfg["_matchers"] = matchers
+        cfg["_haulageMatcher"] = TermMatcher(_haulage_activity_patterns(cfg), match_cfg)
+    rules["_intensityMatcher"] = TermMatcher(rules.get("intensityTextKeywords") or [], match_cfg)
+    _prepare_sector_detection_index(rules)
 
 
 def _contains_any(
     text: str,
-    terms: list[str],
+    terms: list[str] | TermMatcher,
     match_cfg: dict | None = None,
 ) -> str | None:
     if not text:
         return None
-    cfg = match_cfg or MATCH_CFG_DEFAULT
-    for term in terms:
-        if not term:
-            continue
-        if _flex_contains_term(text, term, cfg):
-            return term
-    return None
+    if isinstance(terms, TermMatcher):
+        return terms.find(text)
+    if not terms:
+        return None
+    return TermMatcher(terms, match_cfg or MATCH_CFG_DEFAULT).find(text)
 
 
 def _is_mostly_numeric(value: str) -> bool:
@@ -334,20 +453,15 @@ def _infer_primary_haulage_activity(
     loc_text = " | ".join(batch.get("locations", []))
     label_text = _activity_label_text(batch) or holistic_text
 
-    pri_mat = _contains_any(
-        mat_text or holistic_text,
-        sector_rules.get("primaryMaterials", []),
-        match_cfg,
-    )
-    pri_loc = _contains_any(
-        loc_text or holistic_text,
-        sector_rules.get("primaryLocations", []),
-        match_cfg,
-    )
+    pri_mat = _sector_matcher(sector_rules, "primaryMaterials").find(mat_text or holistic_text)
+    pri_loc = _sector_matcher(sector_rules, "primaryLocations").find(loc_text or holistic_text)
     if not pri_mat or not pri_loc:
         return None
 
-    if not _contains_any(label_text, _haulage_activity_patterns(sector_rules), match_cfg):
+    haul_matcher = sector_rules.get("_haulageMatcher") or TermMatcher(
+        _haulage_activity_patterns(sector_rules), match_cfg
+    )
+    if not haul_matcher.find(label_text):
         return None
 
     return "in-pit transport / haul (inferred from material, location, and haul activity)"
@@ -366,13 +480,9 @@ def evaluate_activity_criterion(
     holistic = holistic_text or _build_holistic_activity_text(batch)
     cfg = match_cfg or MATCH_CFG_DEFAULT
 
-    excluded = _contains_any(
-        activity_label or holistic,
-        sector_rules.get("excludedActivities", []),
-        cfg,
-    )
-    sec_act = _contains_any(activity_label, sector_rules.get("secondaryActivities", []), cfg)
-    pri_act = _contains_any(holistic, sector_rules.get("primaryActivities", []), cfg)
+    excluded = _sector_matcher(sector_rules, "excludedActivities").find(activity_label or holistic)
+    sec_act = _sector_matcher(sector_rules, "secondaryActivities").find(activity_label)
+    pri_act = _sector_matcher(sector_rules, "primaryActivities").find(holistic)
     inference = None
 
     if not pri_act and not excluded:
@@ -486,17 +596,9 @@ def detect_sector(batch: dict, rules: dict) -> dict:
         }
 
     scores = _score_sector_keywords(text, rules)
-    for sector_key, sector_cfg in sectors.items():
-        if not isinstance(sector_cfg, dict):
-            continue
-        for term in (
-            (sector_cfg.get("primaryActivities") or [])
-            + (sector_cfg.get("primaryLocations") or [])
-            + (sector_cfg.get("primaryMaterials") or [])
-        ):
-            t = str(term).lower().strip()
-            if t and t in text:
-                scores[sector_key] = scores.get(sector_key, 0) + 1
+    for t, sector_key in rules.get("_sectorDetectionHits") or []:
+        if t in text:
+            scores[sector_key] = scores.get(sector_key, 0) + 1
 
     if scores:
         best_sector = max(scores, key=lambda k: scores[k])
@@ -585,26 +687,38 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
     activities, locations, materials, sources, comments, field_snippets = [], [], [], [], [], []
     intensity_values: dict[str, float] = {}
 
-    for _, row in proof_df.iterrows():
-        for col in HOLISTIC_ACTIVITY_COLUMNS:
-            v = _norm(row.get(col))
-            if not v:
-                continue
-            if col == "Activity":
-                activities.append(v)
-            else:
-                comments.append(v)
-        for col in ("Location.1", "Location"):
-            v = _norm(row.get(col))
-            if v:
-                locations.append(v)
-        m = _norm(row.get("Material"))
-        if m:
-            materials.append(m)
-        s = _norm(row.get("Source"))
-        if s:
-            sources.append(s)
-        field_snippets.extend(_collect_row_field_snippets(row))
+    for col in HOLISTIC_ACTIVITY_COLUMNS:
+        if col not in proof_df.columns:
+            continue
+        vals = proof_df[col].dropna().astype(str).str.strip()
+        vals = vals[vals != ""]
+        if col == "Activity":
+            activities.extend(vals.tolist())
+        else:
+            comments.extend(vals.tolist())
+
+    for col in ("Location.1", "Location"):
+        if col in proof_df.columns:
+            vals = proof_df[col].dropna().astype(str).str.strip()
+            locations.extend(vals[vals != ""].tolist())
+    if "Material" in proof_df.columns:
+        vals = proof_df["Material"].dropna().astype(str).str.strip()
+        materials.extend(vals[vals != ""].tolist())
+    if "Source" in proof_df.columns:
+        vals = proof_df["Source"].dropna().astype(str).str.strip()
+        sources.extend(vals[vals != ""].tolist())
+
+    structured = {_norm_col(c) for c in HOLISTIC_ACTIVITY_COLUMNS}
+    structured.update({"material", "location", "location.1", "source"})
+    for col in proof_df.columns:
+        cn = _norm_col(col)
+        if not cn or cn in PROOF_ROW_SKIP_COLUMNS or cn in structured:
+            continue
+        vals = proof_df[col].dropna().astype(str).str.strip()
+        for v in vals[vals != ""]:
+            v_norm = _norm(v)
+            if v_norm and len(v_norm) <= 120 and not _is_mostly_numeric(v_norm):
+                field_snippets.append(v_norm)
 
     for col in proof_df.columns:
         if col in ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr", "Opening SMR", "Closing SMR"):
@@ -683,12 +797,10 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         shortfalls.append(activity_eval["shortfall"])
 
     loc_text = " | ".join(batch.get("locations", []))
-    sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []), match_cfg)
-    pri_loc = _contains_any(loc_text or text, sector_rules.get("primaryLocations", []), match_cfg)
+    sec_loc = _sector_matcher(sector_rules, "secondaryLocations").find(loc_text or text)
+    pri_loc = _sector_matcher(sector_rules, "primaryLocations").find(loc_text or text)
 
-    if not loc_text.strip() and not _contains_any(
-        text, sector_rules.get("primaryLocations", []), match_cfg
-    ):
+    if not loc_text.strip() and not _sector_matcher(sector_rules, "primaryLocations").find(text):
         location_ok = False
         shortfalls.append(f"No {location_label} location on proof records")
     elif sec_loc and not pri_loc:
@@ -703,8 +815,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         shortfalls.append(f"No primary {sector_label.lower()} location identified")
 
     mat_text = " | ".join(batch.get("materials", []))
-    sec_mat = _contains_any(mat_text or text, sector_rules.get("secondaryMaterials", []), match_cfg)
-    pri_mat = _contains_any(mat_text or text, sector_rules.get("primaryMaterials", []), match_cfg)
+    sec_mat = _sector_matcher(sector_rules, "secondaryMaterials").find(mat_text or text)
+    pri_mat = _sector_matcher(sector_rules, "primaryMaterials").find(mat_text or text)
 
     if not mat_text.strip():
         material_ok = False
@@ -725,8 +837,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     intensity_vals = batch.get("intensityValues") or {}
     intensity_ok = len(intensity_vals) > 0
     if not intensity_ok:
-        kw = rules.get("intensityTextKeywords", [])
-        if _contains_any(text, kw, match_cfg):
+        intensity_matcher = rules.get("_intensityMatcher")
+        if intensity_matcher and intensity_matcher.find(text):
             intensity_ok = True
     if not intensity_ok:
         shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
@@ -904,9 +1016,27 @@ def _collect_text_activities(df: pd.DataFrame, max_activities: int):
     return activities
 
 
+def _build_proofs_by_asset_index(
+    proofs_by_asset: dict[str, pd.DataFrame],
+) -> dict[str, dict[str, Any]]:
+    """Parse proof datetimes once per asset (shift fallback runs per txn-only label)."""
+    index: dict[str, dict[str, Any]] = {}
+    for asset, grp in proofs_by_asset.items():
+        if grp is None or len(grp) == 0:
+            continue
+        if "Date & Time" not in grp.columns:
+            index[str(asset)] = {"df": grp, "proof_dt": pd.Series(dtype="datetime64[ns]")}
+            continue
+        index[str(asset)] = {
+            "df": grp,
+            "proof_dt": pd.to_datetime(grp["Date & Time"], errors="coerce"),
+        }
+    return index
+
+
 def _shift_day_fallback_proofs(
     txn_rows: pd.DataFrame,
-    proofs_by_asset: dict[str, pd.DataFrame],
+    proofs_by_asset_index: dict[str, dict[str, Any]],
     rules: dict,
 ) -> tuple[pd.DataFrame, bool]:
     """When a batch has no linked proof, reuse same-asset shift/day proof if only one activity."""
@@ -926,11 +1056,14 @@ def _shift_day_fallback_proofs(
     window_h = float(cfg.get("windowHours", 24))
     max_activities = int(cfg.get("maxDistinctActivitiesPerDay", 1))
 
-    asset_proofs = proofs_by_asset.get(str(asset))
+    entry = proofs_by_asset_index.get(str(asset))
+    if not entry:
+        return pd.DataFrame(), False
+    asset_proofs = entry["df"]
+    proof_dt = entry["proof_dt"]
     if asset_proofs is None or len(asset_proofs) == 0:
         return pd.DataFrame(), False
 
-    proof_dt = pd.to_datetime(asset_proofs["Date & Time"], errors="coerce")
     txn_day = txn_dt.normalize()
     window_start = txn_dt - pd.Timedelta(hours=window_h)
     in_window = asset_proofs[
@@ -964,6 +1097,10 @@ def evaluate_all_labels(
         return {}
 
     labels = relevant.unique()
+    n_labels = len(labels)
+    if n_labels > 500:
+        print(f"Evaluating POA strength for {n_labels} batches...", flush=True)
+
     proof_groups = {
         str(label): grp
         for label, grp in data.loc[proof_mask].groupby("label", observed=True, sort=False)
@@ -976,8 +1113,12 @@ def evaluate_all_labels(
         str(asset): grp
         for asset, grp in data.loc[proof_mask].groupby("Asset Number", observed=True, sort=False)
     }
+    proofs_by_asset_index = _build_proofs_by_asset_index(proofs_by_asset)
 
-    for label in labels:
+    for i, label in enumerate(labels):
+        if n_labels > 500 and i > 0 and i % 500 == 0:
+            print(f"  POA strength progress: {i}/{n_labels}", flush=True)
+
         label_str = str(label)
         proof_rows = proof_groups.get(label_str)
         if proof_rows is None:
@@ -986,7 +1127,7 @@ def evaluate_all_labels(
         if len(proof_rows) == 0:
             txn_rows = txn_groups.get(label_str, pd.DataFrame())
             proof_rows, shift_applied = _shift_day_fallback_proofs(
-                txn_rows, proofs_by_asset, rules
+                txn_rows, proofs_by_asset_index, rules
             )
 
         batch = aggregate_proof_batch(proof_rows)

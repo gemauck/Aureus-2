@@ -144,6 +144,18 @@ if [ -z "${RELEASE_SUMMARY:-}" ] && [ -z "${DEPLOY_SUMMARY:-}" ]; then
 fi
 npm run build
 
+# Keep .env APP_VERSION in sync with dist/build-version.json so /version and PM2 env match the UI build id
+if [ -f dist/build-version.json ] && [ -f .env ]; then
+  DEPLOY_BUILD_VERSION="$(node -e "const j=require('./dist/build-version.json'); if(j&&j.version!=null) process.stdout.write(String(j.version));")"
+  if [ -n "${DEPLOY_BUILD_VERSION}" ]; then
+    sed -i '/^APP_VERSION=/d' .env
+    sed -i '/^APP_BUILD_TIME=/d' .env
+    echo "APP_VERSION=${DEPLOY_BUILD_VERSION}" >> .env
+    echo "APP_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .env
+    echo "  ✓ .env APP_VERSION=${DEPLOY_BUILD_VERSION} (from dist/build-version.json)"
+  fi
+fi
+
 # Ensure Vite projects bundle exists (avoids 502 on /vite-projects/projects-module.js)
 VITE_PROJECTS_DIR="${APP_DIR}/dist/vite-projects"
 VITE_PROJECTS_ENTRY="${VITE_PROJECTS_DIR}/projects-module.js"

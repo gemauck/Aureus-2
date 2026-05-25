@@ -346,17 +346,30 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // Application version info for cache-busting and client refresh prompts
-// Use dynamic version that changes on each deployment
-// Priority: APP_VERSION env var (set by deployment script) > git commit hash > timestamp-based version > package version
+// Must match dist/build-version.json + index.html BUILD_VERSION (written by build-jsx.js on each build).
+function readBuildVersionFromFile () {
+  try {
+    const p = join(__dirname, 'dist', 'build-version.json')
+    if (existsSync(p)) {
+      const j = JSON.parse(readFileSync(p, 'utf8'))
+      if (j.version != null && String(j.version).trim()) {
+        return String(j.version).trim()
+      }
+    }
+  } catch (_) {}
+  return null
+}
+
 const getAppVersion = () => {
+  const fromBuild = readBuildVersionFromFile()
+  if (fromBuild) return fromBuild
+
   if (process.env.APP_VERSION) {
-    // Use the version set by deployment script (format: YYYYMMDD-gitHash)
     return process.env.APP_VERSION
   }
-  
-  // Try to get git commit hash as fallback (more stable than timestamp)
+
   try {
-    const gitHash = execSync('git rev-parse --short HEAD', { 
+    const gitHash = execSync('git rev-parse --short HEAD', {
       cwd: __dirname,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore']
@@ -364,9 +377,6 @@ const getAppVersion = () => {
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '')
     return `${date}-${gitHash}`
   } catch (error) {
-    // Final fallback: Use timestamp-based version (changes on each server start/restart)
-    // This ensures version changes even if git is not available, triggering update notifications
-    // Format: package.version-timestamp (e.g., "0.1.20-1734567890123")
     return `${pkg.version}-${Date.now()}`
   }
 }

@@ -164,6 +164,7 @@ def run_pipeline(
     print('Core POA metrics computed', flush=True)
     review.total_smr(sources)
     print('Total SMR computed', flush=True)
+    print('Starting POA strength evaluation...', flush=True)
     review.evaluate_poa_strength()
     print('POA strength evaluated', flush=True)
 
