@@ -1,6 +1,6 @@
 // Lazy loading script to defer non-critical component loading
 // VERSION: 20260513-core-slim - CRM/maps/leave moved out of core-bundle for faster first load
-console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
+console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
 (function() {
     // CRM + maps: first batch (was in core-entry.js; shrinking dist/core-bundle.js parse cost)
     const componentFiles = [
@@ -234,6 +234,12 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
             // Convert src/ paths to dist/src/ paths if needed
             // Use absolute path for dist assets to avoid relative path issues on nested routes
             let scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
+
+            // Every lazy-loaded dist module gets BUILD_VERSION so deploys are not stuck on old browser/SW cache
+            if (scriptSrc.startsWith('/dist/src/') && !scriptSrc.includes('v=')) {
+                const buildV = (typeof window !== 'undefined' && window.BUILD_VERSION) ? window.BUILD_VERSION : Date.now();
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + buildV;
+            }
             
             // Log ProjectDetail loading attempts
             if (src.includes('ProjectDetail')) {
