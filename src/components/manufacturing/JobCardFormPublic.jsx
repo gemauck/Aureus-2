@@ -1645,6 +1645,7 @@ const JobCardFormPublic = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const wizardScrollRef = useRef(null);
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureLocked, setSignatureLocked] = useState(false);
@@ -2590,6 +2591,19 @@ const JobCardFormPublic = () => {
   }, []);
 
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
+
+  const scrollWizardToTop = useCallback(() => {
+    const el = wizardScrollRef.current;
+    if (el) el.scrollTop = 0;
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, []);
+
+  useEffect(() => {
+    if (wizardFlow !== 'form') return;
+    scrollWizardToTop();
+    const frame = requestAnimationFrame(() => scrollWizardToTop());
+    return () => cancelAnimationFrame(frame);
+  }, [currentStep, wizardFlow, scrollWizardToTop]);
 
   useEffect(() => {
     // Only load while viewing the list. A separate fetch on `landing` (no `q`) could finish after a
@@ -5076,7 +5090,6 @@ const JobCardFormPublic = () => {
     setStepError('');
     pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[stepIndex] });
     setCurrentStep(stepIndex);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNext = () => {
@@ -5154,7 +5167,6 @@ const JobCardFormPublic = () => {
       setLocalDraftsTick(t => t + 1);
     }
     setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrevious = () => {
@@ -5164,7 +5176,6 @@ const JobCardFormPublic = () => {
       pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[prevIdx] });
     }
     setCurrentStep(prev => Math.max(prev - 1, 0));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const renderAssignmentStep = () => (
@@ -5220,13 +5231,16 @@ const JobCardFormPublic = () => {
         </header>
             <div className="flex flex-col sm:flex-row gap-2 mb-2">
               <div className="flex-1 min-w-0">
+                <label htmlFor="team-technician" className="block text-sm font-medium text-gray-700 mb-2">
+                  Team member
+                </label>
                 <SearchableSelect
                   id="team-technician"
-                  aria-label="Technician"
+                  aria-label="Team member"
                   value={technicianInput}
                   onChange={v => setTechnicianInput(v)}
                   options={teamTechnicianOptions}
-                  placeholder="Search…"
+                  placeholder="Search team members…"
                 />
               </div>
               <button
@@ -7711,7 +7725,10 @@ const JobCardFormPublic = () => {
       {/* Main Content Area - Scrollable */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Scrollable Content Area - min-h-0 allows flex item to shrink and enable scroll */}
-        <div className="job-card-scrollable-content flex-1 min-h-0 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch">
+        <div
+          ref={wizardScrollRef}
+          className="job-card-scrollable-content flex-1 min-h-0 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch"
+        >
           <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
             {stepError && (
               <div className="bg-red-50 border border-red-200/90 text-red-800 rounded-2xl px-4 py-3 flex items-start gap-3 text-sm shadow-sm">
