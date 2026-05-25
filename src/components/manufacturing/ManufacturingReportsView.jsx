@@ -237,11 +237,15 @@
     return stored;
   }
 
-  function formatAllocationCustomerName(client, site) {
+  function formatClientSiteLabel(client, site, joiner) {
     const c = client != null ? String(client).trim() : '';
     const s = site != null ? String(site).trim() : '';
-    if (c && s) return `${c}: ${s}`;
+    if (c && s) return `${c}${joiner}${s}`;
     return c || s;
+  }
+
+  function formatAllocationCustomerName(client, site) {
+    return formatClientSiteLabel(client, site, ': ');
   }
 
   function getClientNameFromAllocationRow(row) {
@@ -254,6 +258,23 @@
     const site = row.jobCard_siteName || '';
     if (site && String(site).trim()) return String(site).trim();
     return '';
+  }
+
+  /** QuickBooks journal Description — "Client - Site" when site present, else client only. */
+  function getJournalDescriptionFromRow(row) {
+    if (row.customerName != null && String(row.customerName).trim()) {
+      const cn = String(row.customerName).trim();
+      const colonIdx = cn.indexOf(': ');
+      if (colonIdx >= 0) {
+        return formatClientSiteLabel(cn.slice(0, colonIdx), cn.slice(colonIdx + 2), ' - ');
+      }
+      return cn;
+    }
+    return formatClientSiteLabel(
+      getClientNameFromAllocationRow(row),
+      getSiteNameFromAllocationRow(row),
+      ' - '
+    );
   }
 
   /** QuickBooks journal "Name" — "Client: Site" when site present, else client only. */
@@ -283,31 +304,6 @@
   function getAllocationLineValue(row) {
     const v = parseFloat(row.line_lineValue);
     return Number.isFinite(v) && v > 0 ? v : 0;
-  }
-
-  function formatJournalLineItemLabel(row) {
-    const item = row.line_itemName || row.line_sku || '';
-    const qty = parseFloat(row.line_quantity);
-    if (!Number.isFinite(qty) || qty <= 0) return item;
-    const qtyLabel = Number.isInteger(qty) ? String(qty) : String(qty);
-    return item ? `${qtyLabel} x ${item}` : qtyLabel;
-  }
-
-  function buildJournalDebitDescription(row) {
-    const client = getClientNameFromAllocationRow(row);
-    const item = formatJournalLineItemLabel(row);
-    if (row.sourceType === 'Sales Order') {
-      const so = row.order_orderNumber || '';
-      return `Sales Order ${so} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
-    }
-    if (row.sourceType === 'Job Card Consumption') {
-      const jc = row.jobCard_jobCardNumber || '';
-      const site = getSiteNameFromAllocationRow(row);
-      const sitePart = site ? ` — ${site}` : '';
-      return `Job Card ${jc}${sitePart} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
-    }
-    if (row.quickbooksMemo) return String(row.quickbooksMemo);
-    return `Stock to client - ${client} - ${item}`.trim();
   }
 
   function buildStockIssuedCreditDescription(dateStart, dateEnd) {
@@ -342,7 +338,7 @@
         journalNo,
         journalDateSerial,
         getJournalDebitAccountFromRow(row),
-        buildJournalDebitDescription(row),
+        getJournalDescriptionFromRow(row),
         formatJournalAmount(value),
         '',
         getJournalCustomerNameFromRow(row),
