@@ -301,7 +301,8 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
-                                     src.includes('ManagementMeetingNotes') || src.includes('Teams.jsx') || src.includes('Teams.js') ||
+                                     src.includes('ManagementMeetingNotes') || src.includes('POAReview') ||
+                                     src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      src.includes('AuditTrail') || src.includes('Reports') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
@@ -314,7 +315,8 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
                                      scriptSrc.includes('/projects/Projects') || 
                                      scriptSrc.includes('/projects/ProjectDetail') ||
                                      scriptSrc.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates
-                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
+                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') ||
+                                     scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             
@@ -352,6 +354,7 @@ console.log('🚀 lazy-load-components.js v20260513-core-slim loaded');
                     scriptSrc.includes('ProjectProgressTracker') ||
                     scriptSrc.includes('WeeklyFMSProgressTracker') ||
                     scriptSrc.includes('ManagementMeetingNotes') ||
+                    scriptSrc.includes('POAReview') ||
                     scriptSrc.includes('WeeklyFMSReviewTracker') ||
                     scriptSrc.includes('Teams.jsx') ||
                     scriptSrc.includes('Teams.js') ||
