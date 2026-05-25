@@ -846,7 +846,7 @@ const StepBadge = ({
   const meta = STEP_META[stepId] || {};
   const baseClasses =
     variant === 'carousel'
-      ? 'group flex flex-row items-center justify-start gap-1.5 rounded-lg px-2 py-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always] max-w-[11rem]'
+      ? 'group flex flex-row items-center justify-start gap-2 rounded-lg px-2.5 py-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 snap-start shrink-0 touch-manipulation [scroll-snap-stop:always] max-w-[12.5rem]'
       : 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-700 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass =
     active && variant === 'carousel'
@@ -867,7 +867,7 @@ const StepBadge = ({
       <div
         className={[
           variant === 'carousel'
-            ? 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition'
+            ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition'
             : 'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
           active && variant === 'carousel'
             ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
@@ -879,7 +879,7 @@ const StepBadge = ({
         ].join(' ')}
       >
         <i
-          className={`fa-solid ${meta.icon || 'fa-circle-dot'} ${variant === 'carousel' ? 'text-xs' : 'text-base'}`}
+          className={`fa-solid ${meta.icon || 'fa-circle-dot'} ${variant === 'carousel' ? 'text-sm' : 'text-base'}`}
         ></i>
       </div>
       <div
@@ -890,7 +890,7 @@ const StepBadge = ({
         }
       >
         <span
-          className={`${variant === 'carousel' ? 'text-[10px]' : 'text-[11px]'} uppercase tracking-wide font-semibold ${
+          className={`${variant === 'carousel' ? 'text-xs' : 'text-[11px]'} uppercase tracking-wide font-semibold ${
             active && variant === 'carousel'
               ? 'text-blue-800'
               : active
@@ -901,7 +901,7 @@ const StepBadge = ({
           Step {index + 1}
         </span>
         <span
-          className={`${variant === 'carousel' ? 'text-xs' : 'text-sm'} font-semibold leading-tight ${
+          className={`${variant === 'carousel' ? 'text-sm' : 'text-sm'} font-semibold leading-tight ${
             active && variant === 'carousel'
               ? 'text-slate-900'
               : active
@@ -1074,7 +1074,7 @@ const SearchableSelect = ({
               key={String(opt.value) + String(opt.label)}
               role="option"
               aria-selected={isOptSelected}
-              className={`cursor-pointer px-3 py-2.5 text-sm touch-manipulation border-l-2 ${
+              className={`cursor-pointer px-3 py-3 text-base touch-manipulation border-l-2 ${
                 isOptSelected
                   ? 'bg-blue-100 text-blue-900 font-medium border-blue-600'
                   : 'border-transparent text-gray-900 hover:bg-blue-50 active:bg-blue-100'
@@ -1181,7 +1181,7 @@ const SearchableSelect = ({
                   key={String(opt.value) + String(opt.label)}
                   role="option"
                   aria-selected={isOptSelected}
-                  className={`cursor-pointer px-3 py-2.5 text-sm touch-manipulation border-l-2 ${
+                  className={`cursor-pointer px-3 py-3 text-base touch-manipulation border-l-2 ${
                     isOptSelected
                       ? 'bg-blue-100 text-blue-900 font-medium border-blue-600'
                       : 'border-transparent text-gray-900 hover:bg-blue-50 active:bg-blue-100'
@@ -5485,7 +5485,7 @@ const JobCardFormPublic = () => {
           </div>
         </div>
       </section>
-      {renderNavigationButtons()}
+      {renderNavigationButtons({ placement: 'inline' })}
     </div>
   );
 
@@ -5618,7 +5618,7 @@ const JobCardFormPublic = () => {
           </div>
         </div>
       </section>
-      {renderNavigationButtons()}
+      {renderNavigationButtons({ placement: 'inline' })}
     </div>
   );
 
@@ -6029,7 +6029,7 @@ const JobCardFormPublic = () => {
           </div>
         </div>
       )}
-      {renderNavigationButtons()}
+      {renderNavigationButtons({ placement: 'inline' })}
     </div>
   );
 
@@ -6235,7 +6235,7 @@ const JobCardFormPublic = () => {
           <p className="text-sm text-gray-400">No ad-hoc purchases recorded yet.</p>
             )}
       </section>
-      {renderNavigationButtons()}
+      {renderNavigationButtons({ placement: 'inline' })}
     </div>
   );
 
@@ -6572,61 +6572,95 @@ const JobCardFormPublic = () => {
           </div>
         </div>
       </section>
-      {renderNavigationButtons()}
+      {renderNavigationButtons({ placement: 'inline' })}
     </div>
   );
 
-  const renderNavigationButtons = () => (
-    <div className="mt-6 pt-6 border-t border-slate-200/90 bg-white rounded-2xl p-4 sm:p-6 shadow-sm shadow-slate-200/30 ring-1 ring-slate-100">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <div className="text-xs text-slate-500 text-center sm:text-left font-medium">
-          Step {currentStep + 1} of {STEP_IDS.length}
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-3">
-          <button
-            type="button"
-            onClick={handlePrevious}
-            disabled={currentStep === 0 || isSubmitting}
-            className="min-h-[48px] px-5 py-3 border border-slate-300 text-slate-800 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
-          >
-            Back
-          </button>
+  const renderNavigationButtons = ({ placement = 'inline' } = {}) => {
+    const isFooter = placement === 'footer';
+    const shellClass = isFooter
+      ? 'job-card-wizard-footer xl:hidden flex-shrink-0 border-t border-slate-200/90 bg-white shadow-[0_-4px_24px_rgba(15,23,42,0.12)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+      : 'mt-6 pt-6 border-t border-slate-200/90 bg-white rounded-2xl p-4 sm:p-6 shadow-sm shadow-slate-200/30 ring-1 ring-slate-100 hidden xl:block';
+    const stepLabelClass = isFooter
+      ? 'text-sm text-slate-600 text-center font-semibold mb-2'
+      : 'text-xs text-slate-500 text-center sm:text-left font-medium';
+    const btnClass = isFooter
+      ? 'min-h-[52px] flex-1 px-3 py-3 text-base font-semibold rounded-xl touch-manipulation'
+      : 'min-h-[48px] px-5 py-3 text-sm font-semibold rounded-xl touch-manipulation';
+    return (
+      <div className={shellClass}>
+        <div className={isFooter ? 'max-w-4xl mx-auto' : ''}>
+          <div className={isFooter ? '' : 'flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4'}>
+            <div className={stepLabelClass}>
+              Step {currentStep + 1} of {STEP_IDS.length}
+            </div>
+            <div
+              className={
+                isFooter
+                  ? 'flex flex-row flex-wrap gap-2'
+                  : 'flex flex-col sm:flex-row gap-3 sm:gap-3'
+              }
+            >
+              <button
+                type="button"
+                onClick={handlePrevious}
+                disabled={currentStep === 0 || isSubmitting}
+                className={`${btnClass} border border-slate-300 text-slate-800 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isFooter ? 'min-w-[5.5rem]' : ''
+                }`}
+              >
+                Back
+              </button>
 
-          <button
-            type="button"
-            onClick={(event) => { event.preventDefault(); handleSave({ forceDraft: true }); }}
-            disabled={isSubmitting}
-            className="min-h-[48px] px-5 py-3 border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
-          >
-            Save draft
-          </button>
-          {currentStep < STEP_IDS.length - 1 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={isSubmitting}
-              className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-md shadow-blue-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              type="submit"
-              onClick={(event) => { event.preventDefault(); handleSave({ forceSubmitted: true }); }}
-              disabled={isSubmitting}
-              className="min-h-[48px] px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-md shadow-blue-900/10 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting
-                ? 'Saving...'
-                : formData.status === 'completed'
-                    ? 'Save completed job card'
-                    : 'Submit job card'}
-            </button>
-          )}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleSave({ forceDraft: true });
+                }}
+                disabled={isSubmitting}
+                className={`${btnClass} border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isFooter ? 'min-w-[6.5rem]' : ''
+                }`}
+              >
+                Save draft
+              </button>
+              {currentStep < STEP_IDS.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={isSubmitting}
+                  className={`${btnClass} bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-900/10 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isFooter ? 'flex-[1.2] min-w-[6rem]' : 'px-6'
+                  }`}
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    handleSave({ forceSubmitted: true });
+                  }}
+                  disabled={isSubmitting}
+                  className={`${btnClass} bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md shadow-blue-900/10 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isFooter ? 'flex-[1.2] min-w-[6rem]' : 'px-6'
+                  }`}
+                >
+                  {isSubmitting
+                    ? 'Saving...'
+                    : formData.status === 'completed'
+                      ? 'Save completed job card'
+                      : 'Submit job card'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStepContent = () => {
     switch (STEP_IDS[currentStep]) {
@@ -7734,11 +7768,11 @@ const JobCardFormPublic = () => {
 
       {/* Mobile: full step ribbon always visible; stays above scrolling form (flex + CSS) */}
       <header className="job-card-mobile-wizard-ribbon xl:hidden flex-shrink-0 relative z-20 overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-blue-900 text-white shadow-sm border-b border-blue-900/20">
-        <div className="relative px-2 py-1.5">
-          <div className="max-w-4xl mx-auto space-y-1">
+        <div className="relative px-3 py-2">
+          <div className="max-w-4xl mx-auto space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <h1 className="jobcard-app-title text-sm font-bold leading-none text-white truncate">
+                <h1 className="jobcard-app-title text-base font-bold leading-tight text-white truncate">
                   Job cards
                   {editingMeta?.jobCardNumber ? (
                     <span className="font-normal text-amber-100/95">
@@ -7751,7 +7785,7 @@ const JobCardFormPublic = () => {
               </div>
               <div className="job-card-header-toolbar relative z-10 inline-flex flex-nowrap items-center gap-0.5 shrink-0">
                 <span
-                  className={`job-card-online-badge inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none whitespace-nowrap ${
+                  className={`job-card-online-badge inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold leading-none whitespace-nowrap ${
                     isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
                   }`}
                 >
@@ -7765,24 +7799,24 @@ const JobCardFormPublic = () => {
                 <button
                   type="button"
                   onClick={handleShareLink}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 touch-manipulation"
                   aria-label="Share job card link"
                 >
-                  <i className="fa-regular fa-share-from-square text-[11px]" aria-hidden />
+                  <i className="fa-regular fa-share-from-square text-sm" aria-hidden />
                 </button>
                 <button
                   type="button"
                   onClick={exitToMenu}
-                  className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
+                  className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition touch-manipulation"
                   aria-label="Back to menu"
                 >
-                  <i className="fa-solid fa-house text-[11px]" aria-hidden />
+                  <i className="fa-solid fa-house text-sm" aria-hidden />
                 </button>
               </div>
             </div>
             {getJobCardRecorderDisplayName() ? (
               <p
-                className="text-[10px] text-white/80 truncate"
+                className="text-xs text-white/85 truncate"
                 title={`Recorded in ERP as ${getJobCardRecorderDisplayName()}`}
               >
                 {getJobCardRecorderDisplayName()}
@@ -7811,7 +7845,7 @@ const JobCardFormPublic = () => {
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <span className="text-[10px] font-medium tabular-nums text-white/80 shrink-0">{progressPercent}%</span>
+              <span className="text-xs font-semibold tabular-nums text-white/90 shrink-0">{progressPercent}%</span>
             </div>
           </div>
         </div>
@@ -7824,7 +7858,7 @@ const JobCardFormPublic = () => {
           ref={wizardScrollRef}
           className="job-card-scrollable-content flex-1 min-h-0 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch"
         >
-          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+          <div className="job-card-scroll-inner max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 pb-28 xl:pb-6 space-y-4 sm:space-y-5">
             {stepError && (
               <div className="bg-red-50 border border-red-200/90 text-red-800 rounded-2xl px-4 py-3 flex items-start gap-3 text-sm shadow-sm">
                 <i className="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>
@@ -7906,7 +7940,7 @@ const JobCardFormPublic = () => {
           </div>
         </div>
 
-        {/* Footer removed - navigation buttons are now inline at end of each step */}
+        {renderNavigationButtons({ placement: 'footer' })}
       </div>
 
       {photoLightboxUrl ? (
