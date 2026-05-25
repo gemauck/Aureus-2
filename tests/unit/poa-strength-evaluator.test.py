@@ -354,6 +354,53 @@ def test_refuelling_water_eligible():
     assert result["strength"] in (STRENGTH_STRONG, STRENGTH_MODERATE, STRENGTH_WEAK)
 
 
+def test_breakdown_maint_not_eligible_activity():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "BD-1",
+                    "Date & Time": "2026-04-01 08:00:00",
+                    "Activity": "Breakdown / Maint",
+                    "Comments": "Day-Shift-A",
+                    "Source": "Activity Report Mc",
+                    "Custom Attribute": "Operator: Breakdown",
+                    "Location.1": "Pit 4&5",
+                    "Opening SMR": 406778,
+                    "Closing SMR": 406778,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+    assert not any("Primary mining activity identified" in p for p in result["compliancePoints"])
+    assert any("breakdown" in s.lower() or "non-operational" in s.lower() for s in result["shortfalls"])
+
+
+def test_standby_idle_not_eligible():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "SB-1",
+                    "Date & Time": "2026-04-01 12:00:00",
+                    "Activity": "Standby / Idle",
+                    "Location.1": "north pit",
+                    "Material": "coal",
+                    "Total SMR Usage": 1,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+
+
 def test_asset_name_without_activity_not_eligible():
     rules = load_rules()
     batch = aggregate_proof_batch(
@@ -417,4 +464,6 @@ if __name__ == "__main__":
     test_refuelling_water_eligible()
     test_diesel_bowser_activity_excluded()
     test_asset_name_without_activity_not_eligible()
+    test_breakdown_maint_not_eligible_activity()
+    test_standby_idle_not_eligible()
     print("All POA strength evaluator tests passed.")

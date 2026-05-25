@@ -372,7 +372,19 @@
         "diesel bowser side tank",
         "mobile diesel bowser",
         "dispensing diesel",
-        "fuel bowser diesel"
+        "fuel bowser diesel",
+        "breakdown",
+        "breakdown / maint",
+        "breakdown maint",
+        "breakdown maintenance",
+        "breakdown / maintenance",
+        "standby",
+        "standby / idle",
+        "stand by",
+        "idle",
+        "operator breakdown",
+        "operator: breakdown",
+        "insufficient proof of use"
       ],
       "spreadsheetCatalog": [
         {
@@ -791,6 +803,17 @@
           ],
           "ineligibleTerm": "refuelling diesel",
           "eligibleLabel": "refuelling water for mining operations"
+        },
+        "nonOperationalStatus": {
+          "patterns": [
+            "breakdown",
+            "standby",
+            "stand by",
+            "idle",
+            "operator: breakdown",
+            "insufficient proof"
+          ],
+          "ineligibleLabel": "breakdown / non-operational status"
         }
       }
     },

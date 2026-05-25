@@ -602,6 +602,64 @@ def _infer_primary_haulage_activity(
     return "in-pit transport / haul (inferred from material, location, and haul activity)"
 
 
+def _status_context_text(batch: dict) -> str:
+    """Activity fields plus custom attribute / equipment snippets for status detection."""
+    parts = [_production_activity_text(batch)]
+    parts.extend(batch.get("fieldSnippets") or [])
+    parts.extend(batch.get("assetDescriptions") or [])
+    return " | ".join(dict.fromkeys(p for p in parts if p))
+
+
+def _detect_non_operational_status(batch: dict, sector_rules: dict) -> str | None:
+    """
+    Asset on breakdown, standby, or idle cannot perform eligible production activity.
+    Catches logbook rows like 'Breakdown / Maint' and 'Operator: Breakdown'.
+    """
+    cfg = (sector_rules.get("activityInference") or {}).get("nonOperationalStatus") or {}
+    if cfg.get("enabled") is False:
+        return None
+
+    combined = _status_context_text(batch).lower()
+    if not combined.strip():
+        return None
+
+    patterns = cfg.get("patterns") or [
+        "breakdown",
+        "standby",
+        "stand by",
+        "idle",
+        "operator: breakdown",
+        "insufficient proof",
+    ]
+    ineligible = str(cfg.get("ineligibleLabel") or "breakdown / non-operational status").strip()
+
+    for pattern in patterns:
+        p = str(pattern).lower().strip()
+        if not p:
+            continue
+        if " " in p or ":" in p:
+            if p in combined:
+                return ineligible
+        elif re.search(rf"\b{re.escape(p)}\b", combined):
+            return ineligible
+
+    if re.search(r"\bbreakdown\b", combined) and re.search(r"\bmaint\b", combined):
+        return ineligible
+    return None
+
+
+def _pri_act_blocked_by_breakdown_context(production_text: str, pri_act: str | None) -> bool:
+    """Prevent 'maint' in Breakdown/Maint from matching road/asset maintenance primaries."""
+    if not pri_act or not production_text:
+        return False
+    if not re.search(r"\bbreakdown\b", production_text.lower()):
+        return False
+    norm_act = _normalize_for_match(pri_act)
+    if "maint" in norm_act and "breakdown" not in norm_act:
+        return True
+    return False
+
+
 def _infer_refuel_activity(
     batch: dict,
     sector_rules: dict,
@@ -667,15 +725,25 @@ def evaluate_activity_criterion(
     cfg = match_cfg or MATCH_CFG_DEFAULT
 
     production_text = _production_activity_text(batch)
+    status_context = _status_context_text(batch)
 
-    excluded = _sector_matcher(sector_rules, "excludedActivities").find(production_text)
+    non_op = _detect_non_operational_status(batch, sector_rules)
+    excluded = _sector_matcher(sector_rules, "excludedActivities").find(
+        production_text or status_context
+    )
+    if non_op:
+        excluded = excluded or non_op
+
     sec_act = _sector_matcher(sector_rules, "secondaryActivities").find(activity_label)
     pri_act = (
         _sector_matcher(sector_rules, "primaryActivities").find(production_text)
-        if production_text.strip()
+        if production_text.strip() and not non_op
         else None
     )
     inference = None
+
+    if _pri_act_blocked_by_breakdown_context(production_text, pri_act):
+        pri_act = None
 
     refuel_infer = _infer_refuel_activity(batch, sector_rules, holistic, activity_label)
     if refuel_infer:
