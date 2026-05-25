@@ -1646,6 +1646,10 @@ const JobCardFormPublic = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const wizardScrollRef = useRef(null);
+  /** False while opening a card with `attachmentsPending` until /photos has loaded (avoid PATCH wiping attachments). */
+  const photosHydrationCompleteRef = useRef(true);
+  /** User added/removed section photos, voice, or gallery after open — skip clobbering from deferred photo fetch. */
+  const editMediaDirtyRef = useRef(false);
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureLocked, setSignatureLocked] = useState(false);
@@ -1813,54 +1817,58 @@ const JobCardFormPublic = () => {
     );
     const visualEntries = extractVisualPhotoEntries(photosRaw);
 
-    const restoredSectionMedia = emptySectionWorkMedia();
-    sectionMediaEntries.forEach(item => {
-      const sec = item.section;
-      if (restoredSectionMedia[sec] != null) {
-        const mediaUrl =
-          (typeof item.url === 'string' && item.url) ||
-          (typeof item.dataUrl === 'string' && item.dataUrl) ||
-          (typeof item.src === 'string' && item.src) ||
-          '';
-        if (!mediaUrl) return;
-        restoredSectionMedia[sec].push({
-          name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
-          url: mediaUrl,
-          thumbUrl:
-            (typeof item.thumbUrl === 'string' && item.thumbUrl) ||
-            (typeof item.previewUrl === 'string' && item.previewUrl) ||
-            ''
-        });
-      }
-    });
-    setSectionWorkMedia(restoredSectionMedia);
-    setVoiceAttachments(
-      voiceEntries.map((v, i) => ({
-        id: `vn_restore_${i}_${Date.now()}`,
-        section: v.section || 'otherComments',
-        dataUrl: v.url || v.dataUrl || '',
-        mimeType: v.mimeType || 'audio/webm',
-        noteNumber: i + 1
-      }))
-    );
-    setSelectedPhotos(
-      visualEntries.map((item, i) => ({
-        name: item.name || `Photo ${i + 1}`,
-        url: item.url,
-        previewUrl: item.previewUrl || '',
-        entry: item.stored,
-        safetyCulture: item.safetyCulture === true,
-        mediaId: item.mediaId || '',
-        token: item.token || '',
-        mediaType: item.mediaType || '',
-        issueId: item.issueId || '',
-        filename: item.filename || ''
-      }))
-    );
-    setFormData(prev => {
-      if (String(activeEditCardIdRef.current || '') !== String(targetLocalId)) return prev;
-      return { ...prev, photos: visualEntries.map(item => item.stored) };
-    });
+    photosHydrationCompleteRef.current = true;
+
+    if (!editMediaDirtyRef.current) {
+      const restoredSectionMedia = emptySectionWorkMedia();
+      sectionMediaEntries.forEach(item => {
+        const sec = item.section;
+        if (restoredSectionMedia[sec] != null) {
+          const mediaUrl =
+            (typeof item.url === 'string' && item.url) ||
+            (typeof item.dataUrl === 'string' && item.dataUrl) ||
+            (typeof item.src === 'string' && item.src) ||
+            '';
+          if (!mediaUrl) return;
+          restoredSectionMedia[sec].push({
+            name: item.name || `Attachment ${restoredSectionMedia[sec].length + 1}`,
+            url: mediaUrl,
+            thumbUrl:
+              (typeof item.thumbUrl === 'string' && item.thumbUrl) ||
+              (typeof item.previewUrl === 'string' && item.previewUrl) ||
+              ''
+          });
+        }
+      });
+      setSectionWorkMedia(restoredSectionMedia);
+      setVoiceAttachments(
+        voiceEntries.map((v, i) => ({
+          id: `vn_restore_${i}_${Date.now()}`,
+          section: v.section || 'otherComments',
+          dataUrl: v.url || v.dataUrl || '',
+          mimeType: v.mimeType || 'audio/webm',
+          noteNumber: i + 1
+        }))
+      );
+      setSelectedPhotos(
+        visualEntries.map((item, i) => ({
+          name: item.name || `Photo ${i + 1}`,
+          url: item.url,
+          previewUrl: item.previewUrl || '',
+          entry: item.stored,
+          safetyCulture: item.safetyCulture === true,
+          mediaId: item.mediaId || '',
+          token: item.token || '',
+          mediaType: item.mediaType || '',
+          issueId: item.issueId || '',
+          filename: item.filename || ''
+        }))
+      );
+      setFormData(prev => {
+        if (String(activeEditCardIdRef.current || '') !== String(targetLocalId)) return prev;
+        return { ...prev, photos: visualEntries.map(item => item.stored) };
+      });
+    }
   }, []);
 
   const signatureCanvasRef = useRef(null);
@@ -2010,6 +2018,7 @@ const JobCardFormPublic = () => {
         kind: 'voice',
         section: clip?.section || 'unknown'
       });
+      editMediaDirtyRef.current = true;
       setVoiceAttachments(prev => [
         ...prev,
         {
@@ -3354,6 +3363,7 @@ const JobCardFormPublic = () => {
               thumbUrl: thumbUrl || ''
             };
         pushWizardActivity('wizard_media_added', { kind: 'photo' });
+        editMediaDirtyRef.current = true;
         setSelectedPhotos(prev => [
           ...prev,
           {
@@ -3374,6 +3384,7 @@ const JobCardFormPublic = () => {
   };
 
   const handleRemovePhoto = (index) => {
+    editMediaDirtyRef.current = true;
     const newPhotos = selectedPhotos.filter((_, idx) => idx !== index);
     setSelectedPhotos(newPhotos);
     setFormData(prev => ({
@@ -3416,6 +3427,7 @@ const JobCardFormPublic = () => {
         }
         const thumbUrl = !isVid ? await buildJobCardImageThumbnailDataUrl(dataUrl) : '';
         pushWizardActivity('wizard_media_added', { kind: 'sectionMedia', section });
+        editMediaDirtyRef.current = true;
         setSectionWorkMedia(prev => ({
           ...prev,
           [section]: [
@@ -3432,6 +3444,7 @@ const JobCardFormPublic = () => {
   };
 
   const handleRemoveSectionWorkMedia = (section, index) => {
+    editMediaDirtyRef.current = true;
     setSectionWorkMedia(prev => ({
       ...prev,
       [section]: (prev[section] || []).filter((_, i) => i !== index)
@@ -3762,6 +3775,8 @@ const JobCardFormPublic = () => {
     lastSignatureRestoreRef.current = null;
     sessionActivityQueueRef.current = [];
     activeEditCardIdRef.current = null;
+    photosHydrationCompleteRef.current = true;
+    editMediaDirtyRef.current = false;
     clearSignature();
   };
 
@@ -3782,6 +3797,8 @@ const JobCardFormPublic = () => {
     sessionActivityQueueRef.current = [];
     setPriorLoadedActivities([]);
     setPriorActivityLoading(false);
+    photosHydrationCompleteRef.current = true;
+    editMediaDirtyRef.current = false;
     resetForm();
     setWizardFlow('form');
   };
@@ -4181,6 +4198,8 @@ const JobCardFormPublic = () => {
     clearSignature();
     sessionActivityQueueRef.current = [];
     activeEditCardIdRef.current = null;
+    photosHydrationCompleteRef.current = true;
+    editMediaDirtyRef.current = false;
     setOpeningJobCard(true);
 
     try {
@@ -4221,6 +4240,7 @@ const JobCardFormPublic = () => {
           if (apiCard && apiCard.id) {
             full = apiCard;
             if (apiCard.attachmentsPending === true) {
+              photosHydrationCompleteRef.current = false;
               deferredPhotosPromise = (async () => {
                 try {
                   const pr = await fetch(`/api/jobcards/${encodeURIComponent(openId)}/photos`, {
@@ -4822,12 +4842,20 @@ const JobCardFormPublic = () => {
           thumbUrl: item.thumbUrl || ''
         }))
       );
-      jobCardData.photos = buildJobCardPhotosPayload({
-        formPhotos: formData.photos,
-        signatureDataUrl: signatureForSave,
-        sectionPhotoEntries,
-        voicePhotoEntries
-      });
+      const serverJobCardIdForPhotos =
+        editingMeta?.serverJobCardId ||
+        (editingMeta?.localId && isLikelyServerJobCardId(editingMeta.localId)
+          ? String(editingMeta.localId)
+          : null);
+      const omitPhotosOnServer = Boolean(serverJobCardIdForPhotos && !photosHydrationCompleteRef.current);
+      if (!omitPhotosOnServer) {
+        jobCardData.photos = buildJobCardPhotosPayload({
+          formPhotos: formData.photos,
+          signatureDataUrl: signatureForSave,
+          sectionPhotoEntries,
+          voicePhotoEntries
+        });
+      }
 
       jobCardData.status = normalizedStatus;
       if (normalizedStatus === 'draft') {
@@ -5031,7 +5059,12 @@ const JobCardFormPublic = () => {
         sessionActivityQueueRef.current = [];
         removeLocalPendingJobCard(jobCardData.id);
         try {
-          alert(normalizedStatus === 'draft' ? 'Draft saved.' : 'Job card saved.');
+          const photosNote = omitPhotosOnServer
+            ? '\n\nPhotos and voice notes are still loading from the server — other fields were saved. Wait a moment and save again to update attachments.'
+            : '';
+          alert(
+            (normalizedStatus === 'draft' ? 'Draft saved.' : 'Job card saved.') + photosNote
+          );
         } catch {
           /* ignore */
         }
@@ -5066,6 +5099,126 @@ const JobCardFormPublic = () => {
     }
   };
 
+  const buildWizardPhotosPayload = useCallback(() => {
+    const draftSignature =
+      (signatureLocked && formData.customerSignature) ||
+      exportSignature() ||
+      (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
+    return buildJobCardPhotosPayload({
+      formPhotos: formData.photos,
+      signatureDataUrl: draftSignature,
+      sectionPhotoEntries: SECTION_WORK_MEDIA_KEYS.flatMap(sec =>
+        (sectionWorkMedia[sec] || []).map(item => ({
+          kind: 'sectionMedia',
+          section: sec,
+          url: item.url,
+          name: item.name || '',
+          thumbUrl: item.thumbUrl || ''
+        }))
+      ),
+      voicePhotoEntries: voiceAttachments.map(v => ({
+        kind: 'voice',
+        section: v.section,
+        url: v.dataUrl,
+        mimeType: v.mimeType || 'audio/webm'
+      }))
+    });
+  }, [formData, signatureLocked, sectionWorkMedia, voiceAttachments, exportSignature]);
+
+  const persistWizardDraft = useCallback(
+    async ({ syncServer = false } = {}) => {
+      const nowIso = new Date().toISOString();
+      const draftLocalId =
+        editingMeta?.localId ?? activeEditCardIdRef.current ?? generateClientDraftId();
+      const prevPending = readLocalPendingJobCards().find(
+        c => c && String(c.id) === String(draftLocalId)
+      );
+      const draftSignature =
+        (signatureLocked && formData.customerSignature) ||
+        exportSignature() ||
+        (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
+      const serverJobCardId =
+        editingMeta?.serverJobCardId ||
+        (isLikelyServerJobCardId(draftLocalId) ? String(draftLocalId) : null);
+      const snapshot = {
+        ...formData,
+        customerSignature: draftSignature,
+        id: draftLocalId,
+        startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
+        createdAt: editingMeta?.createdAt ?? nowIso,
+        updatedAt: nowIso,
+        synced: false,
+        status: 'draft',
+        submittedAt: null,
+        completedAt: null,
+        jobCardNumber: editingMeta?.jobCardNumber || '',
+        serverJobCardId: editingMeta?.serverJobCardId || null,
+        totalMaterialsCost: totalMaterialCost,
+        travelKilometers: Math.max(
+          0,
+          (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
+        ),
+        photos: buildWizardPhotosPayload(),
+        activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
+      };
+      upsertLocalPendingJobCard(snapshot);
+      setEditingMeta(prev => ({
+        localId: prev?.localId ?? draftLocalId,
+        serverJobCardId: prev?.serverJobCardId || null,
+        startedAt: prev?.startedAt ?? prev?.createdAt ?? nowIso,
+        createdAt: prev?.createdAt ?? nowIso,
+        synced: false,
+        jobCardNumber: prev?.jobCardNumber || ''
+      }));
+      setLocalDraftsTick(t => t + 1);
+
+      if (!syncServer || !serverJobCardId || !isOnline || !getJobCardAuthToken()) return;
+
+      const payloadObj = { ...snapshot };
+      delete payloadObj.activityQueue;
+      delete payloadObj.synced;
+      delete payloadObj.source;
+      delete payloadObj.serverJobCardId;
+      delete payloadObj.id;
+      if (!photosHydrationCompleteRef.current) {
+        delete payloadObj.photos;
+      }
+      const patchBytes = estimateJsonBytes(payloadObj);
+      if (patchBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) return;
+
+      const token = getJobCardAuthToken();
+      try {
+        const patchRes = await fetchWithRetry(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payloadObj)
+        });
+        if (!patchRes.ok) {
+          const text = await patchRes.text().catch(() => '');
+          console.warn(
+            'JobCardFormPublic: background draft PATCH failed',
+            patchRes.status,
+            text.slice(0, 200)
+          );
+        }
+      } catch (e) {
+        console.warn('JobCardFormPublic: background draft PATCH error', e);
+      }
+    },
+    [
+      editingMeta,
+      formData,
+      signatureLocked,
+      totalMaterialCost,
+      buildWizardPhotosPayload,
+      exportSignature,
+      isOnline
+    ]
+  );
+
   const validateStep = (stepIndex) => {
     switch (STEP_IDS[stepIndex]) {
       case 'assignment':
@@ -5087,6 +5240,7 @@ const JobCardFormPublic = () => {
         return;
       }
     }
+    void persistWizardDraft({ syncServer: Boolean(editingMeta?.serverJobCardId) });
     setStepError('');
     pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[stepIndex] });
     setCurrentStep(stepIndex);
@@ -5104,67 +5258,7 @@ const JobCardFormPublic = () => {
     const nextIdx = Math.min(currentStep + 1, STEP_IDS.length - 1);
     if (nextIdx !== currentStep) {
       pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[nextIdx] });
-    }
-    if (nextIdx >= 1) {
-      const nowIso = new Date().toISOString();
-      const draftLocalId =
-        editingMeta?.localId ?? activeEditCardIdRef.current ?? generateClientDraftId();
-      const prevPending = readLocalPendingJobCards().find(
-        c => c && String(c.id) === String(draftLocalId)
-      );
-      const draftSignature =
-        (signatureLocked && formData.customerSignature) ||
-        exportSignature() ||
-        (typeof formData.customerSignature === 'string' ? formData.customerSignature.trim() : '');
-      const autoDraft = {
-        ...formData,
-        customerSignature: draftSignature,
-        id: draftLocalId,
-        startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
-        createdAt: editingMeta?.createdAt ?? nowIso,
-        updatedAt: nowIso,
-        synced: false,
-        status: 'draft',
-        submittedAt: null,
-        completedAt: null,
-        jobCardNumber: editingMeta?.jobCardNumber || '',
-        serverJobCardId: editingMeta?.serverJobCardId || null,
-        totalMaterialsCost: totalMaterialCost,
-        travelKilometers: Math.max(
-          0,
-          (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
-        ),
-        photos: buildJobCardPhotosPayload({
-          formPhotos: formData.photos,
-          signatureDataUrl: draftSignature,
-          sectionPhotoEntries: SECTION_WORK_MEDIA_KEYS.flatMap(sec =>
-            (sectionWorkMedia[sec] || []).map(item => ({
-              kind: 'sectionMedia',
-              section: sec,
-              url: item.url,
-              name: item.name || '',
-              thumbUrl: item.thumbUrl || ''
-            }))
-          ),
-          voicePhotoEntries: voiceAttachments.map(v => ({
-            kind: 'voice',
-            section: v.section,
-            url: v.dataUrl,
-            mimeType: v.mimeType || 'audio/webm'
-          }))
-        }),
-        activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
-      };
-      upsertLocalPendingJobCard(autoDraft);
-      setEditingMeta(prev => ({
-        localId: prev?.localId ?? draftLocalId,
-        serverJobCardId: prev?.serverJobCardId || null,
-        startedAt: prev?.startedAt ?? prev?.createdAt ?? nowIso,
-        createdAt: prev?.createdAt ?? nowIso,
-        synced: false,
-        jobCardNumber: prev?.jobCardNumber || ''
-      }));
-      setLocalDraftsTick(t => t + 1);
+      void persistWizardDraft({ syncServer: Boolean(editingMeta?.serverJobCardId) });
     }
     setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));
   };
@@ -5174,6 +5268,7 @@ const JobCardFormPublic = () => {
     const prevIdx = Math.max(currentStep - 1, 0);
     if (prevIdx !== currentStep) {
       pushWizardActivity('wizard_step_entered', { stepId: STEP_IDS[prevIdx] });
+      void persistWizardDraft({ syncServer: Boolean(editingMeta?.serverJobCardId) });
     }
     setCurrentStep(prev => Math.max(prev - 1, 0));
   };
