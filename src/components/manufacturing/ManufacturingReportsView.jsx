@@ -260,8 +260,8 @@
     return '';
   }
 
-  /** QuickBooks journal Description — "Client - Site" when site present, else client only. */
-  function getJournalDescriptionFromRow(row) {
+  /** QuickBooks journal "Name" — "Client - Site" when site present, else client only. */
+  function getJournalCustomerNameFromRow(row) {
     if (row.customerName != null && String(row.customerName).trim()) {
       const cn = String(row.customerName).trim();
       const colonIdx = cn.indexOf(': ');
@@ -274,17 +274,6 @@
       getClientNameFromAllocationRow(row),
       getSiteNameFromAllocationRow(row),
       ' - '
-    );
-  }
-
-  /** QuickBooks journal "Name" — "Client: Site" when site present, else client only. */
-  function getJournalCustomerNameFromRow(row) {
-    if (row.customerName != null && String(row.customerName).trim()) {
-      return String(row.customerName).trim();
-    }
-    return formatAllocationCustomerName(
-      getClientNameFromAllocationRow(row),
-      getSiteNameFromAllocationRow(row)
     );
   }
 
@@ -304,6 +293,31 @@
   function getAllocationLineValue(row) {
     const v = parseFloat(row.line_lineValue);
     return Number.isFinite(v) && v > 0 ? v : 0;
+  }
+
+  function formatJournalLineItemLabel(row) {
+    const item = row.line_itemName || row.line_sku || '';
+    const qty = parseFloat(row.line_quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return item;
+    const qtyLabel = Number.isInteger(qty) ? String(qty) : String(qty);
+    return item ? `${qtyLabel} x ${item}` : qtyLabel;
+  }
+
+  function buildJournalDebitDescription(row) {
+    const client = getClientNameFromAllocationRow(row);
+    const item = formatJournalLineItemLabel(row);
+    if (row.sourceType === 'Sales Order') {
+      const so = row.order_orderNumber || '';
+      return `Sales Order ${so} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
+    }
+    if (row.sourceType === 'Job Card Consumption') {
+      const jc = row.jobCard_jobCardNumber || '';
+      const site = getSiteNameFromAllocationRow(row);
+      const sitePart = site ? ` — ${site}` : '';
+      return `Job Card ${jc}${sitePart} - ${client} - ${item}`.replace(/\s+-\s+-/g, ' - ').trim();
+    }
+    if (row.quickbooksMemo) return String(row.quickbooksMemo);
+    return `Stock to client - ${client} - ${item}`.trim();
   }
 
   function buildStockIssuedCreditDescription(dateStart, dateEnd) {
@@ -338,7 +352,7 @@
         journalNo,
         journalDateSerial,
         getJournalDebitAccountFromRow(row),
-        getJournalDescriptionFromRow(row),
+        buildJournalDebitDescription(row),
         formatJournalAmount(value),
         '',
         getJournalCustomerNameFromRow(row),
