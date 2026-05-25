@@ -179,6 +179,98 @@ def test_detect_sector_forestry_over_mining_default():
     assert ctx["sector"] == "forestry"
 
 
+def test_initial_schedule6_terms_still_match_after_spreadsheet_merge():
+    rules = load_rules()
+    assert "exploration" in (rules["sectors"]["mining"].get("primaryActivities") or [])
+    batch = {
+        "proofCount": 1,
+        "activities": ["exploration drilling on site"],
+        "locations": ["north pit"],
+        "materials": ["coal"],
+        "comments": [],
+        "fieldSnippets": [],
+        "sources": [],
+        "intensityValues": {"Total SMR Usage": 2.0},
+        "combinedText": "exploration drilling on site | north pit | coal",
+        "holisticText": "exploration drilling on site | coal | north pit",
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is True
+
+
+def test_flex_match_similar_activity_names():
+    rules = load_rules()
+    for activity in (
+        "LOAD & HAUL",
+        "loading and hauling",
+        "Drill and Blast",
+        "TRANSPORT MATERIAL",
+    ):
+        batch = {
+            "proofCount": 1,
+            "activities": [activity.lower()],
+            "locations": ["north pit"],
+            "materials": ["coal"],
+            "comments": [],
+            "fieldSnippets": [],
+            "sources": [],
+            "intensityValues": {"Total SMR Usage": 3.0},
+            "combinedText": f"{activity.lower()} | north pit | coal",
+            "holisticText": f"{activity.lower()} | coal | north pit",
+        }
+        result = evaluate_batch_rules(batch, rules)
+        assert result["criteria"]["activity"] is True, activity
+
+
+def test_holistic_transport_coal_pit_inferred_haul():
+    """Activity column alone may say 'transport'; coal + pit + haul wording = primary mining."""
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "870-R",
+                    "Date & Time": "2026-04-02 06:00:00",
+                    "Activity": "transporting materials",
+                    "Location.1": "north pit",
+                    "Material": "coal",
+                    "Total SMR Usage": 12,
+                    "Loads / Tonnes": 4,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is True
+    assert result["criteria"]["material"] is True
+    assert result["criteria"]["location"] is True
+    assert result["strength"] in (STRENGTH_STRONG, STRENGTH_MODERATE)
+
+
+def test_holistic_reads_non_standard_proof_columns():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "DT-2",
+                    "Date & Time": "2026-04-03 07:00:00",
+                    "Activity": "",
+                    "Location.1": "south pit",
+                    "Material": "rom coal",
+                    "Equipment Type": "Dump Truck",
+                    "Total SMR Usage": 6,
+                }
+            ]
+        )
+    )
+    assert "dump truck" in batch.get("holisticText", "")
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is True
+
+
 def test_shift_day_fallback_second_dispense():
     rows = [
         {
@@ -227,5 +319,9 @@ if __name__ == "__main__":
     test_forestry_harvesting_strong()
     test_farming_harvest_strong()
     test_detect_sector_forestry_over_mining_default()
+    test_initial_schedule6_terms_still_match_after_spreadsheet_merge()
+    test_flex_match_similar_activity_names()
+    test_holistic_transport_coal_pit_inferred_haul()
+    test_holistic_reads_non_standard_proof_columns()
     test_shift_day_fallback_second_dispense()
     print("All POA strength evaluator tests passed.")

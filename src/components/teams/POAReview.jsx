@@ -1497,6 +1497,8 @@ self.onmessage = async (e) => {
                     <li>• Calculates time gaps between proof records and transactions</li>
                     <li>• Generates formatted Excel reports with conditional formatting</li>
                     <li>• Scores POA strength per dispense batch (Strong / Moderate / Weak / Insufficient) using Schedule 6 rules — sector-aware for mining, forestry, and farming</li>
+                    <li>• Reads all proof-row fields (not only Activity) — e.g. coal in Material + transport in Activity counts as eligible in-pit haul where rules apply</li>
+                    <li>• Eligible operations list aligned to your SARS spreadsheet (mining, forestry, farming)</li>
                     <li>• Adds POA Compliance Points and Shortfalls columns from the rules engine (fast, no external API calls)</li>
                 </ul>
             </div>

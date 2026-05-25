@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from difflib import SequenceMatcher
 from typing import Any
 
 import pandas as pd
@@ -45,7 +46,54 @@ TEXT_FIELDS = [
     "Location.1",
     "Location",
     "Source",
+    "Asset Description",
+    "Custom Attribute",
 ]
+
+HOLISTIC_ACTIVITY_COLUMNS = (
+    "Activity",
+    "Operation Description / Comment",
+    "Comments",
+    "Asset Description",
+    "Custom Attribute",
+)
+
+PROOF_ROW_SKIP_COLUMNS = frozenset({
+    "transaction id",
+    "transactionid",
+    "asset number",
+    "date & time",
+    "datetime",
+    "label",
+    "is consec",
+    "no poa asset",
+    "count of proof before transaction",
+    "time since last activity",
+    "total smr",
+    "poa strength",
+    "poa compliance points",
+    "poa shortfalls",
+    "opening smr",
+    "closing smr",
+    "total smr usage",
+    "total usage km/hr",
+    "loads / tonnes",
+    "litres",
+    "total fuel used (l)",
+    "eligible volume (l) (claimable % of total)",
+    "eligible price",
+    "eligible total (r)",
+    "pump before",
+    "pump after",
+    "opening odo",
+    "closing odo",
+})
+
+
+def _norm_col(name: Any) -> str:
+    if name is None:
+        return ""
+    return str(name).strip().lower()
 
 
 def _norm(s: Any) -> str:
@@ -54,14 +102,323 @@ def _norm(s: Any) -> str:
     return str(s).strip().lower()
 
 
-def _contains_any(text: str, terms: list[str]) -> str | None:
+MATCH_CFG_DEFAULT = {
+    "fuzzyMinRatio": 0.86,
+    "minTokenOverlap": 2,
+    "minTokenLength": 3,
+}
+
+
+def _matching_cfg(rules: dict | None) -> dict:
+    if not rules:
+        return dict(MATCH_CFG_DEFAULT)
+    base = dict(MATCH_CFG_DEFAULT)
+    base.update(rules.get("activityMatching") or {})
+    return base
+
+
+def _normalize_for_match(value: str) -> str:
+    s = str(value).lower().strip()
+    s = s.replace("&", " and ")
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _match_tokens(value: str, min_len: int = 2) -> list[str]:
+    return [t for t in _normalize_for_match(value).split() if len(t) >= min_len]
+
+
+def _token_equivalent(token: str, token_set: set[str]) -> bool:
+    if token in token_set:
+        return True
+    if len(token) > 4 and token.endswith("s") and token[:-1] in token_set:
+        return True
+    if (token + "s") in token_set:
+        return True
+    if len(token) > 5 and token.endswith("ing"):
+        stem = token[:-3]
+        if stem in token_set or (stem + "e") in token_set:
+            return True
+    return False
+
+
+def _token_overlap_match(term: str, text: str, min_overlap: int) -> bool:
+    term_tokens = [t for t in _match_tokens(term, 3) if len(t) >= 3]
+    if not term_tokens:
+        return _normalize_for_match(term) in _normalize_for_match(text)
+    text_tokens = set(_match_tokens(text, 2))
+    hits = sum(1 for t in term_tokens if _token_equivalent(t, text_tokens))
+    return hits >= min(len(term_tokens), max(1, min_overlap))
+
+
+def _fuzzy_phrase_match(term: str, text: str, min_ratio: float) -> bool:
+    norm_term = _normalize_for_match(term)
+    if len(norm_term) < 8:
+        return False
+    norm_text = _normalize_for_match(text)
+    for segment in re.split(r"\s*\|\s*", norm_text):
+        segment = segment.strip()
+        if not segment:
+            continue
+        if SequenceMatcher(None, norm_term, segment).ratio() >= min_ratio:
+            return True
+        seg_tokens = _match_tokens(segment, 3)
+        term_token_count = len(_match_tokens(norm_term, 3))
+        if term_token_count < 2:
+            continue
+        for idx in range(len(seg_tokens) - term_token_count + 1):
+            chunk = " ".join(seg_tokens[idx : idx + term_token_count])
+            if SequenceMatcher(None, norm_term, chunk).ratio() >= min_ratio:
+                return True
+    return False
+
+
+def _variants_for_term(term: str) -> list[str]:
+    base = _normalize_for_match(term)
+    if not base:
+        return []
+    variants = {base, term.lower().strip()}
+    if "&" in term.lower():
+        variants.add(_normalize_for_match(term.replace("&", " and ")))
+    if " and " in base:
+        variants.add(base.replace(" and ", " & "))
+    parts = base.split()
+    if parts:
+        last = parts[-1]
+        if last.endswith("s") and len(last) > 3:
+            variants.add(" ".join(parts[:-1] + [last[:-1]]))
+        else:
+            variants.add(" ".join(parts + [last + "s"]))
+    return [v for v in variants if v]
+
+
+def _expand_activity_terms(terms: list[str], alias_groups: list | None) -> list[str]:
+    """Keep original Schedule 6 + spreadsheet terms and add spelling/punctuation variants."""
+    seen: set[str] = set()
+    expanded: list[str] = []
+    for term in terms:
+        for variant in _variants_for_term(term):
+            if variant not in seen:
+                seen.add(variant)
+                expanded.append(variant)
+        if term.lower().strip() not in seen:
+            seen.add(term.lower().strip())
+            expanded.append(term.lower().strip())
+    for group in alias_groups or []:
+        if not isinstance(group, list):
+            continue
+        for entry in group:
+            norm = _normalize_for_match(entry)
+            if norm and norm not in seen:
+                seen.add(norm)
+                expanded.append(norm)
+    return expanded
+
+
+def _flex_contains_term(text: str, term: str, match_cfg: dict) -> bool:
+    if not text or not term:
+        return False
+    t = term.lower().strip()
+    lowered = text.lower()
+    if re.search(r"[\s\-&/]", t):
+        if t in lowered:
+            return True
+    elif re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", lowered):
+        return True
+    norm_term = _normalize_for_match(term)
+    norm_text = _normalize_for_match(text)
+    if norm_term and norm_term in norm_text:
+        return True
+    min_overlap = int(match_cfg.get("minTokenOverlap", 2))
+    if _token_overlap_match(term, text, min_overlap):
+        return True
+    fuzzy_ratio = float(match_cfg.get("fuzzyMinRatio", 0.86))
+    return _fuzzy_phrase_match(term, text, fuzzy_ratio)
+
+
+def _prepare_rules_matching(rules: dict) -> None:
+    """Expand activity term lists once: initial rules + spreadsheet + alias groups."""
+    alias_root = rules.get("activityAliasGroups") or {}
+    for sector, cfg in (rules.get("sectors") or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        groups = alias_root.get(sector, []) if isinstance(alias_root, dict) else []
+        for field in ("primaryActivities", "secondaryActivities", "excludedActivities"):
+            raw = cfg.get(field) or []
+            cfg[field] = _expand_activity_terms(raw, groups)
+
+
+def _contains_any(
+    text: str,
+    terms: list[str],
+    match_cfg: dict | None = None,
+) -> str | None:
     if not text:
         return None
+    cfg = match_cfg or MATCH_CFG_DEFAULT
     for term in terms:
-        t = term.lower().strip()
-        if t and t in text:
+        if not term:
+            continue
+        if _flex_contains_term(text, term, cfg):
             return term
     return None
+
+
+def _is_mostly_numeric(value: str) -> bool:
+    compact = value.replace(".", "").replace(",", "").replace("-", "").strip()
+    return bool(compact) and compact.isdigit()
+
+
+def _collect_row_field_snippets(row: pd.Series) -> list[str]:
+    """Non-standard columns on a proof row (holistic context beyond Activity)."""
+    structured = {_norm_col(c) for c in HOLISTIC_ACTIVITY_COLUMNS}
+    structured.update({"material", "location", "location.1", "source"})
+    snippets: list[str] = []
+    for col in row.index:
+        cn = _norm_col(col)
+        if not cn or cn in PROOF_ROW_SKIP_COLUMNS or cn in structured:
+            continue
+        v = _norm(row.get(col))
+        if not v or len(v) > 120 or _is_mostly_numeric(v):
+            continue
+        snippets.append(v)
+    return snippets
+
+
+def _build_holistic_activity_text(batch: dict) -> str:
+    parts: list[str] = []
+    for key in ("activities", "comments", "fieldSnippets", "materials", "locations", "sources"):
+        parts.extend(batch.get(key) or [])
+    return " | ".join(dict.fromkeys(p for p in parts if p))
+
+
+def _activity_label_text(batch: dict) -> str:
+    return " | ".join(batch.get("activities", []) + batch.get("comments", []))
+
+
+def _haulage_activity_patterns(sector_rules: dict) -> list[str]:
+    cfg = sector_rules.get("activityInference") or {}
+    haul = cfg.get("haulageWithPrimaryMaterialAndLocation") or {}
+    patterns = haul.get("activityPatterns")
+    if patterns:
+        return list(patterns)
+    return [
+        "transport",
+        "haul",
+        "hauling",
+        "laden",
+        "travel distance",
+        "dump truck",
+        "carting",
+        "moving material",
+        "transporting material",
+        "transporting materials",
+        "loading",
+        "loaded",
+    ]
+
+
+def _infer_primary_haulage_activity(
+    batch: dict,
+    sector: str,
+    sector_rules: dict,
+    holistic_text: str,
+    match_cfg: dict | None = None,
+) -> str | None:
+    """Transport + primary material + site location → eligible production haul (esp. mining)."""
+    if sector != "mining":
+        return None
+
+    cfg = match_cfg or MATCH_CFG_DEFAULT
+    mat_text = " | ".join(batch.get("materials", []))
+    loc_text = " | ".join(batch.get("locations", []))
+    label_text = _activity_label_text(batch) or holistic_text
+
+    pri_mat = _contains_any(
+        mat_text or holistic_text,
+        sector_rules.get("primaryMaterials", []),
+        match_cfg,
+    )
+    pri_loc = _contains_any(
+        loc_text or holistic_text,
+        sector_rules.get("primaryLocations", []),
+        match_cfg,
+    )
+    if not pri_mat or not pri_loc:
+        return None
+
+    if not _contains_any(label_text, _haulage_activity_patterns(sector_rules), match_cfg):
+        return None
+
+    return "in-pit transport / haul (inferred from material, location, and haul activity)"
+
+
+def evaluate_activity_criterion(
+    batch: dict,
+    sector: str,
+    sector_rules: dict,
+    sector_label: str,
+    holistic_text: str,
+    match_cfg: dict | None = None,
+) -> dict:
+    """Assess activity using full proof row context, not the Activity column alone."""
+    activity_label = _activity_label_text(batch)
+    holistic = holistic_text or _build_holistic_activity_text(batch)
+    cfg = match_cfg or MATCH_CFG_DEFAULT
+
+    excluded = _contains_any(
+        activity_label or holistic,
+        sector_rules.get("excludedActivities", []),
+        cfg,
+    )
+    sec_act = _contains_any(activity_label, sector_rules.get("secondaryActivities", []), cfg)
+    pri_act = _contains_any(holistic, sector_rules.get("primaryActivities", []), cfg)
+    inference = None
+
+    if not pri_act and not excluded:
+        inference = _infer_primary_haulage_activity(batch, sector, sector_rules, holistic, cfg)
+        if inference:
+            pri_act = inference
+
+    if excluded and not pri_act:
+        return {
+            "ok": False,
+            "matchedTerm": None,
+            "inference": None,
+            "shortfall": f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})",
+        }
+    if sec_act and not pri_act:
+        return {
+            "ok": False,
+            "matchedTerm": sec_act,
+            "inference": None,
+            "shortfall": (
+                f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — "
+                "not own primary production per Schedule 6 Part 3"
+            ),
+        }
+    if pri_act:
+        display = (batch.get("activities") or [None])[0] or activity_label.split(" | ")[0] or pri_act
+        return {
+            "ok": True,
+            "matchedTerm": pri_act,
+            "inference": inference,
+            "display": str(display).strip(),
+            "shortfall": None,
+        }
+    if activity_label.strip() or holistic.strip():
+        return {
+            "ok": False,
+            "matchedTerm": None,
+            "inference": None,
+            "shortfall": f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified",
+        }
+    return {
+        "ok": False,
+        "matchedTerm": None,
+        "inference": None,
+        "shortfall": "No activity description in proof records",
+    }
 
 
 def _sector_from_site_overrides(text: str, rules: dict) -> str | None:
@@ -204,7 +561,9 @@ def get_sector_rules(rules: dict, sector: str) -> dict:
 def load_rules(rules_path: str | None = None) -> dict:
     path = rules_path or RULES_PATH
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        rules = json.load(f)
+    _prepare_rules_matching(rules)
+    return rules
 
 
 def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
@@ -217,21 +576,24 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "materials": [],
             "sources": [],
             "comments": [],
+            "fieldSnippets": [],
             "intensityValues": {},
             "combinedText": "",
+            "holisticText": "",
         }
 
-    activities, locations, materials, sources, comments = [], [], [], [], []
+    activities, locations, materials, sources, comments, field_snippets = [], [], [], [], [], []
     intensity_values: dict[str, float] = {}
 
     for _, row in proof_df.iterrows():
-        for col in ("Activity", "Operation Description / Comment", "Comments"):
+        for col in HOLISTIC_ACTIVITY_COLUMNS:
             v = _norm(row.get(col))
-            if v:
-                if col == "Activity":
-                    activities.append(v)
-                else:
-                    comments.append(v)
+            if not v:
+                continue
+            if col == "Activity":
+                activities.append(v)
+            else:
+                comments.append(v)
         for col in ("Location.1", "Location"):
             v = _norm(row.get(col))
             if v:
@@ -242,6 +604,7 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         s = _norm(row.get("Source"))
         if s:
             sources.append(s)
+        field_snippets.extend(_collect_row_field_snippets(row))
 
     for col in proof_df.columns:
         if col in ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr", "Opening SMR", "Closing SMR"):
@@ -253,8 +616,13 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             except Exception:
                 pass
 
-    combined_parts = activities + locations + materials + comments + sources
-    combined_text = " | ".join(combined_parts)
+    combined_parts = (
+        activities + comments + field_snippets + locations + materials + sources
+    )
+    combined_text = " | ".join(dict.fromkeys(combined_parts))
+    holistic_text = " | ".join(
+        dict.fromkeys(activities + comments + field_snippets + materials + locations)
+    )
 
     return {
         "proofCount": len(proof_df),
@@ -263,8 +631,10 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         "materials": list(dict.fromkeys(materials)),
         "sources": list(dict.fromkeys(sources)),
         "comments": list(dict.fromkeys(comments)),
+        "fieldSnippets": list(dict.fromkeys(field_snippets)),
         "intensityValues": intensity_values,
         "combinedText": combined_text,
+        "holisticText": holistic_text,
     }
 
 
@@ -294,40 +664,31 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     sector_rules = get_sector_rules(rules, sector)
     sector_label = sector_ctx.get("label") or sector_rules.get("label", sector.title())
     location_label = sector_ctx.get("locationLabel") or sector_rules.get("locationLabel", "production site")
+    match_cfg = _matching_cfg(rules)
 
     text = batch.get("combinedText", "")
-    activity_text = " | ".join(batch.get("activities", []) + batch.get("comments", []))
+    holistic_text = batch.get("holisticText") or _build_holistic_activity_text(batch) or text
 
-    excluded = _contains_any(activity_text or text, sector_rules.get("excludedActivities", []))
-    sec_act = _contains_any(activity_text or text, sector_rules.get("secondaryActivities", []))
-    pri_act = _contains_any(activity_text or text, sector_rules.get("primaryActivities", []))
-
-    if excluded and not pri_act:
-        activity_ok = False
-        shortfalls.append(
-            f"Non-eligible {sector_label.lower()} activity for Schedule 6 Part 3 ({excluded})"
-        )
-    elif sec_act and not pri_act:
-        activity_ok = False
-        shortfalls.append(
-            f"Secondary/non-primary {sector_label.lower()} activity ({sec_act}) — not own primary production per Schedule 6 Part 3"
-        )
-    elif pri_act:
-        activity_ok = True
-    elif activity_text or text.strip():
-        activity_ok = False
-        shortfalls.append(
-            f"No primary Schedule 6 Part 3 {sector_label.lower()} production activity identified"
-        )
-    else:
-        activity_ok = False
-        shortfalls.append("No activity description in proof records")
+    activity_eval = evaluate_activity_criterion(
+        batch,
+        sector,
+        sector_rules,
+        sector_label,
+        holistic_text,
+        match_cfg,
+    )
+    activity_ok = bool(activity_eval.get("ok"))
+    pri_act = activity_eval.get("matchedTerm")
+    if activity_eval.get("shortfall"):
+        shortfalls.append(activity_eval["shortfall"])
 
     loc_text = " | ".join(batch.get("locations", []))
-    sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []))
-    pri_loc = _contains_any(loc_text or text, sector_rules.get("primaryLocations", []))
+    sec_loc = _contains_any(loc_text or text, sector_rules.get("secondaryLocations", []), match_cfg)
+    pri_loc = _contains_any(loc_text or text, sector_rules.get("primaryLocations", []), match_cfg)
 
-    if not loc_text.strip() and not _contains_any(text, sector_rules.get("primaryLocations", [])):
+    if not loc_text.strip() and not _contains_any(
+        text, sector_rules.get("primaryLocations", []), match_cfg
+    ):
         location_ok = False
         shortfalls.append(f"No {location_label} location on proof records")
     elif sec_loc and not pri_loc:
@@ -342,8 +703,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         shortfalls.append(f"No primary {sector_label.lower()} location identified")
 
     mat_text = " | ".join(batch.get("materials", []))
-    sec_mat = _contains_any(mat_text or text, sector_rules.get("secondaryMaterials", []))
-    pri_mat = _contains_any(mat_text or text, sector_rules.get("primaryMaterials", []))
+    sec_mat = _contains_any(mat_text or text, sector_rules.get("secondaryMaterials", []), match_cfg)
+    pri_mat = _contains_any(mat_text or text, sector_rules.get("primaryMaterials", []), match_cfg)
 
     if not mat_text.strip():
         material_ok = False
@@ -365,7 +726,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     intensity_ok = len(intensity_vals) > 0
     if not intensity_ok:
         kw = rules.get("intensityTextKeywords", [])
-        if _contains_any(text, kw):
+        if _contains_any(text, kw, match_cfg):
             intensity_ok = True
     if not intensity_ok:
         shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
@@ -382,7 +743,12 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
     compliance_points = build_compliance_points(
-        batch, criteria, strength, sector_context=sector_ctx, matched_activity=pri_act
+        batch,
+        criteria,
+        strength,
+        sector_context=sector_ctx,
+        matched_activity=pri_act,
+        activity_eval=activity_eval,
     )
 
     return {
@@ -394,6 +760,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "method": "rules",
         "sector": sector,
         "sectorContext": sector_ctx,
+        "activityMatch": activity_eval,
     }
 
 
@@ -420,6 +787,7 @@ def build_compliance_points(
     shift_applied: bool = False,
     sector_context: dict | None = None,
     matched_activity: str | None = None,
+    activity_eval: dict | None = None,
 ) -> list[str]:
     """Human-readable positives for criteria met and linked proof context."""
     points: list[str] = []
@@ -446,10 +814,22 @@ def build_compliance_points(
 
     if criteria.get("activity"):
         acts = batch.get("activities") or []
-        detail = acts[0] if acts else matched_activity
+        activity_eval = activity_eval or {}
+        detail = activity_eval.get("display") or (acts[0] if acts else None) or matched_activity
         sector_name = (sector_label or "primary production").lower()
-        if detail:
+        matched_rule = activity_eval.get("matchedTerm") or matched_activity
+        if detail and matched_rule and str(matched_rule).startswith("in-pit transport"):
+            mats = batch.get("materials") or []
+            locs = batch.get("locations") or []
+            context = ", ".join(filter(None, [mats[0] if mats else None, locs[0] if locs else None]))
+            points.append(
+                f"Primary {sector_name} activity identified: {detail}"
+                + (f" (in-pit haul — {context})" if context else " (in-pit haul from material & location)")
+            )
+        elif detail:
             points.append(f"Primary {sector_name} activity identified ({detail})")
+        elif matched_rule:
+            points.append(f"Primary {sector_name} activity identified (matched: {matched_rule})")
         else:
             points.append(f"Primary Schedule 6 Part 3 {sector_name} activity identified")
 

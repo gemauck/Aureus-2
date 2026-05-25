@@ -3,164 +3,1445 @@
   "sectorDetection": {
     "mining": {
       "keywords": [
-        "mine", "mining", "pit", "open pit", "opencast", "quarry", "face", "bench", "strip",
-        "overburden", "rom", "coal", "ore", "mineral", "extraction", "load and haul", "load & haul",
-        "drilling", "blasting", "dewatering", "tailings", "bultfontein", "emalahleni", "hards", "softs",
-        "np1", "np2", "excavator", "dozer", "truck fleet", "dump truck"
+        "mine",
+        "mining",
+        "pit",
+        "open pit",
+        "opencast",
+        "quarry",
+        "face",
+        "bench",
+        "strip",
+        "overburden",
+        "rom",
+        "coal",
+        "ore",
+        "mineral",
+        "extraction",
+        "load and haul",
+        "load & haul",
+        "drilling",
+        "blasting",
+        "dewatering",
+        "tailings",
+        "bultfontein",
+        "emalahleni",
+        "hards",
+        "softs",
+        "np1",
+        "np2",
+        "excavator",
+        "dozer",
+        "truck fleet",
+        "dump truck"
       ]
     },
     "forestry": {
       "keywords": [
-        "forestry", "forest", "plantation", "timber", "log", "logs", "felling", "thinning", "pruning",
-        "seedling", "nursery", "compartment", "stand", "pulpwood", "chip-mill", "sawmill", "fire break",
-        "firebreak", "extraction road", "carting", "crosscut", "debarking", "stacking timber", "silviculture"
+        "forestry",
+        "forest",
+        "plantation",
+        "timber",
+        "log",
+        "logs",
+        "felling",
+        "thinning",
+        "pruning",
+        "seedling",
+        "nursery",
+        "compartment",
+        "stand",
+        "pulpwood",
+        "chip-mill",
+        "sawmill",
+        "fire break",
+        "firebreak",
+        "extraction road",
+        "carting",
+        "crosscut",
+        "debarking",
+        "stacking timber",
+        "silviculture"
       ]
     },
     "farming": {
       "keywords": [
-        "farm", "farming", "field", "crop", "harvest", "plough", "ploughing", "planting", "livestock",
-        "cattle", "sheep", "goats", "herding", "pasture", "orchard", "vineyard", "irrigation", "baler",
-        "baling", "hay", "silage", "maize", "wheat", "sugarcane", "cane", "tractor", "spray", "spraying",
-        "kraal", "feedlot", "paddock", "apiculture", "beekeeping", "game farm"
+        "farm",
+        "farming",
+        "field",
+        "crop",
+        "harvest",
+        "plough",
+        "ploughing",
+        "planting",
+        "livestock",
+        "cattle",
+        "sheep",
+        "goats",
+        "herding",
+        "pasture",
+        "orchard",
+        "vineyard",
+        "irrigation",
+        "baler",
+        "baling",
+        "hay",
+        "silage",
+        "maize",
+        "wheat",
+        "sugarcane",
+        "cane",
+        "tractor",
+        "spray",
+        "spraying",
+        "kraal",
+        "feedlot",
+        "paddock",
+        "apiculture",
+        "beekeeping",
+        "game farm"
       ]
     }
   },
   "sectors": {
     "mining": {
       "label": "Mining",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(f) — mining on land",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(f) \u2014 mining on land",
       "locationLabel": "mine/pit/quarry",
       "primaryActivities": [
-        "exploration", "prospecting", "overburden removal", "overburden", "site preparation",
-        "stripping", "topsoil removal", "mining", "mineral recovery", "recovery of minerals",
-        "extraction", "quarrying", "load and haul", "load & haul", "loading", "hauling", "haul",
-        "drilling", "blasting", "excavation", "excavating", "face production", "bench mining",
-        "pit production", "pit operation", "in-pit", "in pit", "open pit", "opencast",
-        "dewatering", "pumping", "pump", "water supply", "groundwater",
-        "access road", "private access road", "tailings", "tailings dam", "waste removal",
-        "waste disposal", "rehabilitation", "coal stockpiling", "stockpiling coal",
-        "in-pit transport", "site transport", "grading", "grading at pit", "dozer", "dozing",
-        "ripping", "primary production", "production mining",
-        "service and maintenance", "maintenance at pit", "workshop at pit",
-        "transport to siding", "railway siding"
+        "exploration",
+        "prospecting",
+        "overburden removal",
+        "overburden",
+        "site preparation",
+        "stripping",
+        "topsoil removal",
+        "mining",
+        "mineral recovery",
+        "recovery of minerals",
+        "extraction",
+        "quarrying",
+        "load and haul",
+        "load & haul",
+        "loading",
+        "hauling",
+        "haul",
+        "drilling",
+        "blasting",
+        "excavation",
+        "excavating",
+        "face production",
+        "bench mining",
+        "pit production",
+        "pit operation",
+        "in-pit",
+        "in pit",
+        "open pit",
+        "opencast",
+        "dewatering",
+        "pumping",
+        "pump",
+        "water supply",
+        "groundwater",
+        "access road",
+        "private access road",
+        "tailings",
+        "tailings dam",
+        "waste removal",
+        "waste disposal",
+        "rehabilitation",
+        "coal stockpiling",
+        "stockpiling coal",
+        "in-pit transport",
+        "site transport",
+        "grading",
+        "grading at pit",
+        "dozer",
+        "dozing",
+        "ripping",
+        "primary production",
+        "production mining",
+        "service and maintenance",
+        "maintenance at pit",
+        "workshop at pit",
+        "transport to siding",
+        "railway siding",
+        "assets maint.",
+        "building maint.",
+        "building of berms and creating drainage trenches for mine roads",
+        "cable handler",
+        "clean4blast",
+        "compressor",
+        "construction and maintenance of roads and suppression of dust",
+        "contruction and maintenance of roads and suppression of dust",
+        "crane",
+        "crush rom",
+        "dam maint.",
+        "diesel bowser",
+        "diesel bowser side tank",
+        "drill & blast",
+        "drilling of holes for blasting",
+        "drills",
+        "dump truck",
+        "dust suppression",
+        "dustcontrol",
+        "elect. maint.",
+        "excavating and tunnelling underground",
+        "excavator",
+        "front end loader",
+        "generator",
+        "grader",
+        "grading and smoothing of mine roads",
+        "lighting plant",
+        "load rom",
+        "loading and haulage of materials (by dump truck) for transporation within the m",
+        "loading materials",
+        "loadob-reef",
+        "maintenance of roads and suppression of dust on mine roads",
+        "maintenance vehicle",
+        "mobile diesel bowser",
+        "operation to be updated with default",
+        "partially eligible",
+        "plant maint.",
+        "prospecting water",
+        "pumping water",
+        "pumpwater",
+        "rd maintain",
+        "rdconstrut",
+        "rehab - compactor",
+        "rehab - dozer",
+        "rehab - dump truck",
+        "rehab - dust suppression",
+        "rehab - fel",
+        "rehab - grader",
+        "rehab - tlb",
+        "road maint.",
+        "seizing",
+        "separateroc",
+        "service truck",
+        "service truck - complete service",
+        "service truck - transport",
+        "service truck - tyre handler",
+        "servicing and repair of various assets and equipment",
+        "shaft maint.",
+        "supply water",
+        "sweep reef",
+        "tlb",
+        "trans2plant",
+        "transfuel",
+        "transobreef",
+        "transp. materials",
+        "transp. railway",
+        "transp. staff",
+        "transp.vehicles",
+        "transport of materials including coal and overburden within the mining area",
+        "transport, servicing and repair of various assets and equipment",
+        "tunneling",
+        "undergtrans",
+        "waistdump",
+        "waste transport",
+        "water pump",
+        "water transport"
       ],
       "secondaryActivities": [
-        "crushing", "crusher", "screening", "sorting", "washing plant", "washing",
-        "processing plant", "plant operation", "plant feed", "beneficiation", "chpp", "prep plant",
-        "secondary processing", "post-mining processing", "post-recovery processing",
-        "workshop", "refuelling", "refueling", "wash bay", "weighbridge", "office",
-        "administration", "milling", "smelting off site"
+        "crushing",
+        "crusher",
+        "screening",
+        "sorting",
+        "washing plant",
+        "washing",
+        "processing plant",
+        "plant operation",
+        "plant feed",
+        "beneficiation",
+        "chpp",
+        "prep plant",
+        "secondary processing",
+        "post-mining processing",
+        "post-recovery processing",
+        "workshop",
+        "refuelling",
+        "refueling",
+        "wash bay",
+        "weighbridge",
+        "office",
+        "administration",
+        "milling",
+        "smelting off site"
       ],
       "primaryLocations": [
-        "pit", "north pit", "south pit", "east pit", "west pit", "open pit", "opencast",
-        "quarry", "face", "bench", "strip", "mining area", "extraction area", "rom pad",
-        "in-pit", "in pit", "np1", "np2", "sp", "area 1", "area 9", "luhlanga", "kwazubuka",
-        "emalahleni", "bultfontein", "hards", "softs", "topsoil", "mine", "mining site",
-        "tailings", "waste dump", "overburden dump"
+        "pit",
+        "north pit",
+        "south pit",
+        "east pit",
+        "west pit",
+        "open pit",
+        "opencast",
+        "quarry",
+        "face",
+        "bench",
+        "strip",
+        "mining area",
+        "extraction area",
+        "rom pad",
+        "in-pit",
+        "in pit",
+        "np1",
+        "np2",
+        "sp",
+        "area 1",
+        "area 9",
+        "luhlanga",
+        "kwazubuka",
+        "emalahleni",
+        "bultfontein",
+        "hards",
+        "softs",
+        "topsoil",
+        "mine",
+        "mining site",
+        "tailings",
+        "waste dump",
+        "overburden dump"
       ],
       "secondaryLocations": [
-        "plant", "processing plant", "crusher", "crushing", "workshop", "office", "depot",
-        "stockyard", "stock yard", "chpp", "prep plant", "wash plant", "weighbridge",
-        "maintenance bay", "fuel bay", "secondary", "siding office"
+        "plant",
+        "processing plant",
+        "crusher",
+        "crushing",
+        "workshop",
+        "office",
+        "depot",
+        "stockyard",
+        "stock yard",
+        "chpp",
+        "prep plant",
+        "wash plant",
+        "weighbridge",
+        "maintenance bay",
+        "fuel bay",
+        "secondary",
+        "siding office"
       ],
       "primaryMaterials": [
-        "coal", "rom", "run of mine", "overburden", "topsoil", "hards", "softs", "waste",
-        "ob", "interburden", "ore", "mineral", "aggregate", "stripping", "burden", "salt",
-        "sand", "stone", "rock", "clay", "gravel", "limestone"
+        "coal",
+        "rom",
+        "run of mine",
+        "overburden",
+        "topsoil",
+        "hards",
+        "softs",
+        "waste",
+        "ob",
+        "interburden",
+        "ore",
+        "mineral",
+        "aggregate",
+        "stripping",
+        "burden",
+        "salt",
+        "sand",
+        "stone",
+        "rock",
+        "clay",
+        "gravel",
+        "limestone"
       ],
       "secondaryMaterials": [
-        "processed", "crushed", "screened", "product coal", "fines", "chips", "lump export",
-        "secondary", "plant feed", "middlings", "beneficiated"
+        "processed",
+        "crushed",
+        "screened",
+        "product coal",
+        "fines",
+        "chips",
+        "lump export",
+        "secondary",
+        "plant feed",
+        "middlings",
+        "beneficiated"
       ],
       "excludedActivities": [
-        "passenger transport", "commuting", "road transport to market"
-      ]
+        "passenger transport",
+        "commuting",
+        "road transport to market"
+      ],
+      "spreadsheetCatalog": [
+        {
+          "description": "Assets Maint.",
+          "sarsSummary": "The service, maintenance or repair of equipment / assets [as defined by Note (f)(iii) (qq) and (kk)of Schedule 6 of the Customs and Excise Act], being the servicing and repair of various assets and equipment."
+        },
+        {
+          "description": "Building Maint.",
+          "sarsSummary": "The construction or maintenance of infrastructure within the mining area [as defined by Note (f)(iii)(kk)Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Cable Handler",
+          "sarsSummary": "The construction and/or maintenance of a powerlines required in the mining area [as defined by Note (f)(iii)(ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Clean4Blast",
+          "sarsSummary": "Cleaning Of Area For Blasting  Construction Of Road For Mining Vehicles Maintain Waist Dumps"
+        },
+        {
+          "description": "Compressor",
+          "sarsSummary": "Compressor Truck To Assist Drill  Rig"
+        },
+        {
+          "description": "Crane",
+          "sarsSummary": "The transport, service, maintenance or repair of large vehicles [as defined by Note (f)(iii) (qq) of Schedule 6 of the Customs and Excise Act], being the servicing and repair of stationary and other vehicles in the mining area - including delivery of vehicles, parts and products into the mining area."
+        },
+        {
+          "description": "Crush ROM",
+          "sarsSummary": "Crushing Of Rock In The Pit For Transfer To  Stockpiles"
+        },
+        {
+          "description": "Dam Maint.",
+          "sarsSummary": "The construction or maintenance of dams within the mining area [as defined by Note (f)(iii)(hh)(A) and (B) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Diesel Bowser",
+          "sarsSummary": "The service, maintenance or repair of vehicles [as defined by Note f(iii) (qq)], being the dispensing of diesel (by mobile bowser) into stationary and other vehicles operating in the mining area."
+        },
+        {
+          "description": "Diesel Bowser Side Tank",
+          "sarsSummary": "The service, maintenance or repair of vehicles [as defined by Note f(iii) (qq)], being the dispensing of diesel (by mobile bowser) into stationary and other vehicles operating in the mining area."
+        },
+        {
+          "description": "Dozer",
+          "sarsSummary": "Operations for the recovery of coal being the dozing and levelling of various materials including overburden, waste and coal within the mining area [as defined by Note (f)(iii)(cc) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Drill & Blast",
+          "sarsSummary": "Operations for the recovery of minerals [as defined by Note (f)(iii)(cc) of Schedule 6 of the Customs and Excise Act] being activities related to drilling and blasting, including the operation of drills and other specialised underdround vehicles required"
+        },
+        {
+          "description": "Drill & Blast",
+          "sarsSummary": "Operations for the recovery of minerals [as defined by Note (f)(iii)(cc) of Schedule 6 of the Customs and Excise Act] being activities related to drilling and blasting, including the operation of drills and other specialised underdround vehicles required to transport explosives."
+        },
+        {
+          "description": "Drill & Blast",
+          "sarsSummary": "Operations for the recovery of minerals [as defined by Note (f)(iii)(cc) of Schedule 6 of the Customs and Excise Act] being activities related to drilling and blasting, including the operation of drills and other specialised underdround vehicles required to transport explosives."
+        },
+        {
+          "description": "Drill & Blast",
+          "sarsSummary": "Operations for the recovery of minerals [as defined by Note (f)(iii)(cc) of Schedule 6 of the Customs and Excise Act] being activities related to drilling and blasting, including the operation of drills and other specialized underground vehicles required to transport explosives."
+        },
+        {
+          "description": "Drilling",
+          "sarsSummary": "Drilling Of Holes For The Placement Of Explosives"
+        },
+        {
+          "description": "Drills",
+          "sarsSummary": "Operations for the recovery of coal being the drilling of holes for blasting [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(B) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Dump Truck",
+          "sarsSummary": "Operations for the recovery of coal being the loading of materials, including coal and overburden, into dump trucks for transportation within the mining area [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(G) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Dump Truck",
+          "sarsSummary": "Operations for the recovery of coal being the loading of materials, including coal and overburden, into dump trucks for transportation within the mining area [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(G) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Dump Truck",
+          "sarsSummary": "Operations for the recovery of coal being the transport of materials including coal and overburden within the mining area [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(G) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Dust Suppression",
+          "sarsSummary": "The construction or maintenance of private access roads within the mining area being the maintenance of roads and suppression of dust on mine roads [as defined by Note (f)(iii)(gg) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "DustControl",
+          "sarsSummary": "Dust Control On Road"
+        },
+        {
+          "description": "Elect. Maint.",
+          "sarsSummary": "The construction or maintenance of the electrical infrastructure within the mining area [as defined by Note (f)(iii)(ll) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials [as defined by Note (f)(iii)(bb) and Note (f) (iii)(uu) (H) of Schedule 6 which is undertaken in the preparation of a site to enable the commencement of mining"
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] which is undertaken in the preparation of a site to enable the commencement of m"
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] which is undertaken in the preparation of a site to enable the commencement of mining / extraction of coal."
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] which is undertaken in the preparation of a site to enable the commencement of mining / extraction of coal."
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of which is undertaken in the preparation of a site to enable the commencement of mining"
+        },
+        {
+          "description": "Excavating",
+          "sarsSummary": "The excavation, removal and loading of overburden and other materials [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] which is undertaken in the preparation of a site to enable the commencement of mining / extraction of coal."
+        },
+        {
+          "description": "Excavator",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials which is undertaken in the preparation of a site to enable the commencement of mining / extraction of coal [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Excavator",
+          "sarsSummary": "The excavation, removal and loading of over burden and other materials which is undertaken in the preparation of a site to enable the commencement of mining / extraction of coal [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Front End Loader",
+          "sarsSummary": "Operations for the recovery of coal being the loading of materials, including coal and overburden, into dump trucks for transportation within the mining area [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(G) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Front End Loader",
+          "sarsSummary": "Operations for the recovery of coal being the loading of materials, including coal and overburden, into dump trucks for transportation within the mining area [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(G) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Generator",
+          "sarsSummary": "The operation and/or maintenance of powerlines and power generation equipment required for use in the mining area [as defined by Note (f)(iii)(ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Grader",
+          "sarsSummary": "The construction or maintenance of private access roads within the mining area being the grading and smoothing of mine roads [as defined by Note (f)(iii)(gg) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Lighting Plant",
+          "sarsSummary": "The operation and/or maintenance of  powerline and power generation equipment required for illumination in the mining area [as defined by Note (f)(iii)(ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Lighting Plant",
+          "sarsSummary": "The operation and/or maintenance of a power lines and power generation equipment required for illumination in the mining area [as defined by Note (f)(iii)(ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Lighting Plant",
+          "sarsSummary": "The operatrion and/or maintenance of a powerlines and power generation equipment required for illumination in the mining area [as defined by Note (f)(iii)(ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Load ROM",
+          "sarsSummary": "Loading Of Rock Obtained From The Stock Piles In To Vehicles To  Be Transported To  Smelter"
+        },
+        {
+          "description": "LOADING MATERIALS",
+          "sarsSummary": "The loading and transport of materials containing minerals to be processed at the plant [as defined by Note (f)(iii)(pp) of Schedule 6 of the Customs and Excise Act] being the loading and haulage of materials (by dump truck) for transportation within the mining area."
+        },
+        {
+          "description": "LoadOb-Reef",
+          "sarsSummary": "Load Overburden And Rock Blasted From  Reef"
+        },
+        {
+          "description": "Maintenance Vehicle",
+          "sarsSummary": "The construction and/or maintenance of a infrastructure within the mining site [as defined by Note (f)(iii)(gg-ll) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Mobile Diesel Bowser",
+          "sarsSummary": "The service, maintenance or repair of vehicles being the dispensing of diesel (by mobile bowser) into stationary and other vehicles operating in the mining area [as defined by Note (f)(iii)(qq) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Operation to be Updated with Default",
+          "sarsSummary": "To be updated with default"
+        },
+        {
+          "description": "PARTIALLY ELIGIBLE",
+          "sarsSummary": "Transaction that is deemed to be only partially eligible due to asset conducting a non-eligible activity for a period of time prior to this transaction"
+        },
+        {
+          "description": "Plant Maint.",
+          "sarsSummary": "The construction or maintenance of the Plant [as defined by Note (f)(iii)(kk)Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Prospecting",
+          "sarsSummary": "Operations required for exlporation and prospecting for minerals [ [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] including the use of drills and other propecting equipment."
+        },
+        {
+          "description": "Prospecting",
+          "sarsSummary": "Operations required for exploration and prospecting for minerals [ [as defined by Note (f)(iii)(bb) and Note (f)(iii)(uu) (H) of Schedule 6 of the Customs and Excise Act] including the use of drills and other prospecting equipment."
+        },
+        {
+          "description": "Prospecting  Water",
+          "sarsSummary": "The drilling and prospecting for water to be used in the mining operations  [as defined by Note (f)(iii) (dd)of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Prospecting  Water",
+          "sarsSummary": "The drilling and prospecting for water to be used in the mining operations [as defined by Note (f)(iii) (dd)of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Prospecting Water",
+          "sarsSummary": "The drilling and prospecting for water to be used in the mining operations [as defined by Note (f)(iii) (dd)of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Pumping Water",
+          "sarsSummary": "The pumping of water solely for use in a mining operation if the pumping occurs at the place where the mining operation is carried on or at a place adjacent to that place [as defined by Note (f)(iii)(ee) of Schedule 6 of the Customs and Excise Act]."
+        },
+        {
+          "description": "PumpWater",
+          "sarsSummary": "To Pump Water From Mining Area After Drilling  And Blasting"
+        },
+        {
+          "description": "Rd Maintain",
+          "sarsSummary": "Construction Or Maintenance Of Private Access Roads At A Place Where The Mining Activity Is Carried On"
+        },
+        {
+          "description": "RdConstrut",
+          "sarsSummary": "Transport Of Overburden And Rock Blasted From  Reef To  Stock Piles"
+        },
+        {
+          "description": "Rehab - Compactor",
+          "sarsSummary": "Rehabilitation of the mining area being compacting of backfill and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - Dozer",
+          "sarsSummary": "Rehabilitation of the mining area  being the dozing of waste and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - Dump Truck",
+          "sarsSummary": "Rehabilitation of the mining area being the transport / hauling loading waste, backfill and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - Dust Suppression",
+          "sarsSummary": "Rehabilitation of the mining area , being dust suppression in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - FEL",
+          "sarsSummary": "Rehabilitation of the mining area  being the loading and moving of waste, backfill and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - Grader",
+          "sarsSummary": "Rehabilitation of the mining area being the grading or smoothing of waste, backfill and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehab - TLB",
+          "sarsSummary": "Rehabilitation of the mining area being the digging / excavation, moving and loading of waste, backfill and overburden in compliance with the environmental management plan or programme [as defined by Note (f)(iii)(vv) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Rehabilitation",
+          "sarsSummary": "Rehabilitation of the mining area [as more fully defined in Note (f)(iii)(vv)], being all activities required to achieve compliance with the environmental management plan or program."
+        },
+        {
+          "description": "Rehabilitation",
+          "sarsSummary": "Rehabilitation of the mining area [as more fully defined in Note (f)(iii)(vv)], being all activities required to achieve compliance with the environmental mangement plan or programme."
+        },
+        {
+          "description": "Road Maint.",
+          "sarsSummary": "The construction or maintenance of private access roads within the mining area [as defined by Note (f)(iii)(gg) Schedule 6 of the Customs and Excise Act], being the construction and maintenance of roads and suppression of dust."
+        },
+        {
+          "description": "Road Maint.",
+          "sarsSummary": "The construction or maintenance of private access roads within the mining area [as defined by Note (f)(iii)(gg) Schedule 6 of the Customs and Excise Act], being the contruction and maintenance of roads and suppression of dust."
+        },
+        {
+          "description": "Seizing",
+          "sarsSummary": "Breaking Down Of Rock So That Rock Is Easy To  Transport"
+        },
+        {
+          "description": "SeparateRoc",
+          "sarsSummary": "SEPARATE ROCK INTO  SIZES FOR TRANSPORT TO SMELTER IN MINING AREA"
+        },
+        {
+          "description": "Service Truck",
+          "sarsSummary": "The service, maintenance or repair of vehicles, being the servicing and repair of stationary and other vehicles in the mining area - including delivery of labour, parts, lubes, oils and other requirements as contained in the Service Truck [as defined by Note (f)(iii)(qq) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Service Truck - Complete Service",
+          "sarsSummary": "The service, maintenance or repair of vehicles, being the servicing and repair of stationary and other vehicles in the mining area - including delivery of labour, parts, lubes, oils and other requirements as contained in the Service Truck [as defined by Note (f)(iii)(qq) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Service Truck - Transport",
+          "sarsSummary": "The transport, service, maintenance or repair of large vehicles, being the servicing and repair of stationary and other vehicles in the mining area - including delivery of vehicles, parts and products into the mining area [as defined by Note (f)(iii) (qq) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Service Truck - Tyre Handler",
+          "sarsSummary": "The service, maintenance or repair of vehicles , being the servicing and repair of stationary and other vehicles in the mining area - specifically including the handling and replacement of large tyres [as defined by Note (f)(iii) (qq) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Shaft Maint.",
+          "sarsSummary": "The construction or maintenance of the mine shaft within the mining area [as defined by Note (f)(iii)(kk) and (rr) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Supply  Water",
+          "sarsSummary": "The transport and supply of water required in the mining operation, including the maintenance of private access roads, dust suppression and fire control [as defined by Note (f)(iii)(ff) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Supply  Water",
+          "sarsSummary": "The transport and supply of water required in the mining operation, including the maintenance of private access roads, dust supression and fire control [as defined by Note (f)(iii)(ff) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Supply Water",
+          "sarsSummary": "The transport and supply of water required in the mining operation, including the maintenance of private access roads, dust supression and fire control [as defined by Note (f)(iii)(ff) Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Sweep Reef",
+          "sarsSummary": "Sweeping Reef After Clearance And Before Blasting"
+        },
+        {
+          "description": "TLB",
+          "sarsSummary": "The construction or maintenance of private access roads within the mining area , being the building of berms and creating drainage trenches for mine roads [as defined by Note (f)(iii)(gg) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Trans2Plant",
+          "sarsSummary": "Loading Of Transport Vehicles From  Stock Piles"
+        },
+        {
+          "description": "TransFuel",
+          "sarsSummary": "replenishment of fuel to assets"
+        },
+        {
+          "description": "TransObReef",
+          "sarsSummary": "Transport Of Overburden And Rock Blasted From  Reef To  Stock Piles"
+        },
+        {
+          "description": "Transp. Materials",
+          "sarsSummary": "The loading and transport of materials containing minerals to be processed at the plant [as defined by Note (f)(iii)(pp) of Schedule 6 of the Customs and Excise Act] being the loading and haulage of materials (by dump truck) for transporation within the m"
+        },
+        {
+          "description": "Transp. Materials",
+          "sarsSummary": "The loading and transport of materials containing minerals to be processed at the plant [as defined by Note (f)(iii)(pp) of Schedule 6 of the Customs and Excise Act] being the loading and haulage of materials (by dump truck) for transportation within the mining area."
+        },
+        {
+          "description": "Transp. Railway",
+          "sarsSummary": "The transport of minerals to the nearest railway siding [as defined by Note (f)(iii) (tt)of Schedule 6 of the Customs and Excise Act] utilising dump trucks, locomotives and other vehicles."
+        },
+        {
+          "description": "Transp. Railway",
+          "sarsSummary": "The transport of minerals to the nearest railway siding [as defined by Note (f)(iii) (tt)of Schedule 6 of the Customs and Excise Act] utilising dump trucks, locomotives and other vehicles."
+        },
+        {
+          "description": "Transp. Staff",
+          "sarsSummary": "Transport of personnel using specially built underground vehicles required of operations for the recovery of minerals [as defined by Note (f)(iii)(cc) and (uu)(F) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Transp.Vehicles",
+          "sarsSummary": "The service, maintenance or repair of equipment / assets [as defined by Note (f)(iii) (qq) and (kk)of Schedule 6 of the Customs and Excise Act], being the transport, servicing and repair of various assets and equipment."
+        },
+        {
+          "description": "Tunneling",
+          "sarsSummary": "Operations for the recovery of coal [as defined by Note (f)(iii)(cc) and Note (f)(iii)(uu)(E) of Schedule 6 of the Customs and Excise Act] being excavating and tunnelling underground."
+        },
+        {
+          "description": "UnderGTrans",
+          "sarsSummary": "Transport labour underground"
+        },
+        {
+          "description": "WaistDump",
+          "sarsSummary": "Transport Of Overburden And Rock Blasted From  Reef To  Stock Piles"
+        },
+        {
+          "description": "Waste Transport",
+          "sarsSummary": "The removal and transport of waste from the mining site  [as defined by Note (f)(iii)(oo) Schedule 6 of the Customs and Excise Act], being the loading and hauling of waste using dump trucks and other specialized underground vehicles."
+        },
+        {
+          "description": "Waste Transport",
+          "sarsSummary": "The removal and transport of waste from the minining site [as defined by Note (f)(iii)(oo) Schedule 6 of the Customs and Excise Act], being the loading and hauling of waste using dump trucks and other specialised undergound vehicles."
+        },
+        {
+          "description": "Water Pump",
+          "sarsSummary": "The pumping of water solely for use in a mining operation if the pumping occurs at the place where the mining operation is carried on or at a place adjacent to that place [as defined by Note (f)(iii)(ee) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Water Transport",
+          "sarsSummary": "The transport of water required for the maintenance of private access roads and other assets within the mining area (dust suppression and fire control) [as defined by Note (f)(iii)(gg) Schedule 6 of the Customs and Excise Act]. And /or the the supply of water required by drills [as defined by Note (f)(iii)(ee)]"
+        }
+      ],
+      "activityInference": {
+        "haulageWithPrimaryMaterialAndLocation": {
+          "activityPatterns": [
+            "transport",
+            "haul",
+            "hauling",
+            "laden",
+            "travel distance",
+            "dump truck",
+            "carting",
+            "moving material",
+            "transporting material",
+            "transporting materials",
+            "loading",
+            "loaded"
+          ]
+        }
+      }
     },
     "forestry": {
       "label": "Forestry",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(g) — forestry",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(g) \u2014 forestry",
       "locationLabel": "forest/plantation",
       "primaryActivities": [
-        "land preparation", "clearing land", "clearing", "ploughing", "plough", "discing", "disc",
-        "hoeing", "initial access road", "access road", "fire break", "firebreak", "fire control road",
-        "planting", "plantation establishment", "seedling transport", "planting pits", "line seeding",
-        "herbicide", "herbicides", "fertilisation", "fertilizing", "fertiliser", "blanking",
-        "weeding", "pruning", "thinning", "thinning trees", "tree removal", "maintenance of plantation",
-        "road maintenance", "infrastructure maintenance", "extraction road", "harvesting",
-        "felling", "manual felling", "mechanical felling", "bark stripping", "stripping bark",
-        "stacking", "stacking timber", "crosscutting", "log lengths", "extraction", "extraction to roadside",
-        "carting", "carting logs", "transport in forest", "transport to sawmill", "transport to chip-mill",
-        "transport to siding", "growing trees", "cutting trees", "cutting", "silviculture",
-        "locomotive", "generating electricity"
+        "land preparation",
+        "clearing land",
+        "clearing",
+        "ploughing",
+        "plough",
+        "discing",
+        "disc",
+        "hoeing",
+        "initial access road",
+        "access road",
+        "fire break",
+        "firebreak",
+        "fire control road",
+        "planting",
+        "plantation establishment",
+        "seedling transport",
+        "planting pits",
+        "line seeding",
+        "herbicide",
+        "herbicides",
+        "fertilisation",
+        "fertilizing",
+        "fertiliser",
+        "blanking",
+        "weeding",
+        "pruning",
+        "thinning",
+        "thinning trees",
+        "tree removal",
+        "maintenance of plantation",
+        "road maintenance",
+        "infrastructure maintenance",
+        "extraction road",
+        "harvesting",
+        "felling",
+        "manual felling",
+        "mechanical felling",
+        "bark stripping",
+        "stripping bark",
+        "stacking",
+        "stacking timber",
+        "crosscutting",
+        "log lengths",
+        "extraction",
+        "extraction to roadside",
+        "carting",
+        "carting logs",
+        "transport in forest",
+        "transport to sawmill",
+        "transport to chip-mill",
+        "transport to siding",
+        "growing trees",
+        "cutting trees",
+        "cutting",
+        "silviculture",
+        "locomotive",
+        "generating electricity",
+        "felling trees",
+        "fire fighting",
+        "harvesting / felling trees",
+        "loading",
+        "loading (onsite)",
+        "loading / carting logs",
+        "stacking timber / extraction"
       ],
       "secondaryActivities": [
-        "mill construction", "constructing mill", "processing facility", "sawmill operation",
-        "chip-mill operation", "milling timber", "dressing wood", "planing", "shaping wood",
-        "producing board", "board production", "road building supplies", "office", "administration"
+        "mill construction",
+        "constructing mill",
+        "processing facility",
+        "sawmill operation",
+        "chip-mill operation",
+        "milling timber",
+        "dressing wood",
+        "planing",
+        "shaping wood",
+        "producing board",
+        "board production",
+        "road building supplies",
+        "office",
+        "administration"
       ],
       "primaryLocations": [
-        "forest", "plantation", "compartment", "stand", "block", "nursery", "silviculture block",
-        "extraction road", "fire break", "firebreak", "roadside", "in field", "plantation road",
-        "harvest block", "felling area", "thinning block", "planting block"
+        "forest",
+        "plantation",
+        "compartment",
+        "stand",
+        "block",
+        "nursery",
+        "silviculture block",
+        "extraction road",
+        "fire break",
+        "firebreak",
+        "roadside",
+        "in field",
+        "plantation road",
+        "harvest block",
+        "felling area",
+        "thinning block",
+        "planting block"
       ],
       "secondaryLocations": [
-        "sawmill", "chip-mill", "chip mill", "mill yard", "processing plant", "board plant",
-        "office", "depot", "workshop off site"
+        "sawmill",
+        "chip-mill",
+        "chip mill",
+        "mill yard",
+        "processing plant",
+        "board plant",
+        "office",
+        "depot",
+        "workshop off site"
       ],
       "primaryMaterials": [
-        "timber", "log", "logs", "seedling", "seedlings", "pulpwood", "poles", "trees", "pulp",
-        "felled timber", "stacked timber"
+        "timber",
+        "log",
+        "logs",
+        "seedling",
+        "seedlings",
+        "pulpwood",
+        "poles",
+        "trees",
+        "pulp",
+        "felled timber",
+        "stacked timber"
       ],
       "secondaryMaterials": [
-        "processed timber", "board", "chips", "planed wood", "milled timber", "finished product"
+        "processed timber",
+        "board",
+        "chips",
+        "planed wood",
+        "milled timber",
+        "finished product"
       ],
       "excludedActivities": [
-        "milling at sawmill", "milling at chip-mill", "dressing timber", "planing timber"
+        "milling at sawmill",
+        "milling at chip-mill",
+        "dressing timber",
+        "planing timber"
+      ],
+      "spreadsheetCatalog": [
+        {
+          "description": "Fire Fighting",
+          "sarsSummary": "(MM) The carrying out of fire fighting activities."
+        },
+        {
+          "description": "Harvesting",
+          "sarsSummary": "(AA) Growing crops and harvesting and storing crops on the farming property, being harvesting."
+        },
+        {
+          "description": "HARVESTING / FELLING TREES",
+          "sarsSummary": "(dd)(B),C ,(D),(E)  Felling of trees,Stripping of bark, Stacking of trees in field and Crosscutting of logs."
+        },
+        {
+          "description": "Loading (Onsite)",
+          "sarsSummary": "(AA) Growing crops and harvesting and storing crops on the farming property, being loading."
+        },
+        {
+          "description": "LOADING / CARTING LOGS",
+          "sarsSummary": "(hh) The process of growing, cutting or carting of trees and logs"
+        },
+        {
+          "description": "STACKING TIMBER / EXTRACTION",
+          "sarsSummary": "(dd)(D),(F) Stacking of felled tree timber (in field or at roadside), Extraction of timber to roadside"
+        }
       ]
     },
     "farming": {
       "label": "Farming",
-      "schedule6Ref": "Schedule 6 Part 3 Note 6(h) — farming",
+      "schedule6Ref": "Schedule 6 Part 3 Note 6(h) \u2014 farming",
       "locationLabel": "farm/farming property",
       "primaryActivities": [
-        "growing crops", "crop production", "harvesting", "harvest", "storing crops", "horticulture",
-        "pasturage", "apiculture", "beekeeping", "fish breeding", "oyster farming",
-        "breeding animals", "caring for animals", "livestock", "shearing", "milking",
-        "rounding up", "herding", "herd", "transport livestock", "baling hay", "baler", "baling",
-        "planting", "tending fruit trees", "soil conservation", "water conservation",
-        "fire fighting", "firefighting", "fence construction", "fence maintenance",
-        "firebreak construction", "firebreak maintenance", "service and maintenance",
-        "maintenance of equipment", "shed construction", "silo construction", "silage pit",
-        "dam construction", "irrigation", "drainage", "earthworks", "groundwater search",
-        "pumping water", "water supply", "storage of farming products", "packing",
-        "weed control", "pest control", "disease control", "spraying", "hunting", "trapping",
-        "game farming", "ploughing", "plough", "discing", "disc", "hoeing", "cultivation",
-        "flood management", "locomotive", "generating electricity", "transport farming products",
-        "transport farming requirements", "fertilising", "fertilizing", "spread fertiliser"
+        "growing crops",
+        "crop production",
+        "harvesting",
+        "harvest",
+        "storing crops",
+        "horticulture",
+        "pasturage",
+        "apiculture",
+        "beekeeping",
+        "fish breeding",
+        "oyster farming",
+        "breeding animals",
+        "caring for animals",
+        "livestock",
+        "shearing",
+        "milking",
+        "rounding up",
+        "herding",
+        "herd",
+        "transport livestock",
+        "baling hay",
+        "baler",
+        "baling",
+        "planting",
+        "tending fruit trees",
+        "soil conservation",
+        "water conservation",
+        "fire fighting",
+        "firefighting",
+        "fence construction",
+        "fence maintenance",
+        "firebreak construction",
+        "firebreak maintenance",
+        "service and maintenance",
+        "maintenance of equipment",
+        "shed construction",
+        "silo construction",
+        "silage pit",
+        "dam construction",
+        "irrigation",
+        "drainage",
+        "earthworks",
+        "groundwater search",
+        "pumping water",
+        "water supply",
+        "storage of farming products",
+        "packing",
+        "weed control",
+        "pest control",
+        "disease control",
+        "spraying",
+        "hunting",
+        "trapping",
+        "game farming",
+        "ploughing",
+        "plough",
+        "discing",
+        "disc",
+        "hoeing",
+        "cultivation",
+        "flood management",
+        "locomotive",
+        "generating electricity",
+        "transport farming products",
+        "transport farming requirements",
+        "fertilising",
+        "fertilizing",
+        "spread fertiliser",
+        "bailing",
+        "build ridges",
+        "build roads",
+        "building construction",
+        "building construction / maintenance.",
+        "building of ridges",
+        "building of roads",
+        "carting of rocks and stones",
+        "carting stones",
+        "chipping",
+        "compost",
+        "cutting of maize (for silage production)",
+        "dig trenches",
+        "digging of trenches",
+        "earth works",
+        "equipment maintenance",
+        "equipment maintenance / service.",
+        "excavating",
+        "feeding",
+        "feeding of cattle",
+        "fence construction / maintenance.",
+        "fertigating",
+        "fertigation",
+        "fertilizer",
+        "fetch bales",
+        "firebreaks",
+        "gen electri",
+        "generator",
+        "grading",
+        "gravel",
+        "haul maize (silage)",
+        "hauling of maize for silage production",
+        "irrigation construction",
+        "irrigation construction / maintenance",
+        "irrigation of crops",
+        "land prep",
+        "land preparation",
+        "lettuce",
+        "lime",
+        "loading of shale",
+        "loadofshale",
+        "maintenance",
+        "maintenance of roads",
+        "maintenance of roads or compacting platforms",
+        "maintenance.",
+        "maize cut",
+        "making of wood chips for compost",
+        "milk transp",
+        "mowing",
+        "mulcher",
+        "platform",
+        "preparation of land",
+        "prospecting water",
+        "pruneing",
+        "raking",
+        "ripping",
+        "rolling",
+        "service.",
+        "silage",
+        "silage / maize cut",
+        "slashing",
+        "slurry",
+        "spraying (pests)",
+        "spraying of crops and pastures",
+        "spraying weeds",
+        "spreading of compost",
+        "spreading of fertilizer",
+        "spreading of lime on the soil",
+        "spreading of slurry",
+        "trans other",
+        "trans phnx",
+        "trans ptn",
+        "transport of hay bales for storage and usage",
+        "transport of lettuce",
+        "transportation",
+        "transporting a",
+        "transporting p",
+        "transporting p plant",
+        "trenching"
       ],
       "secondaryActivities": [
-        "game viewing", "lodging", "leisure", "tourism", "office", "administration",
-        "transport to purchaser premises", "buyer transport"
+        "game viewing",
+        "lodging",
+        "leisure",
+        "tourism",
+        "office",
+        "administration",
+        "transport to purchaser premises",
+        "buyer transport"
       ],
       "primaryLocations": [
-        "farm", "farming property", "field", "lands", "camp", "paddock", "pasture", "orchard",
-        "vineyard", "dam", "kraal", "feedlot", "silo", "shed", "plantation farm", "crop field",
-        "maize lands", "wheat lands", "sugarcane field", "cane lands"
+        "farm",
+        "farming property",
+        "field",
+        "lands",
+        "camp",
+        "paddock",
+        "pasture",
+        "orchard",
+        "vineyard",
+        "dam",
+        "kraal",
+        "feedlot",
+        "silo",
+        "shed",
+        "plantation farm",
+        "crop field",
+        "maize lands",
+        "wheat lands",
+        "sugarcane field",
+        "cane lands"
       ],
       "secondaryLocations": [
-        "market", "buyer premises", "town", "office", "supplier depot off farm"
+        "market",
+        "buyer premises",
+        "town",
+        "office",
+        "supplier depot off farm"
       ],
       "primaryMaterials": [
-        "hay", "silage", "grain", "maize", "wheat", "crop", "crops", "livestock", "cattle", "sheep",
-        "goats", "seed", "fertiliser", "fertilizer", "fruit", "vegetables", "sugarcane", "cane",
-        "wool", "milk", "eggs", "hides", "flowers", "nursery products", "farming products",
+        "hay",
+        "silage",
+        "grain",
+        "maize",
+        "wheat",
+        "crop",
+        "crops",
+        "livestock",
+        "cattle",
+        "sheep",
+        "goats",
+        "seed",
+        "fertiliser",
+        "fertilizer",
+        "fruit",
+        "vegetables",
+        "sugarcane",
+        "cane",
+        "wool",
+        "milk",
+        "eggs",
+        "hides",
+        "flowers",
+        "nursery products",
+        "farming products",
         "farming requirements"
       ],
       "secondaryMaterials": [
-        "retail product", "packaged for market off farm"
+        "retail product",
+        "packaged for market off farm"
       ],
       "excludedActivities": [
-        "game viewing", "tourist lodging", "leisure activities"
+        "game viewing",
+        "tourist lodging",
+        "leisure activities"
+      ],
+      "spreadsheetCatalog": [
+        {
+          "description": "Bailing",
+          "sarsSummary": "Bailing of hay [as defined by Note (h)(ii)(cc)(B)(IJJ) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Baling",
+          "sarsSummary": "Baling of hay"
+        },
+        {
+          "description": "BUILD RIDGES",
+          "sarsSummary": "The carrying out of earthworks the farming property being the building of ridges"
+        },
+        {
+          "description": "BUILD ROADS",
+          "sarsSummary": "The carrying out of earthworks the farming property being the building of roads"
+        },
+        {
+          "description": "Building construction / maintenance.",
+          "sarsSummary": "The construction or maintenance of sheds, pens, silos or silage pits for use in a farming activity [as defined by Note (h)(ii)(cc)(B)(QQ) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Carting stones",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity carried out on the farming property"
+        },
+        {
+          "description": "Carting stones",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity carried out on the farming property [as defined by Note (h)(ii)(cc)(B)(SS) of Schedule 6 of the Customs and Excise Act] being the carting of rocks and stones"
+        },
+        {
+          "description": "CHIPPING",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being the making of wood chips for compost"
+        },
+        {
+          "description": "COMPOST",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being the spreading of compost"
+        },
+        {
+          "description": "COMPOST",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being the spreading of compost."
+        },
+        {
+          "description": "Dig trenches",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity carried out on the farming property"
+        },
+        {
+          "description": "Dig trenches",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity carried out on the farming property [as defined by Note (h)(ii)(cc)(B)(SS) of Schedule 6 of the Customs and Excise Act] being the digging of trenches"
+        },
+        {
+          "description": "Disc",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being discing"
+        },
+        {
+          "description": "Earth works",
+          "sarsSummary": "The carring out of earth works on the Farming property as [as defined by Note (h)(ii)(cc)(B)(SS) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Equipment maintenance / service.",
+          "sarsSummary": "The service, maintenance or repair of vehicles or equipment for use in a farming activity if it is carried out at the place where farming is carried on [as defined by Note (h)(ii)(cc)(B)(PP) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "EXCAVATING",
+          "sarsSummary": "(SS) The carrying out of earthworks for the purpose of a farming activity, carried out on the farming property."
+        },
+        {
+          "description": "Feeding",
+          "sarsSummary": "The breeding and caring for animals and reptiles being the feeding of cattle"
+        },
+        {
+          "description": "Fence construction / maintenance.",
+          "sarsSummary": "The construction or maintenance of fences [as defined by Note (h)(ii)(cc)(B)(NN) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "FERTIGATING",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being fertigation"
+        },
+        {
+          "description": "FERTILIZER",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being the spreading of fertilizer"
+        },
+        {
+          "description": "Fetch bales",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property [as defined by Note (h)(ii)(cc)(B)(AA) of Schedule 6 of the Customs and Excise Act] being the transport of hay bales for storage and usage"
+        },
+        {
+          "description": "Fire fighting",
+          "sarsSummary": "The carrying out of fire fighting activities [as defined by Note (h)(ii)(cc)(B)(MM) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Firebreaks",
+          "sarsSummary": "The construction or maintenance of firebreaks [as defined by Note (h)(ii)(cc)(B)(OO) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Gen electri",
+          "sarsSummary": "Generate electricity or the use of other farm equipment for domestic purposes"
+        },
+        {
+          "description": "Generator",
+          "sarsSummary": "Generating electricity or the use of other farm equipment for domestic purposes [as defined by Note (h)(ii)(cc)(B)(BBB) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Generator",
+          "sarsSummary": "Generating of electricity for the use of other farm equipment for domestic purposes"
+        },
+        {
+          "description": "GRADING",
+          "sarsSummary": "the carrying out of earthworks on the farming property being the maintenance of roads"
+        },
+        {
+          "description": "GRAVEL",
+          "sarsSummary": "the carrying out of earthworks on the farming property being the maintenance of roads"
+        },
+        {
+          "description": "Harvesting",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property [as defined by Note (h)(ii)(cc)(B)(AA) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Harvesting",
+          "sarsSummary": "the carrying out of transportation during picking of avos or peppers"
+        },
+        {
+          "description": "HAUL MAIZE (Silage)",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being the hauling of maize for silage production"
+        },
+        {
+          "description": "Irrigation",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being the irrigation of crops."
+        },
+        {
+          "description": "Irrigation construction / maintenance",
+          "sarsSummary": "The construction or maintenance of dams, water tanks, water troughs, water channels, irrigation systems or drainage systems including water pipes and water piping for use in a farming activity carried out on the farming property [as defined by Note (h)(ii)(cc)(B)(RR) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Land Prep",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity, carried out on the farming property ,being land preparation"
+        },
+        {
+          "description": "Lettuce",
+          "sarsSummary": "(AA) Growing crops and harvesting and storing crops on the farming property, being the transport of lettuce."
+        },
+        {
+          "description": "Lettuce",
+          "sarsSummary": "the transport of lettuce from the fields to the warehouse"
+        },
+        {
+          "description": "LIME",
+          "sarsSummary": "Any activity undertaken for the purpose of soil or water conservation, being the spreading of lime on the soil"
+        },
+        {
+          "description": "Loadofshale",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity, carried out on the farming property, being the loading of shale"
+        },
+        {
+          "description": "Milk Transp",
+          "sarsSummary": "(cc) Eligible use in farming includes the transportation by the user by means of own vehicles"
+        },
+        {
+          "description": "Mowing",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property. Being mowing"
+        },
+        {
+          "description": "MULCHER",
+          "sarsSummary": "Weed,pest or disease control"
+        },
+        {
+          "description": "PLANTING",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property. Being planting"
+        },
+        {
+          "description": "PLANTING",
+          "sarsSummary": "The planting or tending of fruit trees [as defined by Note (h)(ii)(cc)(B)(KK) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "PLATFORM",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity , carried out on the farming property"
+        },
+        {
+          "description": "Ploughing",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being ploughing"
+        },
+        {
+          "description": "Preparation of land",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property [as defined by Note (h)(ii)(cc)(B)(AA) of Schedule 6 of the Customs and Excise Act being the preparation of land"
+        },
+        {
+          "description": "Prospecting water",
+          "sarsSummary": "Searching for ground water solely for use in a farming activity, or the construction or maintenance of facilities for the extraction of such water, solely for that use [as defined by Note (h)(ii)(cc)(B)(TT) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "Pruneing",
+          "sarsSummary": "(KK) The planting or tending of fruit trees."
+        },
+        {
+          "description": "Raking",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being raking"
+        },
+        {
+          "description": "Ripping",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being ripping"
+        },
+        {
+          "description": "ROLLING",
+          "sarsSummary": "The carrying out of earthworks the farming property being the maintenance of roads or compacting platforms"
+        },
+        {
+          "description": "Silage / Maize Cut",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property, being the cutting of maize (for silage production)"
+        },
+        {
+          "description": "SLASHING",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property being Slashing"
+        },
+        {
+          "description": "SLASHING",
+          "sarsSummary": "The carrying out of earthworks for the purpose of a farming activity, carried out on the farming property, being slashing"
+        },
+        {
+          "description": "SLASHING",
+          "sarsSummary": "Weed pest or disease control"
+        },
+        {
+          "description": "Slurry",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property. being  spreading of slurry"
+        },
+        {
+          "description": "Spraying",
+          "sarsSummary": "Weed, pest or disease control, being spraying of crops and pastures"
+        },
+        {
+          "description": "Spraying (Pests)",
+          "sarsSummary": "Weed, pest or disease control [as defined by Note (h)(ii)(cc)(B)(YY) of Schedule 6 of the Customs and Excise Act]"
+        },
+        {
+          "description": "SPRAYING WEEDS",
+          "sarsSummary": "Weed,pest or disease control"
+        },
+        {
+          "description": "Spreading of fertilizer",
+          "sarsSummary": "Growing crops and harvesting and storing crops on the farming property [as defined by Note (h)(ii)(cc)(B)(AA) of Schedule 6 of the Customs and Excise Act] being the spreading of fertilizer"
+        },
+        {
+          "description": "Spreading of fertilizer",
+          "sarsSummary": "Growing crops and harvesting and storing of crops on the farming property"
+        },
+        {
+          "description": "TRANS OTHER",
+          "sarsSummary": "(cc) Eligible use in farming includes the transportation by the user by means of own vehicles"
+        },
+        {
+          "description": "TRANS PHNX",
+          "sarsSummary": "(cc) Eligible use in farming includes the transportation by the user by means of own vehicles"
+        },
+        {
+          "description": "TRANS PTN",
+          "sarsSummary": "(cc) Eligible use in farming includes the transportation by the user by means of own vehicles"
+        },
+        {
+          "description": "Transportation",
+          "sarsSummary": "Transportation by the user by means of own vehicles to any place [as defined by Note (h)(iv)(CC)(AA)(WW) from the farming property to the market or first point of delivery; or the farming requirements are transported from the supplier's loading point to the farming property."
+        },
+        {
+          "description": "TRANSPORTING A",
+          "sarsSummary": "The transport of avos from the orchard to the warehouse"
+        },
+        {
+          "description": "TRANSPORTING P",
+          "sarsSummary": "The transport of peppers from the greenhouse to the warehouse"
+        },
+        {
+          "description": "TRANSPORTING P PLANT",
+          "sarsSummary": "The transport of pepper seedling plants from the nursery to the greenhouse"
+        },
+        {
+          "description": "TRENCHING",
+          "sarsSummary": "To dig trenches where irrigation/water pipes will be laid for water supply"
+        },
+        {
+          "description": "Water supply",
+          "sarsSummary": "The supply of water solely for use in farming if the supply is to a farming property and the water is supplied from that property or a place adjacent to that property [as defined by Note (h)(ii)(cc)(B)(VV) of Schedule 6 of the Customs and Excise Act]"
+        }
       ]
     }
   },
@@ -174,22 +1455,106 @@
     "Total Fuel Used (L)"
   ],
   "intensityTextKeywords": [
-    "load", "loads", "haul", "hauls", "tonne", "tonnes", "hour", "hours", "hr", "km",
-    "shift", "trip", "bucket", "cycle", "hectare", "ha", "bale", "bales", "head", "litre"
+    "load",
+    "loads",
+    "haul",
+    "hauls",
+    "tonne",
+    "tonnes",
+    "hour",
+    "hours",
+    "hr",
+    "km",
+    "shift",
+    "trip",
+    "bucket",
+    "cycle",
+    "hectare",
+    "ha",
+    "bale",
+    "bales",
+    "head",
+    "litre"
   ],
   "shiftProofFallback": {
     "enabled": true,
     "windowHours": 24,
     "maxDistinctActivitiesPerDay": 1,
-    "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period — verify applicability"
+    "advisoryNote": "No proof directly before this dispense; single shift/day POA entry may cover this period \u2014 verify applicability"
+  },
+  "activityMatching": {
+    "fuzzyMinRatio": 0.86,
+    "minTokenOverlap": 2,
+    "minTokenLength": 3,
+    "notes": "Flexible matching on primaryActivities (Schedule 6 baseline + spreadsheet): and/& variants, plurals, token overlap, light fuzzy phrases."
+  },
+  "activityAliasGroups": {
+    "mining": [
+      ["load and haul", "load & haul", "loading and hauling", "load haul", "haulage", "hauling"],
+      ["drill and blast", "drill & blast", "drilling and blasting", "drill blast"],
+      ["transporting materials", "transporting material", "transport materials", "transport material"],
+      ["dump truck", "dumptruck"],
+      ["dozer", "dozing", "bulldozer"],
+      ["dewatering", "de-watering", "pumping water", "water pump"],
+      ["overburden removal", "overburden", "ob removal"],
+      ["coal mining", "mining coal"],
+      ["excavation", "excavating", "excavator"],
+      ["grading", "grader", "road grading"]
+    ],
+    "forestry": [
+      ["harvesting", "harvest", "felling", "felling trees", "manual felling", "mechanical felling"],
+      ["carting logs", "carting", "log carting", "extraction", "extraction to roadside"],
+      ["stacking timber", "stacking", "stacked timber"],
+      ["fire fighting", "firefighting"],
+      ["thinning", "thinning trees", "pruning"]
+    ],
+    "farming": [
+      ["baling", "bailing", "baler", "baling hay"],
+      ["harvesting", "harvest", "crop harvest"],
+      ["irrigation", "irrigating"],
+      ["ploughing", "plowing", "plough", "plow"],
+      ["discing", "disc", "disking"],
+      ["fence construction", "fence maintenance", "fencing"],
+      ["firebreak", "fire break", "firebreaks"],
+      ["earthworks", "earth works"],
+      ["feeding cattle", "feeding", "feed cattle"],
+      ["fertigation", "fertilizing", "fertilising", "spread fertilizer", "spread fertiliser"]
+    ]
   },
   "siteOverrides": {
-    "bultfontein": { "sector": "mining" },
-    "emalahleni": { "sector": "mining" },
-    "ritluka": { "sector": "mining" },
-    "luhlanga": { "sector": "mining" },
-    "kwazubuka": { "sector": "mining" },
-    "north pit": { "sector": "mining" },
-    "south pit": { "sector": "mining" }
+    "bultfontein": {
+      "sector": "mining"
+    },
+    "emalahleni": {
+      "sector": "mining"
+    },
+    "ritluka": {
+      "sector": "mining"
+    },
+    "luhlanga": {
+      "sector": "mining"
+    },
+    "kwazubuka": {
+      "sector": "mining"
+    },
+    "north pit": {
+      "sector": "mining"
+    },
+    "south pit": {
+      "sector": "mining"
+    }
+  },
+  "spreadsheetImport": {
+    "source": "Untitled spreadsheet.xlsx",
+    "rowCounts": {
+      "mining": 94,
+      "farming": 70,
+      "forestry": 6
+    },
+    "primaryTermCounts": {
+      "mining": 81,
+      "farming": 90,
+      "forestry": 11
+    }
   }
 }
