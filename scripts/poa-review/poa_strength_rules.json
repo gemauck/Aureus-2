@@ -177,8 +177,6 @@
         "crane",
         "crush rom",
         "dam maint.",
-        "diesel bowser",
-        "diesel bowser side tank",
         "drill & blast",
         "drilling of holes for blasting",
         "drills",
@@ -199,7 +197,10 @@
         "loadob-reef",
         "maintenance of roads and suppression of dust on mine roads",
         "maintenance vehicle",
-        "mobile diesel bowser",
+        "refuelling water",
+        "refueling water",
+        "water refuelling",
+        "water refueling",
         "operation to be updated with default",
         "partially eligible",
         "plant maint.",
@@ -260,8 +261,6 @@
         "post-mining processing",
         "post-recovery processing",
         "workshop",
-        "refuelling",
-        "refueling",
         "wash bay",
         "weighbridge",
         "office",
@@ -363,7 +362,17 @@
       "excludedActivities": [
         "passenger transport",
         "commuting",
-        "road transport to market"
+        "road transport to market",
+        "refuelling diesel",
+        "refueling diesel",
+        "diesel refuelling",
+        "diesel refueling",
+        "refuel diesel",
+        "diesel bowser",
+        "diesel bowser side tank",
+        "mobile diesel bowser",
+        "dispensing diesel",
+        "fuel bowser diesel"
       ],
       "spreadsheetCatalog": [
         {
@@ -759,6 +768,29 @@
             "loading",
             "loaded"
           ]
+        },
+        "refuelByProduct": {
+          "refuelPatterns": [
+            "refuel",
+            "refuelling",
+            "refueling",
+            "bowser"
+          ],
+          "dieselSignals": [
+            "diesel",
+            "derv",
+            "gas oil",
+            "fuel bowser"
+          ],
+          "waterSignals": [
+            "water",
+            "potable",
+            "drinking water",
+            "dust suppression",
+            "fire control"
+          ],
+          "ineligibleTerm": "refuelling diesel",
+          "eligibleLabel": "refuelling water for mining operations"
         }
       }
     },
@@ -1496,6 +1528,7 @@
       ["dump truck", "dumptruck"],
       ["dozer", "dozing", "bulldozer"],
       ["dewatering", "de-watering", "pumping water", "water pump"],
+      ["refuelling water", "refueling water", "water refuelling", "water refueling", "refuel water"],
       ["overburden removal", "overburden", "ob removal"],
       ["coal mining", "mining coal"],
       ["excavation", "excavating", "excavator"],

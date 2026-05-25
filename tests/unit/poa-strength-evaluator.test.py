@@ -310,6 +310,67 @@ def test_shift_day_fallback_second_dispense():
     assert any("shift/day" in s.lower() or "verify applicability" in s.lower() for s in results["870-R-2"]["shortfalls"])
 
 
+def test_refuelling_diesel_not_eligible():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "BOW-1",
+                    "Date & Time": "2026-04-01 08:00:00",
+                    "Activity": "Refuelling diesel",
+                    "Location.1": "north pit",
+                    "Material": "diesel",
+                    "Total SMR Usage": 2,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+    assert any("refuel" in s.lower() or "diesel" in s.lower() for s in result["shortfalls"])
+
+
+def test_refuelling_water_eligible():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "BOW-2",
+                    "Date & Time": "2026-04-01 09:00:00",
+                    "Activity": "Refuelling water",
+                    "Location.1": "south pit",
+                    "Material": "water",
+                    "Total SMR Usage": 3,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is True
+    assert result["strength"] in (STRENGTH_STRONG, STRENGTH_MODERATE, STRENGTH_WEAK)
+
+
+def test_diesel_bowser_activity_excluded():
+    rules = load_rules()
+    batch = {
+        "proofCount": 1,
+        "activities": ["diesel bowser"],
+        "locations": ["north pit"],
+        "materials": ["diesel"],
+        "comments": [],
+        "sources": [],
+        "intensityValues": {"Total SMR Usage": 1.0},
+        "combinedText": "diesel bowser | north pit | diesel",
+        "holisticText": "diesel bowser | north pit | diesel",
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+
+
 if __name__ == "__main__":
     test_strong_batch_all_criteria()
     test_insufficient_no_proof()
@@ -324,4 +385,7 @@ if __name__ == "__main__":
     test_holistic_transport_coal_pit_inferred_haul()
     test_holistic_reads_non_standard_proof_columns()
     test_shift_day_fallback_second_dispense()
+    test_refuelling_diesel_not_eligible()
+    test_refuelling_water_eligible()
+    test_diesel_bowser_activity_excluded()
     print("All POA strength evaluator tests passed.")

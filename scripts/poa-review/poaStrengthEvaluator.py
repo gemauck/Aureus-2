@@ -467,6 +467,57 @@ def _infer_primary_haulage_activity(
     return "in-pit transport / haul (inferred from material, location, and haul activity)"
 
 
+def _infer_refuel_activity(
+    batch: dict,
+    sector_rules: dict,
+    holistic_text: str,
+    activity_label: str,
+) -> tuple[str, str] | None:
+    """
+    Refuel/bowser activities: diesel → ineligible; water → eligible primary.
+    Uses activity text plus materials/comments in holistic context.
+    """
+    cfg = (sector_rules.get("activityInference") or {}).get("refuelByProduct") or {}
+    if cfg.get("enabled") is False:
+        return None
+
+    refuel_patterns = [str(p).lower() for p in (cfg.get("refuelPatterns") or []) if p]
+    if not refuel_patterns:
+        refuel_patterns = ["refuel", "refuelling", "refueling", "bowser"]
+    diesel_signals = [str(s).lower() for s in (cfg.get("dieselSignals") or ["diesel"]) if s]
+    water_signals = [str(s).lower() for s in (cfg.get("waterSignals") or ["water"]) if s]
+
+    label_lower = (activity_label or "").lower()
+    holistic_lower = (holistic_text or "").lower()
+    combined = f"{label_lower} | {holistic_lower}"
+
+    if not any(p in combined for p in refuel_patterns):
+        return None
+
+    mat_text = " | ".join(batch.get("materials", [])).lower()
+    context = f"{holistic_lower} | {mat_text}"
+    has_diesel = any(s in context for s in diesel_signals)
+    has_water = any(s in context for s in water_signals)
+
+    ineligible = str(cfg.get("ineligibleTerm") or "refuelling diesel").strip()
+    eligible = str(cfg.get("eligibleLabel") or "refuelling water for mining operations").strip()
+
+    if "water" in label_lower and "diesel" not in label_lower:
+        return ("primary", eligible)
+    if "diesel" in label_lower and "water" not in label_lower:
+        return ("excluded", ineligible)
+
+    if has_water and not has_diesel:
+        return ("primary", eligible)
+    if has_diesel and not has_water:
+        return ("excluded", ineligible)
+    if has_diesel and has_water:
+        if "water" in label_lower:
+            return ("primary", eligible)
+        return ("excluded", ineligible)
+    return None
+
+
 def evaluate_activity_criterion(
     batch: dict,
     sector: str,
@@ -484,6 +535,17 @@ def evaluate_activity_criterion(
     sec_act = _sector_matcher(sector_rules, "secondaryActivities").find(activity_label)
     pri_act = _sector_matcher(sector_rules, "primaryActivities").find(holistic)
     inference = None
+
+    refuel_infer = _infer_refuel_activity(batch, sector_rules, holistic, activity_label)
+    if refuel_infer:
+        kind, detail = refuel_infer
+        if kind == "excluded":
+            excluded = excluded or detail
+            pri_act = None
+        elif kind == "primary" and not excluded:
+            pri_act = detail
+            inference = detail
+            sec_act = None
 
     if not pri_act and not excluded:
         inference = _infer_primary_haulage_activity(batch, sector, sector_rules, holistic, cfg)
