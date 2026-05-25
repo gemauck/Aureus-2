@@ -257,7 +257,7 @@ def test_holistic_reads_non_standard_proof_columns():
                     "Transaction ID": "",
                     "Asset Number": "DT-2",
                     "Date & Time": "2026-04-03 07:00:00",
-                    "Activity": "",
+                    "Activity": "Transporting Materials",
                     "Location.1": "south pit",
                     "Material": "rom coal",
                     "Equipment Type": "Dump Truck",
@@ -354,6 +354,34 @@ def test_refuelling_water_eligible():
     assert result["strength"] in (STRENGTH_STRONG, STRENGTH_MODERATE, STRENGTH_WEAK)
 
 
+def test_asset_name_without_activity_not_eligible():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "HM400-1",
+                    "Date & Time": "2026-04-01 11:00:00",
+                    "Activity": "",
+                    "Asset Description": "KOMATSU-HM400-ADT",
+                    "Equipment Type": "Dump Truck",
+                    "Opening SMR": 15908,
+                    "Closing SMR": 15908,
+                }
+            ]
+        )
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+    assert any(
+        "asset" in s.lower() or "equipment" in s.lower() or "operation" in s.lower()
+        for s in result["shortfalls"]
+    )
+    joined_points = " ".join(result.get("compliancePoints") or [])
+    assert "Primary mining activity identified (KOMATSU" not in joined_points
+
+
 def test_diesel_bowser_activity_excluded():
     rules = load_rules()
     batch = {
@@ -388,4 +416,5 @@ if __name__ == "__main__":
     test_refuelling_diesel_not_eligible()
     test_refuelling_water_eligible()
     test_diesel_bowser_activity_excluded()
+    test_asset_name_without_activity_not_eligible()
     print("All POA strength evaluator tests passed.")

@@ -360,8 +360,11 @@ def _prepare_rules_matching(rules: dict) -> None:
         matchers: dict[str, TermMatcher] = {}
         for field in _MATCHER_FIELDS:
             raw = cfg.get(field) or []
-            if field in ("primaryActivities", "secondaryActivities", "excludedActivities"):
+            if field in ("primaryActivities", "secondaryActivities"):
                 cfg[field] = _expand_activity_terms(raw, groups)
+            elif field == "excludedActivities":
+                # Do not merge activityAliasGroups into excluded — avoids false blocks (e.g. dump truck).
+                cfg[field] = _expand_activity_terms(raw, None)
             matchers[field] = TermMatcher(cfg.get(field) or [], match_cfg)
         cfg["_matchers"] = matchers
         cfg["_haulageMatcher"] = TermMatcher(_haulage_activity_patterns(cfg), match_cfg)
@@ -412,7 +415,139 @@ def _build_holistic_activity_text(batch: dict) -> str:
 
 
 def _activity_label_text(batch: dict) -> str:
-    return " | ".join(batch.get("activities", []) + batch.get("comments", []))
+    """Activity + operation/comment fields only (not asset description or equipment labels)."""
+    return " | ".join(
+        dict.fromkeys(
+            (batch.get("activities") or [])
+            + (batch.get("opComments") or [])
+            + (batch.get("commentsOnly") or [])
+        )
+    )
+
+
+def _production_activity_text(batch: dict) -> str:
+    return _activity_label_text(batch)
+
+
+_PRODUCTION_OPERATION_WORDS = (
+    "haul",
+    "transport",
+    "load",
+    "loading",
+    "mining",
+    "drill",
+    "blast",
+    "excavat",
+    "pump",
+    "grade",
+    "strip",
+    "recover",
+    "extract",
+    "cart",
+    "travel distance",
+    "laden",
+    "tunnel",
+    "prospect",
+    "dewater",
+    "refuel",
+    "supply water",
+    "crush",
+    "dust suppression",
+    "separat",
+    "stack",
+    "fell",
+    "harvest",
+    "plough",
+    "bale",
+    "irrigation",
+    "carting",
+    "blasting",
+    "drilling",
+    "overburden",
+    "topsoil",
+    "rehab",
+    "maint",
+    "servicing",
+)
+
+
+_EQUIPMENT_CATEGORY_TERMS = frozenset(
+    {
+        "dump truck",
+        "dumptruck",
+        "excavator",
+        "loader",
+        "front end loader",
+        "dozer",
+        "grader",
+        "tlb",
+        "crane",
+        "compressor",
+        "fel",
+        "adt",
+        "generator",
+        "lighting plant",
+        "bell",
+        "tractor",
+        "cable handler",
+    }
+)
+
+
+def _has_production_operation_wording(text: str) -> bool:
+    t = (text or "").lower()
+    return any(word in t for word in _PRODUCTION_OPERATION_WORDS)
+
+
+def _is_equipment_category_term(term: str | None) -> bool:
+    if not term:
+        return False
+    return _normalize_for_match(str(term)) in _EQUIPMENT_CATEGORY_TERMS
+
+
+def _looks_like_asset_identifier(text: str | None) -> bool:
+    """Model/asset codes (e.g. KOMATSU-HM400-ADT) are not production activity descriptions."""
+    if not text or not str(text).strip():
+        return True
+    t = str(text).strip().lower()
+    if _has_production_operation_wording(t):
+        return False
+    if re.match(r"^[a-z]{2,12}-[a-z0-9]{2,12}(-[a-z]{2,6})?$", t):
+        return True
+    if re.search(r"\b(komatsu|volvo|bell|cat|caterpillar)\b", t) and not re.search(
+        r"\b(haul|transport|load|mining|drill|pump|grade)\b", t
+    ):
+        return True
+    return False
+
+
+def _activity_qualifies_as_production(
+    batch: dict,
+    production_text: str,
+    pri_act: str | None,
+    inference: str | None,
+) -> bool:
+    """Asset/equipment name alone is not Schedule 6 primary production activity."""
+    if inference:
+        return True
+    if not pri_act:
+        return False
+    if _has_production_operation_wording(production_text):
+        return True
+    prod = _normalize_for_match(production_text)
+    if not prod:
+        return False
+    if _is_equipment_category_term(pri_act):
+        term = _normalize_for_match(pri_act)
+        tokens = prod.split()
+        # e.g. "dump truck" or "adt" only — not a described production operation
+        if prod == term or (len(tokens) <= 2 and term in tokens):
+            return False
+        # e.g. "dozer 2 seam mb" — operational context beyond equipment noun
+        if term in prod and len(tokens) >= 3:
+            return True
+        return False
+    return True
 
 
 def _haulage_activity_patterns(sector_rules: dict) -> list[str]:
@@ -531,9 +666,15 @@ def evaluate_activity_criterion(
     holistic = holistic_text or _build_holistic_activity_text(batch)
     cfg = match_cfg or MATCH_CFG_DEFAULT
 
-    excluded = _sector_matcher(sector_rules, "excludedActivities").find(activity_label or holistic)
+    production_text = _production_activity_text(batch)
+
+    excluded = _sector_matcher(sector_rules, "excludedActivities").find(production_text)
     sec_act = _sector_matcher(sector_rules, "secondaryActivities").find(activity_label)
-    pri_act = _sector_matcher(sector_rules, "primaryActivities").find(holistic)
+    pri_act = (
+        _sector_matcher(sector_rules, "primaryActivities").find(production_text)
+        if production_text.strip()
+        else None
+    )
     inference = None
 
     refuel_infer = _infer_refuel_activity(batch, sector_rules, holistic, activity_label)
@@ -551,6 +692,12 @@ def evaluate_activity_criterion(
         inference = _infer_primary_haulage_activity(batch, sector, sector_rules, holistic, cfg)
         if inference:
             pri_act = inference
+
+    if pri_act and not _activity_qualifies_as_production(
+        batch, production_text, pri_act, inference
+    ):
+        pri_act = None
+        inference = None
 
     if excluded and not pri_act:
         return {
@@ -570,15 +717,43 @@ def evaluate_activity_criterion(
             ),
         }
     if pri_act:
-        display = (batch.get("activities") or [None])[0] or activity_label.split(" | ")[0] or pri_act
+        display = (batch.get("activities") or [None])[0]
+        if not display or _looks_like_asset_identifier(display):
+            for key in ("opComments", "commentsOnly"):
+                for candidate in batch.get(key) or []:
+                    if candidate and not _looks_like_asset_identifier(candidate):
+                        display = candidate
+                        break
+                if display and not _looks_like_asset_identifier(display):
+                    break
+        if not display or _looks_like_asset_identifier(display):
+            display = pri_act if not _is_equipment_category_term(pri_act) else None
+        display = str(display or pri_act or "").strip()
         return {
             "ok": True,
             "matchedTerm": pri_act,
             "inference": inference,
-            "display": str(display).strip(),
+            "display": display,
             "shortfall": None,
         }
     if activity_label.strip() or holistic.strip():
+        asset_only = (
+            _looks_like_asset_identifier(production_text)
+            or (
+                not production_text.strip()
+                and any(_looks_like_asset_identifier(a) for a in batch.get("assetDescriptions") or [])
+            )
+        )
+        if asset_only:
+            return {
+                "ok": False,
+                "matchedTerm": None,
+                "inference": None,
+                "shortfall": (
+                    "Asset or equipment type recorded without a Schedule 6 primary production "
+                    "activity (operation description required — not just machine name)"
+                ),
+            }
         return {
             "ok": False,
             "matchedTerm": None,
@@ -746,7 +921,8 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "holisticText": "",
         }
 
-    activities, locations, materials, sources, comments, field_snippets = [], [], [], [], [], []
+    activities, locations, materials, sources = [], [], [], []
+    op_comments, comments_only, asset_descriptions, field_snippets = [], [], [], []
     intensity_values: dict[str, float] = {}
 
     for col in HOLISTIC_ACTIVITY_COLUMNS:
@@ -756,8 +932,14 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         vals = vals[vals != ""]
         if col == "Activity":
             activities.extend(vals.tolist())
-        else:
-            comments.extend(vals.tolist())
+        elif col == "Operation Description / Comment":
+            op_comments.extend(vals.tolist())
+        elif col == "Comments":
+            comments_only.extend(vals.tolist())
+        elif col == "Asset Description":
+            asset_descriptions.extend(vals.tolist())
+        elif col == "Custom Attribute":
+            asset_descriptions.extend(vals.tolist())
 
     for col in ("Location.1", "Location"):
         if col in proof_df.columns:
@@ -792,12 +974,25 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             except Exception:
                 pass
 
+    narrative_comments = op_comments + comments_only
     combined_parts = (
-        activities + comments + field_snippets + locations + materials + sources
+        activities
+        + narrative_comments
+        + asset_descriptions
+        + field_snippets
+        + locations
+        + materials
+        + sources
     )
     combined_text = " | ".join(dict.fromkeys(combined_parts))
     holistic_text = " | ".join(
-        dict.fromkeys(activities + comments + field_snippets + materials + locations)
+        dict.fromkeys(
+            activities
+            + narrative_comments
+            + field_snippets
+            + materials
+            + locations
+        )
     )
 
     return {
@@ -806,7 +1001,10 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         "locations": list(dict.fromkeys(locations)),
         "materials": list(dict.fromkeys(materials)),
         "sources": list(dict.fromkeys(sources)),
-        "comments": list(dict.fromkeys(comments)),
+        "opComments": list(dict.fromkeys(op_comments)),
+        "commentsOnly": list(dict.fromkeys(comments_only)),
+        "comments": list(dict.fromkeys(narrative_comments)),
+        "assetDescriptions": list(dict.fromkeys(asset_descriptions)),
         "fieldSnippets": list(dict.fromkeys(field_snippets)),
         "intensityValues": intensity_values,
         "combinedText": combined_text,
