@@ -56,7 +56,6 @@ function saveBatchMeta(batchId, tempDir, batchData) {
         totalBatches: batchData.totalBatches,
         sources: batchData.sources,
         fileName: batchData.fileName,
-        useAIStrength: batchData.useAIStrength,
         receivedBatches: batchData.receivedBatches,
         receivedRowCount: batchData.receivedRowCount,
         startTime: batchData.startTime
@@ -140,7 +139,7 @@ async function handler(req, res) {
             return badRequest(res, `Invalid JSON payload: ${parseError.message}`);
         }
 
-        const { batchId, batchNumber, totalBatches, rows, sources, fileName, isFinal, useAIStrength } = payload || {};
+        const { batchId, batchNumber, totalBatches, rows, sources, fileName, isFinal } = payload || {};
 
         console.log('POA Review Batch API - Received batch:', { 
             batchId, 
@@ -194,7 +193,6 @@ async function handler(req, res) {
                     batchFilePaths: diskMeta.batchFilePaths || [],
                     totalBatches: diskMeta.totalBatches,
                     sources: diskMeta.sources || ['Inmine: Daily Diesel Issues'],
-                    useAIStrength: diskMeta.useAIStrength === true,
                     fileName: diskMeta.fileName || 'poa-review',
                     receivedBatches: diskMeta.receivedBatches || 0,
                     receivedRowCount: diskMeta.receivedRowCount || 0,
@@ -207,7 +205,6 @@ async function handler(req, res) {
                     batchFilePaths: [], // index i = path for batch (i+1)
                     totalBatches: totalBatches || 1,
                     sources: sources || ['Inmine: Daily Diesel Issues'],
-                    useAIStrength: useAIStrength === true,
                     fileName: fileName || 'poa-review',
                     receivedBatches: 0,
                     receivedRowCount: 0,
@@ -320,8 +317,6 @@ from ProofReview import POAReview, format_review, review_cols
 input_file = r'${tempCsvPath.replace(/\\/g, '/')}'
 output_file = r'${outputFilePath.replace(/\\/g, '/')}'
 sources = ${JSON.stringify(batchData.sources)}
-use_llm_strength = ${batchData.useAIStrength ? 'True' : 'False'}
-cache_dir = r'${tempDir.replace(/\\/g, '/')}'
 
 def normalize_column_name(col_name):
     """Normalize column name for matching (case-insensitive, strip whitespace)"""
@@ -421,7 +416,7 @@ try:
     if "label" not in review.data.columns:
         review.label_rows()
     review.total_smr(sources)
-    review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
+    review.evaluate_poa_strength()
     # Create output directory if it doesn't exist
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     

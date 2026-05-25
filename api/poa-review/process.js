@@ -31,9 +31,9 @@ async function handler(req, res) {
             return badRequest(res, `Invalid JSON payload: ${parseError.message}`);
         }
 
-        const { filePath, fileName, sources, useAIStrength } = payload || {};
+        const { filePath, fileName, sources } = payload || {};
 
-        console.log('POA Review API - Received payload:', { filePath, fileName, sources, useAIStrength });
+        console.log('POA Review API - Received payload:', { filePath, fileName, sources });
 
         if (!filePath || !fileName) {
             console.error('POA Review API - Missing required fields:', { filePath: !!filePath, fileName: !!fileName });
@@ -119,8 +119,6 @@ from ProofReview import POAReview, format_review, review_cols
 input_file = r'${inputFilePath.replace(/\\/g, '/')}'
 output_file = r'${outputFilePath.replace(/\\/g, '/')}'
 sources = ${JSON.stringify(sources || ['Inmine: Daily Diesel Issues'])}
-use_llm_strength = ${useAIStrength === true ? 'True' : 'False'}
-cache_dir = r'${path.join(rootDir, 'uploads', 'poa-review-temp').replace(/\\/g, '/')}'
 
 def normalize_column_name(col_name):
     """Normalize column name for matching (case-insensitive, strip whitespace)"""
@@ -203,7 +201,7 @@ try:
     review.total_smr(sources)
     
     print("Evaluating POA strength...")
-    review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
+    review.evaluate_poa_strength()
     
     print("Formatting review...")
     # Create output directory if it doesn't exist

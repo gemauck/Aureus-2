@@ -2858,12 +2858,6 @@ app.post('/api/poa-review/process-batch', (req, res) =>
     routeLabel: 'POA Review process-batch',
   })
 )
-app.all('/api/poa-review/evaluate-strength', (req, res) =>
-  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'evaluate-strength.js'), {
-    timeoutMs: POA_BATCH_TIMEOUT_MS,
-    routeLabel: 'POA Review evaluate-strength',
-  })
-)
 // Serve standalone Python script for browser (Pyodide) run
 app.get('/api/poa-review/browser-script', (req, res) => {
   try {
@@ -2953,7 +2947,7 @@ app.use('/api', async (req, res) => {
     
     // Add timeout to prevent hanging requests
     // POA Review processing can take up to 5 minutes, so give it more time
-    const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel') || req.url.includes('/poa-review/evaluate-strength');
+    const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
     const isPoaExcel = req.url.includes('/poa-review/process-excel')

@@ -54,7 +54,6 @@ async function handler(req, res) {
         let safeFileName = '';
         let timestamp = 0;
         let sources = ['Inmine: Daily Diesel Issues'];
-        let useAIStrength = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -113,9 +112,6 @@ async function handler(req, res) {
                         sources = JSON.parse(value);
                     } catch (e) { /* keep default */ }
                 }
-                if (name === 'useAIStrength') {
-                    useAIStrength = value === 'true' || value === true;
-                }
             });
 
             bb.on('finish', () => {
@@ -155,7 +151,6 @@ async function handler(req, res) {
         // For large files, convert Excel to CSV first to avoid memory issues
         // Then use the batch processing API which handles large files efficiently
         const tempCsvPath = path.join(inputDir, `${safeFileName}_${timestamp}.csv`);
-        const cacheDir = path.join(rootDir, 'uploads', 'poa-review-temp');
         const convertScriptPath = path.join(scriptsDir, 'convert_excel_for_poa.py');
         const processScriptPath = path.join(scriptsDir, 'process_poa_csv.py');
         const pythonExec = venvPython === 'python3' ? 'python3' : `"${venvPython}"`;
@@ -211,8 +206,6 @@ async function handler(req, res) {
                 tempCsvPath,
                 outputFilePath,
                 JSON.stringify(sources),
-                useAIStrength ? 'true' : 'false',
-                cacheDir,
                 String(MAX_ROWS),
             ],
             { timeout: 600000, label: 'process' }

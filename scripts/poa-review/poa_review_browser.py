@@ -254,7 +254,7 @@ class POAReview:
         )
         return self.data
 
-    def evaluate_poa_strength(self, use_llm=False, cache_dir=None):
+    def evaluate_poa_strength(self):
         if "label" not in self.data.columns:
             self.label_rows()
         label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
@@ -293,38 +293,6 @@ class POAReview:
             self.data.loc[override_mask, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
         self.strength_summary = summarize_strength_results(label_results)
         return self.data
-
-
-_BROWSER_STATE = {}
-
-
-def _serialize_label_results(label_results):
-    label_batches = {label: res["batch"] for label, res in label_results.items()}
-    rules_results = {
-        label: {k: v for k, v in res.items() if k != "batch"}
-        for label, res in label_results.items()
-    }
-    return label_batches, rules_results
-
-
-def _merge_api_label_results(label_results, api_label_results):
-    if not api_label_results:
-        return label_results
-    merged = dict(label_results)
-    for label, mr in api_label_results.items():
-        if label not in merged:
-            continue
-        base = merged[label]
-        merged[label] = {
-            **base,
-            "criteria": mr.get("criteria", base.get("criteria")),
-            "score": mr.get("score", base.get("score")),
-            "strength": mr.get("strength", base.get("strength")),
-            "shortfalls": mr.get("shortfalls", base.get("shortfalls", [])),
-            "compliancePoints": mr.get("compliancePoints", base.get("compliancePoints", [])),
-            "method": mr.get("method", base.get("method", "rules")),
-        }
-    return merged
 
 
 def _strength_fill_series(review, output_cols):
@@ -423,52 +391,13 @@ def _write_output_excel(review, original_columns):
     )
 
 
-def run_phase1():
-    """Rules pipeline through strength payload export (browser AI step follows in JS)."""
+def run():
     with open(OPTIONS_JSON, "r") as f:
         options = json.load(f)
     sources = options.get("sources", ["Inmine: Daily Diesel Issues"])
     review, original_columns = _build_review_from_csv(sources)
-    label_results = evaluate_all_labels(review.data, review.proof_mask, review.transaction_mask)
-    label_batches, rules_results = _serialize_label_results(label_results)
-    with open("/tmp/llm_payload.json", "w", encoding="utf-8") as f:
-        json.dump({"labelBatches": label_batches, "rulesResults": rules_results}, f)
-    _BROWSER_STATE["review"] = review
-    _BROWSER_STATE["original_columns"] = original_columns
-    _BROWSER_STATE["label_results"] = label_results
-
-
-def run_phase2():
-    """Apply rules or server-merged AI results and write Excel."""
-    review = _BROWSER_STATE.get("review")
-    original_columns = _BROWSER_STATE.get("original_columns")
-    label_results = dict(_BROWSER_STATE.get("label_results") or {})
-    if review is None or original_columns is None:
-        raise RuntimeError("run_phase1() must complete before run_phase2()")
-
-    merged_path = "/tmp/strength_merged.json"
-    if os.path.isfile(merged_path):
-        with open(merged_path, "r", encoding="utf-8") as f:
-            api_out = json.load(f)
-        if isinstance(api_out, dict) and isinstance(api_out.get("data"), dict):
-            api_out = api_out["data"]
-        label_results = _merge_api_label_results(label_results, api_out.get("labelResults") or {})
-
-    review._apply_label_results(label_results)
+    review.evaluate_poa_strength()
     _write_output_excel(review, original_columns)
-
-
-def run():
-    with open(OPTIONS_JSON, "r") as f:
-        options = json.load(f)
-    use_ai = bool(options.get("useAIStrength"))
-    run_phase1()
-    if not use_ai or not os.path.isfile("/tmp/strength_merged.json"):
-        review = _BROWSER_STATE["review"]
-        review._apply_label_results(_BROWSER_STATE["label_results"])
-        _write_output_excel(review, _BROWSER_STATE["original_columns"])
-        return
-    run_phase2()
 
 
 if __name__ == "__main__" and not globals().get("__POA_PYODIDE_WORKER__"):

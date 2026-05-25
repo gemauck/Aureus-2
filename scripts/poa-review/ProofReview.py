@@ -464,24 +464,12 @@ class POAReview:
 		self.data.loc[self.transaction_mask, "total smr"] = pd.to_numeric(mapped, errors="coerce").fillna(0).astype(np.float32)
 		return self.data
 
-	def evaluate_poa_strength(self, use_llm=False, cache_dir=None):
-		"""Score POA strength per dispense batch (label) and map to transaction rows."""
+	def evaluate_poa_strength(self):
+		"""Score POA strength per dispense batch (label) using rules and map to transaction rows."""
 		if "label" not in self.data.columns:
 			self.label_rows()
 
 		label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
-		label_batches = {label: res["batch"] for label, res in label_results.items()}
-
-		if use_llm:
-			try:
-				from poaStrengthLLM import evaluate_labels_with_llm
-				label_results = evaluate_labels_with_llm(
-					label_batches,
-					label_results,
-					cache_dir=cache_dir,
-				)
-			except Exception as e:
-				print(f"POA Strength LLM skipped, using rules only: {e}", flush=True)
 
 		strength_map = {label: res["strength"] for label, res in label_results.items()}
 		shortfall_map = {label: format_shortfalls(res.get("shortfalls") or []) for label, res in label_results.items()}

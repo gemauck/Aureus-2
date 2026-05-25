@@ -125,8 +125,6 @@ def run_pipeline(
     input_file: str,
     output_file: str,
     sources: list,
-    use_llm_strength: bool = False,
-    cache_dir: str | None = None,
     max_rows: int = MAX_ROWS_DEFAULT,
 ) -> None:
     print('Reading CSV file...', flush=True)
@@ -166,7 +164,7 @@ def run_pipeline(
     print('Core POA metrics computed', flush=True)
     review.total_smr(sources)
     print('Total SMR computed', flush=True)
-    review.evaluate_poa_strength(use_llm=use_llm_strength, cache_dir=cache_dir)
+    review.evaluate_poa_strength()
     print('POA strength evaluated', flush=True)
 
     os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
@@ -186,7 +184,7 @@ def run_pipeline(
 def main() -> int:
     if len(sys.argv) < 3:
         print(
-            'Usage: process_poa_csv.py <input.csv> <output.xlsx> [sources_json] [use_llm] [cache_dir] [max_rows]',
+            'Usage: process_poa_csv.py <input.csv> <output.xlsx> [sources_json] [max_rows]',
             file=sys.stderr,
         )
         return 1
@@ -194,12 +192,10 @@ def main() -> int:
     input_file = sys.argv[1]
     output_file = sys.argv[2]
     sources = json.loads(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else ['Inmine: Daily Diesel Issues']
-    use_llm = sys.argv[4].lower() in ('1', 'true', 'yes') if len(sys.argv) > 4 else False
-    cache_dir = sys.argv[5] if len(sys.argv) > 5 else None
-    max_rows = int(sys.argv[6]) if len(sys.argv) > 6 else MAX_ROWS_DEFAULT
+    max_rows = int(sys.argv[4]) if len(sys.argv) > 4 else MAX_ROWS_DEFAULT
 
     try:
-        run_pipeline(input_file, output_file, sources, use_llm, cache_dir, max_rows)
+        run_pipeline(input_file, output_file, sources, max_rows)
         return 0
     except Exception as exc:
         print(f'Error: {exc}', file=sys.stderr)

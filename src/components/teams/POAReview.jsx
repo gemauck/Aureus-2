@@ -167,7 +167,7 @@ function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
     );
 }
 
-function ReportSummaryPanel({ summary, isDark, completedInText, useAIStrength }) {
+function ReportSummaryPanel({ summary, isDark, completedInText }) {
     if (!summary) return null;
 
     const statClass = `text-xl font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`;
@@ -240,7 +240,7 @@ function ReportSummaryPanel({ summary, isDark, completedInText, useAIStrength })
             {summary.strengthSummary && summary.strengthSummary.totalBatches > 0 && (
                 <div>
                     <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                        POA strength by batch{useAIStrength ? ' (rules preview; server report may use AI)' : ' (rules)'}
+                        POA strength by batch (rules)
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                         {['Strong', 'Moderate', 'Weak', 'Insufficient'].map((tier) => (
@@ -307,7 +307,6 @@ const POAReview = () => {
     const [completedInText, setCompletedInText] = useState(null); // e.g. "2m 34s"
     const processingStartRef = useRef(null);
     const [runLocally, setRunLocally] = useState(false);
-    const [useAIStrength, setUseAIStrength] = useState(true);
     const [preflight, setPreflight] = useState(null);
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [reportSummary, setReportSummary] = useState(null);
@@ -754,7 +753,6 @@ const POAReview = () => {
                                 sources: sources && sources.length > 0 ? sources : [],
                                 fileName,
                                 isFinal,
-                                useAIStrength: useAIStrength === true,
                             })
                         });
                         
@@ -779,7 +777,6 @@ const POAReview = () => {
                                         sources: sources && sources.length > 0 ? sources : [],
                                         fileName,
                                         isFinal,
-                                        useAIStrength: useAIStrength === true,
                                     })
                                 });
                             }
@@ -873,7 +870,7 @@ const POAReview = () => {
             console.error('POA Review - Chunked processing error:', error);
             throw error;
         }
-    }, [sources, finalizeReportSummary, useAIStrength]);
+    }, [sources, finalizeReportSummary]);
 
     const toggleDocumentSource = useCallback((sourceName) => {
         setSources(prev => prev.includes(sourceName) ? prev.filter(s => s !== sourceName) : [...prev, sourceName]);
@@ -947,7 +944,6 @@ const POAReview = () => {
                 const csvString = csvLines.join('\n');
                 const optionsJson = JSON.stringify({
                     sources: sources || ['Inmine: Daily Diesel Issues'],
-                    useAIStrength: useAIStrength === true,
                 });
                 setProcessingProgress(`Starting Python (tab will stay responsive)…`);
                 setProcessingProgressPercent(15);
@@ -955,12 +951,10 @@ const POAReview = () => {
                 const origin = (window.location.origin || '').replace(/\/$/, '');
                 const scriptUrl = origin + '/api/poa-review/browser-script';
                 const pyodideBase = origin + '/api/poa-review/pyodide';
-                const authToken = window.storage?.getToken?.() || '';
-                const browserUseAI = useAIStrength === true;
                 const workerCode = `
 importScripts('${pyodideBase}/pyodide.js');
 self.onmessage = async (e) => {
-  const { csv, optionsJson, scriptUrl, origin, authToken, useAIStrength } = e.data;
+  const { csv, optionsJson, scriptUrl } = e.data;
   try {
     self.postMessage({ type: 'progress', message: 'Loading Python runtime…' });
     const pyodide = await self.loadPyodide({ indexURL: '${pyodideBase}/' });
@@ -975,30 +969,7 @@ self.onmessage = async (e) => {
     const res = await fetch(scriptUrl);
     const script = await res.text();
     pyodide.runPython(script);
-    pyodide.runPython('run_phase1()');
-    if (useAIStrength) {
-      self.postMessage({ type: 'progress', message: 'Running AI strength evaluation (batch summaries only)…' });
-      try {
-        const payloadText = pyodide.FS.readFile('/tmp/llm_payload.json', { encoding: 'utf8' });
-        const aiRes = await fetch(origin + '/api/poa-review/evaluate-strength', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + (authToken || ''),
-          },
-          credentials: 'include',
-          body: payloadText,
-        });
-        if (aiRes.ok) {
-          pyodide.FS.writeFile('/tmp/strength_merged.json', await aiRes.text());
-        } else {
-          self.postMessage({ type: 'progress', message: 'AI unavailable — using rules-only strength…' });
-        }
-      } catch (aiErr) {
-        self.postMessage({ type: 'progress', message: 'AI step failed — using rules-only strength…' });
-      }
-    }
-    pyodide.runPython('run_phase2()');
+    pyodide.runPython('run()');
     const outBytes = pyodide.FS.readFile('/tmp/output.xlsx', { encoding: 'binary' });
     self.postMessage({ type: 'done', outBytes });
   } catch (err) {
@@ -1017,7 +988,6 @@ self.onmessage = async (e) => {
                             setProcessingProgress(d.message);
                             if (d.message.includes('Loading')) setProcessingProgressPercent(20);
                             else if (d.message.includes('Installing')) setProcessingProgressPercent(30);
-                            else if (d.message.includes('AI')) setProcessingProgressPercent(55);
                             else setProcessingProgressPercent(40);
                         } else if (d.type === 'done') {
                             try {
@@ -1049,9 +1019,6 @@ self.onmessage = async (e) => {
                         csv: csvString,
                         optionsJson,
                         scriptUrl,
-                        origin,
-                        authToken,
-                        useAIStrength: browserUseAI,
                     });
                 });
                 return;
@@ -1068,8 +1035,6 @@ self.onmessage = async (e) => {
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
-                formData.append('useAIStrength', useAIStrength ? 'true' : 'false');
-
                 const token = window.storage?.getToken?.() || '';
                 const maxRetries = 2;
                 const retryDelay = 2000;
@@ -1084,7 +1049,6 @@ self.onmessage = async (e) => {
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
-                            retryFormData.append('useAIStrength', useAIStrength ? 'true' : 'false');
                             formData = retryFormData;
                         }
                         response = await fetch('/api/poa-review/process-excel', {
@@ -1168,7 +1132,7 @@ self.onmessage = async (e) => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, runLocally, useAIStrength, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
+    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -1408,24 +1372,6 @@ self.onmessage = async (e) => {
                 </p>
             </div>
 
-            <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                <label className={`flex items-center gap-2 cursor-pointer ${isDark ? 'text-slate-200' : 'text-gray-700'}`}>
-                    <input
-                        type="checkbox"
-                        checked={useAIStrength}
-                        onChange={(e) => setUseAIStrength(e.target.checked)}
-                        disabled={isProcessing}
-                        className="rounded border-gray-400"
-                    />
-                    <span className="text-sm">Use AI strength evaluation</span>
-                </label>
-                <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    {runLocally
-                        ? 'Your file stays on device; only compact batch summaries are sent to the server for AI scoring. Falls back to rules-only if unavailable.'
-                        : 'Adds POA Strength and Shortfalls columns using rules plus OpenAI (Schedule 6 context) when configured. Falls back to rules-only if unavailable.'}
-                </p>
-            </div>
-
             {/* Error Display */}
             {error && (
                 <div className={`rounded-lg border p-3 ${isDark ? 'bg-red-900/30 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
@@ -1535,7 +1481,6 @@ self.onmessage = async (e) => {
                     summary={reportSummary}
                     isDark={isDark}
                     completedInText={completedInText}
-                    useAIStrength={useAIStrength}
                 />
             )}
 
@@ -1551,8 +1496,8 @@ self.onmessage = async (e) => {
                     <li>• Groups consecutive transactions within 1 hour</li>
                     <li>• Calculates time gaps between proof records and transactions</li>
                     <li>• Generates formatted Excel reports with conditional formatting</li>
-                    <li>• Scores POA strength per dispense batch (Strong / Moderate / Weak / Insufficient) with shortfall notes</li>
-                    <li>• Optional AI evaluation for Schedule 6 primary production activity (server-side)</li>
+                    <li>• Scores POA strength per dispense batch (Strong / Moderate / Weak / Insufficient) using Schedule 6 rules — sector-aware for mining, forestry, and farming</li>
+                    <li>• Adds POA Compliance Points and Shortfalls columns from the rules engine (fast, no external API calls)</li>
                 </ul>
             </div>
         </div>
