@@ -3,7 +3,8 @@
  * Resend email.received webhook: when a reply is received at the document-request inbound
  * address, look up the original sent message (In-Reply-To → DocumentRequestEmailSent),
  * download attachments, upload to uploads/doc-collection-comments, and create a
- * DocumentItemComment for that project/document/month.
+ * DocumentItemComment for that project/document/month (shown under Email activity only —
+ * not the manual Comments stream; requester Reply-All echoes are skipped).
  *
  * Resend setup: In Resend Dashboard enable "Receive" for your domain, then add a webhook
  * for event "email.received" pointing to: https://your-domain/api/inbound/document-request-reply
@@ -31,6 +32,31 @@ const SIGNATURE_TOLERANCE_SEC = parseInt(process.env.RESEND_WEBHOOK_TOLERANCE_SE
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function isValidEmail(s) {
   return typeof s === 'string' && s.trim().length > 0 && EMAIL_RE.test(s.trim())
+}
+
+function normalizeEmailAddress(value) {
+  if (!value || typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  const match = trimmed.match(/<([^>]+)>/)
+  const email = (match && match[1] ? match[1] : trimmed).trim().toLowerCase()
+  return isValidEmail(email) ? email : ''
+}
+
+/**
+ * Skip storing inbound mail as a cell comment when the sender is the original requester
+ * (Reply All from their mailbox) or the documents@ inbound address — those belong in Email
+ * activity only; real client replies are still stored as author "Email from Client".
+ */
+function shouldSkipInboundReplyComment(mapping, fromStr) {
+  const fromNorm = normalizeEmailAddress(fromStr)
+  if (!fromNorm) return false
+  const requesterNorm = normalizeEmailAddress(mapping?.requesterEmail || '')
+  if (requesterNorm && fromNorm === requesterNorm) return true
+  const inboundNorm = normalizeEmailAddress(
+    process.env.DOCUMENT_REQUEST_INBOUND_EMAIL || process.env.INBOUND_EMAIL_FOR_DOCUMENT_REQUESTS || ''
+  )
+  if (inboundNorm && fromNorm === inboundNorm) return true
+  return false
 }
 
 function extractEmailsFromString(value) {
@@ -1413,6 +1439,15 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
     const bodyText = emailBodyText(email)
     const fromStr = (email.from || '').toString().replace(/^.*<([^>]+)>.*$/, '$1').trim() || 'unknown'
 
+    if (shouldSkipInboundReplyComment(mapping, fromStr)) {
+      console.log('document-request-reply: skip comment (requester/inbound/cc-only echo)', {
+        emailId,
+        from: normalizeEmailAddress(fromStr) || fromStr,
+        requesterEmail: normalizeEmailAddress(mapping?.requesterEmail || '') || null
+      })
+      return
+    }
+
     // Idempotency: if we've already processed this Resend emailId, skip to avoid duplicates.
     if (emailId && prisma.documentRequestEmailReceived && !options.force) {
       try {
@@ -1536,5 +1571,7 @@ export {
   parseMonthYearFromText,
   parseDocMonthYearFromSubject,
   parseReplyContextFromEmail,
-  processReceivedEmail
+  processReceivedEmail,
+  shouldSkipInboundReplyComment,
+  normalizeEmailAddress
 }

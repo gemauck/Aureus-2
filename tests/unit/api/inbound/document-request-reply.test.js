@@ -42,7 +42,9 @@ const {
   parseMonthYearFromText,
   parseDocMonthYearFromSubject,
   parseReplyContextFromEmail,
-  processReceivedEmail
+  processReceivedEmail,
+  shouldSkipInboundReplyComment,
+  normalizeEmailAddress
 } = await import('../../../../api/inbound/document-request-reply.js')
 
 describe('document-request-reply helpers', () => {
@@ -68,6 +70,30 @@ describe('document-request-reply helpers', () => {
     expect(result.docName).toBe('Mining Right')
     expect(result.month).toBe(2)
     expect(result.year).toBe(2026)
+  })
+})
+
+describe('shouldSkipInboundReplyComment', () => {
+  test('skips when sender is the original requester', () => {
+    expect(
+      shouldSkipInboundReplyComment(
+        { requesterEmail: 'Requester <gareth@abcotronics.co.za>' },
+        'gareth@abcotronics.co.za'
+      )
+    ).toBe(true)
+  })
+
+  test('does not skip real client replies', () => {
+    expect(
+      shouldSkipInboundReplyComment(
+        { requesterEmail: 'gareth@abcotronics.co.za' },
+        'client@mining.co.za'
+      )
+    ).toBe(false)
+  })
+
+  test('normalizeEmailAddress extracts address from display name', () => {
+    expect(normalizeEmailAddress('Client <client@example.com>')).toBe('client@example.com')
   })
 })
 
@@ -104,7 +130,17 @@ describe('document-request-reply processing', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null)
   })
 
-  test('processReceivedEmail falls back to body context mapping', async () => {
+  test('processReceivedEmail creates inbound comment for client replies', async () => {
+    mockPrisma.documentRequestEmailSent.findFirst.mockResolvedValue({
+      messageId: 'msg-1',
+      projectId: 'project-1',
+      sectionId: 'section-1',
+      documentId: 'doc-1',
+      year: 2026,
+      month: 2,
+      requesterEmail: 'requester@example.com'
+    })
+
     await processReceivedEmail('email-1', 're_test_key', {})
 
     expect(mockPrisma.documentItemComment.create).toHaveBeenCalledTimes(1)
@@ -114,5 +150,38 @@ describe('document-request-reply processing', () => {
     expect(created.year).toBe(2026)
     expect(created.text).toContain('Email from Client')
     expect(mockPrisma.documentRequestEmailReceived.create).toHaveBeenCalledTimes(1)
+  })
+
+  test('processReceivedEmail skips comment when sender is the requester (Reply All echo)', async () => {
+    mockPrisma.documentRequestEmailSent.findFirst.mockResolvedValue({
+      messageId: 'msg-1',
+      projectId: 'project-1',
+      sectionId: 'section-1',
+      documentId: 'doc-1',
+      year: 2026,
+      month: 2,
+      requesterEmail: 'requester@example.com'
+    })
+    global.fetch = jest.fn(async (url) => {
+      if (String(url).includes('/attachments')) {
+        return { ok: true, json: async () => ({ data: [] }) }
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'email-2',
+          subject: 'Re: Abco Document / Data request',
+          text: 'Thanks',
+          html: '',
+          from: 'requester@example.com',
+          headers: { 'in-reply-to': '<msg-1>' }
+        })
+      }
+    })
+
+    await processReceivedEmail('email-2', 're_test_key', {})
+
+    expect(mockPrisma.documentItemComment.create).not.toHaveBeenCalled()
+    expect(mockPrisma.documentRequestEmailReceived.create).not.toHaveBeenCalled()
   })
 })

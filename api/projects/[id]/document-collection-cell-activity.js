@@ -9,6 +9,7 @@ import { badRequest, ok } from '../../_lib/response.js'
 import { prisma } from '../../_lib/prisma.js'
 
 const SYNTHETIC_SENT_AUTHORS = new Set(['Sent reply (platform)', 'Sent request (platform)'])
+const INBOUND_EMAIL_COMMENT_AUTHOR = 'Email from Client'
 
 function parseSyntheticSubjectBody(text) {
   const firstLine = (text || '').split('\n')[0] || ''
@@ -236,6 +237,10 @@ async function handler(req, res) {
 
   for (const c of comments) {
     const author = (c.author || '').trim()
+    if (author === INBOUND_EMAIL_COMMENT_AUTHOR) {
+      // Inbound client replies are listed under Email activity (received), not Comments.
+      continue
+    }
     if (SYNTHETIC_SENT_AUTHORS.has(author)) {
       // Keep platform "sent" fallback comments out of the comment stream.
       // If no matching sent log exists, surface them as email rows instead.

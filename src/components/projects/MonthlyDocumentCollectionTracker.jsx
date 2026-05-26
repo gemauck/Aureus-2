@@ -5401,7 +5401,8 @@ const getAssigneeColor = (identifier, users) => {
         const status = getDocumentStatus(doc, month);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(doc, month);
-        const hasComments = comments.length > 0;
+        const userComments = comments.filter((c) => !isEmailActivityComment(c));
+        const hasComments = userComments.length > 0;
         const monthKeyForEmail = !isJsonOnlyTracker ? getMonthKey(month, selectedYear) : null;
         const emailDraft =
             monthKeyForEmail && doc?.emailRequestByMonth && typeof doc.emailRequestByMonth === 'object'
@@ -5414,7 +5415,9 @@ const getAssigneeColor = (identifier, users) => {
                 (Array.isArray(emailDraft.cc) && emailDraft.cc.length > 0) ||
                 (typeof emailDraft.subject === 'string' && emailDraft.subject.trim()) ||
                 (typeof emailDraft.body === 'string' && emailDraft.body.trim()));
-        const commentsForNotificationBadge = comments.filter((c) => !isPlatformOutboundAuditComment(c));
+        const commentsForNotificationBadge = comments.filter(
+            (c) => !isPlatformOutboundAuditComment(c) && !isEmailActivityComment(c)
+        );
         const showActivityCommentBadge = commentsForNotificationBadge.length > 0;
         const activityCommentBadgeCount = commentsForNotificationBadge.length;
         const cellKey = buildCellKey(section.id, doc.id, month);
@@ -5673,7 +5676,7 @@ const getAssigneeColor = (identifier, users) => {
                                     className="relative text-gray-500 hover:text-gray-700 transition-colors p-1 rounded shrink-0"
                                     title={
                                         hasComments
-                                            ? `${comments.length} comment(s)`
+                                            ? `${userComments.length} comment(s)`
                                             : hasSavedEmailDraft
                                               ? 'Saved email draft — open for activity'
                                               : 'Activity & comments'
@@ -5696,7 +5699,7 @@ const getAssigneeColor = (identifier, users) => {
                             const receivedCount = receivedMeta.count || 0;
                             const hasActivity = hasComments || (!isJsonOnlyTracker && receivedCount > 0);
                             if (!hasActivity) return null;
-                            const total = (hasComments ? comments.length : 0) + (!isJsonOnlyTracker ? receivedCount : 0);
+                            const total = (hasComments ? userComments.length : 0) + (!isJsonOnlyTracker ? receivedCount : 0);
                             return (
                                 <span
                                     className="text-[10px] text-gray-400 tabular-nums"
@@ -8799,10 +8802,7 @@ Abcotronics`;
                     );
                     const localComments = doc ? getDocumentComments(doc, month) : [];
                     const commentRows = localComments
-                        .filter((c) => {
-                            const author = (c?.author || '').trim();
-                            return author !== 'Sent request (platform)' && author !== 'Sent reply (platform)';
-                        })
+                        .filter((c) => !isEmailActivityComment(c))
                         .map((c) => {
                             const commentKey = getCommentKey(c);
                             return {
@@ -8873,10 +8873,7 @@ Abcotronics`;
                         }
                     }
                     const commentRows = localComments
-                        .filter((c) => {
-                            const author = (c?.author || '').trim();
-                            return author !== 'Sent request (platform)' && author !== 'Sent reply (platform)';
-                        })
+                        .filter((c) => !isEmailActivityComment(c))
                         .map((c) => {
                         const commentKey = getCommentKey(c);
                         return ({
