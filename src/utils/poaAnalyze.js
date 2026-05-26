@@ -275,6 +275,19 @@ function formatDateShort(d) {
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/** Min/max without spread — Math.min(...largeArray) overflows the call stack. */
+function minMaxDateTimes(dates) {
+    if (!dates.length) return { min: null, max: null };
+    let minMs = dates[0].getTime();
+    let maxMs = minMs;
+    for (let i = 1; i < dates.length; i++) {
+        const t = dates[i].getTime();
+        if (t < minMs) minMs = t;
+        if (t > maxMs) maxMs = t;
+    }
+    return { min: new Date(minMs), max: new Date(maxMs) };
+}
+
 /**
  * @param {Record<string, string>[]} rows
  * @param {{ sources?: string[], analyzedRowCount?: number, fileRowHint?: number }} [options]
@@ -402,8 +415,7 @@ export function analyzePoaRows(rows, options = {}) {
     }
 
     const dated = records.map((r) => r.dt).filter(Boolean);
-    const dateMin = dated.length ? new Date(Math.min(...dated.map((d) => d.getTime()))) : null;
-    const dateMax = dated.length ? new Date(Math.max(...dated.map((d) => d.getTime()))) : null;
+    const { min: dateMin, max: dateMax } = minMaxDateTimes(dated);
 
     if (sources.length > 0 && cols.source) {
         const sourceSet = new Set(
