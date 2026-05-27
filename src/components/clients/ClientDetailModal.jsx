@@ -44,6 +44,16 @@ function mergeContactRecords(items = [], extras = []) {
     return Array.from(byId.values());
 }
 
+/** Client account status (Overview tab) — not lead pipeline stages. */
+function normalizeClientAccountStatus(statusOrStage) {
+    const s = String(statusOrStage ?? 'Active').trim().toLowerCase();
+    return s === 'inactive' ? 'Inactive' : 'Active';
+}
+
+function clientEngagementStageFromAccountStatus(statusOrStage) {
+    return normalizeClientAccountStatus(statusOrStage) === 'Inactive' ? 'inactive' : 'Active';
+}
+
 const LEAD_PROPOSAL_PROCESS_STEPS = [
     { step: 1, label: 'Customer Engagement Mandate' },
     { step: 2, label: 'Proposal Drafting' },
@@ -415,6 +425,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
             engagementStage: client.engagementStage ?? client.status ?? (isLead ? 'Potential' : undefined),
+            status: isLead ? client.status : normalizeClientAccountStatus(client.status ?? client.engagementStage),
             aidaStatus: client.aidaStatus ?? client.stage ?? (isLead ? 'Awareness' : undefined),
             externalAgentId: client.externalAgentId || null,
             externalAgent: client.externalAgent || null,
@@ -438,7 +449,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             name: '',
             type: entityType, // Use entityType ('client' or 'lead')
             industry: '',
-            engagementStage: 'Potential',
+            engagementStage: isLead ? 'Potential' : 'Active',
+            status: isLead ? undefined : 'Active',
             aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
@@ -563,6 +575,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
             services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
             engagementStage: client.engagementStage ?? client.status ?? (isLead ? 'Potential' : undefined),
+            status: isLead ? client.status : normalizeClientAccountStatus(client.status ?? client.engagementStage),
             aidaStatus: client.aidaStatus || client.stage || (isLead ? 'Awareness' : undefined),
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                 paymentTerms: 'Net 30',
@@ -584,7 +597,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             name: '',
             type: entityType,
             industry: '',
-            engagementStage: 'Potential',
+            engagementStage: isLead ? 'Potential' : 'Active',
+            status: isLead ? undefined : 'Active',
             aidaStatus: 'Awareness',
             revenue: 0,
             value: 0,
@@ -1810,6 +1824,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     activityLog: typeof clientToUse.activityLog === 'string' ? JSON.parse(clientToUse.activityLog || '[]') : (clientToUse.activityLog || []),
                     services: typeof clientToUse.services === 'string' ? JSON.parse(clientToUse.services || '[]') : (clientToUse.services || []),
                     engagementStage: clientToUse.engagementStage ?? clientToUse.status ?? (isLead ? 'Potential' : undefined),
+                    status: isLead ? clientToUse.status : normalizeClientAccountStatus(clientToUse.status ?? clientToUse.engagementStage),
                     aidaStatus: clientToUse.aidaStatus || clientToUse.stage || (isLead ? 'Awareness' : undefined),
                     billingTerms: typeof clientToUse.billingTerms === 'string' ? JSON.parse(clientToUse.billingTerms || '{}') : (clientToUse.billingTerms || {
                         paymentTerms: 'Net 30',
@@ -5880,7 +5895,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                                             <select 
-                                                value={formData.status}
+                                                value={normalizeClientAccountStatus(formData.status ?? formData.engagementStage)}
                                                 onFocus={() => {
                                                     isEditingRef.current = true;
                                                     userHasStartedTypingRef.current = true;
@@ -5902,7 +5917,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 if (onEditingChange) onEditingChange(false, true);
                                                 
                                                 setFormData(prev => {
-                                                    const updated = {...prev, status: newStatus};
+                                                    const engagementStage = clientEngagementStageFromAccountStatus(newStatus);
+                                                    const updated = {...prev, status: newStatus, engagementStage};
                                                     formDataRef.current = updated;
                                                     
                                                     // Auto-save immediately with the updated data
@@ -5919,10 +5935,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         setTimeout(async () => {
                                                             try {
                                                                 // Get the latest formData from ref (updated by useEffect)
-                                                                const latest = {...formDataRef.current, status: newStatus};
+                                                                const latest = {...formDataRef.current, status: newStatus, engagementStage};
                                                                 
                                                                 // Explicitly ensure status is included
                                                                 latest.status = newStatus;
+                                                                latest.engagementStage = engagementStage;
                                                                 
                                                                 // For leads, also ensure stage is mapped from aidaStatus if needed
                                                                 if (isLead && latest.aidaStatus && !latest.stage) {
@@ -5968,7 +5985,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 }}
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             >
-                                                <option>Active</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
                                             </select>
                                         </div>
                                     )}

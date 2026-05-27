@@ -615,9 +615,15 @@ function processClientData(rawClients, cacheKey) {
         if (isLead) {
             engagementStage = c.engagementStage ?? c.status ?? 'Potential';
         } else {
-            if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
-            else engagementStage = c.engagementStage ?? c.status ?? 'Potential';
+            const rawStage = c.engagementStage ?? c.status;
+            const rawLower = String(rawStage ?? '').toLowerCase();
+            if (rawLower === 'active') engagementStage = 'Active';
+            else if (rawLower === 'inactive') engagementStage = 'Inactive';
+            else engagementStage = rawStage || 'Active';
         }
+        const clientAccountStatus = !isLead
+            ? (String(engagementStage).toLowerCase() === 'inactive' ? 'Inactive' : 'Active')
+            : undefined;
         
         const contacts = Array.isArray(c.contacts) ? c.contacts : (typeof c.contacts === 'string' ? safeParseJson(c.contacts, []) : []);
         const followUps = Array.isArray(c.followUps) ? c.followUps : (typeof c.followUps === 'string' ? safeParseJson(c.followUps, []) : []);
@@ -634,6 +640,7 @@ function processClientData(rawClients, cacheKey) {
         id: c.id,
         name: c.name,
         engagementStage,
+        ...(clientAccountStatus ? { status: clientAccountStatus } : {}),
         aidaStatus: resolvePipelineStage(c) || (c.aidaStatus ?? c.stage) || 'Awareness',
         industry: c.industry || 'Other',
         type: clientType, // Preserve null/undefined - will be filtered out later
@@ -3554,14 +3561,21 @@ const Clients = React.memo(() => {
             if (isLead) {
                 engagementStage = c.engagementStage ?? c.status ?? 'Potential';
             } else {
-                if ((c.engagementStage ?? c.status) === 'active') engagementStage = 'Active';
-                else engagementStage = c.engagementStage ?? c.status ?? 'Potential';
+                const rawStage = c.engagementStage ?? c.status;
+                const rawLower = String(rawStage ?? '').toLowerCase();
+                if (rawLower === 'active') engagementStage = 'Active';
+                else if (rawLower === 'inactive') engagementStage = 'Inactive';
+                else engagementStage = rawStage || 'Active';
             }
+            const clientAccountStatus = !isLead
+                ? (String(engagementStage).toLowerCase() === 'inactive' ? 'Inactive' : 'Active')
+                : undefined;
 
             return {
                 id: normalizedId,
                 name: c.name,
                 engagementStage,
+                ...(clientAccountStatus ? { status: clientAccountStatus } : {}),
                 aidaStatus,
                 industry: c.industry || 'Other',
                 type: c.type, // Preserve as-is - null types will be filtered out
@@ -4746,6 +4760,14 @@ const Clients = React.memo(() => {
         isFormOpenRef.current = pause;
     };
     
+    const clientAccountStatusFromForm = (statusOrStage) => {
+        const s = String(statusOrStage ?? 'Active').trim().toLowerCase();
+        return s === 'inactive' ? 'Inactive' : 'Active';
+    };
+    const clientEngagementStageFromAccountStatus = (statusOrStage) => {
+        return clientAccountStatusFromForm(statusOrStage) === 'Inactive' ? 'inactive' : 'Active';
+    };
+
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         
         // Validate required fields - handle undefined/null safely
@@ -4778,10 +4800,14 @@ const Clients = React.memo(() => {
                 return null;
             }
             
+            const accountStatus = clientAccountStatusFromForm(clientFormData.status ?? clientFormData.engagementStage);
+            const accountEngagementStage = clientEngagementStageFromAccountStatus(accountStatus);
+
             comprehensiveClient = {
                 id: selectedClient ? selectedClient.id : Date.now().toString(),
                 name: clientName,
-                status: clientFormData.status || 'Active',
+                status: accountStatus,
+                engagementStage: accountEngagementStage,
                 industry: clientFormData.industry || 'Other',
                 type: 'client',
                 revenue: clientFormData.revenue || 0,
@@ -4844,8 +4870,7 @@ const Clients = React.memo(() => {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
-                            // Preserve status as-is - don't force conversion to lowercase
-                            status: comprehensiveClient.status || 'Active',
+                            engagementStage: comprehensiveClient.engagementStage || clientEngagementStageFromAccountStatus(comprehensiveClient.status),
                             revenue: comprehensiveClient.revenue,
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,
@@ -4904,7 +4929,7 @@ const Clients = React.memo(() => {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
-                            status: comprehensiveClient.status === 'Active' || comprehensiveClient.status === 'active' || !comprehensiveClient.status ? 'active' : 'inactive',
+                            engagementStage: comprehensiveClient.engagementStage || clientEngagementStageFromAccountStatus(comprehensiveClient.status),
                             revenue: comprehensiveClient.revenue,
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,
