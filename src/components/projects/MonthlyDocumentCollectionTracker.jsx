@@ -3405,6 +3405,58 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         saveToDatabase();
         return true;
     };
+
+    const getOutdentToMainDocumentContext = (section, docId) => {
+        if (!section || !Array.isArray(section.documents)) {
+            return { canOutdent: false, reason: 'Section not found' };
+        }
+        const doc = (section.documents || []).find((d) => String(d?.id) === String(docId));
+        if (!doc) {
+            return { canOutdent: false, reason: 'Document not found' };
+        }
+        if (doc.parentId == null || String(doc.parentId).trim() === '') {
+            return { canOutdent: false, reason: 'Already a main document' };
+        }
+        if (hasChildDocuments(section, doc)) {
+            return { canOutdent: false, reason: 'Documents with children cannot be outdented' };
+        }
+        return { canOutdent: true };
+    };
+
+    const handleOutdentToMainDocument = (sectionId, docId, options = {}) => {
+        let changed = false;
+        let blockedReason = '';
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            const ctx = getOutdentToMainDocumentContext(section, docId);
+            if (!ctx.canOutdent) {
+                blockedReason = ctx.reason || 'Cannot outdent this row';
+                return section;
+            }
+            changed = true;
+            return {
+                ...section,
+                documents: (section.documents || []).map(doc =>
+                    String(doc.id) === String(docId)
+                        ? { ...doc, parentId: null }
+                        : doc
+                )
+            };
+        }));
+        if (!changed) {
+            if (!options.silent && blockedReason) {
+                window.showNotification?.(blockedReason, 'warning');
+            }
+            return false;
+        }
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        saveToDatabase();
+        return true;
+    };
     
     const handleSaveDocument = (documentData) => {
         if (!editingSectionId) {
@@ -7842,6 +7894,9 @@ Abcotronics`;
         const convertCtx = editingDocument
             ? getConvertToSubDocumentContext(sectionForEdit, editingDocument.id)
             : { canConvert: false };
+        const outdentCtx = editingDocument
+            ? getOutdentToMainDocumentContext(sectionForEdit, editingDocument.id)
+            : { canOutdent: false };
         
         useEffect(() => {
             setFormData({
@@ -7968,25 +8023,46 @@ Abcotronics`;
                                 <div className="text-xs text-sky-900">
                                     Convert this row into a sub-document of the row above.
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const ok = handleConvertToSubDocument(editingSectionId, editingDocument.id);
-                                        if (!ok) return;
-                                        setShowDocumentModal(false);
-                                        setEditingDocument(null);
-                                        setEditingSectionId(null);
-                                    }}
-                                    disabled={!convertCtx.canConvert}
-                                    title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
-                                    className={`px-3 py-1.5 text-xs rounded-lg ${
-                                        convertCtx.canConvert
-                                            ? 'bg-sky-600 text-white hover:bg-sky-700'
-                                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                    }`}
-                                >
-                                    Make Sub-document
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const ok = handleOutdentToMainDocument(editingSectionId, editingDocument.id);
+                                            if (!ok) return;
+                                            setShowDocumentModal(false);
+                                            setEditingDocument(null);
+                                            setEditingSectionId(null);
+                                        }}
+                                        disabled={!outdentCtx.canOutdent}
+                                        title={outdentCtx.canOutdent ? 'Make this a main document (undo sub-document)' : (outdentCtx.reason || 'Cannot make main document')}
+                                        className={`px-3 py-1.5 text-xs rounded-lg ${
+                                            outdentCtx.canOutdent
+                                                ? 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-100'
+                                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Make Main
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const ok = handleConvertToSubDocument(editingSectionId, editingDocument.id);
+                                            if (!ok) return;
+                                            setShowDocumentModal(false);
+                                            setEditingDocument(null);
+                                            setEditingSectionId(null);
+                                        }}
+                                        disabled={!convertCtx.canConvert}
+                                        title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
+                                        className={`px-3 py-1.5 text-xs rounded-lg ${
+                                            convertCtx.canConvert
+                                                ? 'bg-sky-600 text-white hover:bg-sky-700'
+                                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        Make Sub-document
+                                    </button>
+                                </div>
                             </div>
                         )}
 
@@ -9838,6 +9914,7 @@ Abcotronics`;
                                                 const canDrag = true;
                                                 const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
                                                 const convertCtx = getConvertToSubDocumentContext(section, doc.id);
+                                                const outdentCtx = getOutdentToMainDocumentContext(section, doc.id);
                                                 return (
                                                 <tr
                                                     key={doc.id}
@@ -10096,6 +10173,15 @@ Abcotronics`;
                                                                 type="button"
                                                             >
                                                                 <i className="fas fa-indent text-sm"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleOutdentToMainDocument(section.id, doc.id)}
+                                                                className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:text-gray-300 disabled:hover:bg-transparent"
+                                                                title={outdentCtx.canOutdent ? 'Make main document (undo sub-document)' : (outdentCtx.reason || 'Cannot make main document')}
+                                                                disabled={!outdentCtx.canOutdent}
+                                                                type="button"
+                                                            >
+                                                                <i className="fas fa-outdent text-sm"></i>
                                                             </button>
                                                             <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
                                                                 <button
