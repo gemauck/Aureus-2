@@ -45,6 +45,7 @@
     "test:projects": "node tests/projects-functionality-persistence-tests.js",
     "stress:poa": "node scripts/stress-test-poa-review.js",
     "poa:merge-spreadsheet-rules": "node scripts/poa-review/merge-spreadsheet-eligible-activities.js",
+    "audit:fuel-refund-report": "venv-poareview/bin/python3 scripts/fuel-refund-report-audit/run_audit.py",
     "predeploy": "npm run test:safety && npm run test:jobcards:number",
     "lint:audit": "eslint api/manufacturing.js api/sales-orders.js api/purchase-orders.js api/jobcards.js",
     "test:jobcards:number": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/api/_lib/jobCardNumber.test.js",

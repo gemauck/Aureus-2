@@ -154,6 +154,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',
+        './src/components/tools/FuelRefundReportAudit.jsx',
         './src/components/tools/TravelBookingRequests.jsx',
         './src/components/tools/Tools.jsx',
         
