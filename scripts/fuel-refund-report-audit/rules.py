@@ -838,7 +838,7 @@ def check_refund_total_math(rows: list[dict], cfg: dict[str, Any]) -> list[Findi
     return findings
 
 
-# --- v2 checks ---
+# --- Receipt / summary / review heuristics ---
 
 
 def check_receipt_duplicate(receipts: list[dict], cfg: dict[str, Any]) -> list[Finding]:
@@ -970,7 +970,6 @@ def check_bowser_low_litre(rows: list[dict], cfg: dict[str, Any]) -> list[Findin
 def run_all_rules(
     parsed: ParsedWorkbook,
     report_stage: str = "checking",
-    enable_v2: bool = False,
     require_pump_readings: bool = False,
     require_tank_readings: bool = False,
     require_consumption_assessment: bool = False,
@@ -1018,12 +1017,11 @@ def run_all_rules(
     all_rows = list(rows)
     for asset_rows in parsed.asset_sheets.values():
         all_rows.extend(asset_rows)
-    if enable_v2:
-        findings.extend(check_receipt_duplicate(parsed.fuel_receipts, cfg))
-        findings.extend(check_tank_summary_imbalance(parsed, cfg))
-        findings.extend(check_auto_created_asset_suspect(all_rows, cfg))
-        findings.extend(check_eligible_review_unmarked_consecutive(parsed.eligible_review_dispenses, cfg))
-        findings.extend(check_bowser_low_litre(all_rows, cfg))
+    findings.extend(check_receipt_duplicate(parsed.fuel_receipts, cfg))
+    findings.extend(check_tank_summary_imbalance(parsed, cfg))
+    findings.extend(check_auto_created_asset_suspect(all_rows, cfg))
+    findings.extend(check_eligible_review_unmarked_consecutive(parsed.eligible_review_dispenses, cfg))
+    findings.extend(check_bowser_low_litre(all_rows, cfg))
 
     return findings, checks_skipped
 

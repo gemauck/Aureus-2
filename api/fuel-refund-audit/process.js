@@ -39,7 +39,6 @@ async function handler(req, res) {
         let safeFileName = '';
         let timestamp = 0;
         let reportStage = 'checking';
-        let enableV2 = false;
         let requirePumpReadings = false;
         let requireTankReadings = false;
         let requireConsumptionAssessment = false;
@@ -106,9 +105,6 @@ async function handler(req, res) {
                 if (name === 'reportStage' && ['checking', 'final'].includes(value)) {
                     reportStage = value;
                 }
-                if (name === 'enableV2' && (value === 'true' || value === '1')) {
-                    enableV2 = true;
-                }
                 if (name === 'requirePumpReadings' && (value === 'true' || value === '1')) {
                     requirePumpReadings = true;
                 }
@@ -148,7 +144,6 @@ async function handler(req, res) {
             '--report-stage',
             reportStage,
         ];
-        if (enableV2) args.push('--enable-v2');
         if (requirePumpReadings) args.push('--require-pump-readings');
         if (requireTankReadings) args.push('--require-tank-readings');
         if (requireConsumptionAssessment) args.push('--require-consumption-assessment');
@@ -198,7 +193,6 @@ async function handler(req, res) {
             fileName: outputFileName,
             summary,
             reportStage,
-            enableV2,
             requirePumpReadings,
             requireTankReadings,
             requireConsumptionAssessment,

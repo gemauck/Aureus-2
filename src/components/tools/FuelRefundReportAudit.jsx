@@ -38,7 +38,6 @@ const FuelRefundReportAudit = () => {
     const saved = loadSavedOptions();
     const [file, setFile] = useState(null);
     const [reportStage, setReportStage] = useState(saved?.reportStage || 'checking');
-    const [enableV2, setEnableV2] = useState(!!saved?.enableV2);
     const [requirePumpReadings, setRequirePumpReadings] = useState(!!saved?.requirePumpReadings);
     const [requireTankReadings, setRequireTankReadings] = useState(!!saved?.requireTankReadings);
     const [requireConsumptionAssessment, setRequireConsumptionAssessment] = useState(
@@ -61,12 +60,11 @@ const FuelRefundReportAudit = () => {
     useEffect(() => {
         saveOptions({
             reportStage,
-            enableV2,
             requirePumpReadings,
             requireTankReadings,
             requireConsumptionAssessment,
         });
-    }, [reportStage, enableV2, requirePumpReadings, requireTankReadings, requireConsumptionAssessment]);
+    }, [reportStage, requirePumpReadings, requireTankReadings, requireConsumptionAssessment]);
 
     useEffect(() => {
         return () => {
@@ -123,7 +121,6 @@ const FuelRefundReportAudit = () => {
         const form = new FormData();
         form.append('file', file);
         form.append('reportStage', reportStage);
-        if (enableV2) form.append('enableV2', 'true');
         if (requirePumpReadings) form.append('requirePumpReadings', 'true');
         if (requireTankReadings) form.append('requireTankReadings', 'true');
         if (requireConsumptionAssessment) form.append('requireConsumptionAssessment', 'true');
@@ -272,15 +269,6 @@ const FuelRefundReportAudit = () => {
                                 <option value="checking">Checking copy</option>
                                 <option value="final">Final submission</option>
                             </select>
-                        </label>
-                        <label className={`flex items-center gap-2 cursor-pointer ${text}`}>
-                            <input
-                                type="checkbox"
-                                checked={enableV2}
-                                onChange={(e) => setEnableV2(e.target.checked)}
-                                disabled={processing}
-                            />
-                            <span>Enable v2 checks</span>
                         </label>
                     </div>
 

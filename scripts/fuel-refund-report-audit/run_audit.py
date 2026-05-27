@@ -47,11 +47,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Flag unrealistic consumption (L/hr or L/km) vs asset median and caps",
     )
     parser.add_argument(
-        "--enable-v2",
-        action="store_true",
-        help="Enable v2 heuristic checks",
-    )
-    parser.add_argument(
         "--fail-on-warnings",
         action="store_true",
         help="Exit 1 when warnings exist (default: only errors)",
@@ -80,7 +75,6 @@ def main(argv: list[str] | None = None) -> int:
     findings, checks_skipped = run_all_rules(
         parsed,
         report_stage=args.report_stage,
-        enable_v2=args.enable_v2,
         require_pump_readings=args.require_pump_readings,
         require_tank_readings=args.require_tank_readings,
         require_consumption_assessment=args.require_consumption_assessment,

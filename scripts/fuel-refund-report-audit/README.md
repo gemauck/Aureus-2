@@ -17,8 +17,7 @@ npm run audit:fuel-refund-report -- \
   --input "/path/to/report.xlsx" \
   --output "/path/to/report-audit.xlsx" \
   --json "/path/to/summary.json" \
-  --report-stage checking \
-  --enable-v2
+  --report-stage checking
 ```
 
 | Flag | Description |
@@ -28,7 +27,6 @@ npm run audit:fuel-refund-report -- \
 | `--require-pump-readings` | Flag missing Pump Readings Before/After (off by default) |
 | `--require-tank-readings` | Flag missing tank Before/After on combined + asset sheets (off by default) |
 | `--require-consumption-assessment` | Flag unrealistic Consumption L/hr or L/km vs median/caps (off by default) |
-| `--enable-v2` | Receipt duplicates, tank summary, auto-created assets, eligible-review consecutive, bowser low-litre |
 
 Exit code `1` when any **error** severity finding exists.
 
@@ -38,9 +36,9 @@ Exit code `1` when any **error** severity finding exists.
 |-------|------------|-----|
 | Combined Fuel Transactions | 2 | Primary transaction audit (cols A–AG) |
 | Fuel Receipts | 2 | Receipt cost / price checks |
-| Eligible Review - Dispenses | 1 | v2 consecutive exception cross-check |
+| Eligible Review - Dispenses | 1 | Consecutive exception cross-check |
 | Combined Tank Summary | — | Refund rate + tank totals |
-| Per-asset tabs (e.g. CM632) | 2 | Final-stage tank litres; bowser low-litre (v2) |
+| Per-asset tabs (e.g. CM632) | 2 | Final-stage tank litres; bowser low-litre |
 
 ## Column map (Combined Fuel Transactions)
 
@@ -64,7 +62,7 @@ Exit code `1` when any **error** severity finding exists.
 
 Thresholds live in `rules_config.json`.
 
-## v1 checks
+## Audit checks (always run)
 
 1. `initial_dispense_no_claim` — INITIAL-DISPENSE must not claim  
 2. `duplicate_transaction` — same datetime, asset, pump, abs litres  
@@ -72,15 +70,18 @@ Thresholds live in `rules_config.json`.
 4. `circular_storage_tank` — bowser self-fill heuristic (excludes normal TANK1/TANK2 site fills)  
 5. `dispense_exceeds_tank_size`  
 6. `consecutive_hour_exceeds_tank` — 60-minute sliding window  
-7. `missing_pump_readings` (checking stage)  
-8. `missing_tank_litres_final` (final stage)  
-9. `negative_odo_eligible`  
-10. `high_odo_eligible` — >70 hr or >500 km  
-11. `unrealistic_consumption` — median×3 or caps  
-12. `mining_eligible_missing_operation_desc`  
-13. `refund_rate_summary`  
-14. `receipt_missing_fuel_cost` (+ Price/L on Fuel Receipts)  
-15. `refund_total_math` — AG vs AE×AF  
+7. `negative_odo_eligible` / `high_odo_eligible` — usage on Total Usage Km/Hr  
+8. `mining_eligible_missing_operation_desc`  
+9. `refund_rate_summary`  
+10. `receipt_missing_fuel_cost` (+ Price/L on Fuel Receipts)  
+11. `refund_total_math` — AG vs AE×AF  
+12. `receipt_duplicate` — duplicate rows on Fuel Receipts  
+13. `tank_summary_imbalance` — eligible volume but zero refund on Combined Tank Summary  
+14. `auto_created_asset_suspect` — AUTO-/NEW-/UNALLOCATED naming patterns  
+15. `eligible_review_unmarked_consecutive` — Eligible Review vs Transaction ID  
+16. `bowser_low_litre` — small bowser dispense review  
+
+Optional (checkbox / CLI flag): `missing_pump_readings`, `missing_tank_readings`, `unrealistic_consumption`, `missing_tank_litres_final` (final stage only).
 
 ## API / UI
 
