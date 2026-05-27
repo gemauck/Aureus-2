@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Require tank litre readings on combined and asset sheets",
     )
     parser.add_argument(
+        "--require-consumption-assessment",
+        action="store_true",
+        help="Flag unrealistic consumption (L/hr or L/km) vs asset median and caps",
+    )
+    parser.add_argument(
         "--enable-v2",
         action="store_true",
         help="Enable v2 heuristic checks",
@@ -78,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         enable_v2=args.enable_v2,
         require_pump_readings=args.require_pump_readings,
         require_tank_readings=args.require_tank_readings,
+        require_consumption_assessment=args.require_consumption_assessment,
     )
     summary = build_summary_json(findings, parsed, checks_skipped=checks_skipped)
 

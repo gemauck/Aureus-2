@@ -163,6 +163,24 @@ def test_mining_claim_skipped_transfer_in(cfg):
     assert check_mining_eligible_missing_claim(rows, cfg) == []
 
 
+def test_consumption_check_disabled(cfg):
+    parsed = ParsedWorkbook(
+        source_path="test.xlsx",
+        combined_rows=[
+            _row(
+                **{
+                    "Consumption": "99 L/hr",
+                    "Total Fuel Used (L)": 500,
+                    "Total Usage Km/Hr": "10 hr",
+                }
+            )
+        ],
+    )
+    findings, checks_skipped = run_all_rules(parsed, require_consumption_assessment=False)
+    assert "unrealistic_consumption" in checks_skipped
+    assert not any(f.check_id == "unrealistic_consumption" for f in findings)
+
+
 def test_pump_check_disabled(cfg):
     parsed = ParsedWorkbook(
         source_path="test.xlsx",

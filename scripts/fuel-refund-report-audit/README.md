@@ -23,8 +23,11 @@ npm run audit:fuel-refund-report -- \
 
 | Flag | Description |
 |------|-------------|
-| `--report-stage checking` | Flag missing **pump** readings (O/P) on dispense types (default) |
-| `--report-stage final` | Do not require pump readings; **info** if asset sheets still have tank-litre columns populated |
+| `--report-stage checking` | Standard review (default) |
+| `--report-stage final` | **Info** if asset sheets still have tank-litre columns (Compliance: remove before submit) |
+| `--require-pump-readings` | Flag missing Pump Readings Before/After (off by default) |
+| `--require-tank-readings` | Flag missing tank Before/After on combined + asset sheets (off by default) |
+| `--require-consumption-assessment` | Flag unrealistic Consumption L/hr or L/km vs median/caps (off by default) |
 | `--enable-v2` | Receipt duplicates, tank summary, auto-created assets, eligible-review consecutive, bowser low-litre |
 
 Exit code `1` when any **error** severity finding exists.

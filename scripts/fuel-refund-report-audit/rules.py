@@ -935,6 +935,7 @@ def run_all_rules(
     enable_v2: bool = False,
     require_pump_readings: bool = False,
     require_tank_readings: bool = False,
+    require_consumption_assessment: bool = False,
     config: dict[str, Any] | None = None,
 ) -> tuple[list[Finding], list[str]]:
     cfg = config or load_config()
@@ -967,7 +968,10 @@ def run_all_rules(
 
     findings.extend(check_negative_odo_eligible(rows, cfg))
     findings.extend(check_high_odo_eligible(rows, cfg))
-    findings.extend(check_unrealistic_consumption(rows, cfg))
+    if require_consumption_assessment:
+        findings.extend(check_unrealistic_consumption(rows, cfg))
+    else:
+        checks_skipped.append("unrealistic_consumption")
     findings.extend(check_mining_eligible_missing_operation_desc(rows, cfg))
     findings.extend(check_refund_rate_summary(rows, parsed, cfg))
     findings.extend(check_receipt_missing_fuel_cost(rows, parsed.fuel_receipts, cfg))

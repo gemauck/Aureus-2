@@ -41,6 +41,9 @@ const FuelRefundReportAudit = () => {
     const [enableV2, setEnableV2] = useState(!!saved?.enableV2);
     const [requirePumpReadings, setRequirePumpReadings] = useState(!!saved?.requirePumpReadings);
     const [requireTankReadings, setRequireTankReadings] = useState(!!saved?.requireTankReadings);
+    const [requireConsumptionAssessment, setRequireConsumptionAssessment] = useState(
+        !!saved?.requireConsumptionAssessment
+    );
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [processingPhase, setProcessingPhase] = useState('');
@@ -61,8 +64,9 @@ const FuelRefundReportAudit = () => {
             enableV2,
             requirePumpReadings,
             requireTankReadings,
+            requireConsumptionAssessment,
         });
-    }, [reportStage, enableV2, requirePumpReadings, requireTankReadings]);
+    }, [reportStage, enableV2, requirePumpReadings, requireTankReadings, requireConsumptionAssessment]);
 
     useEffect(() => {
         return () => {
@@ -122,6 +126,7 @@ const FuelRefundReportAudit = () => {
         if (enableV2) form.append('enableV2', 'true');
         if (requirePumpReadings) form.append('requirePumpReadings', 'true');
         if (requireTankReadings) form.append('requireTankReadings', 'true');
+        if (requireConsumptionAssessment) form.append('requireConsumptionAssessment', 'true');
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/fuel-refund-audit/process');
@@ -309,6 +314,22 @@ const FuelRefundReportAudit = () => {
                                 <span className={`block text-xs ${muted}`}>
                                     Flag missing tank litre Before/After on combined and asset sheets when those
                                     columns exist.
+                                </span>
+                            </span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={requireConsumptionAssessment}
+                                onChange={(e) => setRequireConsumptionAssessment(e.target.checked)}
+                                disabled={processing}
+                            />
+                            <span>
+                                <span className="font-medium">Assess consumption rates</span>
+                                <span className={`block text-xs ${muted}`}>
+                                    Flag dispenses where Consumption (L/hr or L/km) is far above the asset median
+                                    or configured caps (optional; off by default).
                                 </span>
                             </span>
                         </label>

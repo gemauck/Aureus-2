@@ -42,6 +42,7 @@ async function handler(req, res) {
         let enableV2 = false;
         let requirePumpReadings = false;
         let requireTankReadings = false;
+        let requireConsumptionAssessment = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -114,6 +115,9 @@ async function handler(req, res) {
                 if (name === 'requireTankReadings' && (value === 'true' || value === '1')) {
                     requireTankReadings = true;
                 }
+                if (name === 'requireConsumptionAssessment' && (value === 'true' || value === '1')) {
+                    requireConsumptionAssessment = true;
+                }
             });
 
             bb.on('finish', () => {
@@ -147,6 +151,7 @@ async function handler(req, res) {
         if (enableV2) args.push('--enable-v2');
         if (requirePumpReadings) args.push('--require-pump-readings');
         if (requireTankReadings) args.push('--require-tank-readings');
+        if (requireConsumptionAssessment) args.push('--require-consumption-assessment');
 
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
         const cmd = `${pythonExec} ${quoted} 2>&1`;
@@ -196,6 +201,7 @@ async function handler(req, res) {
             enableV2,
             requirePumpReadings,
             requireTankReadings,
+            requireConsumptionAssessment,
             hasErrors: !!summary.has_errors,
             auditExitCode: exitCode,
             stdout: stdout.slice(-2000),
