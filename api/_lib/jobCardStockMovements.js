@@ -193,7 +193,9 @@ async function reconcileInventoryMasterTx(tx, sku) {
  */
 export async function syncJobCardStockMovements(prisma, opts) {
   const jobCard = opts?.jobCard
-  if (!jobCard?.id) return { created: 0, updated: 0, skipped: 0, dateFixed: 0, errors: [] }
+  if (!jobCard?.id) {
+    return { created: 0, updated: 0, skipped: 0, dateFixed: 0, removed: 0, errors: [] }
+  }
 
   const lines = parseJobCardStockUsed(jobCard.stockUsed)
   const performedBy = String(opts.performedBy || jobCard.agentName || 'System').trim()
