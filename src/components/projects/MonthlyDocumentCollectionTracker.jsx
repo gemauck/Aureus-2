@@ -3340,6 +3340,71 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         setEditingDocument(newDoc);
         setShowDocumentModal(true);
     };
+
+    const getConvertToSubDocumentContext = (section, docId) => {
+        if (!section || !Array.isArray(section.documents)) {
+            return { canConvert: false, reason: 'Section not found' };
+        }
+        const ordered = getOrderedDocumentRows(section);
+        const rowIndex = ordered.findIndex((row) => String(row.doc?.id) === String(docId));
+        if (rowIndex <= 0) {
+            return { canConvert: false, reason: 'Already first row' };
+        }
+        const currentRow = ordered[rowIndex];
+        if (!currentRow?.doc) {
+            return { canConvert: false, reason: 'Document not found' };
+        }
+        if (hasChildDocuments(section, currentRow.doc)) {
+            return { canConvert: false, reason: 'Parent rows with children cannot be nested' };
+        }
+        const rowAbove = ordered[rowIndex - 1];
+        const targetParentId = rowAbove?.isSubRow ? rowAbove?.doc?.parentId : rowAbove?.doc?.id;
+        if (targetParentId == null || targetParentId === '') {
+            return { canConvert: false, reason: 'No valid parent row above' };
+        }
+        if (String(targetParentId) === String(currentRow.doc.id)) {
+            return { canConvert: false, reason: 'Cannot parent a document to itself' };
+        }
+        if (String(currentRow.doc.parentId || '') === String(targetParentId)) {
+            return { canConvert: false, reason: 'Already under row above' };
+        }
+        return { canConvert: true, targetParentId };
+    };
+
+    const handleConvertToSubDocument = (sectionId, docId, options = {}) => {
+        let changed = false;
+        let blockedReason = '';
+        setSections(prev => prev.map(section => {
+            if (String(section.id) !== String(sectionId)) return section;
+            const ctx = getConvertToSubDocumentContext(section, docId);
+            if (!ctx.canConvert) {
+                blockedReason = ctx.reason || 'Cannot convert this row';
+                return section;
+            }
+            changed = true;
+            return {
+                ...section,
+                documents: (section.documents || []).map(doc =>
+                    String(doc.id) === String(docId)
+                        ? { ...doc, parentId: ctx.targetParentId }
+                        : doc
+                )
+            };
+        }));
+        if (!changed) {
+            if (!options.silent && blockedReason) {
+                window.showNotification?.(blockedReason, 'warning');
+            }
+            return false;
+        }
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        lastSavedDataRef.current = null;
+        saveToDatabase();
+        return true;
+    };
     
     const handleSaveDocument = (documentData) => {
         if (!editingSectionId) {
@@ -7773,6 +7838,10 @@ Abcotronics`;
             : isMonthlyDataReview
                 ? 'Monthly Data Review'
                 : 'Document Collection';
+        const sectionForEdit = sections.find((s) => String(s.id) === String(editingSectionId));
+        const convertCtx = editingDocument
+            ? getConvertToSubDocumentContext(sectionForEdit, editingDocument.id)
+            : { canConvert: false };
         
         useEffect(() => {
             setFormData({
@@ -7893,6 +7962,33 @@ Abcotronics`;
                                 placeholder="Additional details..."
                             ></textarea>
                         </div>
+
+                        {editingDocument && (
+                            <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 flex items-center justify-between gap-3">
+                                <div className="text-xs text-sky-900">
+                                    Convert this row into a sub-document of the row above.
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const ok = handleConvertToSubDocument(editingSectionId, editingDocument.id);
+                                        if (!ok) return;
+                                        setShowDocumentModal(false);
+                                        setEditingDocument(null);
+                                        setEditingSectionId(null);
+                                    }}
+                                    disabled={!convertCtx.canConvert}
+                                    title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg ${
+                                        convertCtx.canConvert
+                                            ? 'bg-sky-600 text-white hover:bg-sky-700'
+                                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                    Make Sub-document
+                                </button>
+                            </div>
+                        )}
 
                         {editingDocument && (
                             <div className="rounded-lg border border-gray-200 p-3 space-y-2">
@@ -9741,6 +9837,7 @@ Abcotronics`;
                                             getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
                                                 const canDrag = true;
                                                 const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
+                                                const convertCtx = getConvertToSubDocumentContext(section, doc.id);
                                                 return (
                                                 <tr
                                                     key={doc.id}
@@ -9991,6 +10088,15 @@ Abcotronics`;
                                                                     <i className="fas fa-layer-group text-sm"></i>
                                                                 </button>
                                                             )}
+                                                            <button
+                                                                onClick={() => handleConvertToSubDocument(section.id, doc.id)}
+                                                                className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:text-gray-300 disabled:hover:bg-transparent"
+                                                                title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
+                                                                disabled={!convertCtx.canConvert}
+                                                                type="button"
+                                                            >
+                                                                <i className="fas fa-indent text-sm"></i>
+                                                            </button>
                                                             <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
                                                                 <button
                                                                     onClick={() => handleEditDocument(section, doc)}
