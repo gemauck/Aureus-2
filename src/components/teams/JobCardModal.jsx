@@ -1,3 +1,5 @@
+import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
+
 // Get dependencies from window
 const { useState, useEffect, useRef, useCallback, useLayoutEffect } = React;
 const storage = window.storage;
@@ -959,9 +961,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                     cost: parseFloat(m.cost) || 0
                 }));
 
-            const stockUsed = (formData.stockUsed || [])
-                .filter(s => String(s.sku || '').trim() && parseFloat(s.quantity) > 0)
-                .map(s => {
+            const stockUsed = sanitizeJobCardStockUsedForSave(formData.stockUsed).map(s => {
                     const locId = String(s.locationId || '').trim();
                     const locName =
                         String(s.locationName || '').trim() ||

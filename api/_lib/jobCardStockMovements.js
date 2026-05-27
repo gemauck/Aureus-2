@@ -27,7 +27,8 @@ export function parseJobCardStockUsed(raw) {
       const locationId = String(row.locationId || row.location || '').trim()
       const qty = parseFloat(row.quantity)
       const itemName = String(row.itemName || row.name || '').trim()
-      if (!sku || !Number.isFinite(qty) || qty <= 0) return null
+      // Each line must name its warehouse — empty locationId would wrongly default to main office.
+      if (!sku || !locationId || !Number.isFinite(qty) || qty <= 0) return null
       return {
         lineIndex: index,
         sku,

@@ -11,6 +11,7 @@ import {
 } from './jobCardActivityDisplay.js';
 import jsQR from 'jsqr';
 import { parseInventoryQrPayload } from '../../utils/inventoryQrPayload.js';
+import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
@@ -4883,6 +4884,7 @@ const JobCardFormPublic = () => {
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
       jobCardData.totalMaterialsCost = totalMaterialCost;
+      jobCardData.stockUsed = sanitizeJobCardStockUsedForSave(jobCardData.stockUsed);
 
       const voicePhotoEntries = voiceAttachments.map(v => ({
         kind: 'voice',
@@ -5215,6 +5217,7 @@ const JobCardFormPublic = () => {
           0,
           (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
         ),
+        stockUsed: sanitizeJobCardStockUsedForSave(formData.stockUsed),
         photos: buildWizardPhotosPayload(),
         activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
       };
