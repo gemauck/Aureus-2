@@ -1367,9 +1367,15 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                     voiceClips={voiceAttachments.filter((c) => c.section === 'diagnosis')}
                                 />
                             </div>
-                            <div>
-                                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                            <div className="rounded-lg border border-slate-200/90 bg-slate-50/80 p-3 dark:border-slate-600 dark:bg-slate-900/40">
+                                <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                     Work Done / Carried Out
+                                </h5>
+                                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                    Detail the corrective actions and resolution steps.
+                                </p>
+                                <label className="mb-1 mt-3 block text-xs font-medium text-gray-700 dark:text-slate-300">
+                                    Work Done / Carried Out Notes
                                 </label>
                                 <VoiceNoteTextarea
                                     sectionId="actionsTaken"

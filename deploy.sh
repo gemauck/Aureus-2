@@ -144,6 +144,9 @@ if [ -z "${RELEASE_SUMMARY:-}" ] && [ -z "${DEPLOY_SUMMARY:-}" ]; then
 fi
 npm run build
 
+# Remove stale duplicate bundles (old JobCardFormPublic labels, etc.) — not referenced by index.html
+rm -f "${APP_DIR}/dist/core-bundle (1).js" "${APP_DIR}/dist/src/components/clients/core-bundle.js" 2>/dev/null || true
+
 # Keep .env APP_VERSION in sync with dist/build-version.json so /version and PM2 env match the UI build id
 if [ -f dist/build-version.json ] && [ -f .env ]; then
   DEPLOY_BUILD_VERSION="$(node -e "const j=require('./dist/build-version.json'); if(j&&j.version!=null) process.stdout.write(String(j.version));")"

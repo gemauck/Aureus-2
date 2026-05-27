@@ -311,6 +311,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      src.includes('ManagementMeetingNotes') || src.includes('POAReview') ||
                                      src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      src.includes('AuditTrail') || src.includes('Reports') ||
+                                     src.includes('JobCardModal') || src.includes('JobCards.jsx') || src.includes('JobCards.js') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
                                      scriptSrc.includes('WeeklyFMSProgressTracker') ||
@@ -325,6 +326,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') ||
                                      scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
+                                     scriptSrc.includes('JobCardModal') || scriptSrc.includes('JobCards.jsx') || scriptSrc.includes('JobCards.js') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             
             if (needsCacheBusting) {

@@ -812,7 +812,7 @@ const STEP_META = {
   },
   work: {
     title: 'Work Notes',
-    subtitle: 'Diagnosis & actions',
+    subtitle: 'Diagnosis & work done',
     icon: 'fa-clipboard-list'
   },
   stock: {
