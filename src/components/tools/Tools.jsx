@@ -49,7 +49,6 @@ const Tools = () => {
         DocumentParser: null,
         SafetyCultureInspections: null,
         DocumentSorter: null,
-        FuelRefundReportAudit: null,
         ExpenseCaptureTool: null,
         TravelBookingRequests: null
     });
@@ -91,7 +90,6 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                FuelRefundReportAudit: window.FuelRefundReportAudit,
                 ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
                 TravelBookingRequests: window.TravelBookingRequests
             };
@@ -157,7 +155,6 @@ const Tools = () => {
                 DocumentParser: window.DocumentParser,
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
-                FuelRefundReportAudit: window.FuelRefundReportAudit,
                 ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
                 TravelBookingRequests: window.TravelBookingRequests
             };
@@ -263,14 +260,6 @@ const Tools = () => {
                 icon: 'fa-folder-tree',
                 color: 'amber',
                 component: toolComponents.DocumentSorter
-            },
-            {
-                id: 'fuel-refund-report-audit',
-                name: 'Fuel Refund Report Audit',
-                description: 'Audit Detailed Fuel Refund Report workbooks for duplicates, claims, pump readings, and refund math',
-                icon: 'fa-gas-pump',
-                color: 'orange',
-                component: toolComponents.FuelRefundReportAudit
             },
             {
                 id: 'travel-booking-requests',

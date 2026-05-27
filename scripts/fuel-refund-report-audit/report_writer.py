@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -108,14 +107,12 @@ def _annotate_combined_sheet(ws, findings: list[Finding], parsed: ParsedWorkbook
 
 
 def write_audit_workbook(
-    input_path: str | Path,
     output_path: str | Path,
     findings: list[Finding],
     parsed: ParsedWorkbook,
 ) -> None:
-    input_path = Path(input_path)
+    """Write findings into output_path (must already be a normalized copy of the source workbook)."""
     output_path = Path(output_path)
-    shutil.copy2(input_path, output_path)
 
     wb = openpyxl.load_workbook(output_path)
     if "Audit Findings" in wb.sheetnames:
@@ -262,11 +259,20 @@ def write_audit_workbook(
     wb.close()
 
 
+UI_FINDINGS_CAP = 8000
+
+
 def build_summary_json(
     findings: list[Finding],
     parsed: ParsedWorkbook,
     checks_skipped: list[str] | None = None,
 ) -> dict[str, Any]:
     base = summarize_findings(findings, parsed, checks_skipped=checks_skipped)
-    base["findings"] = [f.to_dict() for f in findings]
+    base["findings_total"] = len(findings)
+    if len(findings) > UI_FINDINGS_CAP:
+        base["findings_truncated"] = True
+        base["findings"] = [f.to_dict() for f in findings[:UI_FINDINGS_CAP]]
+    else:
+        base["findings_truncated"] = False
+        base["findings"] = [f.to_dict() for f in findings]
     return base

@@ -62,6 +62,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/teams/SarsMonitoring.jsx',
         './src/utils/poaAnalyze.js',
         './src/components/teams/POAReview.jsx',
+        './src/components/teams/DFRRCheck.jsx',
         './src/components/manufacturing/JobCardVoiceNoteTextarea.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
@@ -154,7 +155,6 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/tools/DocumentParser.jsx',
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',
-        './src/components/tools/FuelRefundReportAudit.jsx',
         './src/components/tools/TravelBookingRequests.jsx',
         './src/components/tools/Tools.jsx',
         
@@ -308,7 +308,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
-                                     src.includes('ManagementMeetingNotes') || src.includes('POAReview') ||
+                                     src.includes('ManagementMeetingNotes') || src.includes('POAReview') || src.includes('DFRRCheck') ||
                                      src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      src.includes('AuditTrail') || src.includes('Reports') ||
                                      src.includes('JobCardModal') || src.includes('JobCards.jsx') || src.includes('JobCards.js') ||
@@ -323,7 +323,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      scriptSrc.includes('/projects/Projects') || 
                                      scriptSrc.includes('/projects/ProjectDetail') ||
                                      scriptSrc.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates
-                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') ||
+                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') || scriptSrc.includes('DFRRCheck') ||
                                      scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      scriptSrc.includes('JobCardModal') || scriptSrc.includes('JobCards.jsx') || scriptSrc.includes('JobCards.js') ||
@@ -364,6 +364,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                     scriptSrc.includes('WeeklyFMSProgressTracker') ||
                     scriptSrc.includes('ManagementMeetingNotes') ||
                     scriptSrc.includes('POAReview') ||
+                    scriptSrc.includes('DFRRCheck') ||
                     scriptSrc.includes('WeeklyFMSReviewTracker') ||
                     scriptSrc.includes('Teams.jsx') ||
                     scriptSrc.includes('Teams.js') ||

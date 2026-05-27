@@ -28,6 +28,23 @@ SYSTEM_SHEETS = frozenset(
 
 BANNER_MARKERS = ("Transaction Type", "Date & Time")
 
+AUDIT_COLUMN_HEADERS = (
+    "Audit Result",
+    "Audit Severity",
+    "Findings Count",
+    "Audit Comments",
+    "Checks Failed",
+)
+
+
+def _strip_leading_audit_headers(headers: list[str]) -> list[str]:
+    """Drop prior audit columns A–E when re-parsing an annotated workbook."""
+    if len(headers) >= len(AUDIT_COLUMN_HEADERS) and headers[: len(AUDIT_COLUMN_HEADERS)] == list(
+        AUDIT_COLUMN_HEADERS
+    ):
+        return headers[len(AUDIT_COLUMN_HEADERS) :]
+    return headers
+
 
 def _cell_str(value: Any) -> str:
     if value is None:
@@ -53,7 +70,9 @@ def _find_header_row(ws, max_scan: int = 12) -> int | None:
 
 def _rows_from_sheet(ws, header_row: int) -> tuple[list[str], list[dict]]:
     header_cells = next(ws.iter_rows(min_row=header_row, max_row=header_row, values_only=True), ())
-    headers = [_cell_str(h) for h in header_cells]
+    headers_full = [_cell_str(h) for h in header_cells]
+    headers = _strip_leading_audit_headers(headers_full)
+    col_offset = len(headers_full) - len(headers)
     rows: list[dict] = []
     for excel_row, cells in enumerate(
         ws.iter_rows(min_row=header_row + 1, values_only=True),
@@ -61,14 +80,19 @@ def _rows_from_sheet(ws, header_row: int) -> tuple[list[str], list[dict]]:
     ):
         if not cells or not any(c is not None and str(c).strip() != "" for c in cells):
             continue
-        first = _cell_str(cells[0])
+        data_cells = cells[col_offset:] if col_offset else cells
+        first = _cell_str(data_cells[0]) if data_cells else ""
         tx_col = headers.index("Transaction Type") if "Transaction Type" in headers else 0
-        tx_val = _cell_str(cells[tx_col]) if tx_col < len(cells) else first
+        tx_val = _cell_str(data_cells[tx_col]) if tx_col < len(data_cells) else first
         if first in ("Totals:", "Total") or tx_val in ("Totals:", "Total"):
             continue
         if tx_val in ("Audit Result", "Transaction Type"):
             continue
-        record = {headers[i]: cells[i] if i < len(cells) else None for i in range(len(headers)) if headers[i]}
+        record = {
+            headers[i]: data_cells[i] if i < len(data_cells) else None
+            for i in range(len(headers))
+            if headers[i]
+        }
         record["_excel_row"] = excel_row
         record["_sheet"] = ws.title
         rows.append(record)

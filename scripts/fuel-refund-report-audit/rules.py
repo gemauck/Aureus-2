@@ -235,10 +235,26 @@ def check_mining_eligible_missing_claim(rows: list[dict], cfg: dict[str, Any]) -
     return findings
 
 
+def _mining_field_check_applies(row: dict, cfg: dict[str, Any]) -> bool:
+    """Operator / location / op description — same scope as missing-claim on dispenses."""
+    if not is_mining_eligible_row(row.get("Asset Group")):
+        return False
+    tx = normalize_tx_type(row.get("Transaction Type"))
+    if tx not in _CLAIM_EXPECTED_TX_TYPES:
+        return False
+    if _refund_marked_non_eligible(row):
+        return False
+    if has_non_eligible_reason(row.get("Operation Description / Comment"), cfg):
+        return False
+    if is_zero_or_no_dispense_litres(row):
+        return False
+    return True
+
+
 def check_mining_eligible_missing_operator(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for row in rows:
-        if not is_mining_eligible_row(row.get("Asset Group")):
+        if not _mining_field_check_applies(row, cfg):
             continue
         op = str(row.get("Operator") or "").strip()
         if not op:
@@ -257,7 +273,7 @@ def check_mining_eligible_missing_operator(rows: list[dict], cfg: dict[str, Any]
 def check_mining_eligible_missing_location(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for row in rows:
-        if not is_mining_eligible_row(row.get("Asset Group")):
+        if not _mining_field_check_applies(row, cfg):
             continue
         loc = str(row.get("Location") or "").strip()
         if not loc:
@@ -713,9 +729,7 @@ def check_unrealistic_consumption(rows: list[dict], cfg: dict[str, Any]) -> list
 def check_mining_eligible_missing_operation_desc(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for row in rows:
-        if not is_mining_eligible_row(row.get("Asset Group")):
-            continue
-        if has_non_eligible_reason(row.get("Operation Description / Comment"), cfg):
+        if not _mining_field_check_applies(row, cfg):
             continue
         desc = str(row.get("Operation Description / Comment") or "").strip()
         if not desc:
@@ -729,6 +743,17 @@ def check_mining_eligible_missing_operation_desc(rows: list[dict], cfg: dict[str
                 )
             )
     return findings
+
+
+def _row_has_refund_rate_claim_context(row: dict) -> bool:
+    """Only compare Refund Price to summary when the row has claim-related values."""
+    rp = parse_num(row.get("Refund Price"))
+    if rp is None:
+        return False
+    el = parse_num(row.get("Eligible L")) or 0
+    ev = parse_num(row.get("Eligible Volume (L) (Claimable % of Total)")) or 0
+    rt = parse_num(row.get("Refund Total")) or 0
+    return el > 0 or ev > 0 or rt > 0
 
 
 def check_refund_rate_summary(rows: list[dict], parsed: ParsedWorkbook, cfg: dict[str, Any]) -> list[Finding]:
@@ -750,6 +775,8 @@ def check_refund_rate_summary(rows: list[dict], parsed: ParsedWorkbook, cfg: dic
     primary_rate = rates[0]["rate"]
     tol = float(cfg.get("refund_rate_tolerance", 0.001))
     for row in rows:
+        if not _row_has_refund_rate_claim_context(row):
+            continue
         rp = parse_num(row.get("Refund Price"))
         if rp is None:
             continue
@@ -969,10 +996,10 @@ def check_bowser_low_litre(rows: list[dict], cfg: dict[str, Any]) -> list[Findin
 
 def run_all_rules(
     parsed: ParsedWorkbook,
-    report_stage: str = "checking",
     require_pump_readings: bool = False,
     require_tank_readings: bool = False,
     require_consumption_assessment: bool = False,
+    require_refund_rate_check: bool = False,
     config: dict[str, Any] | None = None,
 ) -> tuple[list[Finding], list[str]]:
     cfg = config or load_config()
@@ -1000,8 +1027,7 @@ def run_all_rules(
     else:
         checks_skipped.append("missing_tank_readings")
 
-    if report_stage == "final":
-        findings.extend(check_missing_tank_litres_final(parsed, cfg))
+    checks_skipped.append("missing_tank_litres_final")
 
     findings.extend(check_negative_odo_eligible(rows, cfg))
     findings.extend(check_high_odo_eligible(rows, cfg))
@@ -1010,7 +1036,10 @@ def run_all_rules(
     else:
         checks_skipped.append("unrealistic_consumption")
     findings.extend(check_mining_eligible_missing_operation_desc(rows, cfg))
-    findings.extend(check_refund_rate_summary(rows, parsed, cfg))
+    if require_refund_rate_check:
+        findings.extend(check_refund_rate_summary(rows, parsed, cfg))
+    else:
+        checks_skipped.append("refund_rate_summary")
     findings.extend(check_receipt_missing_fuel_cost(rows, parsed.fuel_receipts, cfg))
     findings.extend(check_refund_total_math(rows, cfg))
 
@@ -1081,6 +1110,13 @@ def summarize_findings(
         for check_id in sorted(by_check.keys())
     ]
 
+    interpretation_hints = _build_interpretation_hints(
+        pass_rate_pct=pass_rate_pct,
+        rows_audited=rows_audited,
+        by_check=by_check,
+        checks_skipped=skipped,
+    )
+
     return {
         "row_count_combined": len(parsed.combined_rows),
         "rows_audited": rows_audited,
@@ -1097,5 +1133,49 @@ def summarize_findings(
         "checks_skipped": sorted(skipped),
         "refund_rates": parsed.refund_rates,
         "parse_warnings": parsed.parse_warnings,
+        "interpretation_hints": interpretation_hints,
         "has_errors": by_severity.get("error", 0) > 0,
     }
+
+
+def _build_interpretation_hints(
+    pass_rate_pct: float,
+    rows_audited: int,
+    by_check: dict[str, int],
+    checks_skipped: set[str],
+) -> list[str]:
+    hints: list[str] = []
+    if rows_audited < 50:
+        return hints
+
+    pump_n = by_check.get("missing_pump_readings", 0)
+    tank_n = by_check.get("missing_tank_readings", 0)
+    rate_n = by_check.get("refund_rate_summary", 0)
+    optional_noise = pump_n + tank_n + rate_n
+
+    if pass_rate_pct < 25:
+        hints.append(
+            f"Pass rate is {pass_rate_pct}% — this is often normal on large files when optional checks "
+            "produce many warnings. Focus on error-severity findings first."
+        )
+    if pump_n > 0 and "missing_pump_readings" not in checks_skipped:
+        hints.append(
+            f"Pump readings: {pump_n} warning(s). Turn off “Require pump readings” unless you are "
+            "running a dedicated readings compliance pass."
+        )
+    if tank_n > 0 and "missing_tank_readings" not in checks_skipped:
+        hints.append(
+            f"Tank readings: {tank_n} warning(s). Turn off “Require tank readings” unless you need "
+            "a full tank-litre sweep."
+        )
+    if rate_n > 1000 and "refund_rate_summary" not in checks_skipped:
+        hints.append(
+            f"Refund rate vs summary: {rate_n} warning(s). Enable “Check refund rate vs summary” only "
+            "when validating rates on rows with claims."
+        )
+    if optional_noise > rows_audited * 0.4 and pass_rate_pct < 50:
+        hints.append(
+            "Most row-level warnings may be from optional pump/tank/rate checks — not necessarily "
+            "logic errors on dispense/claim rules."
+        )
+    return hints

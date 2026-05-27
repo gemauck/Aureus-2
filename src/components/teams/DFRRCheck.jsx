@@ -1,4 +1,4 @@
-// Fuel Refund Report Audit — upload Detailed Fuel Refund Report xlsx, run server audit, download findings
+// DFRR Check — audit Detailed Fuel Refund Report workbooks (Data Analytics team)
 const { useState, useRef, useEffect, useCallback } = React;
 
 const OPTIONS_STORAGE_KEY = 'fuelRefundAuditOptions';
@@ -33,16 +33,19 @@ function saveOptions(options) {
     }
 }
 
-const FuelRefundReportAudit = () => {
+const DFRRCheck = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const saved = loadSavedOptions();
     const [file, setFile] = useState(null);
-    const [reportStage, setReportStage] = useState(saved?.reportStage || 'checking');
     const [requirePumpReadings, setRequirePumpReadings] = useState(!!saved?.requirePumpReadings);
     const [requireTankReadings, setRequireTankReadings] = useState(!!saved?.requireTankReadings);
     const [requireConsumptionAssessment, setRequireConsumptionAssessment] = useState(
         !!saved?.requireConsumptionAssessment
     );
+    const [requireRefundRateCheck, setRequireRefundRateCheck] = useState(
+        !!saved?.requireRefundRateCheck
+    );
+    const [selectedCheckId, setSelectedCheckId] = useState(null);
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [processingPhase, setProcessingPhase] = useState('');
@@ -59,12 +62,12 @@ const FuelRefundReportAudit = () => {
 
     useEffect(() => {
         saveOptions({
-            reportStage,
             requirePumpReadings,
             requireTankReadings,
             requireConsumptionAssessment,
+            requireRefundRateCheck,
         });
-    }, [reportStage, requirePumpReadings, requireTankReadings, requireConsumptionAssessment]);
+    }, [requirePumpReadings, requireTankReadings, requireConsumptionAssessment, requireRefundRateCheck]);
 
     useEffect(() => {
         return () => {
@@ -106,6 +109,7 @@ const FuelRefundReportAudit = () => {
         }
         setError(null);
         setResult(null);
+        setSelectedCheckId(null);
         setFile(selected);
     };
 
@@ -114,16 +118,17 @@ const FuelRefundReportAudit = () => {
         setProcessing(true);
         setError(null);
         setResult(null);
+        setSelectedCheckId(null);
         setUploadProgress(0);
         setProcessingPhase('Uploading workbook…');
         startElapsedTimer();
 
         const form = new FormData();
         form.append('file', file);
-        form.append('reportStage', reportStage);
         if (requirePumpReadings) form.append('requirePumpReadings', 'true');
         if (requireTankReadings) form.append('requireTankReadings', 'true');
         if (requireConsumptionAssessment) form.append('requireConsumptionAssessment', 'true');
+        if (requireRefundRateCheck) form.append('requireRefundRateCheck', 'true');
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/fuel-refund-audit/process');
@@ -191,6 +196,7 @@ const FuelRefundReportAudit = () => {
     const reset = () => {
         setFile(null);
         setResult(null);
+        setSelectedCheckId(null);
         setError(null);
         setUploadProgress(0);
         setProcessingPhase('');
@@ -214,6 +220,13 @@ const FuelRefundReportAudit = () => {
     checksFailed.forEach((item) => {
         if (item.process_task) processTaskNames[item.check_id] = item.process_task;
     });
+
+    const allFindings = Array.isArray(summary.findings) ? summary.findings : [];
+    const filteredFindings = selectedCheckId
+        ? allFindings.filter((f) => f.check_id === selectedCheckId)
+        : [];
+    const interpretationHints = summary.interpretation_hints || [];
+    const parseWarnings = summary.parse_warnings || [];
 
     const checkRows = [
         ...checksFailed.map((item) => ({
@@ -248,29 +261,16 @@ const FuelRefundReportAudit = () => {
         <div className="space-y-4 max-w-6xl">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className={`rounded-lg border p-4 ${card}`}>
-                    <h3 className={`text-sm font-semibold mb-1 ${text}`}>Fuel Refund Report Audit</h3>
-                    <p className={`text-xs mb-4 ${muted}`}>
-                        Upload a Detailed Fuel Refund Report workbook (Combined Fuel Transactions). Returns an
-                        annotated workbook with inline audit columns A–E on the combined sheet, plus Audit
-                        Findings and Audit Summary sheets.
+                    <h3 className={`text-sm font-semibold mb-1 ${text}`}>DFRR Check</h3>
+                    <p className={`text-xs mb-2 ${muted}`}>
+                        Upload the <strong className={text}>original</strong> InsightWare Detailed Fuel Refund
+                        Report export (not a file that already has <code>-audit</code> in the name). Each run
+                        replaces prior audit columns A–E and audit sheets with a fresh result.
                     </p>
-
-                    <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                        <label className={`flex items-center gap-2 ${text}`}>
-                            <span className={muted}>Stage:</span>
-                            <select
-                                value={reportStage}
-                                onChange={(e) => setReportStage(e.target.value)}
-                                disabled={processing}
-                                className={`rounded border px-2 py-1 text-sm ${
-                                    isDark ? 'bg-gray-900 border-gray-600' : 'bg-white border-gray-300'
-                                }`}
-                            >
-                                <option value="checking">Checking copy</option>
-                                <option value="final">Final submission</option>
-                            </select>
-                        </label>
-                    </div>
+                    <p className={`text-xs mb-4 ${muted}`}>
+                        Returns an annotated workbook (inline audit columns A–E on Combined Fuel Transactions)
+                        plus Audit Findings and Audit Summary sheets.
+                    </p>
 
                     <div className={`space-y-2 mb-4 text-sm ${text}`}>
                         <label className="flex items-start gap-2 cursor-pointer">
@@ -318,6 +318,22 @@ const FuelRefundReportAudit = () => {
                                 <span className={`block text-xs ${muted}`}>
                                     Flag dispenses where Consumption (L/hr or L/km) is far above the asset median
                                     or configured caps (optional; off by default).
+                                </span>
+                            </span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={requireRefundRateCheck}
+                                onChange={(e) => setRequireRefundRateCheck(e.target.checked)}
+                                disabled={processing}
+                            />
+                            <span>
+                                <span className="font-medium">Check refund rate vs summary</span>
+                                <span className={`block text-xs ${muted}`}>
+                                    Compare Refund Price to Combined Tank Summary on rows with a claim only
+                                    (optional; off by default — avoids thousands of historical rate warnings).
                                 </span>
                             </span>
                         </label>
@@ -422,7 +438,30 @@ const FuelRefundReportAudit = () => {
 
                 {result && (
                     <div className={`rounded-lg border p-4 ${card}`}>
-                        <h4 className={`text-sm font-semibold mb-3 ${text}`}>Audit results</h4>
+                        <h4 className={`text-sm font-semibold mb-3 ${text}`}>DFRR audit results</h4>
+
+                        {parseWarnings.length > 0 && (
+                            <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 text-sm space-y-1">
+                                {parseWarnings.map((w) => (
+                                    <p key={w}>{w}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {interpretationHints.length > 0 && (
+                            <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 text-sm space-y-2">
+                                {interpretationHints.map((hint) => (
+                                    <p key={hint}>{hint}</p>
+                                ))}
+                            </div>
+                        )}
+
+                        {summary.findings_truncated && (
+                            <p className={`text-xs mb-3 ${muted}`}>
+                                Showing first {allFindings.length} of {summary.findings_total} findings in the
+                                browser; download the workbook for the full Audit Findings sheet.
+                            </p>
+                        )}
 
                         {allRowsPassed && (
                             <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 text-sm">
@@ -551,7 +590,22 @@ const FuelRefundReportAudit = () => {
 
                         {checkRows.length > 0 && (
                             <div>
-                                <h5 className={`text-xs font-semibold mb-2 ${muted}`}>Checks</h5>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h5 className={`text-xs font-semibold ${muted}`}>Checks</h5>
+                                    {selectedCheckId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedCheckId(null)}
+                                            className={`text-xs underline ${muted}`}
+                                        >
+                                            Clear filter
+                                        </button>
+                                    )}
+                                </div>
+                                <p className={`text-xs mb-2 ${muted}`}>
+                                    Click a check with findings to preview rows below (download workbook for
+                                    full detail).
+                                </p>
                                 <div className="overflow-x-auto max-h-64 overflow-y-auto">
                                     <table className="w-full text-xs">
                                         <thead>
@@ -562,34 +616,115 @@ const FuelRefundReportAudit = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {checkRows.map((row) => (
-                                                <tr key={row.checkId} className={text}>
-                                                    <td className="py-1 pr-4 font-mono">{row.checkId}</td>
-                                                    <td className="py-1 pr-4 text-right">
-                                                        {row.status === 'fail' ? row.count : '—'}
-                                                    </td>
-                                                    <td className="py-1">
-                                                        {row.status === 'pass' && (
-                                                            <span className="text-green-600 dark:text-green-400">
-                                                                ✓ Pass
-                                                            </span>
-                                                        )}
-                                                        {row.status === 'fail' && (
-                                                            <span className="text-red-600 dark:text-red-400">
-                                                                Fail
-                                                            </span>
-                                                        )}
-                                                        {row.status === 'skipped' && (
-                                                            <span className="text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide">
-                                                                Skipped
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {checkRows.map((row) => {
+                                                const clickable =
+                                                    row.status === 'fail' && row.count > 0;
+                                                const isSelected = selectedCheckId === row.checkId;
+                                                return (
+                                                    <tr
+                                                        key={row.checkId}
+                                                        className={`${text} ${
+                                                            clickable ? 'cursor-pointer' : ''
+                                                        } ${
+                                                            isSelected
+                                                                ? isDark
+                                                                    ? 'bg-gray-700'
+                                                                    : 'bg-gray-100'
+                                                                : ''
+                                                        }`}
+                                                        onClick={() => {
+                                                            if (clickable) {
+                                                                setSelectedCheckId(
+                                                                    isSelected ? null : row.checkId
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        <td className="py-1 pr-4 font-mono">{row.checkId}</td>
+                                                        <td className="py-1 pr-4 text-right">
+                                                            {row.status === 'fail' ? row.count : '—'}
+                                                        </td>
+                                                        <td className="py-1">
+                                                            {row.status === 'pass' && (
+                                                                <span className="text-green-600 dark:text-green-400">
+                                                                    ✓ Pass
+                                                                </span>
+                                                            )}
+                                                            {row.status === 'fail' && (
+                                                                <span className="text-red-600 dark:text-red-400">
+                                                                    Fail
+                                                                </span>
+                                                            )}
+                                                            {row.status === 'skipped' && (
+                                                                <span className="text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide">
+                                                                    Skipped
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
+
+                                {selectedCheckId && (
+                                    <div className="mt-4">
+                                        <h5 className={`text-xs font-semibold mb-2 ${muted}`}>
+                                            Findings: {selectedCheckId}
+                                            {filteredFindings.length > 0 && (
+                                                <span className="font-normal">
+                                                    {' '}
+                                                    (showing {Math.min(filteredFindings.length, 50)}
+                                                    {filteredFindings.length > 50 ? '+' : ''})
+                                                </span>
+                                            )}
+                                        </h5>
+                                        <div className="overflow-x-auto max-h-48 overflow-y-auto rounded border border-gray-200 dark:border-gray-600">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                                                        <th className="text-left py-1 px-2">Severity</th>
+                                                        <th className="text-left py-1 px-2">Sheet</th>
+                                                        <th className="text-left py-1 px-2">Row</th>
+                                                        <th className="text-left py-1 px-2">Txn ID</th>
+                                                        <th className="text-left py-1 px-2">Message</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredFindings.length === 0 ? (
+                                                        <tr>
+                                                            <td
+                                                                colSpan={5}
+                                                                className={`py-2 px-2 ${muted}`}
+                                                            >
+                                                                No findings in preview (may be truncated).
+                                                                Use the downloaded workbook.
+                                                            </td>
+                                                        </tr>
+                                                    ) : (
+                                                        filteredFindings.slice(0, 50).map((f, idx) => (
+                                                            <tr
+                                                                key={`${f.check_id}-${f.excel_row}-${idx}`}
+                                                                className={text}
+                                                            >
+                                                                <td className="py-1 px-2">{f.severity}</td>
+                                                                <td className="py-1 px-2">{f.sheet}</td>
+                                                                <td className="py-1 px-2">
+                                                                    {f.excel_row ?? '—'}
+                                                                </td>
+                                                                <td className="py-1 px-2 font-mono">
+                                                                    {f.transaction_id || '—'}
+                                                                </td>
+                                                                <td className="py-1 px-2">{f.message}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -599,4 +734,13 @@ const FuelRefundReportAudit = () => {
     );
 };
 
-window.FuelRefundReportAudit = FuelRefundReportAudit;
+window.DFRRCheck = DFRRCheck;
+window.FuelRefundReportAudit = DFRRCheck;
+
+if (typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(
+        new CustomEvent('componentLoaded', {
+            detail: { component: 'DFRRCheck' },
+        })
+    );
+}

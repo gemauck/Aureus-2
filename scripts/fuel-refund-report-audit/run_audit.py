@@ -14,6 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from parse_workbook import parse_workbook
 from report_writer import build_summary_json, write_audit_workbook
 from rules import run_all_rules
+from workbook_normalize import prepare_output_workbook
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,12 +26,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Output audit workbook (default: <input>-audit.xlsx)",
     )
     parser.add_argument("--json", "-j", help="Write JSON summary to this path")
-    parser.add_argument(
-        "--report-stage",
-        choices=("checking", "final"),
-        default="checking",
-        help="checking: standard review; final: flag tank litres still on asset tabs",
-    )
     parser.add_argument(
         "--require-pump-readings",
         action="store_true",
@@ -45,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
         "--require-consumption-assessment",
         action="store_true",
         help="Flag unrealistic consumption (L/hr or L/km) vs asset median and caps",
+    )
+    parser.add_argument(
+        "--require-refund-rate-check",
+        action="store_true",
+        help="Compare Refund Price to Combined Tank Summary on rows with claims",
     )
     parser.add_argument(
         "--fail-on-warnings",
@@ -64,8 +64,14 @@ def main(argv: list[str] | None = None) -> int:
         else input_path.with_name(f"{input_path.stem}-audit{input_path.suffix}")
     )
 
-    print(f"Parsing {input_path}...")
-    parsed = parse_workbook(input_path)
+    print(f"Preparing output workbook → {output_path}")
+    normalize_warnings = prepare_output_workbook(input_path, output_path)
+    for w in normalize_warnings:
+        print(f"  Note: {w}")
+
+    print(f"Parsing {output_path}...")
+    parsed = parse_workbook(output_path)
+    parsed.parse_warnings.extend(normalize_warnings)
     print(
         f"  Combined rows: {len(parsed.combined_rows)} | "
         f"Receipts: {len(parsed.fuel_receipts)} | "
@@ -74,15 +80,15 @@ def main(argv: list[str] | None = None) -> int:
 
     findings, checks_skipped = run_all_rules(
         parsed,
-        report_stage=args.report_stage,
         require_pump_readings=args.require_pump_readings,
         require_tank_readings=args.require_tank_readings,
         require_consumption_assessment=args.require_consumption_assessment,
+        require_refund_rate_check=args.require_refund_rate_check,
     )
     summary = build_summary_json(findings, parsed, checks_skipped=checks_skipped)
 
-    print(f"Writing audit workbook → {output_path}")
-    write_audit_workbook(input_path, output_path, findings, parsed)
+    print(f"Writing audit results → {output_path}")
+    write_audit_workbook(output_path, findings, parsed)
 
     if args.json:
         json_path = Path(args.json).expanduser().resolve()

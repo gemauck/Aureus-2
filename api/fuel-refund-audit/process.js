@@ -38,10 +38,10 @@ async function handler(req, res) {
         let fileName = null;
         let safeFileName = '';
         let timestamp = 0;
-        let reportStage = 'checking';
         let requirePumpReadings = false;
         let requireTankReadings = false;
         let requireConsumptionAssessment = false;
+        let requireRefundRateCheck = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -102,9 +102,6 @@ async function handler(req, res) {
             });
 
             bb.on('field', (name, value) => {
-                if (name === 'reportStage' && ['checking', 'final'].includes(value)) {
-                    reportStage = value;
-                }
                 if (name === 'requirePumpReadings' && (value === 'true' || value === '1')) {
                     requirePumpReadings = true;
                 }
@@ -113,6 +110,9 @@ async function handler(req, res) {
                 }
                 if (name === 'requireConsumptionAssessment' && (value === 'true' || value === '1')) {
                     requireConsumptionAssessment = true;
+                }
+                if (name === 'requireRefundRateCheck' && (value === 'true' || value === '1')) {
+                    requireRefundRateCheck = true;
                 }
             });
 
@@ -141,12 +141,11 @@ async function handler(req, res) {
             outputFilePath,
             '--json',
             jsonPath,
-            '--report-stage',
-            reportStage,
         ];
         if (requirePumpReadings) args.push('--require-pump-readings');
         if (requireTankReadings) args.push('--require-tank-readings');
         if (requireConsumptionAssessment) args.push('--require-consumption-assessment');
+        if (requireRefundRateCheck) args.push('--require-refund-rate-check');
 
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
         const cmd = `${pythonExec} ${quoted} 2>&1`;
@@ -192,10 +191,10 @@ async function handler(req, res) {
             downloadUrl,
             fileName: outputFileName,
             summary,
-            reportStage,
             requirePumpReadings,
             requireTankReadings,
             requireConsumptionAssessment,
+            requireRefundRateCheck,
             hasErrors: !!summary.has_errors,
             auditExitCode: exitCode,
             stdout: stdout.slice(-2000),

@@ -16,19 +16,23 @@ Uses the project `venv-poareview` environment (`openpyxl`, `pandas`). From repo 
 npm run audit:fuel-refund-report -- \
   --input "/path/to/report.xlsx" \
   --output "/path/to/report-audit.xlsx" \
-  --json "/path/to/summary.json" \
-  --report-stage checking
+  --json "/path/to/summary.json"
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--report-stage checking` | Standard review (default) |
-| `--report-stage final` | **Info** if asset sheets still have tank-litre columns (Compliance: remove before submit) |
 | `--require-pump-readings` | Flag missing Pump Readings Before/After (off by default) |
 | `--require-tank-readings` | Flag missing tank Before/After on combined + asset sheets (off by default) |
 | `--require-consumption-assessment` | Flag unrealistic Consumption L/hr or L/km vs median/caps (off by default) |
+| `--require-refund-rate-check` | Compare Refund Price to summary on rows with claims (off by default) |
+
+Re-uploading an **already audited** workbook is safe: prior audit columns A–E and audit sheets are removed before the new run.
 
 Exit code `1` when any **error** severity finding exists.
+
+```bash
+npm run audit:fuel-refund-report:contract
+```
 
 ## Sheets parsed
 
@@ -81,9 +85,11 @@ Thresholds live in `rules_config.json`.
 15. `eligible_review_unmarked_consecutive` — Eligible Review vs Transaction ID  
 16. `bowser_low_litre` — small bowser dispense review  
 
-Optional (checkbox / CLI flag): `missing_pump_readings`, `missing_tank_readings`, `unrealistic_consumption`, `missing_tank_litres_final` (final stage only).
+Optional (checkbox / CLI flag): `missing_pump_readings`, `missing_tank_readings`, `unrealistic_consumption`, `refund_rate_summary`.
+
+Operator, location, and operation description apply only to **mining-eligible dispenses with fuel moved** (same scope as missing-claim).
 
 ## API / UI
 
 - `POST /api/fuel-refund-audit/process` — multipart upload  
-- Tools → **Fuel Refund Report Audit** (`fuel-refund-report-audit`)
+- Teams → **Data Analytics** → **DFRR Check** (`?tab=dfrr-check`)

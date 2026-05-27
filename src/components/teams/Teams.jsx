@@ -296,7 +296,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'sars-monitoring', 'members'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'dfrr-check', 'sars-monitoring', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -924,18 +924,32 @@ const Teams = () => {
                                 </button>
                             )}
                             {selectedTeam?.id === 'data-analytics' && (
-                                <button
-                                    onClick={() => setActiveTab('poa-review')}
-                                    className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
-                                        activeTab === 'poa-review'
-                                            ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
-                                            : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                                    }`}
-                                >
-                                    <i className="fas fa-file-excel mr-1.5"></i>
-                                    <span className="hidden sm:inline">POA Review</span>
-                                    <span className="sm:hidden">POA</span>
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => setActiveTab('poa-review')}
+                                        className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                            activeTab === 'poa-review'
+                                                ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                                : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <i className="fas fa-file-excel mr-1.5"></i>
+                                        <span className="hidden sm:inline">POA Review</span>
+                                        <span className="sm:hidden">POA</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('dfrr-check')}
+                                        className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                            activeTab === 'dfrr-check'
+                                                ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                                : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <i className="fas fa-gas-pump mr-1.5"></i>
+                                        <span className="hidden sm:inline">DFRR Check</span>
+                                        <span className="sm:hidden">DFRR</span>
+                                    </button>
+                                </>
                             )}
                             {(selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (
                                 <button
@@ -1158,6 +1172,30 @@ const Teams = () => {
                                 );
                             }
                             
+                            return (
+                                <div>
+                                    <ComponentToRender />
+                                </div>
+                            );
+                        })()}
+
+                        {activeTab === 'dfrr-check' && selectedTeam?.id === 'data-analytics' && (() => {
+                            const ComponentToRender = window.DFRRCheck;
+
+                            if (!ComponentToRender) {
+                                return (
+                                    <div className="text-center py-12">
+                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                                            Loading DFRR Check…
+                                        </p>
+                                        <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                            Please wait while the component loads.
+                                        </p>
+                                    </div>
+                                );
+                            }
+
                             return (
                                 <div>
                                     <ComponentToRender />
