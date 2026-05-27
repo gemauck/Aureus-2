@@ -3,7 +3,10 @@ import { prisma } from '../_lib/prisma.js'
 import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { ok, created, serverError, badRequest, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
-import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
+import {
+  syncJobCardStockMovements,
+  serializeJobCardStockUsedForDb
+} from '../_lib/jobCardStockMovements.js'
 import {
   finalizeJobCardOtherCommentsForSave,
   mergeCustomerSignoffIntoOtherComments
@@ -124,7 +127,7 @@ async function handler(req, res) {
 
     // Parse and prepare data
     const otherTechnicians = parseJson(body.otherTechnicians, [])
-    const stockUsed = parseJson(body.stockUsed, [])
+    const stockUsedSerialized = serializeJobCardStockUsedForDb(body.stockUsed)
     const materialsBought = parseJson(body.materialsBought, [])
     const photos = parseJson(body.photos, [])
     const serviceForms = parseJson(body.serviceForms, [])
@@ -197,7 +200,7 @@ async function handler(req, res) {
         futureWorkRequired: body.futureWorkRequired || '',
         futureWorkScheduledAt: body.futureWorkScheduledAt ? new Date(body.futureWorkScheduledAt) : null,
         actionsTaken: body.actionsTaken || '',
-        stockUsed: JSON.stringify(stockUsed),
+        stockUsed: stockUsedSerialized,
         materialsBought: JSON.stringify(materialsBought),
         totalMaterialsCost,
         photos: JSON.stringify(photos),

@@ -20,11 +20,12 @@ export function sanitizeJobCardStockUsedForSave(stockUsed) {
         quantity: parseFloat(row.quantity),
         locationId,
         locationName: String(row.locationName || '').trim(),
-        itemName: String(row.itemName || row.name || '').trim()
+        itemName: String(row.itemName || row.name || '').trim(),
+        id:
+          row.id != null && String(row.id).trim()
+            ? String(row.id).trim()
+            : `stock-line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
       };
-      if (row.id != null && String(row.id).trim()) {
-        out.id = String(row.id).trim();
-      }
       if (row.unitCost !== undefined && row.unitCost !== null && row.unitCost !== '') {
         const uc = parseFloat(row.unitCost);
         if (Number.isFinite(uc)) out.unitCost = uc;

@@ -5,7 +5,10 @@ import { insertJobCardActivityRecord } from '../_lib/jobCardActivity.js'
 import { buildJobCardUpdateChanges } from '../_lib/jobCardActivityDiff.js'
 import { ok, serverError, badRequest, notFound, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
-import { syncJobCardStockMovements } from '../_lib/jobCardStockMovements.js'
+import {
+  syncJobCardStockMovements,
+  serializeJobCardStockUsedForDb
+} from '../_lib/jobCardStockMovements.js'
 import {
   finalizeJobCardOtherCommentsForSave,
   mergeCustomerSignoffIntoOtherComments,
@@ -111,13 +114,7 @@ async function handler(req, res) {
         : undefined
 
     const stockUsed =
-      body.stockUsed !== undefined
-        ? Array.isArray(body.stockUsed)
-          ? JSON.stringify(body.stockUsed)
-          : typeof body.stockUsed === 'string'
-            ? body.stockUsed
-            : JSON.stringify(parseJson(body.stockUsed, []))
-        : undefined
+      body.stockUsed !== undefined ? serializeJobCardStockUsedForDb(body.stockUsed) : undefined
 
     const materialsBought =
       body.materialsBought !== undefined

@@ -11,7 +11,10 @@ import {
   findJobCardByLookupParam,
   normalizeJobCardNumberToken
 } from './_lib/jobCardNumber.js'
-import { syncJobCardStockMovements } from './_lib/jobCardStockMovements.js'
+import {
+  syncJobCardStockMovements,
+  serializeJobCardStockUsedForDb
+} from './_lib/jobCardStockMovements.js'
 import {
   buildJobCardListWhereClause,
   jobCardJsonFieldHasEntries
@@ -1349,9 +1352,10 @@ async function handler(req, res) {
         const photos = Array.isArray(body.photos) 
           ? JSON.stringify(body.photos) 
           : body.photos || '[]'
-        const stockUsed = Array.isArray(body.stockUsed) 
-          ? JSON.stringify(body.stockUsed) 
-          : body.stockUsed || '[]'
+        const stockUsed =
+          body.stockUsed !== undefined
+            ? serializeJobCardStockUsedForDb(body.stockUsed)
+            : '[]'
         const materialsBought = Array.isArray(body.materialsBought) 
           ? JSON.stringify(body.materialsBought) 
           : body.materialsBought || '[]'
@@ -1585,9 +1589,7 @@ async function handler(req, res) {
         }
         if (body.actionsTaken !== undefined) updateData.actionsTaken = body.actionsTaken
         if (body.stockUsed !== undefined) {
-          updateData.stockUsed = Array.isArray(body.stockUsed) 
-            ? JSON.stringify(body.stockUsed) 
-            : body.stockUsed
+          updateData.stockUsed = serializeJobCardStockUsedForDb(body.stockUsed)
         }
         if (body.materialsBought !== undefined) {
           updateData.materialsBought = Array.isArray(body.materialsBought) 

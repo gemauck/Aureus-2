@@ -29,8 +29,10 @@ export function parseJobCardStockUsed(raw) {
       const itemName = String(row.itemName || row.name || '').trim()
       // Each line must name its warehouse — empty locationId would wrongly default to main office.
       if (!sku || !locationId || !Number.isFinite(qty) || qty <= 0) return null
+      const clientLineId = String(row.id || row.lineId || '').trim() || undefined
       return {
         lineIndex: index,
+        clientLineId,
         sku,
         locationId,
         quantity: qty,
@@ -44,8 +46,35 @@ export function parseJobCardStockUsed(raw) {
     .filter(Boolean)
 }
 
-export function jobCardStockMovementId(jobCardId, lineIndex) {
-  return `MOV-JC-${String(jobCardId)}-L${lineIndex}`
+/** Stable movement key: prefer client line id (survives reorder); else array index. */
+export function jobCardStockMovementId(jobCardId, lineOrIndex) {
+  const jobId = String(jobCardId)
+  if (lineOrIndex != null && typeof lineOrIndex === 'object') {
+    const safe = String(lineOrIndex.clientLineId || '')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 48)
+    if (safe) return `MOV-JC-${jobId}-R${safe}`
+    return `MOV-JC-${jobId}-L${lineOrIndex.lineIndex}`
+  }
+  return `MOV-JC-${jobId}-L${lineOrIndex}`
+}
+
+/** Canonical JSON persisted on JobCard.stockUsed (matches parse rules). */
+export function serializeJobCardStockUsedForDb(raw) {
+  const lines = parseJobCardStockUsed(raw)
+  return JSON.stringify(
+    lines.map((l) => {
+      const row = {
+        sku: l.sku,
+        quantity: l.quantity,
+        locationId: l.locationId,
+        itemName: l.itemName
+      }
+      if (l.clientLineId) row.id = l.clientLineId
+      if (l.unitCost !== undefined && Number.isFinite(l.unitCost)) row.unitCost = l.unitCost
+      return row
+    })
+  )
 }
 
 export function jobCardStockMovementReference(jobCard) {
@@ -82,25 +111,32 @@ function sameCalendarDay(a, b) {
   )
 }
 
-async function resolveLocationIdTx(tx, locationIdOrCode) {
+/** Job card lines must deduct from the selected site — never silently default to main office. */
+async function resolveJobCardLineLocationIdTx(tx, locationIdOrCode) {
   const s = String(locationIdOrCode || '').trim()
-  if (!s) return resolveDefaultStockLocationIdTx(tx)
+  if (!s) return null
   const loc = await tx.stockLocation.findFirst({
     where: {
       OR: [{ id: s }, { code: s }, { name: { equals: s, mode: 'insensitive' } }]
     }
   })
-  return loc?.id || resolveDefaultStockLocationIdTx(tx)
+  return loc?.id || null
 }
 
-async function resolveDefaultStockLocationIdTx(tx) {
-  const preferred = await tx.stockLocation.findFirst({
-    where: { OR: [{ code: '01_LOC1' }, { code: 'LOC001' }] },
-    orderBy: { code: 'asc' }
-  })
-  if (preferred) return preferred.id
-  const anyLoc = await tx.stockLocation.findFirst({ orderBy: { code: 'asc' } })
-  return anyLoc?.id || null
+async function reverseMovementOnLocationInventory(tx, movement) {
+  if (!movement?.sku) return
+  const loc = String(movement.fromLocation || '').trim()
+  if (!loc) return
+  const qty = Number(movement.quantity)
+  if (!Number.isFinite(qty) || qty === 0) return
+  await upsertLocationInventoryDelta(
+    tx,
+    loc,
+    movement.sku,
+    movement.itemName || movement.sku,
+    -qty,
+    undefined
+  )
 }
 
 async function upsertLocationInventoryDelta(tx, locationId, sku, itemName, quantityDelta, unitCost) {
@@ -165,14 +201,15 @@ export async function syncJobCardStockMovements(prisma, opts) {
   const visitNote = jobCard.location ? ` — ${jobCard.location}` : ''
   const movementDate = resolveJobCardMovementDate(jobCard)
   const applyJobCardDate = opts.applyJobCardDate !== false
-  const result = { created: 0, updated: 0, skipped: 0, dateFixed: 0, errors: [] }
-
-  if (lines.length === 0) return result
+  const result = { created: 0, updated: 0, skipped: 0, dateFixed: 0, removed: 0, errors: [] }
 
   await prisma.$transaction(async (tx) => {
+    const activeMovementIds = new Set()
+
     for (const line of lines) {
-      const movementId = jobCardStockMovementId(jobCard.id, line.lineIndex)
-      const locationId = await resolveLocationIdTx(tx, line.locationId)
+      const movementId = jobCardStockMovementId(jobCard.id, line)
+      activeMovementIds.add(movementId)
+      const locationId = await resolveJobCardLineLocationIdTx(tx, line.locationId)
       if (!locationId) {
         result.errors.push({
           lineIndex: line.lineIndex,
@@ -215,6 +252,11 @@ export async function syncJobCardStockMovements(prisma, opts) {
 
         if (existing) {
           const liDelta = targetQty - existing.quantity
+          const oldSku = existing.sku
+          const oldLoc = String(existing.fromLocation || '')
+          const locationOrSkuChanged =
+            oldSku !== line.sku || oldLoc !== String(locationId)
+
           await tx.stockMovement.update({
             where: { id: existing.id },
             data: {
@@ -229,10 +271,8 @@ export async function syncJobCardStockMovements(prisma, opts) {
               date: applyJobCardDate ? movementDate : new Date()
             }
           })
-          if (liDelta !== 0) {
-            const oldSku = existing.sku
-            const oldLoc = String(existing.fromLocation || '')
-            if (oldSku !== line.sku || oldLoc !== String(locationId)) {
+          if (locationOrSkuChanged || liDelta !== 0) {
+            if (locationOrSkuChanged) {
               if (oldLoc) {
                 await upsertLocationInventoryDelta(
                   tx,
@@ -323,6 +363,24 @@ export async function syncJobCardStockMovements(prisma, opts) {
           message: e?.message || String(e)
         })
       }
+    }
+
+    const movementPrefix = `MOV-JC-${String(jobCard.id)}-`
+    const linkedMovements = await tx.stockMovement.findMany({
+      where: { movementId: { startsWith: movementPrefix } }
+    })
+    for (const mov of linkedMovements) {
+      if (!mov.movementId || activeMovementIds.has(mov.movementId)) continue
+      await reverseMovementOnLocationInventory(tx, mov)
+      await tx.stockMovement.delete({ where: { id: mov.id } })
+      await reconcileInventoryMasterTx(tx, mov.sku)
+      result.removed++
+      opts.audit?.('delete', mov.id, {
+        movementId: mov.movementId,
+        sku: mov.sku,
+        jobCardId: jobCard.id,
+        reason: 'stock_line_removed'
+      })
     }
   })
 
