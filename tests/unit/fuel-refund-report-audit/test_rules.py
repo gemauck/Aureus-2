@@ -1,4 +1,4 @@
-"""Unit tests for fuel refund report audit rules."""
+"""Unit tests for fuel refund report audit rules and report writer."""
 import os
 import sys
 
@@ -7,7 +7,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts", "fuel-refund-report-audit"))
 
 from parse_workbook import ParsedWorkbook  # noqa: E402
+from report_writer import audit_result_label  # noqa: E402
 from rules import (  # noqa: E402
+    Finding,
     check_duplicate_transaction,
     check_initial_dispense_no_claim,
     check_mining_eligible_missing_claim,
@@ -15,6 +17,7 @@ from rules import (  # noqa: E402
     has_non_eligible_reason,
     is_mining_eligible_row as rules_is_mining,
     load_config,
+    summarize_findings,
 )
 
 
@@ -34,6 +37,18 @@ def _row(**kwargs):
     }
     base.update(kwargs)
     return base
+
+
+def _finding(**kwargs):
+    base = {
+        "check_id": "test_check",
+        "severity": "error",
+        "sheet": "Combined Fuel Transactions",
+        "excel_row": 10,
+        "message": "Test message",
+    }
+    base.update(kwargs)
+    return Finding(**base)
 
 
 @pytest.fixture
@@ -133,3 +148,46 @@ def test_refund_total_math_ok(cfg):
 def test_parsed_workbook_empty_combined():
     parsed = ParsedWorkbook(source_path="test.xlsx", combined_rows=[])
     assert parsed.combined_rows == []
+
+
+def test_summarize_pass_rate():
+    parsed = ParsedWorkbook(
+        source_path="test.xlsx",
+        combined_rows=[
+            _row(_excel_row=10),
+            _row(_excel_row=11),
+            _row(_excel_row=12),
+            _row(_excel_row=13),
+        ],
+    )
+    findings = [
+        _finding(excel_row=10, severity="error", check_id="duplicate_transaction"),
+        _finding(excel_row=11, severity="warning", check_id="circular_storage_tank"),
+        _finding(excel_row=12, severity="info", check_id="bowser_low_litre"),
+    ]
+    summary = summarize_findings(findings, parsed)
+
+    assert summary["rows_audited"] == 4
+    assert summary["rows_passed"] == 1
+    assert summary["rows_failed"] == 1
+    assert summary["rows_warning_only"] == 1
+    assert summary["rows_info_only"] == 1
+    assert summary["pass_rate_pct"] == 25.0
+    assert "duplicate_transaction" in {item["check_id"] for item in summary["checks_failed"]}
+    assert "duplicate_transaction" not in summary["checks_passed"]
+
+
+def test_audit_result_label():
+    assert audit_result_label([]) == "Pass"
+    assert audit_result_label([_finding(severity="info")]) == "Info"
+    assert audit_result_label([_finding(severity="warning")]) == "Warning"
+    assert audit_result_label([_finding(severity="error")]) == "Error"
+    assert (
+        audit_result_label(
+            [
+                _finding(severity="warning", check_id="a"),
+                _finding(severity="error", check_id="b"),
+            ]
+        )
+        == "Error"
+    )

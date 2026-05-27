@@ -877,17 +877,69 @@ def run_all_rules(
     return findings
 
 
+COMBINED_SHEET = "Combined Fuel Transactions"
+
+
 def summarize_findings(findings: list[Finding], parsed: ParsedWorkbook) -> dict[str, Any]:
+    cfg = load_config()
     by_check: dict[str, int] = defaultdict(int)
     by_severity: dict[str, int] = defaultdict(int)
     for f in findings:
         by_check[f.check_id] += 1
         by_severity[f.severity] += 1
+
+    combined_by_row: dict[int, list[Finding]] = defaultdict(list)
+    for f in findings:
+        if f.sheet == COMBINED_SHEET and f.excel_row:
+            combined_by_row[f.excel_row].append(f)
+
+    audited_rows = [r for r in parsed.combined_rows if r.get("_excel_row")]
+    rows_audited = len(audited_rows)
+    rows_passed = 0
+    rows_failed = 0
+    rows_warning_only = 0
+    rows_info_only = 0
+
+    for row in audited_rows:
+        row_findings = combined_by_row.get(row["_excel_row"], [])
+        if not row_findings:
+            rows_passed += 1
+            continue
+        severities = {f.severity for f in row_findings}
+        if "error" in severities:
+            rows_failed += 1
+        elif "warning" in severities:
+            rows_warning_only += 1
+        else:
+            rows_info_only += 1
+
+    pass_rate_pct = round((rows_passed / rows_audited) * 100, 1) if rows_audited else 100.0
+
+    process_tasks = cfg.get("process_task_names", {})
+    all_check_ids = set(process_tasks.keys())
+    checks_passed = sorted(all_check_ids - set(by_check.keys()))
+    checks_failed = [
+        {
+            "check_id": check_id,
+            "process_task": process_tasks.get(check_id),
+            "count": by_check[check_id],
+        }
+        for check_id in sorted(by_check.keys())
+    ]
+
     return {
         "row_count_combined": len(parsed.combined_rows),
+        "rows_audited": rows_audited,
+        "rows_passed": rows_passed,
+        "rows_failed": rows_failed,
+        "rows_warning_only": rows_warning_only,
+        "rows_info_only": rows_info_only,
+        "pass_rate_pct": pass_rate_pct,
         "finding_count": len(findings),
         "by_check": dict(sorted(by_check.items())),
         "by_severity": dict(sorted(by_severity.items())),
+        "checks_passed": checks_passed,
+        "checks_failed": checks_failed,
         "refund_rates": parsed.refund_rates,
         "parse_warnings": parsed.parse_warnings,
         "has_errors": by_severity.get("error", 0) > 0,
