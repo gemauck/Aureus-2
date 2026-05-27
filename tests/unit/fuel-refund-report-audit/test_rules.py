@@ -11,8 +11,10 @@ from report_writer import audit_result_label  # noqa: E402
 from rules import (  # noqa: E402
     Finding,
     check_duplicate_transaction,
+    check_high_odo_eligible,
     check_initial_dispense_no_claim,
     check_mining_eligible_missing_claim,
+    check_negative_odo_eligible,
     check_refund_total_math,
     has_non_eligible_reason,
     is_mining_eligible_row as rules_is_mining,
@@ -161,6 +163,53 @@ def test_mining_claim_skipped_transfer_in(cfg):
         )
     ]
     assert check_mining_eligible_missing_claim(rows, cfg) == []
+
+
+def test_negative_odo_on_total_usage_hr(cfg):
+    rows = [
+        _row(
+            **{
+                "Eligible L": 0,
+                "Total Usage Km/Hr": "-27,580.0 hr",
+                "Total Fuel Used (L)": 684.15,
+                "Fuel Dispensed or Received (L)": -684.15,
+            }
+        )
+    ]
+    findings = check_negative_odo_eligible(rows, cfg)
+    assert len(findings) == 1
+    assert findings[0].check_id == "negative_odo_eligible"
+    assert "Total Usage Km/Hr" in findings[0].message
+
+
+def test_high_odo_on_usage_without_eligible_l(cfg):
+    rows = [
+        _row(
+            **{
+                "Eligible L": 0,
+                "Total Usage Km/Hr": "120.0 hr",
+                "Total Fuel Used (L)": 50,
+                "Fuel Dispensed or Received (L)": -50,
+            }
+        )
+    ]
+    findings = check_high_odo_eligible(rows, cfg)
+    assert len(findings) == 1
+    assert findings[0].check_id == "high_odo_eligible"
+
+
+def test_high_odo_km_threshold(cfg):
+    rows = [
+        _row(
+            **{
+                "Eligible L": 10,
+                "Total Usage Km/Hr": "600.0 km",
+                "Total Fuel Used (L)": 100,
+            }
+        )
+    ]
+    findings = check_high_odo_eligible(rows, cfg)
+    assert len(findings) == 1
 
 
 def test_consumption_check_disabled(cfg):

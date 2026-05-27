@@ -532,9 +532,48 @@ def check_missing_tank_litres_final(parsed: ParsedWorkbook, cfg: dict[str, Any])
     return findings
 
 
+def _odo_check_applies(row: dict, cfg: dict[str, Any]) -> bool:
+    """Rows where odometer / usage progression should be validated."""
+    tx = normalize_tx_type(row.get("Transaction Type"))
+    if tx not in {"DISPENSE", "MOBILE-BOWSER-TRANSFER"}:
+        return False
+    if has_non_eligible_reason(row.get("Operation Description / Comment"), cfg):
+        return False
+    if _refund_marked_non_eligible(row):
+        return False
+    el = parse_num(row.get("Eligible L")) or 0
+    if el > 0:
+        return True
+    if is_mining_eligible_row(row.get("Asset Group")) and not is_zero_or_no_dispense_litres(row):
+        return True
+    used = parse_num(row.get("Total Fuel Used (L)"))
+    if used is not None and used > 0.01:
+        return True
+    litres = litres_abs(row.get("Fuel Dispensed or Received (L)"))
+    if litres is not None and litres >= 0.01:
+        return True
+    return False
+
+
 def check_negative_odo_eligible(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for row in rows:
+        if not _odo_check_applies(row, cfg):
+            continue
+        usage, unit = _parse_usage_hr_km(row.get("Total Usage Km/Hr"))
+        if usage is not None and usage < 0:
+            unit_label = unit or "hr/km"
+            findings.append(
+                _row_meta(
+                    row,
+                    "negative_odo_eligible",
+                    "error",
+                    f"Negative odometer progression: Total Usage Km/Hr is {usage} {unit_label}",
+                    cfg,
+                    total_usage_km_hr=row.get("Total Usage Km/Hr"),
+                )
+            )
+            continue
         el = parse_num(row.get("Eligible L")) or 0
         if el <= 0:
             continue
@@ -545,7 +584,7 @@ def check_negative_odo_eligible(rows: list[dict], cfg: dict[str, Any]) -> list[F
                     row,
                     "negative_odo_eligible",
                     "error",
-                    f"Eligible L > 0 but Total Fuel Used is negative ({used})",
+                    f"Eligible L > 0 but Total Fuel Used (L) is negative ({used})",
                     cfg,
                 )
             )
@@ -574,11 +613,10 @@ def check_high_odo_eligible(rows: list[dict], cfg: dict[str, Any]) -> list[Findi
     max_km = float(cfg.get("high_odo_km", 500))
     findings: list[Finding] = []
     for row in rows:
-        el = parse_num(row.get("Eligible L")) or 0
-        if el <= 0:
+        if not _odo_check_applies(row, cfg):
             continue
         usage, unit = _parse_usage_hr_km(row.get("Total Usage Km/Hr"))
-        if usage is None:
+        if usage is None or usage < 0:
             continue
         if unit == "km" and usage > max_km:
             findings.append(
@@ -586,7 +624,7 @@ def check_high_odo_eligible(rows: list[dict], cfg: dict[str, Any]) -> list[Findi
                     row,
                     "high_odo_eligible",
                     "warning",
-                    f"Eligible usage {usage} km exceeds threshold {max_km} km",
+                    f"Usage {usage} km exceeds threshold {max_km} km (Total Usage Km/Hr)",
                     cfg,
                 )
             )
@@ -596,7 +634,7 @@ def check_high_odo_eligible(rows: list[dict], cfg: dict[str, Any]) -> list[Findi
                     row,
                     "high_odo_eligible",
                     "warning",
-                    f"Eligible usage {usage} hr exceeds threshold {max_hr} hr",
+                    f"Usage {usage} hr exceeds threshold {max_hr} hr (Total Usage Km/Hr)",
                     cfg,
                 )
             )
