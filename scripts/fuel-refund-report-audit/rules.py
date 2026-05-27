@@ -193,6 +193,9 @@ def check_mining_eligible_missing_claim(rows: list[dict], cfg: dict[str, Any]) -
             continue
         if has_non_eligible_reason(row.get("Operation Description / Comment"), cfg):
             continue
+        litres = litres_abs(row.get("Fuel Dispensed or Received (L)"))
+        if litres is not None and litres < 0.01:
+            continue
         refund = parse_num(row.get("Refund Total")) or 0
         ev = parse_num(row.get("Eligible Volume (L) (Claimable % of Total)")) or 0
         el = parse_num(row.get("Eligible L")) or 0
@@ -386,6 +389,20 @@ def _pump_missing(row: dict) -> bool:
     return before is None or after is None
 
 
+def _tank_reading_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    s = str(value).strip()
+    return not s or s.lower() in ("[no meter]", "n/a", "-")
+
+
+def _row_missing_tank_readings(row: dict, tank_cols: list[str]) -> bool:
+    for col in tank_cols:
+        if _tank_reading_missing(row.get(col)):
+            return True
+    return False
+
+
 def check_missing_pump_readings(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     need_types = {"DISPENSE", "MOBILE-BOWSER-TRANSFER", "INITIAL-DISPENSE"}
     findings: list[Finding] = []
@@ -400,6 +417,63 @@ def check_missing_pump_readings(rows: list[dict], cfg: dict[str, Any]) -> list[F
                     "warning",
                     "Missing Pump Readings Before and/or After",
                     cfg,
+                )
+            )
+    return findings
+
+
+def check_missing_tank_readings_combined(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
+    if not rows:
+        return []
+    headers = list(rows[0].keys())
+    tank_cols = sheet_has_tank_litre_columns(headers)
+    if not tank_cols:
+        return []
+    need_types = {"DISPENSE", "MOBILE-BOWSER-TRANSFER", "INITIAL-DISPENSE"}
+    findings: list[Finding] = []
+    for row in rows:
+        if normalize_tx_type(row.get("Transaction Type")) not in need_types:
+            continue
+        if _row_missing_tank_readings(row, tank_cols):
+            findings.append(
+                _row_meta(
+                    row,
+                    "missing_tank_readings",
+                    "warning",
+                    "Missing tank litre reading(s) Before and/or After",
+                    cfg,
+                    tank_columns=tank_cols,
+                )
+            )
+    return findings
+
+
+def check_missing_tank_readings_asset_sheets(parsed: ParsedWorkbook, cfg: dict[str, Any]) -> list[Finding]:
+    need_types = {"DISPENSE", "MOBILE-BOWSER-TRANSFER", "INITIAL-DISPENSE"}
+    findings: list[Finding] = []
+    for sheet_name, rows in parsed.asset_sheets.items():
+        if not rows:
+            continue
+        headers = list(rows[0].keys())
+        tank_cols = sheet_has_tank_litre_columns(headers)
+        if not tank_cols:
+            continue
+        for row in rows:
+            if normalize_tx_type(row.get("Transaction Type")) not in need_types:
+                continue
+            if not _row_missing_tank_readings(row, tank_cols):
+                continue
+            findings.append(
+                Finding(
+                    check_id="missing_tank_readings",
+                    severity="warning",
+                    sheet=sheet_name,
+                    excel_row=row.get("_excel_row"),
+                    transaction_id=str(row.get("Transaction ID") or "") or None,
+                    asset_number=str(row.get("Asset Number") or "") or None,
+                    message="Missing tank litre reading(s) Before and/or After",
+                    process_task=_process_task(cfg, "missing_tank_readings"),
+                    fields={"tank_columns": tank_cols},
                 )
             )
     return findings
@@ -836,11 +910,14 @@ def run_all_rules(
     parsed: ParsedWorkbook,
     report_stage: str = "checking",
     enable_v2: bool = False,
+    require_pump_readings: bool = False,
+    require_tank_readings: bool = False,
     config: dict[str, Any] | None = None,
-) -> list[Finding]:
+) -> tuple[list[Finding], list[str]]:
     cfg = config or load_config()
     rows = parsed.combined_rows
     findings: list[Finding] = []
+    checks_skipped: list[str] = []
 
     findings.extend(check_initial_dispense_no_claim(rows, cfg))
     findings.extend(check_duplicate_transaction(rows, cfg))
@@ -851,9 +928,18 @@ def run_all_rules(
     findings.extend(check_dispense_exceeds_tank_size(rows, cfg))
     findings.extend(check_consecutive_hour_exceeds_tank(rows, cfg))
 
-    if report_stage == "checking":
+    if require_pump_readings:
         findings.extend(check_missing_pump_readings(rows, cfg))
-    elif report_stage == "final":
+    else:
+        checks_skipped.append("missing_pump_readings")
+
+    if require_tank_readings:
+        findings.extend(check_missing_tank_readings_combined(rows, cfg))
+        findings.extend(check_missing_tank_readings_asset_sheets(parsed, cfg))
+    else:
+        checks_skipped.append("missing_tank_readings")
+
+    if report_stage == "final":
         findings.extend(check_missing_tank_litres_final(parsed, cfg))
 
     findings.extend(check_negative_odo_eligible(rows, cfg))
@@ -874,13 +960,17 @@ def run_all_rules(
         findings.extend(check_eligible_review_unmarked_consecutive(parsed.eligible_review_dispenses, cfg))
         findings.extend(check_bowser_low_litre(all_rows, cfg))
 
-    return findings
+    return findings, checks_skipped
 
 
 COMBINED_SHEET = "Combined Fuel Transactions"
 
 
-def summarize_findings(findings: list[Finding], parsed: ParsedWorkbook) -> dict[str, Any]:
+def summarize_findings(
+    findings: list[Finding],
+    parsed: ParsedWorkbook,
+    checks_skipped: list[str] | None = None,
+) -> dict[str, Any]:
     cfg = load_config()
     by_check: dict[str, int] = defaultdict(int)
     by_severity: dict[str, int] = defaultdict(int)
@@ -916,8 +1006,9 @@ def summarize_findings(findings: list[Finding], parsed: ParsedWorkbook) -> dict[
     pass_rate_pct = round((rows_passed / rows_audited) * 100, 1) if rows_audited else 100.0
 
     process_tasks = cfg.get("process_task_names", {})
+    skipped = set(checks_skipped or [])
     all_check_ids = set(process_tasks.keys())
-    checks_passed = sorted(all_check_ids - set(by_check.keys()))
+    checks_passed = sorted(all_check_ids - set(by_check.keys()) - skipped)
     checks_failed = [
         {
             "check_id": check_id,
@@ -940,6 +1031,7 @@ def summarize_findings(findings: list[Finding], parsed: ParsedWorkbook) -> dict[
         "by_severity": dict(sorted(by_severity.items())),
         "checks_passed": checks_passed,
         "checks_failed": checks_failed,
+        "checks_skipped": sorted(skipped),
         "refund_rates": parsed.refund_rates,
         "parse_warnings": parsed.parse_warnings,
         "has_errors": by_severity.get("error", 0) > 0,

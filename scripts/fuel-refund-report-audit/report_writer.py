@@ -262,7 +262,11 @@ def write_audit_workbook(
     wb.close()
 
 
-def build_summary_json(findings: list[Finding], parsed: ParsedWorkbook) -> dict[str, Any]:
-    base = summarize_findings(findings, parsed)
+def build_summary_json(
+    findings: list[Finding],
+    parsed: ParsedWorkbook,
+    checks_skipped: list[str] | None = None,
+) -> dict[str, Any]:
+    base = summarize_findings(findings, parsed, checks_skipped=checks_skipped)
     base["findings"] = [f.to_dict() for f in findings]
     return base

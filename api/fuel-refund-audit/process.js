@@ -40,6 +40,8 @@ async function handler(req, res) {
         let timestamp = 0;
         let reportStage = 'checking';
         let enableV2 = false;
+        let requirePumpReadings = false;
+        let requireTankReadings = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -106,6 +108,12 @@ async function handler(req, res) {
                 if (name === 'enableV2' && (value === 'true' || value === '1')) {
                     enableV2 = true;
                 }
+                if (name === 'requirePumpReadings' && (value === 'true' || value === '1')) {
+                    requirePumpReadings = true;
+                }
+                if (name === 'requireTankReadings' && (value === 'true' || value === '1')) {
+                    requireTankReadings = true;
+                }
             });
 
             bb.on('finish', () => {
@@ -137,6 +145,8 @@ async function handler(req, res) {
             reportStage,
         ];
         if (enableV2) args.push('--enable-v2');
+        if (requirePumpReadings) args.push('--require-pump-readings');
+        if (requireTankReadings) args.push('--require-tank-readings');
 
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
         const cmd = `${pythonExec} ${quoted} 2>&1`;
@@ -184,6 +194,8 @@ async function handler(req, res) {
             summary,
             reportStage,
             enableV2,
+            requirePumpReadings,
+            requireTankReadings,
             hasErrors: !!summary.has_errors,
             auditExitCode: exitCode,
             stdout: stdout.slice(-2000),

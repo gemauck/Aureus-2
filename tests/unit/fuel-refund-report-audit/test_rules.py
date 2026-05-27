@@ -17,6 +17,7 @@ from rules import (  # noqa: E402
     has_non_eligible_reason,
     is_mining_eligible_row as rules_is_mining,
     load_config,
+    run_all_rules,
     summarize_findings,
 )
 
@@ -114,6 +115,39 @@ def test_mining_eligible_missing_claim_without_exception(cfg):
     ]
     findings = check_mining_eligible_missing_claim(rows, cfg)
     assert len(findings) == 1
+
+
+def test_mining_claim_skipped_zero_litres(cfg):
+    rows = [
+        _row(
+            **{
+                "Fuel Dispensed or Received (L)": 0.005,
+                "Refund Total": None,
+                "Eligible Volume (L) (Claimable % of Total)": None,
+                "Eligible L": None,
+                "Operation Description / Comment": "Valid mining operation",
+            }
+        )
+    ]
+    findings = check_mining_eligible_missing_claim(rows, cfg)
+    assert len(findings) == 0
+
+
+def test_pump_check_disabled(cfg):
+    parsed = ParsedWorkbook(
+        source_path="test.xlsx",
+        combined_rows=[
+            _row(
+                **{
+                    "Pump Readings Before": None,
+                    "Pump Readings After": None,
+                }
+            )
+        ],
+    )
+    findings, checks_skipped = run_all_rules(parsed, require_pump_readings=False)
+    assert "missing_pump_readings" in checks_skipped
+    assert not any(f.check_id == "missing_pump_readings" for f in findings)
 
 
 def test_refund_total_math_mismatch(cfg):

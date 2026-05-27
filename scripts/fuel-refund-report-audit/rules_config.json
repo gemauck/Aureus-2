@@ -40,6 +40,7 @@
     "dispense_exceeds_tank_size": "Dispense vs Tank Size",
     "consecutive_hour_exceeds_tank": "Consecutive Dispenses (1 hr)",
     "missing_pump_readings": "Pump Readings",
+    "missing_tank_readings": "Tank readings check",
     "missing_tank_litres_final": "Tank Litres on Final Report",
     "negative_odo_eligible": "Negative ODO (Eligible)",
     "high_odo_eligible": "High ODO (Eligible)",

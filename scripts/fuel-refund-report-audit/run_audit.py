@@ -29,7 +29,17 @@ def main(argv: list[str] | None = None) -> int:
         "--report-stage",
         choices=("checking", "final"),
         default="checking",
-        help="checking: flag missing pump readings; final: flag tank litres on asset tabs",
+        help="checking: standard review; final: flag tank litres still on asset tabs",
+    )
+    parser.add_argument(
+        "--require-pump-readings",
+        action="store_true",
+        help="Require pump readings on dispense-type rows",
+    )
+    parser.add_argument(
+        "--require-tank-readings",
+        action="store_true",
+        help="Require tank litre readings on combined and asset sheets",
     )
     parser.add_argument(
         "--enable-v2",
@@ -62,12 +72,14 @@ def main(argv: list[str] | None = None) -> int:
         f"Asset sheets: {len(parsed.asset_sheets)}"
     )
 
-    findings = run_all_rules(
+    findings, checks_skipped = run_all_rules(
         parsed,
         report_stage=args.report_stage,
         enable_v2=args.enable_v2,
+        require_pump_readings=args.require_pump_readings,
+        require_tank_readings=args.require_tank_readings,
     )
-    summary = build_summary_json(findings, parsed)
+    summary = build_summary_json(findings, parsed, checks_skipped=checks_skipped)
 
     print(f"Writing audit workbook → {output_path}")
     write_audit_workbook(input_path, output_path, findings, parsed)
