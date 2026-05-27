@@ -404,8 +404,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, [project?.id, dataSource]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
-    /** `${sectionId}:${docId}` when a document row actions menu is open */
-    const [documentActionsOpenKey, setDocumentActionsOpenKey] = useState(null);
+    /** Document row ⋮ menu: anchor rect + ids (fixed portal so menu is not clipped by table overflow). */
+    const [documentActionsMenu, setDocumentActionsMenu] = useState(null);
     /** `{ sectionId, sectionName }` — copy monthly statuses from one year into a range (same section + document IDs). */
     const [copySectionStatusesModal, setCopySectionStatusesModal] = useState(null);
     const [copyStatusesForm, setCopyStatusesForm] = useState({
@@ -438,15 +438,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
                 setSectionActionsOpenId(null);
             }
-            if (event.target.closest && !event.target.closest('[data-document-actions-dropdown]')) {
-                setDocumentActionsOpenKey(null);
+            if (
+                event.target.closest &&
+                !event.target.closest('[data-document-actions-dropdown]') &&
+                !event.target.closest('[data-document-actions-menu]')
+            ) {
+                setDocumentActionsMenu(null);
             }
         };
-        if (sectionActionsOpenId != null || documentActionsOpenKey != null) {
+        if (sectionActionsOpenId != null || documentActionsMenu != null) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [sectionActionsOpenId, documentActionsOpenKey]);
+    }, [sectionActionsOpenId, documentActionsMenu]);
 
     // Parse documentSections safely (legacy flat array support)
     // OPTIMIZED: Reduced retry attempts and improved early exit conditions
@@ -9913,8 +9917,6 @@ Abcotronics`;
                                             getOrderedDocumentRows(section).map(({ doc, isSubRow }, docIndex) => {
                                                 const canDrag = true;
                                                 const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
-                                                const convertCtx = getConvertToSubDocumentContext(section, doc.id);
-                                                const outdentCtx = getOutdentToMainDocumentContext(section, doc.id);
                                                 return (
                                                 <tr
                                                     key={doc.id}
@@ -10155,89 +10157,41 @@ Abcotronics`;
                                                         )
                                                     )}
                                                     <td className={`px-2 py-2 ${isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
-                                                        <div className="relative flex justify-center" data-document-actions-dropdown>
+                                                        <div className="flex justify-center" data-document-actions-dropdown>
                                                             <button
                                                                 type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    const key = `${section.id}:${doc.id}`;
-                                                                    setDocumentActionsOpenKey((prev) => (prev === key ? null : key));
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    const isOpen =
+                                                                        documentActionsMenu?.sectionId === section.id &&
+                                                                        String(documentActionsMenu?.docId) === String(doc.id);
+                                                                    setDocumentActionsMenu(
+                                                                        isOpen
+                                                                            ? null
+                                                                            : {
+                                                                                sectionId: section.id,
+                                                                                docId: doc.id,
+                                                                                anchorRect: {
+                                                                                    top: rect.top,
+                                                                                    left: rect.left,
+                                                                                    bottom: rect.bottom,
+                                                                                    right: rect.right,
+                                                                                    width: rect.width
+                                                                                }
+                                                                            }
+                                                                    );
                                                                 }}
                                                                 className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                                                 title="Document actions"
-                                                                aria-expanded={documentActionsOpenKey === `${section.id}:${doc.id}`}
+                                                                aria-expanded={
+                                                                    documentActionsMenu?.sectionId === section.id &&
+                                                                    String(documentActionsMenu?.docId) === String(doc.id)
+                                                                }
                                                                 aria-haspopup="true"
                                                             >
                                                                 <i className="fas fa-ellipsis-v text-sm"></i>
                                                             </button>
-                                                            {documentActionsOpenKey === `${section.id}:${doc.id}` && (
-                                                                <div className="absolute right-0 top-full mt-1 w-52 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50 text-left">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            handleEditDocument(section, doc);
-                                                                            setDocumentActionsOpenKey(null);
-                                                                        }}
-                                                                        disabled={isMasterGreyedOut}
-                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                    >
-                                                                        <i className="fas fa-edit text-gray-500 dark:text-gray-400 w-4"></i>
-                                                                        <span>Edit document</span>
-                                                                    </button>
-                                                                    {!doc.parentId && !isMasterGreyedOut && (
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                handleAddSubDocument(section.id, doc);
-                                                                                setDocumentActionsOpenKey(null);
-                                                                            }}
-                                                                            className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2"
-                                                                        >
-                                                                            <i className="fas fa-layer-group text-sky-600 dark:text-sky-400 w-4"></i>
-                                                                            <span>Add sub-document</span>
-                                                                        </button>
-                                                                    )}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            handleConvertToSubDocument(section.id, doc.id);
-                                                                            setDocumentActionsOpenKey(null);
-                                                                        }}
-                                                                        disabled={!convertCtx.canConvert}
-                                                                        title={convertCtx.canConvert ? '' : (convertCtx.reason || 'Cannot convert')}
-                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                    >
-                                                                        <i className="fas fa-indent text-gray-500 dark:text-gray-400 w-4"></i>
-                                                                        <span>Make sub-document</span>
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            handleOutdentToMainDocument(section.id, doc.id);
-                                                                            setDocumentActionsOpenKey(null);
-                                                                        }}
-                                                                        disabled={!outdentCtx.canOutdent}
-                                                                        title={outdentCtx.canOutdent ? '' : (outdentCtx.reason || 'Cannot make main')}
-                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                    >
-                                                                        <i className="fas fa-outdent text-gray-500 dark:text-gray-400 w-4"></i>
-                                                                        <span>Make main document</span>
-                                                                    </button>
-                                                                    <div className="my-1 border-t border-gray-200 dark:border-gray-600" role="separator" />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={(e) => {
-                                                                            setDocumentActionsOpenKey(null);
-                                                                            handleDeleteDocument(section.id, doc.id, e);
-                                                                        }}
-                                                                        disabled={isMasterGreyedOut}
-                                                                        className="w-full px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                                                                    >
-                                                                        <i className="fas fa-trash w-4"></i>
-                                                                        <span>Delete document</span>
-                                                                    </button>
-                                                                </div>
-                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -10422,6 +10376,116 @@ Abcotronics`;
                         </div>
                     </div>
                 );
+            })()}
+            {/* Fixed-position document actions menu (not clipped by overflow-y-clip on table scroll) */}
+            {documentActionsMenu?.anchorRect && (() => {
+                const section = sections.find((s) => String(s.id) === String(documentActionsMenu.sectionId));
+                const doc = section?.documents?.find((d) => String(d.id) === String(documentActionsMenu.docId));
+                if (!section || !doc) return null;
+                const convertCtx = getConvertToSubDocumentContext(section, doc.id);
+                const outdentCtx = getOutdentToMainDocumentContext(section, doc.id);
+                const isSubRow = doc.parentId != null && String(doc.parentId).trim() !== '';
+                const isMasterGreyedOut = !isSubRow && hasChildDocuments(section, doc);
+                const closeMenu = () => setDocumentActionsMenu(null);
+                const anchor = documentActionsMenu.anchorRect;
+                const viewportHeight = window.innerHeight || 0;
+                const viewportWidth = window.innerWidth || 0;
+                const spaceBelow = Math.max(0, viewportHeight - anchor.bottom);
+                const spaceAbove = Math.max(0, anchor.top);
+                const menuEstimatedHeight = 280;
+                const openUpwards = spaceBelow < menuEstimatedHeight && spaceAbove > spaceBelow;
+                const maxHeight = Math.min(menuEstimatedHeight, Math.max(160, (openUpwards ? spaceAbove : spaceBelow) - 8));
+                const dropdownWidth = 208;
+                const left = Math.min(
+                    anchor.right - dropdownWidth,
+                    Math.max(8, viewportWidth - dropdownWidth - 8)
+                );
+                const menu = (
+                    <div
+                        data-document-actions-menu
+                        className="fixed w-52 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-[10000] text-left overflow-y-auto"
+                        style={{
+                            left,
+                            top: openUpwards ? Math.max(8, anchor.top - maxHeight - 4) : anchor.bottom + 4,
+                            maxHeight
+                        }}
+                        role="menu"
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                handleEditDocument(section, doc);
+                                closeMenu();
+                            }}
+                            disabled={isMasterGreyedOut}
+                            className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                            <i className="fas fa-edit text-gray-500 dark:text-gray-400 w-4"></i>
+                            <span>Edit document</span>
+                        </button>
+                        {!doc.parentId && !isMasterGreyedOut && (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                    handleAddSubDocument(section.id, doc);
+                                    closeMenu();
+                                }}
+                                className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2"
+                            >
+                                <i className="fas fa-layer-group text-sky-600 dark:text-sky-400 w-4"></i>
+                                <span>Add sub-document</span>
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                handleConvertToSubDocument(section.id, doc.id);
+                                closeMenu();
+                            }}
+                            disabled={!convertCtx.canConvert}
+                            title={convertCtx.canConvert ? '' : (convertCtx.reason || 'Cannot convert')}
+                            className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                            <i className="fas fa-indent text-gray-500 dark:text-gray-400 w-4"></i>
+                            <span>Make sub-document</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                handleOutdentToMainDocument(section.id, doc.id);
+                                closeMenu();
+                            }}
+                            disabled={!outdentCtx.canOutdent}
+                            title={outdentCtx.canOutdent ? '' : (outdentCtx.reason || 'Cannot make main')}
+                            className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                            <i className="fas fa-outdent text-gray-500 dark:text-gray-400 w-4"></i>
+                            <span>Make main document</span>
+                        </button>
+                        <div className="my-1 border-t border-gray-200 dark:border-gray-600" role="separator" />
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                                closeMenu();
+                                handleDeleteDocument(section.id, doc.id, e);
+                            }}
+                            disabled={isMasterGreyedOut}
+                            className="w-full px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                            <i className="fas fa-trash w-4"></i>
+                            <span>Delete document</span>
+                        </button>
+                    </div>
+                );
+                if (window.ReactDOM && typeof ReactDOM.createPortal === 'function') {
+                    return ReactDOM.createPortal(menu, document.body);
+                }
+                return menu;
             })()}
             {/* Fixed-position assignment dropdown so it is not covered by table/columns */}
             {assignmentOpen && assignmentAnchorRect && (() => {
