@@ -398,7 +398,7 @@ async function buildJobCardBillingPdf(prismaClient, jobCard) {
     kv('Call out category', jobCard.callOutCategory || '—')
     kv('Reason for visit', jobCard.reasonForVisit || '—')
     kv('Diagnosis', jobCard.diagnosis || '—')
-    kv('Actions taken', jobCard.actionsTaken || '—')
+    kv('Work Done / Carried Out', jobCard.actionsTaken || '—')
     kv('Future actions', jobCard.futureWorkRequired || '—')
     if (additionalNotes) {
       doc.font('Helvetica-Bold').text('Additional notes: ', left, contentY, { continued: true, width: contentW })

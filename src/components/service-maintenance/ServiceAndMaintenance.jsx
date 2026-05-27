@@ -1703,7 +1703,7 @@ const ServiceAndMaintenance = () => {
       <p><strong>Call out category:</strong> ${escapeHtml(jobCardForPdf.callOutCategory || '—')}</p>
       <p><strong>Reason for visit:</strong> ${escapeHtml(jobCardForPdf.reasonForVisit || '—')}</p>
       <p><strong>Diagnosis:</strong> ${escapeHtml(jobCardForPdf.diagnosis || '—')}</p>
-      <p><strong>Actions taken:</strong> ${escapeHtml(jobCardForPdf.actionsTaken || '—')}</p>
+      <p><strong>Work Done / Carried Out:</strong> ${escapeHtml(jobCardForPdf.actionsTaken || '—')}</p>
       <p><strong>Future actions:</strong> ${escapeHtml(jobCardForPdf.futureWorkRequired || '—')}</p>
       ${
         otherCommentsReport.technicianNotes
@@ -2942,10 +2942,10 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     </div>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        Actions taken
+                        Work Done / Carried Out
                       </div>
                       <p className="mt-1 leading-relaxed">
-                        {selectedJobCard.actionsTaken || 'No actions recorded.'}
+                        {selectedJobCard.actionsTaken || 'No work recorded.'}
                       </p>
                       <JobCardInlineSectionMediaStripService
                         items={attachmentParts.visualItemsBySection?.actionsTaken}

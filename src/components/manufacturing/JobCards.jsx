@@ -2594,10 +2594,10 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
-                        Actions taken
+                        Work Done / Carried Out
                       </div>
                       <p className="mt-1 leading-relaxed">
-                        {selectedJobCard.actionsTaken || 'No actions recorded.'}
+                        {selectedJobCard.actionsTaken || 'No work recorded.'}
                       </p>
                       <JobCardInlineSectionMediaStrip
                         items={attachmentParts.visualItemsBySection?.actionsTaken}

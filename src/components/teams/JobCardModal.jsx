@@ -1345,7 +1345,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             </div>
                             <div>
                                 <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-slate-300">
-                                    Actions taken
+                                    Work Done / Carried Out
                                 </label>
                                 <VoiceNoteTextarea
                                     sectionId="actionsTaken"

@@ -45,7 +45,7 @@ export const JOB_CARD_FIELD_LABELS = {
   reasonForVisit: 'Reason for visit',
   callOutCategory: 'Call out category',
   diagnosis: 'Diagnosis',
-  actionsTaken: 'Actions taken',
+  actionsTaken: 'Work Done / Carried Out',
   futureWorkRequired: 'Future work',
   futureWorkScheduledAt: 'Future work scheduled',
   otherComments: 'Notes / customer details',

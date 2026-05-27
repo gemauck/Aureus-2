@@ -5653,7 +5653,7 @@ const JobCardFormPublic = () => {
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Actions Taken</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Work Done / Carried Out</h2>
             <p className="text-sm text-gray-500 mt-1">
               Detail the corrective actions and resolution steps.
             </p>
@@ -5672,7 +5672,7 @@ const JobCardFormPublic = () => {
             </p>
           </div>
         </header>
-        <label className="mb-2 block text-sm font-medium text-gray-700">Actions Completed</label>
+        <label className="mb-2 block text-sm font-medium text-gray-700">Work Done / Carried Out Notes</label>
             <VoiceNoteTextarea
               sectionId="actionsTaken"
               name="actionsTaken"
