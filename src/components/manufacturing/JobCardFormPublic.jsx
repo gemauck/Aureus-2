@@ -36,6 +36,16 @@ function emptySectionWorkMedia() {
   return { diagnosis: [], actionsTaken: [], futureWorkRequired: [] };
 }
 
+function createStockEntryRow(overrides = {}) {
+  return {
+    id: `stock-entry-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    locationId: '',
+    sku: '',
+    quantity: 0,
+    ...overrides
+  };
+}
+
 /** Ids of job cards created/updated via the public API on this browser — used for GET /api/public/jobcards?ids= */
 const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
 const MAX_PUBLIC_PRIOR_IDS = 200;
@@ -1635,9 +1645,11 @@ const JobCardFormPublic = () => {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [inventory, setInventory] = useState([]);
   const [stockLocations, setStockLocations] = useState([]);
-  /** Rows with on-hand qty at `newStockItem.locationId` (from API or cache). */
-  const [stockRowsAtLocation, setStockRowsAtLocation] = useState([]);
-  const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
+  /** Draft stock lines in the wizard (one row per location being picked from). */
+  const [stockEntryRows, setStockEntryRows] = useState(() => [createStockEntryRow()]);
+  /** Cached on-hand rows per stock location (SKU dropdowns). */
+  const [inventoryByLocation, setInventoryByLocation] = useState({});
+  const loadingInventoryByLocationRef = useRef({});
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -2133,19 +2145,6 @@ const JobCardFormPublic = () => {
     }
   }, [formData.projectId, projectSelectOptions]);
 
-  const stockSkuOptions = useMemo(
-    () =>
-      stockRowsAtLocation.map((item) => {
-        const sku = item.sku || item.id;
-        const q = Number(item.quantity) || 0;
-        return {
-          value: sku,
-          label: `${item.name || sku} (${sku}) — ${q} on hand`
-        };
-      }),
-    [stockRowsAtLocation]
-  );
-
   const stockLocationOptions = useMemo(
     () =>
       stockLocations
@@ -2157,67 +2156,109 @@ const JobCardFormPublic = () => {
     [stockLocations]
   );
 
-  const lockedStockLocationId = useMemo(() => {
-    const firstStockLine = Array.isArray(formData.stockUsed) ? formData.stockUsed[0] : null;
-    return firstStockLine?.locationId ? String(firstStockLine.locationId) : '';
-  }, [formData.stockUsed]);
+  const getStockSkuOptionsForLocation = useCallback((locId) => {
+    const rows = inventoryByLocation[String(locId || '')] || [];
+    return rows.map((item) => {
+      const sku = item.sku || item.id;
+      const q = Number(item.quantity) || 0;
+      return {
+        value: sku,
+        label: `${item.name || sku} (${sku}) — ${q} on hand`
+      };
+    });
+  }, [inventoryByLocation]);
 
-  useEffect(() => {
-    if (!lockedStockLocationId) return;
-    if (String(newStockItem.locationId || '') === lockedStockLocationId) return;
-    setNewStockItem((prev) => ({ ...prev, locationId: lockedStockLocationId, sku: '' }));
-  }, [lockedStockLocationId, newStockItem.locationId]);
+  const ensureInventoryForLocation = useCallback(
+    async (locId) => {
+      if (!locId) return;
+      const key = String(locId);
+      if (loadingInventoryByLocationRef.current[key]) return;
+      let alreadyLoaded = false;
+      setInventoryByLocation((prev) => {
+        if (Array.isArray(prev[key])) alreadyLoaded = true;
+        return prev;
+      });
+      if (alreadyLoaded) return;
+      loadingInventoryByLocationRef.current[key] = true;
 
-  useEffect(() => {
-    const locId = newStockItem.locationId;
-    if (!locId) {
-      setStockRowsAtLocation([]);
-      return;
-    }
-    let cancelled = false;
-    const run = async () => {
+      const applyRows = (rows) => {
+        setInventoryByLocation((prev) => ({ ...prev, [key]: Array.isArray(rows) ? rows : [] }));
+      };
+
       if (!isOnline) {
-        const rows = jobCardStockPickListFromCachedInventory(inventory, locId);
-        if (!cancelled) setStockRowsAtLocation(rows);
+        applyRows(jobCardStockPickListFromCachedInventory(inventory, key));
+        loadingInventoryByLocationRef.current[key] = false;
         return;
       }
+
       try {
         const response = await fetch(
-          `/api/public/inventory?locationId=${encodeURIComponent(locId)}`,
+          `/api/public/inventory?locationId=${encodeURIComponent(key)}`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         if (response.ok) {
           const data = await response.json();
           const rows = data?.data?.inventory || data?.inventory || [];
-          if (!cancelled) setStockRowsAtLocation(Array.isArray(rows) ? rows : []);
+          applyRows(rows);
+          loadingInventoryByLocationRef.current[key] = false;
           return;
         }
       } catch (e) {
         console.warn('⚠️ JobCardFormPublic: location inventory fetch failed:', e?.message || e);
       }
+
       const token = getJobCardAuthToken();
       if (token && window.DatabaseAPI?.getInventory) {
         try {
-          const response = await window.DatabaseAPI.getInventory(locId, { forceRefresh: true });
+          const response = await window.DatabaseAPI.getInventory(key, { forceRefresh: true });
           const rows = response?.data?.inventory || [];
-          if (!cancelled) {
-            setStockRowsAtLocation(
-              Array.isArray(rows) ? rows.map((item) => ({ ...item, id: item.id })) : []
-            );
-          }
+          applyRows(Array.isArray(rows) ? rows.map((item) => ({ ...item, id: item.id })) : []);
+          loadingInventoryByLocationRef.current[key] = false;
           return;
         } catch (authError) {
-          console.warn('⚠️ JobCardFormPublic: authenticated location inventory failed:', authError?.message || authError);
+          console.warn(
+            '⚠️ JobCardFormPublic: authenticated location inventory failed:',
+            authError?.message || authError
+          );
         }
       }
-      const rows = jobCardStockPickListFromCachedInventory(inventory, locId);
-      if (!cancelled) setStockRowsAtLocation(rows);
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [newStockItem.locationId, isOnline, inventory]);
+
+      applyRows(jobCardStockPickListFromCachedInventory(inventory, key));
+      loadingInventoryByLocationRef.current[key] = false;
+    },
+    [isOnline, inventory]
+  );
+
+  useEffect(() => {
+    if (isOnline) return;
+    setInventoryByLocation((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const locId of keys) {
+        const rows = jobCardStockPickListFromCachedInventory(inventory, locId);
+        if (rows !== prev[locId]) {
+          next[locId] = rows;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [inventory, isOnline]);
+
+  useEffect(() => {
+    const locIds = new Set();
+    (formData.stockUsed || []).forEach((line) => {
+      if (line?.locationId) locIds.add(String(line.locationId));
+    });
+    stockEntryRows.forEach((row) => {
+      if (row.locationId) locIds.add(String(row.locationId));
+    });
+    locIds.forEach((id) => {
+      void ensureInventoryForLocation(id);
+    });
+  }, [formData.stockUsed, stockEntryRows, ensureInventoryForLocation]);
 
   const jobStatusOptions = useMemo(
     () => [
@@ -3451,30 +3492,44 @@ const JobCardFormPublic = () => {
     }));
   };
 
-  const handleAddStockItem = () => {
-    const selectedLocationId = String(newStockItem.locationId || '');
-    const enforcedLocationId = lockedStockLocationId || selectedLocationId;
-    if (!enforcedLocationId) {
+  const addStockEntryRow = () => {
+    setStockEntryRows((prev) => [...prev, createStockEntryRow()]);
+  };
+
+  const removeStockEntryRow = (rowId) => {
+    setStockEntryRows((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((row) => row.id !== rowId);
+    });
+  };
+
+  const updateStockEntryRow = (rowId, patch) => {
+    setStockEntryRows((prev) =>
+      prev.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
+    );
+    if (patch.locationId) {
+      void ensureInventoryForLocation(patch.locationId);
+    }
+  };
+
+  const handleAddStockItem = (entryRowId) => {
+    const entry = stockEntryRows.find((row) => row.id === entryRowId);
+    if (!entry) return;
+
+    const selectedLocationId = String(entry.locationId || '');
+    if (!selectedLocationId) {
       alert('Please select the stock location first.');
       return;
     }
-    if (
-      lockedStockLocationId &&
-      selectedLocationId &&
-      selectedLocationId !== lockedStockLocationId
-    ) {
-      alert('You can only use stock from one location per job card.');
-      return;
-    }
-    if (!newStockItem.sku || newStockItem.quantity <= 0) {
+    if (!entry.sku || entry.quantity <= 0) {
       alert('Please select a component with stock at that location, and enter a quantity greater than zero.');
       return;
     }
 
+    const rowsAtLocation = inventoryByLocation[selectedLocationId] || [];
     const inventoryItem =
-      stockRowsAtLocation.find(
-        (item) => item.sku === newStockItem.sku || item.id === newStockItem.sku
-      ) || inventory.find((item) => item.sku === newStockItem.sku || item.id === newStockItem.sku);
+      rowsAtLocation.find((item) => item.sku === entry.sku || item.id === entry.sku) ||
+      inventory.find((item) => item.sku === entry.sku || item.id === entry.sku);
     if (!inventoryItem) {
       alert('Selected component could not be found for this location.');
       return;
@@ -3484,18 +3539,18 @@ const JobCardFormPublic = () => {
       id: Date.now().toString(),
       sku: inventoryItem.sku || inventoryItem.id,
       itemName: inventoryItem.name || '',
-      quantity: parseFloat(newStockItem.quantity),
-      locationId: enforcedLocationId,
-      locationName: stockLocations.find(loc => String(loc.id) === enforcedLocationId)?.name || '',
+      quantity: parseFloat(entry.quantity),
+      locationId: selectedLocationId,
+      locationName: stockLocations.find((loc) => String(loc.id) === selectedLocationId)?.name || '',
       unitCost: inventoryItem.unitCost || 0
     };
 
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       stockUsed: [...prev.stockUsed, stockItem]
     }));
     pushWizardActivity('stock_line_added', { sku: stockItem.sku });
-    setNewStockItem((prev) => ({ sku: '', quantity: 0, locationId: enforcedLocationId }));
+    updateStockEntryRow(entryRowId, { sku: '', quantity: 0 });
   };
 
   const handleRemoveStockItem = (itemId) => {
@@ -3767,7 +3822,8 @@ const JobCardFormPublic = () => {
       setSelectedPhotos([]);
       setSectionWorkMedia(emptySectionWorkMedia());
       setTechnicianInput('');
-      setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+      setStockEntryRows([createStockEntryRow()]);
+      setInventoryByLocation({});
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setVoiceAttachments([]);
     setCurrentStep(0);
@@ -4372,7 +4428,8 @@ const JobCardFormPublic = () => {
     }));
 
     setTechnicianInput('');
-    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+    setStockEntryRows([createStockEntryRow()]);
+    setInventoryByLocation({});
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setCurrentStep(0);
     setStepError('');
@@ -6049,72 +6106,106 @@ const JobCardFormPublic = () => {
           )}
         </header>
             <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              Select the <strong>stock location</strong> first. The component list only includes items with <strong>quantity on hand</strong> at that warehouse.
+              Select the <strong>stock location</strong> first (e.g. each bakkie or warehouse). The component list only includes items with <strong>quantity on hand</strong> at that site. Use <strong>Add another stock location</strong> when stock comes from more than one place on the same job.
             </p>
-            <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2 mb-3">
-              <div className="sm:col-span-4">
-                <SearchableSelect
-                  id="stock-location"
-                  aria-label="Stock location"
-                  value={lockedStockLocationId || newStockItem.locationId}
-                  onChange={(v) => {
-                    if (lockedStockLocationId) return;
-                    setNewStockItem((prev) => ({ ...prev, locationId: v, sku: '' }));
-                  }}
-                  options={stockLocationOptions}
-                  placeholder="Select stock location first…"
-                  disabled={Boolean(lockedStockLocationId)}
-                  required
-                />
-              </div>
-              <div className="sm:col-span-4">
-                <SearchableSelect
-                  id="stock-sku"
-                  aria-label="Stock component"
-                  value={newStockItem.sku}
-                  onChange={(v) => setNewStockItem((prev) => ({ ...prev, sku: v }))}
-                  options={stockSkuOptions}
-                  placeholder={
-                    newStockItem.locationId
-                      ? 'Search component…'
-                      : 'Choose location first…'
-                  }
-                  disabled={!newStockItem.locationId}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  value={newStockItem.quantity || ''}
-                  onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
-                  placeholder="Qty"
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <button
-                  type="button"
-                  onClick={handleAddStockItem}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
-                >
-                  <i className="fas fa-plus mr-1"></i>Add
-                </button>
-              </div>
+            <div className="space-y-4 mb-3">
+              {stockEntryRows.map((entry, entryIndex) => {
+                const entrySkuOptions = getStockSkuOptionsForLocation(entry.locationId);
+                return (
+                  <div
+                    key={entry.id}
+                    className={
+                      entryIndex > 0
+                        ? 'pt-3 border-t border-slate-200'
+                        : ''
+                    }
+                  >
+                    {stockEntryRows.length > 1 && (
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-600">
+                          Stock location {entryIndex + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeStockEntryRow(entry.id)}
+                          className="text-xs text-red-600 hover:text-red-800"
+                        >
+                          Remove location
+                        </button>
+                      </div>
+                    )}
+                    <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2">
+                      <div className="sm:col-span-4">
+                        <SearchableSelect
+                          id={`stock-location-${entry.id}`}
+                          aria-label="Stock location"
+                          value={entry.locationId}
+                          onChange={(v) => updateStockEntryRow(entry.id, { locationId: v, sku: '' })}
+                          options={stockLocationOptions}
+                          placeholder="Select stock location first…"
+                          required
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
+                        <SearchableSelect
+                          id={`stock-sku-${entry.id}`}
+                          aria-label="Stock component"
+                          value={entry.sku}
+                          onChange={(v) => updateStockEntryRow(entry.id, { sku: v })}
+                          options={entrySkuOptions}
+                          placeholder={
+                            entry.locationId
+                              ? 'Search component…'
+                              : 'Choose location first…'
+                          }
+                          disabled={!entry.locationId}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          inputMode="decimal"
+                          value={entry.quantity || ''}
+                          onChange={(e) =>
+                            updateStockEntryRow(entry.id, {
+                              quantity: parseFloat(e.target.value) || 0
+                            })
+                          }
+                          placeholder="Qty"
+                          className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg"
+                          style={{ fontSize: '16px' }}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAddStockItem(entry.id)}
+                          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
+                        >
+                          <i className="fas fa-plus mr-1"></i>Add
+                        </button>
+                      </div>
+                    </div>
+                    {entry.locationId && entrySkuOptions.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        No on-hand stock at this location
+                        {!isOnline ? ' (offline — connect to refresh, or stock may be empty).' : '.'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            {newStockItem.locationId && stockSkuOptions.length === 0 && (
-              <p className="text-xs text-gray-500 mb-3">
-                No on-hand stock at this location{!isOnline ? ' (offline — connect to refresh, or stock may be empty).' : '.'}
-              </p>
-            )}
-            {lockedStockLocationId && (
-              <p className="text-xs text-gray-500 mb-3">
-                Stock location is locked for this job card after the first stock line is added.
-              </p>
-            )}
+            <button
+              type="button"
+              onClick={addStockEntryRow}
+              className="mb-3 w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 active:bg-blue-200 touch-manipulation"
+            >
+              <i className="fas fa-map-marker-alt mr-1.5"></i>
+              Add another stock location
+            </button>
             {formData.stockUsed.length > 0 && (
               <div className="space-y-2">
                 {formData.stockUsed.map(item => (

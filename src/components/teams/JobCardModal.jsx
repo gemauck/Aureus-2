@@ -30,6 +30,16 @@ const parseJsonArrayField = (value) => {
     return [];
 };
 
+const emptyStockUsedRow = (overrides = {}) => ({
+    sku: '',
+    quantity: '',
+    locationId: '',
+    locationName: '',
+    itemName: '',
+    unitCost: '',
+    ...overrides
+});
+
 const parseHeadingFromComments = (rawComments) => {
     if (!rawComments || typeof rawComments !== 'string') return '';
     const headingLine = rawComments
@@ -516,6 +526,15 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         });
     }, [isOpen, formData.stockUsed, ensureInventoryForLocation]);
 
+    // Show one empty stock line when the modal opens with no stock (same as mobile wizard).
+    useEffect(() => {
+        if (!isOpen) return;
+        setFormData((prev) => {
+            if ((prev.stockUsed || []).length > 0) return prev;
+            return { ...prev, stockUsed: [emptyStockUsedRow()] };
+        });
+    }, [isOpen, jobCard?.id]);
+
     // Load sites when client changes
     useEffect(() => {
         if (formData.clientId && clients) {
@@ -811,26 +830,31 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         }));
     };
 
+    /** Add another SKU line; defaults to the last row's location (same bakkie/warehouse). */
     const addStockRow = () => {
-        // Default new row to the location of the first existing row (if any) so users
-        // do not have to re-pick the same warehouse for every line.
-        const firstLocId =
-            (formData.stockUsed || []).find((r) => r && r.locationId)?.locationId || '';
-        setFormData(prev => ({
+        const rows = formData.stockUsed || [];
+        const lastWithLoc = [...rows].reverse().find((r) => r && r.locationId);
+        const defaultLocId = lastWithLoc?.locationId || '';
+        const defaultLocName = lastWithLoc?.locationName || '';
+        setFormData((prev) => ({
             ...prev,
             stockUsed: [
                 ...(prev.stockUsed || []),
-                {
-                    sku: '',
-                    quantity: '',
-                    locationId: firstLocId,
-                    locationName: '',
-                    itemName: '',
-                    unitCost: ''
-                }
+                emptyStockUsedRow({
+                    locationId: defaultLocId,
+                    locationName: defaultLocName
+                })
             ]
         }));
-        if (firstLocId) void ensureInventoryForLocation(firstLocId);
+        if (defaultLocId) void ensureInventoryForLocation(defaultLocId);
+    };
+
+    /** Add a line at a new stock location (e.g. second bakkie on the same job). */
+    const addStockRowAtNewLocation = () => {
+        setFormData((prev) => ({
+            ...prev,
+            stockUsed: [...(prev.stockUsed || []), emptyStockUsedRow()]
+        }));
     };
 
     const updateStockRow = (index, patch) => {
@@ -1563,22 +1587,31 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
                     {/* Stock used */}
                     <div className="rounded-xl border border-gray-200 p-3 dark:border-slate-600">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <label className="text-xs font-medium text-gray-700 dark:text-slate-300">Stock used</label>
-                            <button
-                                type="button"
-                                onClick={addStockRow}
-                                className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
-                            >
-                                <i className="fas fa-plus mr-1" /> Add line
-                            </button>
+                            <div className="flex flex-wrap gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={addStockRow}
+                                    className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200"
+                                >
+                                    <i className="fas fa-plus mr-1" /> Add line
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={addStockRowAtNewLocation}
+                                    className="text-xs px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 dark:bg-blue-900/30 dark:border-blue-800/60 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                                >
+                                    <i className="fas fa-map-marker-alt mr-1" /> Add another stock location
+                                </button>
+                            </div>
                         </div>
                         {(formData.stockUsed || []).length === 0 ? (
                             <p className="text-xs text-gray-500 dark:text-slate-400">No stock lines. Add consumables used on site.</p>
                         ) : (
                             <div className="space-y-2">
                                 <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1 dark:bg-amber-900/30 dark:border-amber-800/60 dark:text-amber-200">
-                                    Pick the <strong>location</strong> first — the SKU list shows only items on hand at that warehouse.
+                                    Pick the <strong>location</strong> first (each bakkie or warehouse). The SKU list shows only items on hand at that site. Use <strong>Add another stock location</strong> when stock comes from more than one place on the same job.
                                 </p>
                                 {(formData.stockUsed || []).map((row, idx) => {
                                     const locId = row.locationId || '';
@@ -1586,8 +1619,34 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                     const knownSkus = new Set(items.map((it) => String(it.sku)));
                                     const hasUnknownSelectedSku =
                                         Boolean(row.sku) && !knownSkus.has(String(row.sku));
+                                    const prevLocId =
+                                        idx > 0
+                                            ? String((formData.stockUsed || [])[idx - 1]?.locationId || '')
+                                            : '';
+                                    const curLocId = String(locId || '');
+                                    const showLocationGroup =
+                                        idx === 0 || curLocId !== prevLocId;
+                                    const locLabel =
+                                        row.locationName ||
+                                        stockLocations.find((l) => String(l.id) === curLocId)?.name ||
+                                        '';
                                     return (
-                                        <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                                        <div
+                                            key={idx}
+                                            className={
+                                                showLocationGroup && idx > 0
+                                                    ? 'pt-2 border-t border-slate-200 dark:border-slate-600'
+                                                    : ''
+                                            }
+                                        >
+                                            {showLocationGroup && (formData.stockUsed || []).length > 1 && (
+                                                <p className="text-[10px] font-medium text-gray-600 dark:text-slate-400 mb-1">
+                                                    {curLocId
+                                                        ? `Stock from: ${locLabel || 'selected location'}`
+                                                        : 'Another stock location — choose location below'}
+                                                </p>
+                                            )}
+                                        <div className="grid grid-cols-12 gap-2 items-end">
                                             <div className="col-span-3">
                                                 <span className="text-[10px] text-gray-500 dark:text-slate-400">Location</span>
                                                 <select
@@ -1664,6 +1723,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                                                     <i className="fas fa-times" />
                                                 </button>
                                             </div>
+                                        </div>
                                         </div>
                                     );
                                 })}
