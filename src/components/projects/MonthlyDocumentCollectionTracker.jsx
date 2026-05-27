@@ -404,6 +404,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     }, [project?.id, dataSource]);
     // Section header Actions dropdown (declare early to avoid TDZ in effects below)
     const [sectionActionsOpenId, setSectionActionsOpenId] = useState(null);
+    /** `${sectionId}:${docId}` when a document row actions menu is open */
+    const [documentActionsOpenKey, setDocumentActionsOpenKey] = useState(null);
     /** `{ sectionId, sectionName }` — copy monthly statuses from one year into a range (same section + document IDs). */
     const [copySectionStatusesModal, setCopySectionStatusesModal] = useState(null);
     const [copyStatusesForm, setCopyStatusesForm] = useState({
@@ -430,18 +432,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         }),
         [stickyColWidthPx]
     );
-    // Close section Actions dropdown when clicking outside (effect lives near state to avoid TDZ)
+    // Close section / document Actions dropdowns when clicking outside (effect lives near state to avoid TDZ)
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (event.target.closest && !event.target.closest('[data-section-actions-dropdown]')) {
                 setSectionActionsOpenId(null);
             }
+            if (event.target.closest && !event.target.closest('[data-document-actions-dropdown]')) {
+                setDocumentActionsOpenKey(null);
+            }
         };
-        if (sectionActionsOpenId != null) {
+        if (sectionActionsOpenId != null || documentActionsOpenKey != null) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }
-    }, [sectionActionsOpenId]);
+    }, [sectionActionsOpenId, documentActionsOpenKey]);
 
     // Parse documentSections safely (legacy flat array support)
     // OPTIMIZED: Reduced retry attempts and improved early exit conditions
@@ -8018,53 +8023,48 @@ Abcotronics`;
                             ></textarea>
                         </div>
 
-                        {editingDocument && (
-                            <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 flex items-center justify-between gap-3">
-                                <div className="text-xs text-sky-900">
-                                    Convert this row into a sub-document of the row above.
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
+                        {editingDocument && (() => {
+                            const isSubDoc =
+                                editingDocument.parentId != null &&
+                                String(editingDocument.parentId).trim() !== '';
+                            return (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Document level</label>
+                                <select
+                                    value={isSubDoc ? 'sub' : 'main'}
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        if (next === 'main' && isSubDoc) {
                                             const ok = handleOutdentToMainDocument(editingSectionId, editingDocument.id);
                                             if (!ok) return;
-                                            setShowDocumentModal(false);
-                                            setEditingDocument(null);
-                                            setEditingSectionId(null);
-                                        }}
-                                        disabled={!outdentCtx.canOutdent}
-                                        title={outdentCtx.canOutdent ? 'Make this a main document (undo sub-document)' : (outdentCtx.reason || 'Cannot make main document')}
-                                        className={`px-3 py-1.5 text-xs rounded-lg ${
-                                            outdentCtx.canOutdent
-                                                ? 'bg-white text-sky-800 border border-sky-300 hover:bg-sky-100'
-                                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                        }`}
-                                    >
-                                        Make Main
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
+                                            setEditingDocument({ ...editingDocument, parentId: null });
+                                        } else if (next === 'sub' && !isSubDoc) {
                                             const ok = handleConvertToSubDocument(editingSectionId, editingDocument.id);
                                             if (!ok) return;
-                                            setShowDocumentModal(false);
-                                            setEditingDocument(null);
-                                            setEditingSectionId(null);
-                                        }}
-                                        disabled={!convertCtx.canConvert}
-                                        title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
-                                        className={`px-3 py-1.5 text-xs rounded-lg ${
-                                            convertCtx.canConvert
-                                                ? 'bg-sky-600 text-white hover:bg-sky-700'
-                                                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                        }`}
-                                    >
-                                        Make Sub-document
-                                    </button>
-                                </div>
+                                            const parentId = convertCtx.targetParentId;
+                                            if (parentId != null) {
+                                                setEditingDocument({ ...editingDocument, parentId });
+                                            }
+                                        }
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
+                                >
+                                    <option value="main" disabled={isSubDoc && !outdentCtx.canOutdent}>
+                                        Main document
+                                    </option>
+                                    <option value="sub" disabled={!isSubDoc && !convertCtx.canConvert}>
+                                        Sub-document (under row above)
+                                    </option>
+                                </select>
+                                {isSubDoc && !outdentCtx.canOutdent && outdentCtx.reason && (
+                                    <p className="text-[10px] text-gray-500 mt-1">{outdentCtx.reason}</p>
+                                )}
+                                {!isSubDoc && !convertCtx.canConvert && convertCtx.reason && (
+                                    <p className="text-[10px] text-gray-500 mt-1">{convertCtx.reason}</p>
+                                )}
                             </div>
-                        )}
+                            );
+                        })()}
 
                         {editingDocument && (
                             <div className="rounded-lg border border-gray-200 p-3 space-y-2">
@@ -10154,54 +10154,90 @@ Abcotronics`;
                                                             ))
                                                         )
                                                     )}
-                                                    <td className={`px-4 py-2 ${isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
-                                                        <div className="flex items-center gap-2 justify-center">
-                                                            {!doc.parentId && (
-                                                                <button
-                                                                    onClick={() => handleAddSubDocument(section.id, doc)}
-                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
-                                                                    title="Add sub-document"
-                                                                >
-                                                                    <i className="fas fa-layer-group text-sm"></i>
-                                                                </button>
+                                                    <td className={`px-2 py-2 ${isJsonOnlyTracker ? 'border-l-4 border-gray-400' : 'border-l-2 border-gray-200'} ${isMasterGreyedOut ? 'bg-gray-200' : ''}`}>
+                                                        <div className="relative flex justify-center" data-document-actions-dropdown>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const key = `${section.id}:${doc.id}`;
+                                                                    setDocumentActionsOpenKey((prev) => (prev === key ? null : key));
+                                                                }}
+                                                                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                                                title="Document actions"
+                                                                aria-expanded={documentActionsOpenKey === `${section.id}:${doc.id}`}
+                                                                aria-haspopup="true"
+                                                            >
+                                                                <i className="fas fa-ellipsis-v text-sm"></i>
+                                                            </button>
+                                                            {documentActionsOpenKey === `${section.id}:${doc.id}` && (
+                                                                <div className="absolute right-0 top-full mt-1 w-52 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50 text-left">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            handleEditDocument(section, doc);
+                                                                            setDocumentActionsOpenKey(null);
+                                                                        }}
+                                                                        disabled={isMasterGreyedOut}
+                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <i className="fas fa-edit text-gray-500 dark:text-gray-400 w-4"></i>
+                                                                        <span>Edit document</span>
+                                                                    </button>
+                                                                    {!doc.parentId && !isMasterGreyedOut && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                handleAddSubDocument(section.id, doc);
+                                                                                setDocumentActionsOpenKey(null);
+                                                                            }}
+                                                                            className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 hover:text-sky-700 dark:hover:text-sky-300 flex items-center gap-2"
+                                                                        >
+                                                                            <i className="fas fa-layer-group text-sky-600 dark:text-sky-400 w-4"></i>
+                                                                            <span>Add sub-document</span>
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            handleConvertToSubDocument(section.id, doc.id);
+                                                                            setDocumentActionsOpenKey(null);
+                                                                        }}
+                                                                        disabled={!convertCtx.canConvert}
+                                                                        title={convertCtx.canConvert ? '' : (convertCtx.reason || 'Cannot convert')}
+                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <i className="fas fa-indent text-gray-500 dark:text-gray-400 w-4"></i>
+                                                                        <span>Make sub-document</span>
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            handleOutdentToMainDocument(section.id, doc.id);
+                                                                            setDocumentActionsOpenKey(null);
+                                                                        }}
+                                                                        disabled={!outdentCtx.canOutdent}
+                                                                        title={outdentCtx.canOutdent ? '' : (outdentCtx.reason || 'Cannot make main')}
+                                                                        className="w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-sky-900/40 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <i className="fas fa-outdent text-gray-500 dark:text-gray-400 w-4"></i>
+                                                                        <span>Make main document</span>
+                                                                    </button>
+                                                                    <div className="my-1 border-t border-gray-200 dark:border-gray-600" role="separator" />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            setDocumentActionsOpenKey(null);
+                                                                            handleDeleteDocument(section.id, doc.id, e);
+                                                                        }}
+                                                                        disabled={isMasterGreyedOut}
+                                                                        className="w-full px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                                                    >
+                                                                        <i className="fas fa-trash w-4"></i>
+                                                                        <span>Delete document</span>
+                                                                    </button>
+                                                                </div>
                                                             )}
-                                                            <button
-                                                                onClick={() => handleConvertToSubDocument(section.id, doc.id)}
-                                                                className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:text-gray-300 disabled:hover:bg-transparent"
-                                                                title={convertCtx.canConvert ? 'Convert to sub-document of row above' : (convertCtx.reason || 'Cannot convert')}
-                                                                disabled={!convertCtx.canConvert}
-                                                                type="button"
-                                                            >
-                                                                <i className="fas fa-indent text-sm"></i>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleOutdentToMainDocument(section.id, doc.id)}
-                                                                className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:text-gray-300 disabled:hover:text-gray-300 disabled:hover:bg-transparent"
-                                                                title={outdentCtx.canOutdent ? 'Make main document (undo sub-document)' : (outdentCtx.reason || 'Cannot make main document')}
-                                                                disabled={!outdentCtx.canOutdent}
-                                                                type="button"
-                                                            >
-                                                                <i className="fas fa-outdent text-sm"></i>
-                                                            </button>
-                                                            <span className={isMasterGreyedOut ? 'opacity-60 pointer-events-none inline-flex items-center gap-2' : 'inline-flex items-center gap-2'}>
-                                                                <button
-                                                                    onClick={() => handleEditDocument(section, doc)}
-                                                                    className="p-2 text-gray-600 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
-                                                                    title="Edit document"
-                                                                    disabled={isMasterGreyedOut}
-                                                                >
-                                                                    <i className="fas fa-edit text-sm"></i>
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => handleDeleteDocument(section.id, doc.id, e)}
-                                                                    className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                    type="button"
-                                                                    title="Delete document"
-                                                                    disabled={isMasterGreyedOut}
-                                                                >
-                                                                    <i className="fas fa-trash text-sm"></i>
-                                                                </button>
-                                                            </span>
                                                         </div>
                                                     </td>
                                                 </tr>
