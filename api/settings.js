@@ -19,14 +19,21 @@ const USER_SETTINGS_DEFAULTS = {
     googleCalendar: false,
     quickbooks: false,
     slack: false,
-    inventoryStockView: 'all'
+    inventoryStockView: 'all',
+    crmClientsStatusFilter: 'all'
 };
 
 const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
+const CRM_CLIENTS_STATUS_FILTER_OPTIONS = ['all', 'active', 'inactive'];
 
 function normalizeInventoryStockView(value) {
     const normalized = String(value || '').trim().toLowerCase();
     return INVENTORY_STOCK_VIEW_OPTIONS.includes(normalized) ? normalized : null;
+}
+
+function normalizeCrmClientsStatusFilter(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return CRM_CLIENTS_STATUS_FILTER_OPTIONS.includes(normalized) ? normalized : null;
 }
 
 async function getCompanyName() {
@@ -67,7 +74,8 @@ async function handler(req, res) {
                     googleCalendar: userSettings.googleCalendar ?? USER_SETTINGS_DEFAULTS.googleCalendar,
                     quickbooks: userSettings.quickbooks ?? USER_SETTINGS_DEFAULTS.quickbooks,
                     slack: userSettings.slack ?? USER_SETTINGS_DEFAULTS.slack,
-                    inventoryStockView: normalizeInventoryStockView(userSettings.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView
+                    inventoryStockView: normalizeInventoryStockView(userSettings.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView,
+                    crmClientsStatusFilter: normalizeCrmClientsStatusFilter(userSettings.crmClientsStatusFilter) ?? USER_SETTINGS_DEFAULTS.crmClientsStatusFilter
                 };
             }
             const companyName = await getCompanyName();
@@ -96,6 +104,9 @@ async function handler(req, res) {
                 slack: body.slack !== undefined ? body.slack : undefined,
                 inventoryStockView: body.inventoryStockView !== undefined
                     ? (normalizeInventoryStockView(body.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView)
+                    : undefined,
+                crmClientsStatusFilter: body.crmClientsStatusFilter !== undefined
+                    ? (normalizeCrmClientsStatusFilter(body.crmClientsStatusFilter) ?? USER_SETTINGS_DEFAULTS.crmClientsStatusFilter)
                     : undefined
             };
             const filtered = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined));

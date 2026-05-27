@@ -1714,6 +1714,18 @@ const DatabaseAPI = {
         return this.updateSettings({ inventoryStockView: normalized });
     },
 
+    async getCrmClientsStatusFilterPreference() {
+        const response = await this.getSettings();
+        const settings = response?.data?.settings || response?.settings || {};
+        const mode = String(settings.crmClientsStatusFilter || 'all').trim().toLowerCase();
+        return ['all', 'active', 'inactive'].includes(mode) ? mode : 'all';
+    },
+
+    async updateCrmClientsStatusFilterPreference(mode) {
+        const normalized = ['all', 'active', 'inactive'].includes(mode) ? mode : 'all';
+        return this.updateSettings({ crmClientsStatusFilter: normalized });
+    },
+
     // BULK OPERATIONS
     async bulkUpdateClients(clientsData) {
         const response = await this.makeRequest('/clients/bulk', {

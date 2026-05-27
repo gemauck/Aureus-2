@@ -2353,6 +2353,8 @@ model UserSettings {
   quickbooks            Boolean  @default(false)
   slack                 Boolean  @default(false)
   inventoryStockView    String   @default("all")
+  /// CRM Clients tab: all | active | inactive
+  crmClientsStatusFilter String  @default("all")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)

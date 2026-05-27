@@ -367,6 +367,18 @@ function extractStageValue(value) {
     return null;
 }
 
+const CRM_CLIENTS_STATUS_FILTER_OPTIONS = ['all', 'active', 'inactive'];
+
+function normalizeCrmClientsStatusFilter(value) {
+    const v = String(value || '').trim().toLowerCase();
+    return CRM_CLIENTS_STATUS_FILTER_OPTIONS.includes(v) ? v : 'all';
+}
+
+function isClientAccountInactive(client) {
+    const raw = client?.status ?? client?.engagementStage ?? 'Active';
+    return String(raw).trim().toLowerCase() === 'inactive';
+}
+
 function resolvePipelineStage(entity) {
     if (!entity || typeof entity !== 'object') {
         return PIPELINE_STAGES[0];
@@ -1169,6 +1181,7 @@ const Clients = React.memo(() => {
             return false;
         }
     });
+    const [clientStatusFilter, setClientStatusFilter] = useState('all');
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
     const [leadSortField, setLeadSortField] = useState('name');
@@ -1274,7 +1287,7 @@ const Clients = React.memo(() => {
         if (clientsPage > 1) {
             setClientsPage(1);
         }
-    }, [searchTerm, filterIndustry, filterServices, showStarredOnly]);
+    }, [searchTerm, filterIndustry, filterServices, showStarredOnly, clientStatusFilter]);
     
     useEffect(() => {
         if (!hasAppliedLeadsFilterResetRef.current) {
@@ -1299,6 +1312,34 @@ const Clients = React.memo(() => {
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
     const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(currentUser?.role);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadClientStatusFilterPreference = async () => {
+            if (!window.DatabaseAPI?.getCrmClientsStatusFilterPreference) return;
+            try {
+                const saved = normalizeCrmClientsStatusFilter(
+                    await window.DatabaseAPI.getCrmClientsStatusFilterPreference()
+                );
+                if (!cancelled) setClientStatusFilter(saved);
+            } catch (error) {
+                console.warn('Clients: failed to load client status filter preference', error);
+            }
+        };
+        loadClientStatusFilterPreference();
+        return () => { cancelled = true; };
+    }, [currentUser?.id, currentUser?.email]);
+
+    const handleClientStatusFilterChange = useCallback(async (nextMode) => {
+        const normalized = normalizeCrmClientsStatusFilter(nextMode);
+        setClientStatusFilter(normalized);
+        if (!window.DatabaseAPI?.updateCrmClientsStatusFilterPreference) return;
+        try {
+            await window.DatabaseAPI.updateCrmClientsStatusFilterPreference(normalized);
+        } catch (error) {
+            console.warn('Clients: failed to save client status filter preference', error);
+        }
+    }, []);
 
     useEffect(() => {
         if (isAdmin) return;
@@ -6087,10 +6128,16 @@ const Clients = React.memo(() => {
             
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(client);
+
+            const inactive = isClientAccountInactive(client);
+            const matchesAccountStatus =
+                clientStatusFilter === 'all' ||
+                (clientStatusFilter === 'active' && !inactive) ||
+                (clientStatusFilter === 'inactive' && inactive);
             
-            return matchesSearch && matchesIndustry && matchesServices && matchesStarred;
+            return matchesSearch && matchesIndustry && matchesServices && matchesStarred && matchesAccountStatus;
         });
-    }, [clients, searchTerm, filterIndustry, filterServices, showStarredOnly]);
+    }, [clients, searchTerm, filterIndustry, filterServices, showStarredOnly, clientStatusFilter]);
 
     // PERFORMANCE FIX: Memoize sorted clients
     const sortedClients = useMemo(() => {
@@ -10251,11 +10298,38 @@ className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 
                                     </span>
                                 </label>
                             )}
+                            {viewMode === 'clients' && (
+                                <div className="inline-flex items-center gap-2 flex-shrink-0">
+                                    <span className={`text-sm whitespace-nowrap ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                        Status
+                                    </span>
+                                    <div className={`inline-flex rounded-lg border p-0.5 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                                        {[
+                                            { id: 'all', label: 'All' },
+                                            { id: 'active', label: 'Active' },
+                                            { id: 'inactive', label: 'Inactive' }
+                                        ].map(({ id, label }) => (
+                                            <button
+                                                key={id}
+                                                type="button"
+                                                onClick={() => handleClientStatusFilterChange(id)}
+                                                className={`px-2.5 py-1 text-sm font-medium rounded-md transition-colors ${
+                                                    clientStatusFilter === id
+                                                        ? 'bg-blue-600 text-white'
+                                                        : isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-white'
+                                                }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || (viewMode === 'leads' && (filterEngagementStage !== 'All Engagement Stages' || filterAidaStatus !== 'All AIDA Status')) || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || (viewMode === 'leads' && (filterEngagementStage !== 'All Engagement Stages' || filterAidaStatus !== 'All AIDA Status')) || (viewMode === 'clients' && clientStatusFilter !== 'all') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
