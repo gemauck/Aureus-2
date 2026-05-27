@@ -133,6 +133,36 @@ def test_mining_claim_skipped_zero_litres(cfg):
     assert len(findings) == 0
 
 
+def test_mining_claim_skipped_blank_and_zero_dispense(cfg):
+    for fd in (0, 0.0, "0.00", None, ""):
+        rows = [
+            _row(
+                **{
+                    "Fuel Dispensed or Received (L)": fd,
+                    "Refund Total": None,
+                    "Eligible Volume (L) (Claimable % of Total)": None,
+                    "Eligible L": None,
+                }
+            )
+        ]
+        assert check_mining_eligible_missing_claim(rows, cfg) == []
+
+
+def test_mining_claim_skipped_transfer_in(cfg):
+    rows = [
+        _row(
+            **{
+                "Transaction Type": "TRANSFER-IN",
+                "Fuel Dispensed or Received (L)": 500,
+                "Refund Total": None,
+                "Eligible Volume (L) (Claimable % of Total)": None,
+                "Eligible L": None,
+            }
+        )
+    ]
+    assert check_mining_eligible_missing_claim(rows, cfg) == []
+
+
 def test_pump_check_disabled(cfg):
     parsed = ParsedWorkbook(
         source_path="test.xlsx",

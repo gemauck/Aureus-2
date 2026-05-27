@@ -79,6 +79,27 @@ def litres_abs(value: Any) -> float | None:
     return abs(n)
 
 
+def is_zero_or_no_dispense_litres(row: dict) -> bool:
+    """True when no meaningful fuel was dispensed/received on this row."""
+    raw = row.get("Fuel Dispensed or Received (L)")
+    litres = litres_abs(raw)
+    if litres is not None:
+        return litres < 0.01
+    if raw is None:
+        return True
+    s = str(raw).strip().replace(",", "")
+    if s in ("", "-", "—", "n/a", "N/A", "[No Meter]"):
+        return True
+    try:
+        return abs(float(s)) < 0.01
+    except ValueError:
+        return False
+
+
+# Transaction types where a mining-eligible claim is expected when fuel moved
+_CLAIM_EXPECTED_TX_TYPES = frozenset({"DISPENSE", "MOBILE-BOWSER-TRANSFER"})
+
+
 def norm_token(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
@@ -187,14 +208,16 @@ def _refund_marked_non_eligible(row: dict) -> bool:
 def check_mining_eligible_missing_claim(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     for row in rows:
+        tx = normalize_tx_type(row.get("Transaction Type"))
+        if tx not in _CLAIM_EXPECTED_TX_TYPES:
+            continue
         if not is_mining_eligible_row(row.get("Asset Group")):
             continue
         if _refund_marked_non_eligible(row):
             continue
         if has_non_eligible_reason(row.get("Operation Description / Comment"), cfg):
             continue
-        litres = litres_abs(row.get("Fuel Dispensed or Received (L)"))
-        if litres is not None and litres < 0.01:
+        if is_zero_or_no_dispense_litres(row):
             continue
         refund = parse_num(row.get("Refund Total")) or 0
         ev = parse_num(row.get("Eligible Volume (L) (Claimable % of Total)")) or 0

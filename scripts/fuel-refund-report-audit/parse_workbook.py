@@ -35,15 +35,18 @@ def _cell_str(value: Any) -> str:
     return str(value).strip()
 
 
-def _find_header_row(ws, max_scan: int = 8) -> int | None:
+def _find_header_row(ws, max_scan: int = 12) -> int | None:
     for ri in range(1, max_scan + 1):
         row = next(ws.iter_rows(min_row=ri, max_row=ri, values_only=True), None)
         if not row:
             continue
+        cells = [_cell_str(c) for c in row if c is not None]
+        if "Transaction Type" in cells:
+            return ri
         first = _cell_str(row[0])
         if first == "Transaction Type":
             return ri
-        if first == "Date & Time" and "Fuel Pump" in [_cell_str(c) for c in row if c]:
+        if first == "Date & Time" and "Fuel Pump" in cells:
             return ri
     return None
 
@@ -59,7 +62,11 @@ def _rows_from_sheet(ws, header_row: int) -> tuple[list[str], list[dict]]:
         if not cells or not any(c is not None and str(c).strip() != "" for c in cells):
             continue
         first = _cell_str(cells[0])
-        if first in ("Totals:", "Total"):
+        tx_col = headers.index("Transaction Type") if "Transaction Type" in headers else 0
+        tx_val = _cell_str(cells[tx_col]) if tx_col < len(cells) else first
+        if first in ("Totals:", "Total") or tx_val in ("Totals:", "Total"):
+            continue
+        if tx_val in ("Audit Result", "Transaction Type"):
             continue
         record = {headers[i]: cells[i] if i < len(cells) else None for i in range(len(headers)) if headers[i]}
         record["_excel_row"] = excel_row
