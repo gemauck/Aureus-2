@@ -2363,6 +2363,33 @@ async function handler(req, res) {
       }
     }
 
+    if (req.method === 'DELETE' && id && !action) {
+      try {
+        const uid = stockTakeAuthUserId(req)
+        if (!uid) return forbidden(res, 'Authentication required.')
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: { participants: true }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (submission.status !== 'in_progress') {
+          return badRequest(res, 'Only in-progress stocktakes can be deleted.')
+        }
+        if (!stockTakeIsOwner(req, submission)) {
+          return forbidden(res, 'Only the owner can delete this stocktake.')
+        }
+        await prisma.stockTakeSubmission.delete({ where: { id: submission.id } })
+        auditManufacturing('delete', 'stock-take-session', submission.id, {
+          submissionRef: submission.submissionRef,
+          locationId: submission.locationId
+        })
+        return ok(res, { deleted: true })
+      } catch (error) {
+        console.error('❌ Stock-take session delete failed:', error)
+        return serverError(res, 'Failed to delete stock-take session', error.message)
+      }
+    }
+
     return badRequest(res, 'Unsupported stock-take-submissions route')
   }
 

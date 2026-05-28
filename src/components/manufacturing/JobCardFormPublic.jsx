@@ -1740,6 +1740,7 @@ const JobCardFormPublic = () => {
   const [stockTakeDraftNotice, setStockTakeDraftNotice] = useState('');
   const [stockTakeSavedSessions, setStockTakeSavedSessions] = useState([]);
   const [stockTakeSavedLoading, setStockTakeSavedLoading] = useState(false);
+  const [stockTakeDeletingId, setStockTakeDeletingId] = useState('');
   const [stockTakeSubmitConfirmOpen, setStockTakeSubmitConfirmOpen] = useState(false);
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
@@ -4278,6 +4279,52 @@ const JobCardFormPublic = () => {
       setStockTakeError('This saved stocktake is no longer in progress.');
     }
     setStockTakeSaving(false);
+  };
+
+  const deleteSavedStockTake = async (sessionId, event) => {
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
+    if (!sessionId) return;
+    const token = getJobCardAuthToken();
+    if (!token) {
+      setStockTakeError('Sign in to delete saved stocktakes.');
+      return;
+    }
+    const row = stockTakeSavedSessions.find((s) => s.id === sessionId);
+    const parsed = splitStockTakeNotes(row?.notes || '');
+    const label = parsed.description || row?.submissionRef || 'this stocktake';
+    if (!window.confirm(`Delete "${label}"?\n\nThis removes the saved count and cannot be undone.`)) {
+      return;
+    }
+    setStockTakeDeletingId(sessionId);
+    setStockTakeError('');
+    try {
+      const res = await fetch(
+        `/api/manufacturing/stock-take-submissions/${encodeURIComponent(sessionId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        }
+      );
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(payload?.error?.message || payload?.message || res.statusText));
+      }
+      if (stockTakeSessionId === sessionId) {
+        setStockTakeSessionId('');
+        setStockTakeSessionRevision(0);
+        setStockTakeRows([]);
+        setStockTakeCounts({});
+        setStockTakeNewItems([]);
+        setStockTakeStatus('');
+      }
+      setStockTakeDraftNotice('Saved stocktake deleted.');
+      await loadMyStockTakeSessions();
+    } catch (e) {
+      setStockTakeError(e?.message || 'Could not delete stocktake');
+    } finally {
+      setStockTakeDeletingId('');
+    }
   };
 
   const startJobCardStockTakeSession = async () => {
@@ -7580,7 +7627,9 @@ const JobCardFormPublic = () => {
             {getJobCardAuthToken() && (stockTakeSavedLoading || stockTakeSavedSessions.length > 0) ? (
               <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <p className="text-sm font-semibold text-gray-900">Your saved stocktakes</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">Tap to resume an in-progress count under your name.</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Tap to resume, or use the delete button to remove a saved count.
+                </p>
                 {stockTakeSavedLoading ? (
                   <p className="text-xs text-gray-500 mt-2">Loading…</p>
                 ) : (
@@ -7592,14 +7641,15 @@ const JobCardFormPublic = () => {
                       const whenLabel = when ? new Date(when).toLocaleString() : '';
                       const locLabel = s.locationName || s.locationCode || 'Location';
                       const isActive = stockTakeSessionId === s.id;
+                      const isDeleting = stockTakeDeletingId === s.id;
                       return (
-                        <li key={s.id}>
+                        <li key={s.id} className="flex gap-2 items-stretch">
                           <button
                             type="button"
-                            disabled={stockTakeSaving || isActive}
+                            disabled={stockTakeSaving || isActive || isDeleting}
                             onClick={() => void resumeSavedStockTake(s.id)}
                             className={
-                              'w-full text-left rounded-lg border px-3 py-2.5 touch-manipulation ' +
+                              'flex-1 min-w-0 text-left rounded-lg border px-3 py-2.5 touch-manipulation ' +
                               (isActive
                                 ? 'border-blue-400 bg-blue-50'
                                 : 'border-gray-200 bg-gray-50 hover:bg-white hover:border-gray-300')
@@ -7611,6 +7661,20 @@ const JobCardFormPublic = () => {
                               {s.submittedBy ? ` · ${s.submittedBy}` : ''}
                               {whenLabel ? ` · ${whenLabel}` : ''}
                             </p>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={stockTakeSaving || isDeleting}
+                            onClick={(e) => void deleteSavedStockTake(s.id, e)}
+                            aria-label={`Delete saved stocktake ${title}`}
+                            title="Delete saved stocktake"
+                            className="shrink-0 inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 text-red-700 hover:bg-red-100 disabled:opacity-50 touch-manipulation"
+                          >
+                            {isDeleting ? (
+                              <i className="fa-solid fa-circle-notch fa-spin text-sm" aria-hidden />
+                            ) : (
+                              <i className="fa-solid fa-trash text-sm" aria-hidden />
+                            )}
                           </button>
                         </li>
                       );
