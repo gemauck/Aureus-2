@@ -58,9 +58,9 @@ const DFRRCheck = () => {
     const processingStartRef = useRef(null);
     const elapsedTimerRef = useRef(null);
 
-    const card = isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200';
-    const text = isDark ? 'text-gray-100' : 'text-gray-900';
-    const muted = isDark ? 'text-gray-400' : 'text-gray-500';
+    const card = isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200';
+    const text = isDark ? 'text-slate-100' : 'text-gray-900';
+    const muted = isDark ? 'text-slate-400' : 'text-gray-500';
 
     useEffect(() => {
         saveOptions({
@@ -274,7 +274,10 @@ const DFRRCheck = () => {
         <div className="space-y-4 max-w-6xl">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className={`rounded-lg border p-4 ${card}`}>
-                    <h3 className={`text-sm font-semibold mb-1 ${text}`}>DFRR Check</h3>
+                    <h3 className={`text-sm font-semibold mb-1 ${text}`}>
+                        <i className="fas fa-gas-pump mr-2"></i>
+                        DFRR Check
+                    </h3>
                     <p className={`text-xs mb-2 ${muted}`}>
                         Upload the <strong className={text}>original</strong> InsightWare Detailed Fuel Refund
                         Report export (not a file that already has <code>-audit</code> in the name). Each run
@@ -285,7 +288,7 @@ const DFRRCheck = () => {
                         plus Audit Findings and Audit Summary sheets.
                     </p>
 
-                    <div className={`space-y-2 mb-4 text-sm ${text}`}>
+                    <div className={`rounded-lg border p-3 mb-4 space-y-2 text-sm ${text} ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                         <label className="flex items-start gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -401,10 +404,14 @@ const DFRRCheck = () => {
                     )}
 
                     {processing && (
-                        <div className="mb-4 space-y-2">
-                            <div className="flex items-center justify-between text-xs">
-                                <span className={muted}>{processingPhase || 'Processing…'}</span>
-                                {elapsedText && <span className={muted}>Elapsed: {elapsedText}</span>}
+                        <div className={`rounded-lg border p-4 mb-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div className="flex items-center gap-3 mb-3">
+                                <i className="fas fa-spinner fa-spin text-blue-600"></i>
+                                <div className="flex-1">
+                                    <p className={`text-sm font-medium ${text}`}>Processing...</p>
+                                    <p className={`text-xs mt-1 ${muted}`}>{processingPhase || 'Running audit…'}</p>
+                                </div>
+                                {elapsedText && <span className={`text-xs font-medium ${muted}`}>{elapsedText}</span>}
                             </div>
                             {isUploading && (
                                 <div className="flex items-center gap-3">
@@ -425,23 +432,40 @@ const DFRRCheck = () => {
                         </div>
                     )}
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-3">
                         <button
                             type="button"
                             onClick={runAudit}
                             disabled={!file || processing}
-                            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                            className={`px-4 py-3 rounded-lg text-sm font-medium transition ${
+                                !file || processing
+                                    ? isDark
+                                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
                         >
-                            {processing ? 'Running audit…' : 'Run audit'}
+                            {processing ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                    Processing...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-play mr-2"></i>
+                                    Process & Generate Report
+                                </>
+                            )}
                         </button>
                         <button
                             type="button"
                             onClick={reset}
                             disabled={processing}
-                            className={`px-4 py-2 text-sm rounded-lg border ${
-                                isDark ? 'border-gray-600 text-gray-300' : 'border-gray-300 text-gray-700'
+                            className={`px-4 py-3 text-sm rounded-lg border ${
+                                isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                             }`}
                         >
+                            <i className="fas fa-rotate-left mr-2"></i>
                             Reset
                         </button>
                     </div>
@@ -483,7 +507,10 @@ const DFRRCheck = () => {
 
                 {result && (
                     <div className={`rounded-lg border p-4 ${card}`}>
-                        <h4 className={`text-sm font-semibold mb-3 ${text}`}>DFRR audit results</h4>
+                        <h4 className={`text-sm font-semibold mb-3 ${text}`}>
+                            <i className="fas fa-clipboard-check mr-2"></i>
+                            DFRR audit results
+                        </h4>
 
                         {parseWarnings.length > 0 && (
                             <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-100 text-sm space-y-1">
