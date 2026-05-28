@@ -289,6 +289,7 @@ const DFRRCheck = () => {
                     </p>
 
                     <div className={`rounded-lg border p-3 mb-4 space-y-2 text-sm ${text} ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <p className={`text-xs font-semibold uppercase tracking-wide ${muted}`}>Audit options</p>
                         <label className="flex items-start gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -387,21 +388,55 @@ const DFRRCheck = () => {
                         </label>
                     </div>
 
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={handleFileSelect}
-                        disabled={processing}
-                        className="block w-full text-sm mb-3"
-                    />
-
-                    {file && (
-                        <p className={`text-xs mb-3 ${muted}`}>
-                            Selected: <span className={text}>{file.name}</span> (
-                            {(file.size / (1024 * 1024)).toFixed(2)} MB)
-                        </p>
-                    )}
+                    <div className={`rounded-lg border p-4 mb-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <label
+                            htmlFor="dfrr-upload"
+                            className={`block w-full p-5 border-2 border-dashed rounded-lg text-center cursor-pointer transition ${
+                                isDark ? 'border-slate-600 hover:border-blue-500 bg-slate-700/40' : 'border-gray-300 hover:border-blue-400 bg-gray-50'
+                            }`}
+                        >
+                            <input
+                                id="dfrr-upload"
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={handleFileSelect}
+                                disabled={processing}
+                                className="hidden"
+                            />
+                            {file ? (
+                                <div>
+                                    <i className={`fas fa-file-excel text-2xl mb-2 ${isDark ? 'text-green-400' : 'text-green-600'}`}></i>
+                                    <p className={`text-sm font-medium ${text}`}>{file.name}</p>
+                                    <p className={`text-xs mt-1 ${muted}`}>{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <i className={`fas fa-cloud-upload-alt text-2xl mb-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}></i>
+                                    <p className={`text-sm font-medium ${text}`}>Click to upload DFRR workbook</p>
+                                    <p className={`text-xs mt-1 ${muted}`}>Excel (.xlsx, .xls)</p>
+                                </div>
+                            )}
+                        </label>
+                        {file && !processing && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFile(null);
+                                    setResult(null);
+                                    setError(null);
+                                    setSelectedCheckId(null);
+                                    if (fileInputRef.current) fileInputRef.current.value = '';
+                                }}
+                                className={`mt-3 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                                    isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fas fa-times mr-1"></i>
+                                Clear file
+                            </button>
+                        )}
+                    </div>
 
                     {processing && (
                         <div className={`rounded-lg border p-4 mb-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -799,6 +834,19 @@ const DFRRCheck = () => {
                                 )}
                             </div>
                         )}
+
+                        <div className={`mt-4 rounded-lg border p-4 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
+                            <h5 className={`text-sm font-semibold mb-2 ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>
+                                <i className="fas fa-info-circle mr-2"></i>
+                                About DFRR Check
+                            </h5>
+                            <ul className={`text-xs space-y-1 ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
+                                <li>• Audits Detailed Fuel Refund Report workbooks against configured rule checks.</li>
+                                <li>• Adds inline audit columns A-E plus Audit Findings and Audit Summary sheets.</li>
+                                <li>• Safely re-audits files by removing prior audit columns/sheets before processing.</li>
+                                <li>• Use optional checkboxes for targeted compliance sweeps (pump, tank, operator, location, rate).</li>
+                            </ul>
+                        </div>
                     </div>
                 )}
             </div>
