@@ -47,6 +47,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Compare Refund Price to Combined Tank Summary on rows with claims",
     )
     parser.add_argument(
+        "--require-operator-check",
+        action="store_true",
+        help="Flag mining-eligible dispense rows missing Operator",
+    )
+    parser.add_argument(
+        "--require-location-check",
+        action="store_true",
+        help="Flag mining-eligible dispense rows missing Location",
+    )
+    parser.add_argument(
         "--fail-on-warnings",
         action="store_true",
         help="Exit 1 when warnings exist (default: only errors)",
@@ -84,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         require_tank_readings=args.require_tank_readings,
         require_consumption_assessment=args.require_consumption_assessment,
         require_refund_rate_check=args.require_refund_rate_check,
+        require_operator_check=args.require_operator_check,
+        require_location_check=args.require_location_check,
     )
     summary = build_summary_json(findings, parsed, checks_skipped=checks_skipped)
 

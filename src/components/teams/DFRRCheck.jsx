@@ -45,6 +45,8 @@ const DFRRCheck = () => {
     const [requireRefundRateCheck, setRequireRefundRateCheck] = useState(
         !!saved?.requireRefundRateCheck
     );
+    const [requireOperatorCheck, setRequireOperatorCheck] = useState(!!saved?.requireOperatorCheck);
+    const [requireLocationCheck, setRequireLocationCheck] = useState(!!saved?.requireLocationCheck);
     const [selectedCheckId, setSelectedCheckId] = useState(null);
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -66,8 +68,17 @@ const DFRRCheck = () => {
             requireTankReadings,
             requireConsumptionAssessment,
             requireRefundRateCheck,
+            requireOperatorCheck,
+            requireLocationCheck,
         });
-    }, [requirePumpReadings, requireTankReadings, requireConsumptionAssessment, requireRefundRateCheck]);
+    }, [
+        requirePumpReadings,
+        requireTankReadings,
+        requireConsumptionAssessment,
+        requireRefundRateCheck,
+        requireOperatorCheck,
+        requireLocationCheck,
+    ]);
 
     useEffect(() => {
         return () => {
@@ -129,6 +140,8 @@ const DFRRCheck = () => {
         if (requireTankReadings) form.append('requireTankReadings', 'true');
         if (requireConsumptionAssessment) form.append('requireConsumptionAssessment', 'true');
         if (requireRefundRateCheck) form.append('requireRefundRateCheck', 'true');
+        if (requireOperatorCheck) form.append('requireOperatorCheck', 'true');
+        if (requireLocationCheck) form.append('requireLocationCheck', 'true');
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/fuel-refund-audit/process');
@@ -334,6 +347,38 @@ const DFRRCheck = () => {
                                 <span className={`block text-xs ${muted}`}>
                                     Compare Refund Price to Combined Tank Summary on rows with a claim only
                                     (optional; off by default — avoids thousands of historical rate warnings).
+                                </span>
+                            </span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={requireOperatorCheck}
+                                onChange={(e) => setRequireOperatorCheck(e.target.checked)}
+                                disabled={processing}
+                            />
+                            <span>
+                                <span className="font-medium">Check missing operator</span>
+                                <span className={`block text-xs ${muted}`}>
+                                    Flag mining-eligible dispense rows where Operator is blank (optional; off by
+                                    default).
+                                </span>
+                            </span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={requireLocationCheck}
+                                onChange={(e) => setRequireLocationCheck(e.target.checked)}
+                                disabled={processing}
+                            />
+                            <span>
+                                <span className="font-medium">Check missing location</span>
+                                <span className={`block text-xs ${muted}`}>
+                                    Flag mining-eligible dispense rows where Location is blank (optional; off by
+                                    default).
                                 </span>
                             </span>
                         </label>

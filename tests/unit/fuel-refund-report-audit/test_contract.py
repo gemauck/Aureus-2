@@ -130,6 +130,58 @@ def test_contract_bowser_low_litre(cfg):
     assert "bowser_low_litre" in ids
 
 
+def test_contract_bowser_consecutive_total_above_threshold_not_flagged(cfg):
+    rows = [
+        _row(
+            **{
+                "Transaction ID": "CONTRACT-BOWSER-A",
+                "Date & Time": "2026-04-01 10:00:00",
+                "Asset Number": "BOWSER-1",
+                "Asset Description": "MOBILE-BOWSER TEST",
+                "Fuel Dispensed or Received (L)": -30,
+            }
+        ),
+        _row(
+            **{
+                "Transaction ID": "CONTRACT-BOWSER-B",
+                "Date & Time": "2026-04-01 10:30:00",
+                "Asset Number": "BOWSER-1",
+                "Asset Description": "MOBILE-BOWSER TEST",
+                "Fuel Dispensed or Received (L)": -25,
+            }
+        ),
+    ]
+    findings = check_bowser_low_litre(rows, cfg)
+    assert findings == []
+
+
+def test_contract_bowser_consecutive_total_below_threshold_flagged(cfg):
+    rows = [
+        _row(
+            **{
+                "Transaction ID": "CONTRACT-BOWSER-C",
+                "Date & Time": "2026-04-01 10:00:00",
+                "Asset Number": "BOWSER-2",
+                "Asset Description": "MOBILE-BOWSER TEST",
+                "Fuel Dispensed or Received (L)": -20,
+            }
+        ),
+        _row(
+            **{
+                "Transaction ID": "CONTRACT-BOWSER-D",
+                "Date & Time": "2026-04-01 10:30:00",
+                "Asset Number": "BOWSER-2",
+                "Asset Description": "MOBILE-BOWSER TEST",
+                "Fuel Dispensed or Received (L)": -15,
+            }
+        ),
+    ]
+    findings = check_bowser_low_litre(rows, cfg)
+    tids = {f.transaction_id for f in findings}
+    assert "CONTRACT-BOWSER-C" in tids
+    assert "CONTRACT-BOWSER-D" in tids
+
+
 def test_contract_auto_created(cfg):
     rows = [
         _row(

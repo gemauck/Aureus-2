@@ -974,23 +974,65 @@ def check_eligible_review_unmarked_consecutive(review_rows: list[dict], cfg: dic
 
 def check_bowser_low_litre(rows: list[dict], cfg: dict[str, Any]) -> list[Finding]:
     threshold = float(cfg.get("bowser_low_litre_threshold", 50))
-    findings: list[Finding] = []
+    by_asset: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         if normalize_tx_type(row.get("Transaction Type")) != "DISPENSE":
             continue
         if not _is_bowser_like(row):
             continue
-        litres = litres_abs(row.get("Fuel Dispensed or Received (L)"))
-        if litres is not None and 0 < litres < threshold:
-            findings.append(
-                _row_meta(
-                    row,
-                    "bowser_low_litre",
-                    "info",
-                    f"Bowser dispense {litres:.2f} L below {threshold} L — review side-tank fill",
-                    cfg,
+        asset = str(row.get("Asset Number") or "").strip()
+        if not asset:
+            continue
+        by_asset[asset].append(row)
+
+    findings: list[Finding] = []
+    window = timedelta(minutes=60)
+    for asset_rows in by_asset.values():
+        asset_rows.sort(key=lambda r: parse_dt(r.get("Date & Time")) or datetime.min)
+        sequences: list[list[dict]] = []
+        current: list[dict] = []
+
+        for row in asset_rows:
+            dt = parse_dt(row.get("Date & Time"))
+            if not current:
+                current = [row]
+                continue
+            prev_dt = parse_dt(current[-1].get("Date & Time"))
+            if dt and prev_dt and dt - prev_dt <= window:
+                current.append(row)
+            else:
+                sequences.append(current)
+                current = [row]
+        if current:
+            sequences.append(current)
+
+        for sequence in sequences:
+            total_litres = sum(litres_abs(r.get("Fuel Dispensed or Received (L)")) or 0 for r in sequence)
+            consecutive = len(sequence) > 1
+            suppress_due_to_consecutive_total = consecutive and total_litres >= threshold
+            for row in sequence:
+                litres = litres_abs(row.get("Fuel Dispensed or Received (L)"))
+                if litres is None or litres <= 0 or litres >= threshold:
+                    continue
+                if suppress_due_to_consecutive_total:
+                    continue
+                msg = f"Bowser dispense {litres:.2f} L below {threshold} L — review side-tank fill"
+                if consecutive:
+                    msg = (
+                        f"Bowser consecutive dispenses total {total_litres:.2f} L in 60 min, still below "
+                        f"{threshold} L — review side-tank fill"
+                    )
+                findings.append(
+                    _row_meta(
+                        row,
+                        "bowser_low_litre",
+                        "info",
+                        msg,
+                        cfg,
+                        sequence_total_litres=round(total_litres, 4),
+                        sequence_count=len(sequence),
+                    )
                 )
-            )
     return findings
 
 
@@ -1000,6 +1042,8 @@ def run_all_rules(
     require_tank_readings: bool = False,
     require_consumption_assessment: bool = False,
     require_refund_rate_check: bool = False,
+    require_operator_check: bool = False,
+    require_location_check: bool = False,
     config: dict[str, Any] | None = None,
 ) -> tuple[list[Finding], list[str]]:
     cfg = config or load_config()
@@ -1010,8 +1054,14 @@ def run_all_rules(
     findings.extend(check_initial_dispense_no_claim(rows, cfg))
     findings.extend(check_duplicate_transaction(rows, cfg))
     findings.extend(check_mining_eligible_missing_claim(rows, cfg))
-    findings.extend(check_mining_eligible_missing_operator(rows, cfg))
-    findings.extend(check_mining_eligible_missing_location(rows, cfg))
+    if require_operator_check:
+        findings.extend(check_mining_eligible_missing_operator(rows, cfg))
+    else:
+        checks_skipped.append("mining_eligible_missing_operator")
+    if require_location_check:
+        findings.extend(check_mining_eligible_missing_location(rows, cfg))
+    else:
+        checks_skipped.append("mining_eligible_missing_location")
     findings.extend(check_circular_storage_tank(rows, cfg))
     findings.extend(check_dispense_exceeds_tank_size(rows, cfg))
     findings.extend(check_consecutive_hour_exceeds_tank(rows, cfg))

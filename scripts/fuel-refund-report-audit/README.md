@@ -25,6 +25,8 @@ npm run audit:fuel-refund-report -- \
 | `--require-tank-readings` | Flag missing tank Before/After on combined + asset sheets (off by default) |
 | `--require-consumption-assessment` | Flag unrealistic Consumption L/hr or L/km vs median/caps (off by default) |
 | `--require-refund-rate-check` | Compare Refund Price to summary on rows with claims (off by default) |
+| `--require-operator-check` | Flag mining-eligible dispense rows missing Operator (off by default) |
+| `--require-location-check` | Flag mining-eligible dispense rows missing Location (off by default) |
 
 Re-uploading an **already audited** workbook is safe: prior audit columns A–E and audit sheets are removed before the new run.
 
@@ -85,7 +87,7 @@ Thresholds live in `rules_config.json`.
 15. `eligible_review_unmarked_consecutive` — Eligible Review vs Transaction ID  
 16. `bowser_low_litre` — small bowser dispense review  
 
-Optional (checkbox / CLI flag): `missing_pump_readings`, `missing_tank_readings`, `unrealistic_consumption`, `refund_rate_summary`.
+Optional (checkbox / CLI flag): `missing_pump_readings`, `missing_tank_readings`, `unrealistic_consumption`, `refund_rate_summary`, `mining_eligible_missing_operator`, `mining_eligible_missing_location`.
 
 Operator, location, and operation description apply only to **mining-eligible dispenses with fuel moved** (same scope as missing-claim).
 

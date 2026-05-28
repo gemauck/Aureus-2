@@ -42,6 +42,8 @@ async function handler(req, res) {
         let requireTankReadings = false;
         let requireConsumptionAssessment = false;
         let requireRefundRateCheck = false;
+        let requireOperatorCheck = false;
+        let requireLocationCheck = false;
         let fileReceived = false;
         let writeStream = null;
 
@@ -114,6 +116,12 @@ async function handler(req, res) {
                 if (name === 'requireRefundRateCheck' && (value === 'true' || value === '1')) {
                     requireRefundRateCheck = true;
                 }
+                if (name === 'requireOperatorCheck' && (value === 'true' || value === '1')) {
+                    requireOperatorCheck = true;
+                }
+                if (name === 'requireLocationCheck' && (value === 'true' || value === '1')) {
+                    requireLocationCheck = true;
+                }
             });
 
             bb.on('finish', () => {
@@ -146,6 +154,8 @@ async function handler(req, res) {
         if (requireTankReadings) args.push('--require-tank-readings');
         if (requireConsumptionAssessment) args.push('--require-consumption-assessment');
         if (requireRefundRateCheck) args.push('--require-refund-rate-check');
+        if (requireOperatorCheck) args.push('--require-operator-check');
+        if (requireLocationCheck) args.push('--require-location-check');
 
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
         const cmd = `${pythonExec} ${quoted} 2>&1`;
@@ -195,6 +205,8 @@ async function handler(req, res) {
             requireTankReadings,
             requireConsumptionAssessment,
             requireRefundRateCheck,
+            requireOperatorCheck,
+            requireLocationCheck,
             hasErrors: !!summary.has_errors,
             auditExitCode: exitCode,
             stdout: stdout.slice(-2000),
