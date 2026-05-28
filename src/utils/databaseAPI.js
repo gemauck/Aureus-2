@@ -2530,6 +2530,15 @@ const DatabaseAPI = {
     },
 
     // JOB CARDS OPERATIONS
+    _notifyJobCardsListChanged(jobCardId) {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        try {
+            window.dispatchEvent(new CustomEvent('jobcards:saved', { detail: { id: jobCardId || null } }));
+        } catch (_) {
+            /* non-fatal */
+        }
+    },
+
     async getJobCards(options = {}) {
         const params = new URLSearchParams();
         const page = parseInt(options?.page, 10);
@@ -2575,6 +2584,8 @@ const DatabaseAPI = {
         });
         // Clear cache for job cards list to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
+        const jc = response?.data?.jobCard || response?.jobCard;
+        this._notifyJobCardsListChanged(jc?.id || null);
         return response;
     },
 
@@ -2586,6 +2597,7 @@ const DatabaseAPI = {
         // Clear cache for both list and individual job card
         this._responseCache.delete('GET:/jobcards');
         this._responseCache.delete(`GET:/jobcards/${id}`);
+        this._notifyJobCardsListChanged(id);
         return response;
     },
 
@@ -2603,6 +2615,7 @@ const DatabaseAPI = {
         // Clear cache for job cards list and individual job card to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
         this._responseCache.delete(`GET:/jobcards/${id}`);
+        this._notifyJobCardsListChanged(id);
         return response;
     },
 

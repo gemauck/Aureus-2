@@ -1679,7 +1679,13 @@ function formatJobCardListWhenCompact(iso) {
     }
 }
 
-function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
+function recentJobCardsListKey(list) {
+    return (list || [])
+        .map((jc) => `${jc?.id || ''}:${jc?.updatedAt || jc?.createdAt || ''}:${jc?.status || ''}`)
+        .join('|');
+}
+
+function RecentJobCardsWidget({ cardBase, headerText, subText, isDark, autoRefresh = true, refreshInterval = 30000 }) {
     const [items, setItems] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -1705,7 +1711,8 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
                 sortDirection: 'desc'
             });
             const res = await fetch(`/api/jobcards?${params.toString()}`, {
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                cache: 'no-store'
             });
             if (!res.ok) {
                 const text = await res.text();
@@ -1720,7 +1727,11 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
             }
             const raw = await res.json();
             const list = (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
-            setItems(Array.isArray(list) ? list : []);
+            const next = Array.isArray(list) ? list : [];
+            setItems((prev) => {
+                if (silent && recentJobCardsListKey(prev) === recentJobCardsListKey(next)) return prev;
+                return next;
+            });
             if (!silent) setError(null);
         } catch (e) {
             if (!silent) {
@@ -1734,8 +1745,29 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark }) {
 
     React.useEffect(() => {
         load({ silent: false });
-        const id = setInterval(() => load({ silent: true }), 120000);
-        return () => clearInterval(id);
+    }, [load]);
+
+    React.useEffect(() => {
+        if (!autoRefresh || !refreshInterval || refreshInterval < 5000) return undefined;
+        const id = window.setInterval(() => {
+            if (!document.hidden) load({ silent: true });
+        }, refreshInterval);
+        return () => window.clearInterval(id);
+    }, [autoRefresh, refreshInterval, load]);
+
+    React.useEffect(() => {
+        const refreshIfVisible = () => {
+            if (!document.hidden) load({ silent: true });
+        };
+        const onSaved = () => refreshIfVisible();
+        window.addEventListener('jobcards:saved', onSaved);
+        document.addEventListener('visibilitychange', refreshIfVisible);
+        window.addEventListener('focus', refreshIfVisible);
+        return () => {
+            window.removeEventListener('jobcards:saved', onSaved);
+            document.removeEventListener('visibilitychange', refreshIfVisible);
+            window.removeEventListener('focus', refreshIfVisible);
+        };
     }, [load]);
 
     const openJobCard = (jc) => {
@@ -2906,6 +2938,8 @@ const DashboardLive = () => {
                                   headerText={headerText}
                                   subText={subText}
                                   isDark={isDark}
+                                  autoRefresh={autoRefresh}
+                                  refreshInterval={refreshInterval}
                               />
                           )
                       }

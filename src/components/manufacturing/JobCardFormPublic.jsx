@@ -1503,6 +1503,13 @@ async function syncOneLocalPendingJobCardToServer(draftCard) {
     await flushJobCardActivityQueue(resolvedServerId, draftCard.activityQueue);
   }
   removeLocalPendingJobCard(localId);
+  if (typeof window !== 'undefined' && resolvedServerId) {
+    try {
+      window.dispatchEvent(new CustomEvent('jobcards:saved', { detail: { id: resolvedServerId } }));
+    } catch (_) {
+      /* non-fatal */
+    }
+  }
   return { ok: true, serverId: resolvedServerId, errorText: '' };
 }
 
