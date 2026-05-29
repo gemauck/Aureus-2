@@ -1180,7 +1180,7 @@ const DatabaseAPI = {
     // CLIENT OPERATIONS
     async getClients(forceRefresh = false) {
         const endpoint = forceRefresh ? `/clients?_t=${Date.now()}` : '/clients';
-        const response = await this.makeRequest(endpoint);
+        const response = await this.makeRequest(endpoint, { forceRefresh: forceRefresh === true });
         const clients = response?.data?.clients || [];
         if (clients.length === 0) {
             console.warn('⚠️ WARNING: No clients found in database response. This could indicate:');
@@ -1240,7 +1240,7 @@ const DatabaseAPI = {
         // If forceRefresh, we need to bypass any caching layers
         // Add cache-busting query param to bypass any HTTP/proxy caches
         const endpoint = forceRefresh ? `/leads?_t=${Date.now()}` : '/leads';
-        const raw = await this.makeRequest(endpoint);
+        const raw = await this.makeRequest(endpoint, { forceRefresh: forceRefresh === true });
         // Normalize payload to { data: { leads: [...] } } for downstream consumers
         const normalized = {
             data: {
@@ -1495,8 +1495,16 @@ const DatabaseAPI = {
     },
 
     async getProject(id, options = {}) {
-        const url = options.summary ? `/projects/${id}?summary=1` : `/projects/${id}`;
-        const response = await this.makeRequest(url, options);
+        const summaryOnly = options.summary === true || options.summary === 1;
+        const trackerSections = options.trackerSections === true || options.trackerSections === 1;
+        const params = new URLSearchParams();
+        if (summaryOnly) params.set('summary', '1');
+        if (trackerSections) params.set('trackerSections', '1');
+        const qs = params.toString();
+        const url = qs ? `/projects/${id}?${qs}` : `/projects/${id}`;
+        const response = await this.makeRequest(url, {
+            forceRefresh: options.forceRefresh === true
+        });
         return response;
     },
 

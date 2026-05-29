@@ -173,38 +173,6 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             const offlineUserTasksKey = `offline_user_tasks_${userId}`;
             const offlineProjectTasksKey = `offline_project_tasks_${userId}`;
             
-            // STEP 1: Load cached data immediately for instant display
-            let cachedUserTasks = [];
-            let cachedProjectTasks = [];
-            try {
-                const offlineUserTasks = localStorage.getItem(offlineUserTasksKey);
-                if (offlineUserTasks) {
-                    const parsed = JSON.parse(offlineUserTasks);
-                    if (Array.isArray(parsed)) {
-                        cachedUserTasks = parsed;
-                        setUserTasks(cachedUserTasks); // Show cached data immediately
-                    }
-                }
-                
-                const offlineProjectTasks = localStorage.getItem(offlineProjectTasksKey);
-                if (offlineProjectTasks) {
-                    const parsed = JSON.parse(offlineProjectTasks);
-                    if (Array.isArray(parsed)) {
-                        cachedProjectTasks = parsed;
-                        setProjectTasks(cachedProjectTasks); // Show cached project tasks immediately
-                        logTaskDebug('📋 Loaded cached project tasks:', cachedProjectTasks.length);
-                    }
-                }
-            } catch (e) {
-                warnTaskDebug('Error reading offline tasks:', e);
-            }
-            
-            // IMMEDIATE: Hide loading spinner if we have any cached data
-            // This makes the widget appear instantly on page refresh
-            if (cachedUserTasks.length > 0 || cachedProjectTasks.length > 0) {
-                setIsLoading(false);
-            }
-
             // Helper function to add timeout to promises
             const withTimeout = (promise, timeoutMs = 5000) => {
                 return Promise.race([
@@ -222,7 +190,8 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             loadPromises.push(
                 withTimeout(
                     fetch('/api/tasks?lightweight=true', {
-                        headers: { 'Authorization': `Bearer ${token}` }
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        cache: 'no-store'
                     })
                         .then(async response => {
                             if (!response.ok) {
@@ -271,12 +240,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 error: err,
                                 stack: err.stack
                             });
-                            // Use cached project tasks if API fails (for local development)
-                            if (cachedProjectTasks.length > 0) {
-                                logTaskDebug('📦 Using cached project tasks:', cachedProjectTasks.length);
-                                return { type: 'project', data: cachedProjectTasks };
-                            }
-                            warnTaskDebug('⚠️ No cached project tasks available, returning empty array');
+                            warnTaskDebug('⚠️ Project tasks API failed, returning empty array');
                             return { type: 'project', data: [] };
                         }),
                     20000 // 20 second timeout (slow connections / database)
@@ -287,7 +251,8 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             loadPromises.push(
                 withTimeout(
                     fetch('/api/user-tasks?lightweight=true', {
-                        headers: { 'Authorization': `Bearer ${token}` }
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        cache: 'no-store'
                     })
                         .then(async response => {
                             if (!response.ok) {
@@ -318,16 +283,12 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                         })
                         .catch(err => {
                             warnTaskDebug('Error loading user tasks from API:', err);
-                            // Keep cached data if API fails
-                            return { type: 'user', data: cachedUserTasks };
+                            return { type: 'user', data: [] };
                         }),
                     12000 // 12 second timeout (increased for slow connections)
                 )
             );
 
-            // STEP 3: Update with fresh data in background (non-blocking)
-            // If we already have cached data, this runs in the background
-            // If we don't have cached data, this will update when complete
             Promise.allSettled(loadPromises).then((results) => {
                 logTaskDebug('📊 Task loading results:', results.map(r => ({
                     status: r.status,
@@ -339,36 +300,20 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                     if (result.status === 'fulfilled') {
                         const { type, data } = result.value;
                         if (type === 'project') {
-                            logTaskDebug('✅ Setting project tasks:', data.length, '(cached:', cachedProjectTasks.length, ')');
-                            // Only update if we got fresh data (not just cached/empty)
-                            // This prevents overwriting cached tasks with empty arrays from API
-                            if (data.length > 0 || cachedProjectTasks.length === 0) {
-                                setProjectTasks(data);
-                            } else {
-                                logTaskDebug('⚠️ Keeping cached project tasks (API returned empty, but we have cached data)');
-                            }
+                            logTaskDebug('✅ Setting project tasks:', data.length);
+                            setProjectTasks(data);
                         } else if (type === 'user') {
-                            // Only update if we got fresh data (not just cached)
-                            if (data.length > 0 || cachedUserTasks.length === 0) {
-                                logTaskDebug('✅ Setting user tasks:', data.length);
-                                setUserTasks(data);
-                            } else {
-                                logTaskDebug('⚠️ Keeping cached user tasks (API returned empty, but we have cached data)');
-                            }
+                            logTaskDebug('✅ Setting user tasks:', data.length);
+                            setUserTasks(data);
                         }
                     } else {
                         console.error('❌ Task loading failed:', result.reason);
                     }
                 });
-                // Only set loading to false here if we didn't have cached data
-                // (if we had cached data, loading was already set to false above)
-                if (cachedUserTasks.length === 0 && cachedProjectTasks.length === 0) {
-                    setIsLoading(false);
-                }
+                setIsLoading(false);
             }).catch(err => {
                 console.error('Error loading tasks:', err);
                 setError('Failed to load some tasks');
-                // Make sure loading is false even on error
                 setIsLoading(false);
             });
         };
@@ -1038,7 +983,7 @@ const ClientActivityMetricsWidget = ({ cardBase, headerText, subText, isDark, cl
 
 /** Below this *widget width*, show compact row cards instead of the wide table (not `window.innerWidth`, so narrow dashboard tiles still lay out correctly). */
 const DASHBOARD_PROGRESS_NARROW_MAX_PX = 768;
-const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 8;
+const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 12;
 
 /** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
 const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
@@ -1091,6 +1036,14 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             .join(',');
     }, [m, projects]);
 
+    const projectsDataVersionKey = React.useMemo(() => {
+        if (!projects?.length) return '';
+        return projects
+            .map((p) => `${p?.id}:${p?.updatedAt || p?.monthlyProgress || ''}`)
+            .sort()
+            .join('|');
+    }, [projects]);
+
     React.useEffect(() => {
         setPickerOverrideIndex(null);
     }, [trackerIdsKey]);
@@ -1123,7 +1076,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                 const results = await promiseAllSettledChunked(
                     ids,
                     DASHBOARD_PROGRESS_HYDRATE_CHUNK,
-                    (projectId) => window.DatabaseAPI.getProject(projectId, { trackerSections: true })
+                    (projectId) =>
+                        window.DatabaseAPI.getProject(projectId, {
+                            trackerSections: true,
+                            forceRefresh: true
+                        })
                 );
                 if (cancelled) return;
                 const next = {};
@@ -1150,7 +1107,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         return () => {
             cancelled = true;
         };
-    }, [m, trackerIdsKey]);
+    }, [m, trackerIdsKey, projectsDataVersionKey]);
 
     const mergedProjects = React.useMemo(() => {
         if (!m || !projects) return [];
@@ -2575,9 +2532,8 @@ const DashboardLive = () => {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    // Optimized real-time data loading with immediate localStorage display
+    // Load dashboard from API with forceRefresh so widgets show current data (not stale cache).
     const loadDashboardData = useCallback(async (showLoading = true) => {
-        
         if (showLoading) {
             setIsLoading(true);
         } else {
@@ -2586,84 +2542,78 @@ const DashboardLive = () => {
         setError(null);
         setConnectionStatus('connecting');
 
-        try {
-            // IMMEDIATE: Load from localStorage first for instant display
-            const allClients = window.storage?.getClients?.() || [];
-            const roleForLeads = window.storage?.getUser?.()?.role;
-            const canViewLeads =
-                typeof window.isAdminRole === 'function' && window.isAdminRole(roleForLeads);
+        const roleForLeads = window.storage?.getUser?.()?.role;
+        const canViewLeads =
+            typeof window.isAdminRole === 'function' && window.isAdminRole(roleForLeads);
 
-            // Get clients and leads from separate localStorage keys
-            const cachedClients = allClients.filter(c => c.type === 'client' || !c.type); // Default to client if no type
+        const applyDashboardPayload = (clients, leads, projects, timeEntries, users) => {
+            const stats = calculateStats(clients, leads, projects, timeEntries);
+            setDashboardData({ clients, leads, projects, timeEntries, users, stats });
+            setLastUpdated(new Date());
+        };
+
+        const readOfflineFallback = () => {
+            const allClients = window.storage?.getClients?.() || [];
+            const cachedClients = allClients.filter((c) => c.type === 'client' || !c.type);
             const storedLeads = window.storage?.getLeads?.();
             const cachedLeadsRaw =
                 Array.isArray(storedLeads) && storedLeads.length > 0
                     ? storedLeads
-                    : allClients.filter(c => c.type === 'lead') || [];
+                    : allClients.filter((c) => c.type === 'lead') || [];
             const cachedLeads = canViewLeads ? cachedLeadsRaw : [];
-            
-            const cachedProjects = window.storage?.getProjects?.() || [];
-            const cachedTimeEntries = window.storage?.getTimeEntries?.() || [];
-            const cachedUsers = window.storage?.getUsers?.() || [];
-
-            // Calculate stats from cached data immediately
-            const cachedStats = calculateStats(cachedClients, cachedLeads, cachedProjects, cachedTimeEntries);
-
-            // Set cached data immediately for instant display
-            setDashboardData({
+            return {
                 clients: cachedClients,
                 leads: cachedLeads,
-                projects: cachedProjects,
-                timeEntries: cachedTimeEntries,
-                users: cachedUsers,
-                stats: cachedStats
-            });
+                projects: window.storage?.getProjects?.() || [],
+                timeEntries: window.storage?.getTimeEntries?.() || [],
+                users: window.storage?.getUsers?.() || []
+            };
+        };
 
-            setIsLoading(false);
-            setIsRefreshing(false);
-            setConnectionStatus('connected');
-
-            // Check authentication for API sync
+        try {
             const token = window.storage?.getToken?.();
-            if (!token) {
+            if (!token || !window.DatabaseAPI) {
+                const offline = readOfflineFallback();
+                applyDashboardPayload(
+                    offline.clients,
+                    offline.leads,
+                    offline.projects,
+                    offline.timeEntries,
+                    offline.users
+                );
+                setConnectionStatus('connected');
                 return;
             }
 
-            // Check if DatabaseAPI is available
-            if (!window.DatabaseAPI) {
-                console.warn('⚠️ DashboardLive: DatabaseAPI not available, using cached data');
-                return;
-            }
-
-            // BACKGROUND: Sync with API in parallel (non-blocking)
             const syncPromises = [
-                window.DatabaseAPI.getClients().catch(err => {
+                window.DatabaseAPI.getClients(true).catch((err) => {
                     console.warn('Client sync failed:', err);
                     return { data: { clients: [] } };
                 }),
                 (canViewLeads
-                    ? window.DatabaseAPI.getLeads()
+                    ? window.DatabaseAPI.getLeads(true)
                     : Promise.resolve({ data: { leads: [] } })
-                ).catch(err => {
+                ).catch((err) => {
                     console.warn('Lead sync failed:', err);
                     return { data: { leads: [] } };
                 }),
-                window.DatabaseAPI.getProjects().catch(err => {
+                window.DatabaseAPI.getProjects({ forceRefresh: true }).catch((err) => {
                     console.warn('Project sync failed:', err);
                     return { data: [] };
                 }),
-                window.DatabaseAPI.getTimeEntries().catch(err => {
+                window.DatabaseAPI.makeRequest('/time-entries', { forceRefresh: true }).catch((err) => {
                     console.warn('Time entry sync failed:', err);
                     return { data: [] };
                 })
             ];
 
-            // Only fetch users for admins to avoid unnecessary 401s and load
+            let fetchUsers = false;
             try {
                 const role = window.storage?.getUser?.()?.role;
                 if (typeof window.isAdminRole === 'function' && window.isAdminRole(role)) {
+                    fetchUsers = true;
                     syncPromises.push(
-                        window.DatabaseAPI.getUsers().catch(err => {
+                        window.DatabaseAPI.makeRequest('/users', { forceRefresh: true }).catch((err) => {
                             console.warn('User sync failed:', err);
                             return { data: [] };
                         })
@@ -2671,66 +2621,60 @@ const DashboardLive = () => {
                 }
             } catch (_) {}
 
-            // Update with fresh API data when available
-            Promise.allSettled(syncPromises).then((results) => {
-                // Map results to handle both fulfilled and rejected promises
-                const mappedResults = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
-                
-                // Get the role to determine if users promise was added
-                const role = window.storage?.getUser?.()?.role;
-                const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(role);
-                
-                // Extract responses - usersRes might not exist if user is not admin
-                const clientsRes = mappedResults[0] || { data: [] };
-                const leadsRes = mappedResults[1] || { data: [] };
-                const projectsRes = mappedResults[2] || { data: [] };
-                const timeEntriesRes = mappedResults[3] || { data: [] };
-                const usersRes = isAdmin && mappedResults[4] ? mappedResults[4] : { data: [] };
+            const offline = readOfflineFallback();
+            const results = await Promise.allSettled(syncPromises);
+            const mappedResults = results.map((r) => (r.status === 'fulfilled' ? r.value : { data: [] }));
 
-                // Get clients from clients API
-                const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients.filter(c => c.type === 'client' || !c.type) : cachedClients;
-                
-                // Get leads from leads API endpoint
-                const leadsFromAPI = Array.isArray(leadsRes.data?.leads) ? leadsRes.data.leads : [];
-                const leads = canViewLeads ? (leadsFromAPI.length > 0 ? leadsFromAPI : cachedLeads) : [];
+            const clientsRes = mappedResults[0] || { data: [] };
+            const leadsRes = mappedResults[1] || { data: [] };
+            const projectsRes = mappedResults[2] || { data: [] };
+            const timeEntriesRes = mappedResults[3] || { data: [] };
+            const usersRes = fetchUsers && mappedResults[4] ? mappedResults[4] : { data: [] };
 
-                // Store leads in localStorage for next load (even if empty to prevent stale cache)
-                if (canViewLeads && window.storage?.setLeads) {
-                    window.storage.setLeads(leadsFromAPI);
-                }
-                
-                // Store clients in localStorage for next load (even if empty to prevent stale cache)
-                if (window.storage?.setClients) {
-                    window.storage.setClients(clients);
-                }
-                
-                // Handle different API response formats
-                const projects = Array.isArray(projectsRes.data?.projects) ? projectsRes.data.projects : 
-                                Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
-                const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
-                const users = Array.isArray(usersRes?.data?.users) ? usersRes.data.users : 
-                             Array.isArray(usersRes?.data) ? usersRes.data : cachedUsers;
+            const clientsFromApi = Array.isArray(clientsRes.data?.clients)
+                ? clientsRes.data.clients.filter((c) => c.type === 'client' || !c.type)
+                : null;
+            const clients = clientsFromApi ?? offline.clients;
 
-                // Recalculate stats with fresh data
-                const freshStats = calculateStats(clients, leads, projects, timeEntries);
+            const leadsFromAPI = Array.isArray(leadsRes.data?.leads) ? leadsRes.data.leads : [];
+            const leads = canViewLeads ? leadsFromAPI : [];
 
-                // Update with fresh data
-                setDashboardData({
-                    clients,
-                    leads,
-                    projects,
-                    timeEntries,
-                    users,
-                    stats: freshStats
-                });
+            if (canViewLeads && window.storage?.setLeads) {
+                window.storage.setLeads(leadsFromAPI);
+            }
+            if (window.storage?.setClients && clientsFromApi) {
+                window.storage.setClients(clientsFromApi);
+            }
 
-                setLastUpdated(new Date());
-            });
+            const projects = Array.isArray(projectsRes.data?.projects)
+                ? projectsRes.data.projects
+                : Array.isArray(projectsRes.data)
+                  ? projectsRes.data
+                  : offline.projects;
+            const timeEntries = Array.isArray(timeEntriesRes.data)
+                ? timeEntriesRes.data
+                : offline.timeEntries;
+            const users = Array.isArray(usersRes?.data?.users)
+                ? usersRes.data.users
+                : Array.isArray(usersRes?.data)
+                  ? usersRes.data
+                  : offline.users;
 
+            applyDashboardPayload(clients, leads, projects, timeEntries, users);
+            setConnectionStatus('connected');
         } catch (error) {
             console.error('❌ Failed to load dashboard data:', error);
             setError(error.message);
             setConnectionStatus('error');
+            const offline = readOfflineFallback();
+            applyDashboardPayload(
+                offline.clients,
+                offline.leads,
+                offline.projects,
+                offline.timeEntries,
+                offline.users
+            );
+        } finally {
             setIsLoading(false);
             setIsRefreshing(false);
         }
@@ -3453,12 +3397,24 @@ const DashboardLive = () => {
         loadDashboardData();
     }, [loadDashboardData]);
 
+    // Refresh when returning to the tab so widgets are not stuck on in-memory API cache
+    useEffect(() => {
+        const refreshIfVisible = () => {
+            if (!document.hidden) loadDashboardData(false);
+        };
+        document.addEventListener('visibilitychange', refreshIfVisible);
+        window.addEventListener('focus', refreshIfVisible);
+        return () => {
+            document.removeEventListener('visibilitychange', refreshIfVisible);
+            window.removeEventListener('focus', refreshIfVisible);
+        };
+    }, [loadDashboardData]);
+
     // Manual refresh
     const handleRefresh = () => {
-        if (window.LiveDataSync) {
-            window.LiveDataSync.forceSync();
-        } else {
-            loadDashboardData(false);
+        loadDashboardData(false);
+        if (window.LiveDataSync?.forceSync) {
+            void window.LiveDataSync.forceSync();
         }
     };
 
