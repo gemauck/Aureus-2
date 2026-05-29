@@ -12,6 +12,12 @@ import {
 import jsQR from 'jsqr';
 import { parseInventoryQrPayload } from '../../utils/inventoryQrPayload.js';
 import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
+import {
+  stockTakeAvailabilityEmptyMessage,
+  stockTakeRowMatchesAvailability,
+  STOCK_TAKE_AVAILABILITY_OPTIONS
+} from '../../utils/stockTakeAvailability.js';
+import { StockTakeAvailabilityFilter } from './StockTakeAvailabilityFilter.jsx';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
@@ -1779,6 +1785,7 @@ const JobCardFormPublic = () => {
   const [stockTakeExtraThumbnails, setStockTakeExtraThumbnails] = useState({});
   const stockTakeThumbFetchRef = useRef(new Set());
   const [stockTakeLineSearch, setStockTakeLineSearch] = useState('');
+  const [stockTakeAvailabilityFilter, setStockTakeAvailabilityFilter] = useState('all');
   const stockTakeLineSearchRef = useRef('');
   const [stockTakePage, setStockTakePage] = useState(1);
   /** Collaborative stock-take session (same API as Manufacturing web) */
@@ -1840,13 +1847,19 @@ const JobCardFormPublic = () => {
   const stockTakeFilteredRows = useMemo(() => {
     const q = stockTakeLineSearch.trim().toLowerCase();
     const rows = stockTakeRows || [];
-    if (!q) return rows;
     return rows.filter((row) => {
+      if (!stockTakeRowMatchesAvailability(row, stockTakeAvailabilityFilter)) return false;
+      if (!q) return true;
       const sku = String(row?.sku || '').trim().toLowerCase();
       const name = String(row?.name || '').trim().toLowerCase();
       return sku.includes(q) || name.includes(q);
     });
-  }, [stockTakeRows, stockTakeLineSearch]);
+  }, [stockTakeRows, stockTakeLineSearch, stockTakeAvailabilityFilter]);
+
+  const stockTakeAvailabilityFilterLabel = useMemo(() => {
+    const hit = STOCK_TAKE_AVAILABILITY_OPTIONS.find((o) => o.value === stockTakeAvailabilityFilter);
+    return hit?.label || 'All';
+  }, [stockTakeAvailabilityFilter]);
 
   const stockTakeLineCount = stockTakeFilteredRows.length;
   const stockTakeAllLineCount = stockTakeRows?.length ?? 0;
@@ -1936,7 +1949,11 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     setStockTakePage(1);
-  }, [stockTakeLineSearch]);
+  }, [stockTakeLineSearch, stockTakeAvailabilityFilter]);
+
+  useEffect(() => {
+    setStockTakeAvailabilityFilter('all');
+  }, [stockTakeLocationId]);
 
   useEffect(() => {
     stockTakeLineSearchRef.current = stockTakeLineSearch;
@@ -7905,15 +7922,21 @@ const JobCardFormPublic = () => {
                     <p className="text-sm font-semibold text-gray-900">Stock lines</p>
                     {stockTakeLineCount > 0 ? (
                       <p className="text-[11px] text-gray-500 mt-0.5">
-                        {stockTakeLineSearch.trim()
-                          ? `${stockTakeLineCount} matching of ${stockTakeAllLineCount} lines`
+                        {stockTakeAvailabilityFilter !== 'all' || stockTakeLineSearch.trim()
+                          ? `${stockTakeLineCount} ${stockTakeAvailabilityFilter !== 'all' ? stockTakeAvailabilityFilterLabel.toLowerCase() + ' · ' : ''}${
+                              stockTakeLineSearch.trim() ? 'matching · ' : ''
+                            }of ${stockTakeAllLineCount} lines`
                           : `${stockTakeLineCount} line${stockTakeLineCount === 1 ? '' : 's'}`}
                         {stockTakeTotalPages > 1
                           ? ` · Page ${stockTakePage} of ${stockTakeTotalPages} (${STOCK_TAKE_PAGE_SIZE} per page)`
                           : ''}
                       </p>
-                    ) : stockTakeAllLineCount > 0 && stockTakeLineSearch.trim() ? (
-                      <p className="text-[11px] text-gray-500 mt-0.5">No lines match your search.</p>
+                    ) : stockTakeAllLineCount > 0 ? (
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {stockTakeLineSearch.trim()
+                          ? 'No lines match your search.'
+                          : stockTakeAvailabilityEmptyMessage(stockTakeAvailabilityFilter)}
+                      </p>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
@@ -7929,7 +7952,11 @@ const JobCardFormPublic = () => {
                   </div>
                 </div>
                 {stockTakeRows.length > 0 ? (
-                  <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+                  <div className="px-4 py-2 border-b border-gray-100 bg-gray-50/50 space-y-2">
+                    <StockTakeAvailabilityFilter
+                      value={stockTakeAvailabilityFilter}
+                      onChange={setStockTakeAvailabilityFilter}
+                    />
                     <label htmlFor="stock-take-line-search" className="sr-only">
                       Search stock lines
                     </label>
@@ -7947,7 +7974,11 @@ const JobCardFormPublic = () => {
                 {stockTakeRows.length === 0 ? (
                   <div className="px-4 py-6 text-sm text-gray-500">No stock lines found for this location.</div>
                 ) : stockTakeFilteredRows.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-gray-500">No lines match your search.</div>
+                  <div className="px-4 py-6 text-sm text-gray-500">
+                    {stockTakeLineSearch.trim()
+                      ? 'No lines match your search.'
+                      : stockTakeAvailabilityEmptyMessage(stockTakeAvailabilityFilter)}
+                  </div>
                 ) : (
                   <>
                     <div className="divide-y divide-gray-100">

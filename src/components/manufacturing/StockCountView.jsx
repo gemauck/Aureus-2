@@ -28,6 +28,65 @@
 
   const STOCK_TAKE_DRAFT_KEY = 'erpStockCountView_stockTakeDraft_v1';
   const STOCK_TAKE_PAGE_SIZE = 50;
+  const STOCK_TAKE_AVAILABILITY_OPTIONS = [
+    { value: 'all', label: 'All' },
+    { value: 'in_stock', label: 'In stock' },
+    { value: 'out_of_stock', label: 'Out of stock' }
+  ];
+
+  function stockTakeRowSystemQty(row) {
+    const n = Number(row?.quantity ?? row?.systemQty ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function stockTakeRowMatchesAvailability(row, filter) {
+    if (!filter || filter === 'all') return true;
+    const qty = stockTakeRowSystemQty(row);
+    if (filter === 'in_stock') return qty > 0;
+    if (filter === 'out_of_stock') return qty <= 0;
+    return true;
+  }
+
+  function stockTakeAvailabilityEmptyMessage(filter) {
+    if (filter === 'in_stock') return 'No in-stock lines at this location.';
+    if (filter === 'out_of_stock') return 'No out-of-stock lines at this location.';
+    return 'No lines match your filters.';
+  }
+
+  function renderStockTakeAvailabilityFilter(value, onChange, isDark) {
+    return React.createElement(
+      'div',
+      {
+        role: 'group',
+        'aria-label': 'Filter by stock on hand at this location',
+        className:
+          'flex w-full rounded-lg border p-0.5 gap-0.5 ' +
+          (isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-300 bg-gray-100')
+      },
+      STOCK_TAKE_AVAILABILITY_OPTIONS.map((opt) => {
+        const active = value === opt.value;
+        return React.createElement(
+          'button',
+          {
+            key: opt.value,
+            type: 'button',
+            'aria-pressed': active,
+            onClick: () => onChange(opt.value),
+            className:
+              'flex-1 min-w-0 rounded-md px-2 py-1.5 text-xs font-semibold touch-manipulation transition-colors ' +
+              (active
+                ? isDark
+                  ? 'bg-gray-700 text-white shadow-sm'
+                  : 'bg-white text-gray-900 shadow-sm'
+                : isDark
+                  ? 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-600 hover:text-gray-900')
+          },
+          opt.label
+        );
+      })
+    );
+  }
 
   /**
    * Label layout presets. `sheet` = fixed mm cells for precut A4 stickers (Tower / Avery).
@@ -439,6 +498,7 @@
     const [stRowsLoading, setStRowsLoading] = React.useState(false);
     const [stPage, setStPage] = React.useState(1);
     const [stLineSearch, setStLineSearch] = React.useState('');
+    const [stAvailabilityFilter, setStAvailabilityFilter] = React.useState('all');
     const stLineSearchRef = React.useRef('');
     const [stCounts, setStCounts] = React.useState({});
     const [stNotes, setStNotes] = React.useState('');
@@ -1445,13 +1505,19 @@
         return rows.filter((row) => String(row?.sku || '').trim() === scanSku);
       }
       const q = String(stLineSearch || '').trim().toLowerCase();
-      if (!q) return rows;
       return rows.filter((row) => {
+        if (!stockTakeRowMatchesAvailability(row, stAvailabilityFilter)) return false;
+        if (!q) return true;
         const sku = String(row?.sku || '').trim().toLowerCase();
         const name = String(row?.name || '').trim().toLowerCase();
         return sku.includes(q) || name.includes(q);
       });
-    }, [stRows, stLineSearch, stScanFilterSku]);
+    }, [stRows, stLineSearch, stScanFilterSku, stAvailabilityFilter]);
+
+    const stAvailabilityFilterLabel = React.useMemo(() => {
+      const hit = STOCK_TAKE_AVAILABILITY_OPTIONS.find((o) => o.value === stAvailabilityFilter);
+      return hit ? hit.label : 'All';
+    }, [stAvailabilityFilter]);
 
     const stScannedRow = React.useMemo(() => {
       const sku = String(stScanFilterSku || '').trim();
@@ -1491,7 +1557,11 @@
 
     React.useEffect(() => {
       setStPage(1);
-    }, [stLineSearch, stScanFilterSku]);
+    }, [stLineSearch, stScanFilterSku, stAvailabilityFilter]);
+
+    React.useEffect(() => {
+      setStAvailabilityFilter('all');
+    }, [stLocationId]);
 
     const handleDownload = async () => {
       setError(null);
@@ -2233,8 +2303,13 @@
                           ' counted · ' +
                           (stScanFilterSku
                             ? '1 scanned item (of ' + stAllLineCount + ' lines)'
-                            : String(stLineSearch || '').trim()
-                              ? stLineCount + ' matching of ' + stAllLineCount + ' lines'
+                            : stAvailabilityFilter !== 'all' || String(stLineSearch || '').trim()
+                              ? stLineCount +
+                                (stAvailabilityFilter !== 'all' ? ' ' + stAvailabilityFilterLabel.toLowerCase() : '') +
+                                (String(stLineSearch || '').trim() ? ' matching' : '') +
+                                ' of ' +
+                                stAllLineCount +
+                                ' lines'
                               : stAllLineCount + ' lines') +
                           (stTotalPages > 1 ? ' · page ' + stPage + ' of ' + stTotalPages : '')
                   )
@@ -2295,9 +2370,10 @@
                             'div',
                             {
                               className:
-                                'px-3 py-2 border-b ' +
+                                'px-3 py-2 border-b space-y-2 ' +
                                 (isDark ? 'border-gray-800 bg-gray-950/50' : 'border-gray-100 bg-gray-50/50')
                             },
+                            renderStockTakeAvailabilityFilter(stAvailabilityFilter, setStAvailabilityFilter, isDark),
                             React.createElement('input', {
                               id: 'erp-st-line-search',
                               type: 'search',
@@ -2316,7 +2392,9 @@
                         ? React.createElement(
                             'div',
                             { className: 'px-3 py-6 text-sm ' + muted },
-                            'No lines match your search.'
+                            String(stLineSearch || '').trim()
+                              ? 'No lines match your search.'
+                              : stockTakeAvailabilityEmptyMessage(stAvailabilityFilter)
                           )
                         : stScanFilterSku && stScannedRow
                           ? React.createElement(
