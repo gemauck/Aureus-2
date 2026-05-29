@@ -7,12 +7,42 @@ const TEMPLATE_SELECT = {
   id: true,
   sku: true,
   name: true,
+  thumbnail: true,
   unitCost: true,
   unit: true,
   category: true,
   type: true,
   status: true,
   quantity: true
+}
+
+const THUMBNAIL_BATCH_MAX = 60
+
+/** Inline data URLs are omitted from large pick lists; fetch via ?thumbnails=SKU1,SKU2. */
+function thumbnailFieldsForList(template, { compact }) {
+  const raw = String(template?.thumbnail || '').trim()
+  if (!raw) return { thumbnail: '', hasThumbnail: false }
+  if (!compact) return { thumbnail: raw, hasThumbnail: true }
+  if (/^https?:\/\//i.test(raw)) return { thumbnail: raw, hasThumbnail: true }
+  return { thumbnail: '', hasThumbnail: true }
+}
+
+async function loadThumbnailsBySku(skus) {
+  const unique = [...new Set(skus.map((s) => String(s).trim()).filter(Boolean))].slice(0, THUMBNAIL_BATCH_MAX)
+  if (!unique.length) return {}
+  const items = await prisma.inventoryItem.findMany({
+    where: { sku: { in: unique }, status: { not: 'inactive' } },
+    select: { sku: true, thumbnail: true },
+    orderBy: { updatedAt: 'desc' }
+  })
+  const out = {}
+  for (const item of items) {
+    const sku = item.sku?.trim()
+    if (!sku || out[sku]) continue
+    const thumb = String(item.thumbnail || '').trim()
+    if (thumb) out[sku] = thumb
+  }
+  return out
 }
 
 /** One unit price per SKU: catalog (InventoryItem) when it exists; else location row (orphan only). */
@@ -160,6 +190,7 @@ async function inventoryForLocation(locationId, options = {}) {
   const out = []
   for (const aggregate of bySkuAggregate.values()) {
     if (!includeZero && (Number(aggregate.quantity) || 0) <= 0) continue
+    const thumbFields = thumbnailFieldsForList(aggregate.template, { compact: allSystemSkus })
     out.push({
       ...aggregate.template,
       id: `${aggregate.sku}-${locationId}`,
@@ -172,7 +203,9 @@ async function inventoryForLocation(locationId, options = {}) {
       unit: aggregate.template.unit || 'pcs',
       category: aggregate.template.category || null,
       type: aggregate.template.type || null,
-      status: aggregate.status
+      status: aggregate.status,
+      thumbnail: thumbFields.thumbnail,
+      hasThumbnail: thumbFields.hasThumbnail
     })
   }
 
@@ -209,6 +242,16 @@ async function handler(req, res) {
   }
 
   try {
+    const rawThumbSkus = req.query?.thumbnails
+    if (rawThumbSkus != null && String(rawThumbSkus).trim() !== '') {
+      const skus = String(rawThumbSkus)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const thumbnails = await loadThumbnailsBySku(skus)
+      return ok(res, { thumbnails })
+    }
+
     const rawLoc = req.query?.locationId
     const locationId = typeof rawLoc === 'string' ? rawLoc.trim() : ''
     const rawIncludeZero = req.query?.includeZero
@@ -248,7 +291,10 @@ async function handler(req, res) {
       }
     })
 
-    const deduped = dedupeInventoryItemsBySku(items)
+    const deduped = dedupeInventoryItemsBySku(items).map((item) => {
+      const thumbFields = thumbnailFieldsForList(item, { compact: true })
+      return { ...item, thumbnail: thumbFields.thumbnail, hasThumbnail: thumbFields.hasThumbnail }
+    })
 
     return ok(res, {
       inventory: deduped,

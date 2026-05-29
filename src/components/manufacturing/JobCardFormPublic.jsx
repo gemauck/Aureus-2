@@ -54,6 +54,36 @@ const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
 const HEADING_PREFIX = 'Heading:';
 /** Stock-take lists can be large; show a page of lines at a time (full list still loads for submit/scan). */
 const STOCK_TAKE_PAGE_SIZE = 50;
+
+function isUsableInventoryThumbnail(url) {
+  const t = String(url || '').trim();
+  return /^https?:\/\//i.test(t) || /^data:image\//i.test(t);
+}
+
+function StockTakeLineThumbnail({ src, alt }) {
+  const [failed, setFailed] = useState(false);
+  const usable = isUsableInventoryThumbnail(src) && !failed;
+  if (!usable) {
+    return (
+      <div
+        className="w-10 h-10 shrink-0 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400"
+        aria-hidden
+      >
+        <i className="fas fa-box text-sm" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt || ''}
+      loading="lazy"
+      decoding="async"
+      className="w-10 h-10 shrink-0 rounded border border-gray-200 object-cover bg-white"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 const STOCK_TAKE_DRAFT_KEY = 'erpJobCard_stockTakeDraft_v1';
 const STOCK_TAKE_NOTES_SEP = '\n---\n';
 
@@ -1746,6 +1776,8 @@ const JobCardFormPublic = () => {
   const [stockTakeSubmitConfirmOpen, setStockTakeSubmitConfirmOpen] = useState(false);
   const [stockTakeScanOpen, setStockTakeScanOpen] = useState(false);
   const [stockTakeHighlightSku, setStockTakeHighlightSku] = useState('');
+  const [stockTakeExtraThumbnails, setStockTakeExtraThumbnails] = useState({});
+  const stockTakeThumbFetchRef = useRef(new Set());
   const [stockTakeLineSearch, setStockTakeLineSearch] = useState('');
   const stockTakeLineSearchRef = useRef('');
   const [stockTakePage, setStockTakePage] = useState(1);
@@ -1823,6 +1855,75 @@ const JobCardFormPublic = () => {
     const start = (stockTakePage - 1) * STOCK_TAKE_PAGE_SIZE;
     return (stockTakeFilteredRows || []).slice(start, start + STOCK_TAKE_PAGE_SIZE);
   }, [stockTakeFilteredRows, stockTakePage]);
+
+  const inventoryThumbBySku = useMemo(() => {
+    const map = {};
+    for (const item of inventory || []) {
+      const sku = String(item?.sku || '').trim();
+      if (!sku) continue;
+      const thumb = String(item?.thumbnail || '').trim();
+      if (isUsableInventoryThumbnail(thumb)) map[sku] = thumb;
+    }
+    return map;
+  }, [inventory]);
+
+  const resolveStockTakeThumbnail = useCallback(
+    (row) => {
+      const sku = String(row?.sku || '').trim();
+      const direct = String(row?.thumbnail || '').trim();
+      if (isUsableInventoryThumbnail(direct)) return direct;
+      if (sku && stockTakeExtraThumbnails[sku]) return stockTakeExtraThumbnails[sku];
+      if (sku && inventoryThumbBySku[sku]) return inventoryThumbBySku[sku];
+      return '';
+    },
+    [stockTakeExtraThumbnails, inventoryThumbBySku]
+  );
+
+  useEffect(() => {
+    if (wizardFlow !== 'stock_take' || !isOnline) return;
+    const needSkus = [];
+    for (const row of stockTakePagedRows || []) {
+      const sku = String(row?.sku || '').trim();
+      if (!sku) continue;
+      if (isUsableInventoryThumbnail(resolveStockTakeThumbnail(row))) continue;
+      if (row?.hasThumbnail === false) continue;
+      if (stockTakeThumbFetchRef.current.has(sku)) continue;
+      needSkus.push(sku);
+    }
+    if (!needSkus.length) return;
+    let cancelled = false;
+    needSkus.forEach((sku) => stockTakeThumbFetchRef.current.add(sku));
+    const run = async () => {
+      try {
+        const res = await fetch(
+          `/api/public/inventory?thumbnails=${encodeURIComponent(needSkus.join(','))}`,
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const thumbs = data?.data?.thumbnails || data?.thumbnails || {};
+        if (!thumbs || typeof thumbs !== 'object') return;
+        setStockTakeExtraThumbnails((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const [sku, url] of Object.entries(thumbs)) {
+            const key = String(sku || '').trim();
+            const val = String(url || '').trim();
+            if (!key || !isUsableInventoryThumbnail(val) || next[key] === val) continue;
+            next[key] = val;
+            changed = true;
+          }
+          return changed ? next : prev;
+        });
+      } catch (e) {
+        console.warn('⚠️ JobCardFormPublic: stock take thumbnail fetch failed:', e?.message || e);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardFlow, isOnline, stockTakePagedRows, resolveStockTakeThumbnail]);
 
   useEffect(() => {
     setStockTakePage((p) => {
@@ -7856,7 +7957,7 @@ const JobCardFormPublic = () => {
                         return (
                           <div
                             key={`${stockTakeLocationId}-${sku}`}
-                            className={`px-3 py-2 grid grid-cols-[minmax(0,1fr)_5.25rem] sm:grid-cols-12 gap-2 items-center overflow-hidden transition-shadow ${
+                            className={`px-3 py-2 grid grid-cols-[2.5rem_minmax(0,1fr)_5.25rem] sm:grid-cols-12 gap-2 items-center overflow-hidden transition-shadow ${
                               stockTakeHighlightSku === sku ? 'ring-2 ring-inset ring-blue-400 bg-blue-50/60' : ''
                             }`}
                           >
@@ -7865,7 +7966,13 @@ const JobCardFormPublic = () => {
                                 {lineNo}
                               </span>
                             </div>
-                            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-6">
+                            <div className="sm:col-span-1 flex items-center justify-center shrink-0">
+                              <StockTakeLineThumbnail
+                                src={resolveStockTakeThumbnail(row)}
+                                alt={row?.name || sku}
+                              />
+                            </div>
+                            <div className="min-w-0 max-w-full overflow-hidden sm:col-span-5">
                               <p
                                 className="text-xs sm:text-sm font-semibold text-gray-900 leading-tight whitespace-normal break-words"
                                 style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
