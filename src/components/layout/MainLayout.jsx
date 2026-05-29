@@ -681,11 +681,68 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window
-    const Dashboard = React.useMemo(() => {
-        // Prioritize DashboardLive for drag-drop and resize features
-        return window.DashboardLive || window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    // DashboardLive loads via lazy-load; avoid locking onto DashboardSimple on first paint.
+    const [dashboardLiveReady, setDashboardLiveReady] = React.useState(
+        !!(window.DashboardLive && typeof window.DashboardLive === 'function')
+    );
+    const [dashboardLiveWaitTimedOut, setDashboardLiveWaitTimedOut] = React.useState(false);
+
+    React.useEffect(() => {
+        const checkDashboardLive = () => {
+            if (window.DashboardLive && typeof window.DashboardLive === 'function') {
+                setDashboardLiveReady(true);
+                return true;
+            }
+            return false;
+        };
+
+        if (checkDashboardLive()) return;
+
+        const handleDashboardLiveReady = () => {
+            checkDashboardLive();
+        };
+        window.addEventListener('dashboardLiveReady', handleDashboardLiveReady);
+
+        const interval = setInterval(() => {
+            if (checkDashboardLive()) {
+                clearInterval(interval);
+            }
+        }, 100);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            window.removeEventListener('dashboardLiveReady', handleDashboardLiveReady);
+            if (!window.DashboardLive) {
+                setDashboardLiveWaitTimedOut(true);
+                console.warn('⚠️ DashboardLive not loaded after 30s — using fallback dashboard');
+            }
+        }, 30000);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+            window.removeEventListener('dashboardLiveReady', handleDashboardLiveReady);
+        };
     }, []);
+
+    const Dashboard = React.useMemo(() => {
+        if (dashboardLiveReady && window.DashboardLive) {
+            return window.DashboardLive;
+        }
+        if (dashboardLiveWaitTimedOut) {
+            return (
+                window.DashboardSimple ||
+                window.DashboardFallback ||
+                window.DashboardDatabaseFirst ||
+                window.Dashboard ||
+                (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>)
+            );
+        }
+        return (
+            window.QuickDashboard ||
+            (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>)
+        );
+    }, [dashboardLiveReady, dashboardLiveWaitTimedOut]);
     
     const ErrorBoundary = React.useMemo(() => {
         return window.ErrorBoundary || (({ children }) => children);
@@ -1908,7 +1965,7 @@ const MainLayout = () => {
                 <header 
                     className={`
                         ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
-                        ${effectiveIsMobile ? 'min-h-12 h-auto py-1 px-2' : 'h-16 px-4 sm:px-6'}
+                        ${effectiveIsMobile ? 'min-h-11 h-auto py-1 px-2' : 'h-12 px-3 sm:px-4'}
                         flex items-center ${effectiveIsMobile ? '' : 'justify-between'} flex-shrink-0
                         relative z-40
                         ${effectiveIsMobile ? 'sticky top-0' : ''}
@@ -1999,7 +2056,7 @@ const MainLayout = () => {
                                 className={
                                     effectiveIsMobile
                                         ? `${mobileHeaderIconBtn} rounded-none`
-                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 transition-all duration-200`
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-9 min-w-9 items-center justify-center rounded-lg p-2 transition-all duration-200`
                                 }
                                 title="Settings"
                             >
@@ -2008,13 +2065,13 @@ const MainLayout = () => {
                         );
 
                         const themeSelector = (
-                            <div className="relative theme-selector flex h-10 items-center">
+                            <div className="relative theme-selector flex h-9 items-center">
                                 <button
                                     type="button"
                                     className={
                                         effectiveIsMobile
                                             ? `${mobileHeaderIconBtn} rounded-none`
-                                            : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 transition-all duration-200`
+                                            : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-9 min-w-9 items-center justify-center rounded-lg p-2 transition-all duration-200`
                                     }
                                     onClick={() => setShowThemeMenu(!showThemeMenu)}
                                     title="Theme and layout"
@@ -2026,7 +2083,7 @@ const MainLayout = () => {
                         );
 
                         const notificationsSlot = notificationCenterReady && window.NotificationCenter ? (
-                            <div className="flex h-10 shrink-0 items-center justify-center [&_button.notification-button]:!h-10 [&_button.notification-button]:!min-h-10 [&_button.notification-button]:!w-10 [&_button.notification-button]:!min-w-10 [&_button.notification-button]:!max-h-10 [&_button.notification-button]:!max-w-10">
+                            <div className="flex h-9 shrink-0 items-center justify-center [&_button.notification-button]:!h-9 [&_button.notification-button]:!min-h-9 [&_button.notification-button]:!w-9 [&_button.notification-button]:!min-w-9 [&_button.notification-button]:!max-h-9 [&_button.notification-button]:!max-w-9">
                                 <window.NotificationCenter />
                             </div>
                         ) : null;
