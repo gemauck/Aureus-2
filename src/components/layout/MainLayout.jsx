@@ -1963,9 +1963,9 @@ const MainLayout = () => {
             <div className="flex-1 flex flex-col overflow-hidden overflow-x-hidden min-w-0" style={{ minWidth: 0, width: 'auto', maxWidth: '100%', flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
                 {/* Header - STICKY on mobile */}
                 <header 
-                    className={`
+                    className={`erp-app-header
                         ${isDark ? 'bg-gray-900/95 backdrop-blur-md border-b border-gray-800 shadow-lg shadow-black/10' : 'bg-white/90 backdrop-blur-md border-b border-gray-200/90 shadow-sm shadow-gray-900/5'} 
-                        ${effectiveIsMobile ? 'min-h-11 h-auto py-1 px-2' : 'h-12 px-3 sm:px-4'}
+                        ${effectiveIsMobile ? 'min-h-10 h-auto py-0.5 px-2' : 'h-10 px-3 sm:px-4'}
                         flex items-center ${effectiveIsMobile ? '' : 'justify-between'} flex-shrink-0
                         relative z-40
                         ${effectiveIsMobile ? 'sticky top-0' : ''}
@@ -2047,7 +2047,7 @@ const MainLayout = () => {
                             </div>
                         ) : null;
 
-                        const mobileHeaderIconBtn = `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/80' : 'text-gray-500 hover:text-gray-700 hover:bg-white/90'} flex !h-10 !min-h-10 !w-10 !min-w-10 shrink-0 items-center justify-center border-0 bg-transparent p-0 transition-colors`;
+                        const mobileHeaderIconBtn = `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/80' : 'text-gray-500 hover:text-gray-700 hover:bg-white/90'} flex !h-8 !min-h-8 !w-8 !min-w-8 shrink-0 items-center justify-center border-0 bg-transparent p-0 transition-colors`;
 
                         const settingsButton = (
                             <button
@@ -2056,7 +2056,7 @@ const MainLayout = () => {
                                 className={
                                     effectiveIsMobile
                                         ? `${mobileHeaderIconBtn} rounded-none`
-                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-9 min-w-9 items-center justify-center rounded-lg p-2 transition-all duration-200`
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-8 min-w-8 items-center justify-center rounded-lg p-1.5 transition-all duration-200`
                                 }
                                 title="Settings"
                             >
@@ -2065,13 +2065,13 @@ const MainLayout = () => {
                         );
 
                         const themeSelector = (
-                            <div className="relative theme-selector flex h-9 items-center">
+                            <div className="relative theme-selector flex h-8 items-center">
                                 <button
                                     type="button"
                                     className={
                                         effectiveIsMobile
                                             ? `${mobileHeaderIconBtn} rounded-none`
-                                            : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-9 min-w-9 items-center justify-center rounded-lg p-2 transition-all duration-200`
+                                            : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-8 min-w-8 items-center justify-center rounded-lg p-1.5 transition-all duration-200`
                                     }
                                     onClick={() => setShowThemeMenu(!showThemeMenu)}
                                     title="Theme and layout"
@@ -2083,7 +2083,7 @@ const MainLayout = () => {
                         );
 
                         const notificationsSlot = notificationCenterReady && window.NotificationCenter ? (
-                            <div className="flex h-9 shrink-0 items-center justify-center [&_button.notification-button]:!h-9 [&_button.notification-button]:!min-h-9 [&_button.notification-button]:!w-9 [&_button.notification-button]:!min-w-9 [&_button.notification-button]:!max-h-9 [&_button.notification-button]:!max-w-9">
+                            <div className="flex h-8 shrink-0 items-center justify-center [&_button.notification-button]:!h-8 [&_button.notification-button]:!min-h-8 [&_button.notification-button]:!w-8 [&_button.notification-button]:!min-w-8 [&_button.notification-button]:!max-h-8 [&_button.notification-button]:!max-w-8">
                                 <window.NotificationCenter />
                             </div>
                         ) : null;
@@ -2091,15 +2091,15 @@ const MainLayout = () => {
                         if (effectiveIsMobile) {
                             return (
                                 <div
-                                    className={`flex h-11 w-full min-w-0 flex-nowrap items-center gap-1.5 rounded-xl border px-2 shadow-sm ${
+                                    className={`erp-app-header-mobile-row flex h-9 w-full min-w-0 flex-nowrap items-center gap-1 rounded-lg border px-1.5 shadow-sm ${
                                         isDark ? 'border-gray-700/90 bg-gray-800/55' : 'border-gray-200 bg-white'
                                     }`}
                                 >
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center">
                                         <button
                                             type="button"
                                             onClick={() => setSidebarOpen(true)}
-                                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-200`}
+                                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'} flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200`}
                                             aria-label="Open menu"
                                         >
                                             <i className="fas fa-bars text-lg leading-none"></i>
@@ -2111,10 +2111,10 @@ const MainLayout = () => {
                                     >
                                         {companyName}
                                     </h1>
-                                    <div className="flex h-10 shrink-0 flex-nowrap items-center gap-0.5">
+                                    <div className="flex h-8 shrink-0 flex-nowrap items-center gap-0.5">
                                         {notificationsSlot}
                                         <div
-                                            className={`flex h-10 flex-nowrap items-center divide-x overflow-hidden rounded-md border ${
+                                            className={`flex h-8 flex-nowrap items-center divide-x overflow-hidden rounded-md border ${
                                                 isDark ? 'divide-gray-600 border-gray-600 bg-gray-900/70' : 'divide-gray-200 border-gray-200 bg-gray-50'
                                             }`}
                                         >

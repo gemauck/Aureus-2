@@ -416,7 +416,7 @@ const NotificationCenter = () => {
                         loadNotifications();
                     }
                 }}
-                className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-xl transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200/90 hover:border-gray-300 hover:shadow-sm'} min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] flex items-center justify-center notification-button`}
+                className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200/90 hover:border-gray-300 hover:shadow-sm'} min-w-8 min-h-8 max-w-8 max-h-8 flex items-center justify-center notification-button`}
                 title="Notifications"
                 style={{ overflow: 'hidden', position: 'relative' }}
             >

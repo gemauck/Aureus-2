@@ -223,7 +223,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
                         if (searchTerm) setIsOpen(true);
                     }}
                     placeholder="Search..."
-                    className={`w-full pl-9 pr-9 py-1.5 text-sm border rounded-full shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all ${
+                    className={`erp-app-header-search w-full pl-8 pr-8 py-1 text-sm border rounded-full shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all ${
                         isDark 
                             ? 'bg-gray-800/90 border-gray-600 text-gray-200 placeholder-gray-400' 
                             : 'bg-gray-50/95 border-gray-200/95 text-gray-900 placeholder-gray-500'

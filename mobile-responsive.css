@@ -40,13 +40,13 @@ body {
   }
   
   /* ===== HEADER ===== (skip public Job Card wizard — it uses its own tall gradient header) */
-  body:not(.job-card-public) header {
+  body:not(.job-card-public) header.erp-app-header {
     position: sticky;
     top: 0;
     z-index: 100;
     width: 100%;
-    height: 56px;
-    padding: 8px 12px;
+    height: 40px;
+    padding: 0 12px;
     background: white;
     border-bottom: 1px solid #e5e7eb;
     display: flex;
@@ -64,12 +64,12 @@ body {
     gap: 8px;
   }
   
-  /* Make hamburger menu prominent */
-  body:not(.job-card-public) header button[aria-label*="menu"],
-  body:not(.job-card-public) header button[aria-label*="Menu"] {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 10px;
+  /* Header chrome buttons stay compact (erp-app-header rules in main.css) */
+  body:not(.job-card-public) header.erp-app-header button[aria-label*="menu"],
+  body:not(.job-card-public) header.erp-app-header button[aria-label*="Menu"] {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
