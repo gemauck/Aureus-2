@@ -1704,10 +1704,11 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark, autoRefre
             setError(null);
         }
         try {
+            // Match Service & Maintenance list default (JobCards.jsx): newest job card number first.
             const params = new URLSearchParams({
                 page: '1',
                 pageSize: '8',
-                sortField: 'createdAt',
+                sortField: 'jobCardNumber',
                 sortDirection: 'desc'
             });
             const res = await fetch(`/api/jobcards?${params.toString()}`, {
@@ -3058,6 +3059,27 @@ const DashboardLive = () => {
     };
 
 
+    // Merge saved widget ids with registry defaults. Never persist a *shorter* list on load —
+    // admin/permission-gated widgets may not be in the registry until the user session is ready.
+    const mergeSavedWidgetsWithRegistry = (savedIds) => {
+        const next = Array.isArray(savedIds) ? [...savedIds] : [];
+        const addIfRegistered = (id) => {
+            if (widgetRegistry.some((w) => w.id === id) && !next.includes(id)) {
+                next.push(id);
+            }
+        };
+        addIfRegistered('my-project-tasks');
+        if (isDashboardAdmin) {
+            addIfRegistered('last-working-month-progress');
+            addIfRegistered('leads-proposal-tender');
+        }
+        addIfRegistered('client-activity-metrics');
+        addIfRegistered('recent-stock-movements');
+        if (isErpSuperUser) addIfRegistered('erp-usage-insights');
+        addIfRegistered('recent-jobcards');
+        return next;
+    };
+
     // Load and persist selected widgets
     useEffect(() => {
         const userId = window.storage?.getUser?.()?.id || 'anon';
@@ -3067,44 +3089,18 @@ const DashboardLive = () => {
             const parsed = stored ? JSON.parse(stored) : null;
             setAvailableWidgets(widgetRegistry);
             if (Array.isArray(parsed) && parsed.length > 0) {
-                const valid = parsed.filter(id => widgetRegistry.some(w => w.id === id));
-                if (valid.length !== parsed.length) {
-                    persistWidgets(valid);
+                const merged = mergeSavedWidgetsWithRegistry(parsed);
+                setSelectedWidgets(merged);
+                if (merged.length > parsed.length) {
+                    persistWidgets(merged);
                 }
-                // Auto-add new 'my-project-tasks' widget if it exists in registry but not in saved preferences
-                if (widgetRegistry.some(w => w.id === 'my-project-tasks') && !valid.includes('my-project-tasks')) {
-                    valid.push('my-project-tasks');
-                    persistWidgets(valid);
-                }
-                if (
-                    isDashboardAdmin &&
-                    widgetRegistry.some(w => w.id === 'last-working-month-progress') &&
-                    !valid.includes('last-working-month-progress')
-                ) {
-                    valid.push('last-working-month-progress');
-                    persistWidgets(valid);
-                }
-                if (widgetRegistry.some(w => w.id === 'client-activity-metrics') && !valid.includes('client-activity-metrics')) {
-                    valid.push('client-activity-metrics');
-                    persistWidgets(valid);
-                }
-                if (widgetRegistry.some(w => w.id === 'recent-stock-movements') && !valid.includes('recent-stock-movements')) {
-                    valid.push('recent-stock-movements');
-                    persistWidgets(valid);
-                }
-                if (
-                    isErpSuperUser &&
-                    widgetRegistry.some(w => w.id === 'erp-usage-insights') &&
-                    !valid.includes('erp-usage-insights')
-                ) {
-                    valid.push('erp-usage-insights');
-                    persistWidgets(valid);
-                }
-                setSelectedWidgets(valid);
             } else {
                 const defaults = ['my-project-tasks', 'client-activity-metrics', 'recent-stock-movements'];
                 if (widgetRegistry.some(w => w.id === 'recent-jobcards')) defaults.push('recent-jobcards');
-                if (isDashboardAdmin) defaults.push('last-working-month-progress');
+                if (isDashboardAdmin) {
+                    defaults.push('last-working-month-progress');
+                    defaults.push('leads-proposal-tender');
+                }
                 if (isErpSuperUser) defaults.push('erp-usage-insights');
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
@@ -3117,7 +3113,10 @@ const DashboardLive = () => {
             setAvailableWidgets(widgetRegistry);
             const fb = ['my-project-tasks', 'client-activity-metrics', 'recent-stock-movements'];
             if (widgetRegistry.some(w => w.id === 'recent-jobcards')) fb.push('recent-jobcards');
-            if (isDashboardAdmin) fb.push('last-working-month-progress');
+            if (isDashboardAdmin) {
+                fb.push('last-working-month-progress');
+                fb.push('leads-proposal-tender');
+            }
             if (isErpSuperUser) fb.push('erp-usage-insights');
             setSelectedWidgets(fb.filter(id => widgetRegistry.some(w => w.id === id)));
             setWidgetLayoutsByBreakpoint({ mobile: {}, desktop: {} });
@@ -3579,6 +3578,7 @@ const DashboardLive = () => {
                 }}
             >
                 {selectedWidgets
+                    .filter((id) => availableWidgets.some((w) => w.id === id))
                     .map((id, index) => {
                         const layout = widgetLayouts[id] || getDefaultLayout(id, index);
                         return { id, index, order: layout.order !== undefined ? layout.order : index };
@@ -3759,3 +3759,6 @@ const DashboardLive = () => {
 
 // Make available globally
 window.DashboardLive = DashboardLive;
+try {
+    window.dispatchEvent(new CustomEvent('dashboardLiveReady'));
+} catch (_) {}
