@@ -1619,10 +1619,12 @@ function buildMergedWizardJobCardRows(serverList) {
       jc.serverJobCardId || (isLikelyServerJobCardId(jc.id) ? String(jc.id) : null),
     synced: false
   }));
+  const priorListSortMs = (row) =>
+    new Date(row?.updatedAt || row?.createdAt || 0).getTime();
   const rows = [...localRows, ...serverRows];
   rows.sort((a, b) => {
-    const tb = new Date(b.createdAt || 0).getTime();
-    const ta = new Date(a.createdAt || 0).getTime();
+    const tb = priorListSortMs(b);
+    const ta = priorListSortMs(a);
     if (tb !== ta) return tb - ta;
     const nb = String(b.jobCardNumber || '');
     const na = String(a.jobCardNumber || '');
@@ -2726,7 +2728,8 @@ const JobCardFormPublic = () => {
             page: '1',
             // Server caps list size; smaller batches keep the prior-card picker fast on phones.
             pageSize: '120',
-            sortField: 'createdAt',
+            // updatedAt — cards re-opened or edited recently (e.g. JC0049/50) stay near the top.
+            sortField: 'updatedAt',
             sortDirection: 'desc'
           });
           if (priorSearchDebounced) params.set('q', priorSearchDebounced);
@@ -3914,6 +3917,7 @@ const JobCardFormPublic = () => {
   };
 
   const openPriorList = () => {
+    setPriorListRefreshTick(t => t + 1);
     setWizardFlow('prior_list');
   };
 
@@ -5476,6 +5480,7 @@ const JobCardFormPublic = () => {
       }
       setEditingMeta(null);
       resetForm();
+      setPriorListRefreshTick(t => t + 1);
       setWizardFlow('landing');
     } catch (error) {
       console.error('Error saving job card:', error);
@@ -7294,7 +7299,7 @@ const JobCardFormPublic = () => {
           <h1 className="text-xl font-bold">Prior job cards</h1>
           <p className="text-sm text-white/80 mt-1">
             {getJobCardAuthToken()
-              ? 'Search and filter below, newest first — tap a card to open. Local drafts not yet synced are included.'
+              ? 'Search and filter below, most recently updated first — tap a card to open. Local drafts not yet synced are included.'
               : 'Sign in to load the full server list on any device. Without signing in, only cards submitted from this browser are listed, plus offline drafts on this device.'}
           </p>
         </header>
@@ -7412,13 +7417,18 @@ const JobCardFormPublic = () => {
           ) : (
             <ul className="max-w-2xl mx-auto space-y-2">
               {mergedPriorJobCards.map(jc => {
-                const when = jc.createdAt;
-                const whenLabel = when
-                  ? new Date(when).toLocaleString(undefined, {
+                const whenUpdated = jc.updatedAt || jc.createdAt;
+                const whenCreated = jc.createdAt;
+                const whenLabel = whenUpdated
+                  ? new Date(whenUpdated).toLocaleString(undefined, {
                       dateStyle: 'medium',
                       timeStyle: 'short'
                     })
                   : '';
+                const showUpdatedHint =
+                  whenUpdated &&
+                  whenCreated &&
+                  new Date(whenUpdated).getTime() > new Date(whenCreated).getTime() + 60_000;
                 const num = jc.jobCardNumber || (jc.clientName ? 'Job card' : 'Job card draft');
                 const headingLabel = String(
                   jc.heading || parseHeadingFromComments(jc.otherComments || '')
@@ -7468,7 +7478,10 @@ const JobCardFormPublic = () => {
                             <span className="text-gray-900">{clientLine}</span>
                           </p>
                           {whenLabel && (
-                            <p className="text-xs text-gray-500 mt-1.5">{whenLabel}</p>
+                            <p className="text-xs text-gray-500 mt-1.5">
+                              {showUpdatedHint ? 'Updated ' : ''}
+                              {whenLabel}
+                            </p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
