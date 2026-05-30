@@ -820,6 +820,30 @@ body.job-card-public .job-card-public-select-menu [role='option'][aria-selected=
   }
 }
 
+/* Full-screen photo preview — portaled above wizard chrome (header / footer / remove buttons) */
+body.job-card-public .job-card-photo-lightbox {
+  z-index: 99999 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+body.job-card-public.job-card-lightbox-open .job-card-mobile-wizard-ribbon,
+body.job-card-public.job-card-lightbox-open .job-card-wizard-footer,
+body.job-card-public.job-card-lightbox-open .job-card-public-wrapper > aside {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.job-card-public.job-card-lightbox-open .job-card-public-wrapper button[title='Remove'] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* --------------------------------------------------------------------------
    Fix white-on-white / invisible hovers: global dark-mode-fixes.css applies
    [data-theme="light"] button:hover { background #f9fafb; color #111827 } and

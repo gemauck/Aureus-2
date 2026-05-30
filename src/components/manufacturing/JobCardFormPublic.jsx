@@ -583,6 +583,193 @@ function abbreviateHeading(value, maxChars = PRIOR_CARD_HEADING_MAX_CHARS) {
   return `${heading.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
+const WORK_NOTE_TEXT_FIELDS = [
+  'diagnosis',
+  'actionsTaken',
+  'futureWorkRequired',
+  'otherComments',
+  'reasonForVisit',
+  'heading'
+];
+
+function jobCardOpenTimestamp(card) {
+  const t = card?.updatedAt || card?.createdAt;
+  const ms = t ? new Date(t).getTime() : 0;
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function pickRicherTextField(localVal, serverVal, localNewer) {
+  const ls = String(localVal ?? '').trim();
+  const ss = String(serverVal ?? '').trim();
+  if (localNewer && ls) return localVal ?? '';
+  if (ss && !ls) return serverVal ?? '';
+  if (ls && !ss) return localVal ?? '';
+  if (ls.length >= ss.length) return localVal ?? serverVal ?? '';
+  return serverVal ?? localVal ?? '';
+}
+
+/** When reopening, prefer fresher / richer local draft fields over a stale server shell. */
+function mergeJobCardOpenSources(localCard, serverCard) {
+  if (!serverCard) return localCard || {};
+  if (!localCard) return serverCard;
+  const localNewer = jobCardOpenTimestamp(localCard) > jobCardOpenTimestamp(serverCard);
+  const merged = { ...serverCard };
+  for (const key of WORK_NOTE_TEXT_FIELDS) {
+    merged[key] = pickRicherTextField(localCard[key], serverCard[key], localNewer);
+  }
+  const localPhotos = parseStoredJsonArray(localCard.photos, []);
+  const serverPhotos = parseStoredJsonArray(serverCard.photos, []);
+  if (localNewer && localPhotos.length > serverPhotos.length) {
+    merged.photos = localCard.photos;
+  }
+  const localForms = parseStoredJsonArray(localCard.serviceForms, []);
+  if (localForms.length > 0 && localNewer) {
+    merged.serviceForms = localCard.serviceForms;
+  }
+  if (localNewer) {
+    merged.updatedAt = localCard.updatedAt || merged.updatedAt;
+  }
+  return merged;
+}
+
+function findLocalPendingJobCardForOpen(openId, card) {
+  const sid = String(openId || '').trim();
+  if (!sid) return null;
+  return (
+    readLocalPendingJobCards().find(c => {
+      if (!c) return false;
+      if (String(c.id) === sid) return true;
+      if (card?.serverJobCardId && String(c.id) === String(card.serverJobCardId)) return true;
+      if (c.serverJobCardId && String(c.serverJobCardId) === sid) return true;
+      return false;
+    }) || null
+  );
+}
+
+const isLikelyServerFormInstanceId = id =>
+  typeof id === 'string' && /^c[a-z0-9]{24}$/i.test(id);
+
+function buildFormDataFromJobCard(full) {
+  const parsedProject = parseProjectAssociationFromComments(full.otherComments || '');
+  const parsedHeading = parseHeadingFromComments(full.otherComments || '');
+  return {
+    heading: full.heading || parsedHeading || '',
+    agentName: full.agentName || '',
+    otherTechnicians: parseStoredJsonArray(full.otherTechnicians, []),
+    projectId: full.projectId || parsedProject.projectId || '',
+    projectName: full.projectName || parsedProject.projectName || '',
+    clientId: full.clientId || '',
+    clientName: full.clientName || '',
+    siteId: full.siteId || '',
+    siteName: full.siteName || '',
+    location: full.location || '',
+    latitude:
+      full.latitude != null && full.latitude !== ''
+        ? String(full.latitude)
+        : full.locationLatitude != null && full.locationLatitude !== ''
+          ? String(full.locationLatitude)
+          : '',
+    longitude:
+      full.longitude != null && full.longitude !== ''
+        ? String(full.longitude)
+        : full.locationLongitude != null && full.locationLongitude !== ''
+          ? String(full.locationLongitude)
+          : '',
+    timeOfDeparture: toDatetimeLocalInput(full.timeOfDeparture),
+    timeOfArrival: toDatetimeLocalInput(full.timeOfArrival),
+    vehicleUsed: full.vehicleUsed || '',
+    kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
+    kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
+    reasonForVisit: full.reasonForVisit || '',
+    callOutCategory: full.callOutCategory || '',
+    diagnosis: full.diagnosis || '',
+    futureWorkRequired: full.futureWorkRequired || '',
+    futureWorkScheduledAt: toDatetimeLocalInput(full.futureWorkScheduledAt),
+    actionsTaken: full.actionsTaken || '',
+    otherComments: full.otherComments || '',
+    stockUsed: parseStoredJsonArray(full.stockUsed, []),
+    materialsBought: parseStoredJsonArray(full.materialsBought, []),
+    photos: extractVisualPhotoEntries(full.photos).map(item => item.stored),
+    serviceForms: parseStoredJsonArray(full.serviceForms, []),
+    status: full.status || 'draft',
+    customerName: full.customerName || '',
+    customerTitle: full.customerTitle || full.customerPosition || '',
+    customerFeedback: full.customerFeedback || '',
+    customerSignDate: full.customerSignDate ? String(full.customerSignDate).slice(0, 10) : '',
+    customerSignature:
+      (typeof full.customerSignature === 'string' && full.customerSignature.trim()) ||
+      extractSignatureUrlFromPhotosValue(full.photos) ||
+      ''
+  };
+}
+
+async function syncServiceFormsToServer(serverJobCardId, serviceForms) {
+  const forms = Array.isArray(serviceForms) ? serviceForms : [];
+  if (!serverJobCardId || forms.length === 0) return;
+  const token = getJobCardAuthToken();
+  if (!token) return;
+  for (const form of forms) {
+    if (!form?.templateId) continue;
+    const answersArr = Object.entries(form.answers || {}).map(([fieldId, value]) => ({
+      fieldId,
+      value: String(value ?? '')
+    }));
+    const completed = answersArr.some(a => String(a.value || '').trim()) ? 'completed' : 'not_started';
+    try {
+      if (isLikelyServerFormInstanceId(form.id)) {
+        await fetch(
+          `/api/jobcards/${encodeURIComponent(serverJobCardId)}/forms/${encodeURIComponent(form.id)}`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ answers: answersArr, status: completed })
+          }
+        );
+      } else {
+        const res = await fetch(`/api/jobcards/${encodeURIComponent(serverJobCardId)}/forms`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            templateId: form.templateId,
+            answers: answersArr,
+            status: completed
+          })
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const inst = data?.data?.form ?? data?.form;
+          if (inst?.id) form.id = inst.id;
+        }
+      }
+    } catch (e) {
+      console.warn('JobCardFormPublic: checklist sync failed', e);
+    }
+  }
+}
+
+function flushActiveFormField() {
+  if (typeof document === 'undefined') return;
+  const el = document.activeElement;
+  if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return;
+  try {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  } catch {
+    /* ignore */
+  }
+  try {
+    el.blur();
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Inline photo/video strip for Diagnosis / Actions / Future work sections on the work step. */
 const WorkSectionMediaAttachments = ({ sectionKey, items, onUpload, onRemove, onPreview }) => {
   const inputId = `section-work-media-${sectionKey}`;
@@ -1640,8 +1827,19 @@ function buildMergedWizardJobCardRows(serverList) {
   const token = typeof window !== 'undefined' ? getJobCardAuthToken() : null;
   const localPending = readLocalPendingJobCards().filter(j => j && j.synced === false);
   const pendingIdSet = new Set(localPending.map(j => String(j.id)));
+  const pendingServerIdSet = new Set(
+    localPending
+      .map(j => j.serverJobCardId || (isLikelyServerJobCardId(j.id) ? String(j.id) : ''))
+      .filter(Boolean)
+      .map(String)
+  );
   const serverRows = (serverList || [])
-    .filter(jc => jc && !pendingIdSet.has(String(jc.id)))
+    .filter(
+      jc =>
+        jc &&
+        !pendingIdSet.has(String(jc.id)) &&
+        !pendingServerIdSet.has(String(jc.id))
+    )
     .map(jc => ({
       ...jc,
       source: token ? 'server' : 'public',
@@ -1843,6 +2041,7 @@ const JobCardFormPublic = () => {
   /** New wizard events since this session opened (merged into activityQueue on save). */
   const sessionActivityQueueRef = useRef([]);
   const activeEditCardIdRef = useRef(null);
+  const persistWizardDraftRef = useRef(null);
 
   const stockTakeFilteredRows = useMemo(() => {
     const q = stockTakeLineSearch.trim().toLowerCase();
@@ -4012,6 +4211,30 @@ const JobCardFormPublic = () => {
   };
 
   const exitToMenu = () => {
+    if (photoLightboxUrl) {
+      setPhotoLightboxUrl('');
+      return;
+    }
+    if (wizardFlow === 'form' && editingMeta) {
+      void persistWizardDraftRef.current?.({
+        syncServer: Boolean(editingMeta?.serverJobCardId)
+      });
+    }
+    const hasDraftWork =
+      wizardFlow === 'form' &&
+      (WORK_NOTE_TEXT_FIELDS.some(k => String(formData[k] || '').trim()) ||
+        (Array.isArray(formData.serviceForms) && formData.serviceForms.length > 0));
+    if (hasDraftWork) {
+      let leave = true;
+      try {
+        leave = window.confirm(
+          'Leave this job card? Your latest changes are saved as a draft on this device and you can reopen it from “View or Edit Existing Job Card”.'
+        );
+      } catch {
+        leave = true;
+      }
+      if (!leave) return;
+    }
     setEditingMeta(null);
     activeEditCardIdRef.current = null;
     sessionActivityQueueRef.current = [];
@@ -4705,8 +4928,18 @@ const JobCardFormPublic = () => {
 
     try {
     let full = card;
+    const localBackup = findLocalPendingJobCardForOpen(openId, card);
+    if (localBackup && (card?.source === 'local' || card?.synced === false)) {
+      full = localBackup;
+    } else if (localBackup) {
+      full = mergeJobCardOpenSources(localBackup, card);
+    }
     let deferredPhotosPromise = null;
     const token = getJobCardAuthToken();
+    const serverFetchId =
+      card?.serverJobCardId ||
+      (isLikelyServerJobCardId(openId) ? openId : null) ||
+      (localBackup?.serverJobCardId ? String(localBackup.serverJobCardId) : null);
     if (token) {
       setPriorLoadedActivities([]);
       setPriorActivityLoading(true);
@@ -4734,19 +4967,23 @@ const JobCardFormPublic = () => {
             setPriorActivityLoading(false);
           }
         })();
-        const r = await fetch(`/api/jobcards/${encodeURIComponent(openId)}?omitPhotos=1`, { headers });
+        const r = await fetch(
+          `/api/jobcards/${encodeURIComponent(serverFetchId || openId)}?omitPhotos=1`,
+          { headers }
+        );
         if (r.ok) {
           const data = await r.json();
           const apiCard = data?.data?.jobCard ?? data?.jobCard;
           if (apiCard && apiCard.id) {
-            full = apiCard;
+            full = mergeJobCardOpenSources(localBackup || card, apiCard);
             if (apiCard.attachmentsPending === true) {
               photosHydrationCompleteRef.current = false;
               deferredPhotosPromise = (async () => {
                 try {
-                  const pr = await fetch(`/api/jobcards/${encodeURIComponent(openId)}/photos`, {
-                    headers
-                  });
+                  const pr = await fetch(
+                    `/api/jobcards/${encodeURIComponent(serverFetchId || openId)}/photos`,
+                    { headers }
+                  );
                   if (!pr.ok) return [];
                   const pd = await pr.json();
                   const photos = pd?.data?.photos ?? pd?.photos;
@@ -4755,7 +4992,11 @@ const JobCardFormPublic = () => {
                   return [];
                 }
               })();
-              full = { ...apiCard, photos: [], attachmentsPending: true };
+              full = {
+                ...mergeJobCardOpenSources(localBackup || card, apiCard),
+                photos: [],
+                attachmentsPending: true
+              };
             }
           }
         }
@@ -4776,7 +5017,7 @@ const JobCardFormPublic = () => {
           const data = await r.json();
           const apiCard = data?.data?.jobCard ?? data?.jobCard;
           if (apiCard && apiCard.id) {
-            full = apiCard;
+            full = mergeJobCardOpenSources(localBackup || card, apiCard);
           }
         }
       } catch (e) {
@@ -4816,61 +5057,53 @@ const JobCardFormPublic = () => {
       });
     }
 
-    const parsedProject = parseProjectAssociationFromComments(full.otherComments || '');
-    const parsedHeading = parseHeadingFromComments(full.otherComments || '');
+    const formsJobCardId =
+      serverJobCardId ||
+      (isLikelyServerJobCardId(localId) ? localId : null);
+    let serviceFormsForOpen = parseStoredJsonArray(full.serviceForms, []);
+    if (token && formsJobCardId) {
+      try {
+        const fr = await fetch(`/api/jobcards/${encodeURIComponent(formsJobCardId)}/forms`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (fr.ok) {
+          const fj = await fr.json();
+          const forms = fj?.data?.forms ?? fj?.forms;
+          if (Array.isArray(forms) && forms.length > 0) {
+            serviceFormsForOpen = forms.map(f => ({
+              id: f.id,
+              templateId: f.templateId,
+              templateName: f.templateName || f.template?.name || '',
+              templateVersion: f.templateVersion || f.template?.version || 1,
+              answers: Object.fromEntries(
+                (Array.isArray(f.answers) ? f.answers : []).map(a => [
+                  a.fieldId,
+                  a.value != null ? a.value : ''
+                ])
+              )
+            }));
+          }
+        }
+      } catch (e) {
+        console.warn('JobCardFormPublic: could not load service forms', e);
+      }
+    }
+    const localForms = parseStoredJsonArray(localBackup?.serviceForms, []);
+    if (
+      localForms.length > 0 &&
+      localBackup &&
+      jobCardOpenTimestamp(localBackup) >= jobCardOpenTimestamp(full)
+    ) {
+      serviceFormsForOpen = localForms;
+    }
 
-    setFormData(prev => ({
-      ...prev,
-      heading: full.heading || parsedHeading || '',
-      agentName: full.agentName || '',
-      otherTechnicians: parseStoredJsonArray(full.otherTechnicians, []),
-      projectId: full.projectId || parsedProject.projectId || '',
-      projectName: full.projectName || parsedProject.projectName || '',
-      clientId: full.clientId || '',
-      clientName: full.clientName || '',
-      siteId: full.siteId || '',
-      siteName: full.siteName || '',
-      location: full.location || '',
-      latitude:
-        full.latitude != null && full.latitude !== ''
-          ? String(full.latitude)
-          : full.locationLatitude != null && full.locationLatitude !== ''
-            ? String(full.locationLatitude)
-            : '',
-      longitude:
-        full.longitude != null && full.longitude !== ''
-          ? String(full.longitude)
-          : full.locationLongitude != null && full.locationLongitude !== ''
-            ? String(full.locationLongitude)
-            : '',
-      timeOfDeparture: toDatetimeLocalInput(full.timeOfDeparture),
-      timeOfArrival: toDatetimeLocalInput(full.timeOfArrival),
-      vehicleUsed: full.vehicleUsed || '',
-      kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
-      kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
-      reasonForVisit: full.reasonForVisit || '',
-      callOutCategory: full.callOutCategory || '',
-      diagnosis: full.diagnosis || '',
-      futureWorkRequired: full.futureWorkRequired || '',
-      futureWorkScheduledAt: toDatetimeLocalInput(full.futureWorkScheduledAt),
-      actionsTaken: full.actionsTaken || '',
-      otherComments: full.otherComments || '',
-      stockUsed: parseStoredJsonArray(full.stockUsed, []),
-      materialsBought: parseStoredJsonArray(full.materialsBought, []),
-      photos: extractVisualPhotoEntries(full.photos).map(item => item.stored),
-      serviceForms: parseStoredJsonArray(full.serviceForms, []),
-      status: full.status || 'draft',
-      customerName: full.customerName || '',
-      customerTitle: full.customerTitle || full.customerPosition || '',
-      customerFeedback: full.customerFeedback || '',
-      customerSignDate: full.customerSignDate
-        ? String(full.customerSignDate).slice(0, 10)
-        : '',
-      customerSignature:
-        (typeof full.customerSignature === 'string' && full.customerSignature.trim()) ||
-        extractSignatureUrlFromPhotosValue(full.photos) ||
-        ''
-    }));
+    setFormData({
+      ...buildFormDataFromJobCard(full),
+      serviceForms: serviceFormsForOpen
+    });
 
     setTechnicianInput('');
     setStockEntryRows([createStockEntryRow()]);
@@ -5018,6 +5251,17 @@ const JobCardFormPublic = () => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [photoLightboxUrl, closePhotoLightbox]);
+
+  useEffect(() => {
+    const body = typeof document !== 'undefined' ? document.body : null;
+    if (!body) return undefined;
+    if (photoLightboxUrl) {
+      body.classList.add('job-card-lightbox-open');
+    } else {
+      body.classList.remove('job-card-lightbox-open');
+    }
+    return () => body.classList.remove('job-card-lightbox-open');
+  }, [photoLightboxUrl]);
 
   useEffect(() => {
     if (wizardFlow !== 'stock_take') return;
@@ -5224,6 +5468,7 @@ const JobCardFormPublic = () => {
       console.warn('JobCardFormPublic: save already in progress, ignoring duplicate tap');
       return;
     }
+    flushActiveFormField();
     saveInProgressRef.current = true;
     const releaseSaveLock = () => {
       saveInProgressRef.current = false;
@@ -5386,6 +5631,10 @@ const JobCardFormPublic = () => {
       jobCardData.activityQueue = Array.isArray(prevPending?.activityQueue)
         ? [...prevPending.activityQueue]
         : [];
+
+      // Persist locally before any server call so work notes survive offline / partial sync.
+      upsertLocalPendingJobCard({ ...jobCardData, synced: false });
+      setLocalDraftsTick(t => t + 1);
 
       // Stock movements are posted server-side when /api/jobcards saves (all statuses).
 
@@ -5563,9 +5812,23 @@ const JobCardFormPublic = () => {
         await flushJobCardActivityQueue(resolvedServerId, jobCardData.activityQueue);
       }
 
+      if (serverReachOk && resolvedServerId && Array.isArray(formData.serviceForms) && formData.serviceForms.length > 0) {
+        await syncServiceFormsToServer(resolvedServerId, formData.serviceForms);
+      }
+
       if (serverReachOk) {
         sessionActivityQueueRef.current = [];
-        removeLocalPendingJobCard(jobCardData.id);
+        if (normalizedStatus === 'draft') {
+          upsertLocalPendingJobCard({
+            ...jobCardData,
+            synced: false,
+            serverJobCardId: resolvedServerId || serverJobCardId || jobCardData.serverJobCardId || null,
+            activityQueue: []
+          });
+          setLocalDraftsTick(t => t + 1);
+        } else {
+          removeLocalPendingJobCard(jobCardData.id);
+        }
         try {
           const photosNote = omitPhotosOnServer
             ? '\n\nPhotos and voice notes are still loading from the server — other fields were saved. Wait a moment and save again to update attachments.'
@@ -5728,6 +5991,10 @@ const JobCardFormPublic = () => {
       isOnline
     ]
   );
+
+  useEffect(() => {
+    persistWizardDraftRef.current = persistWizardDraft;
+  }, [persistWizardDraft]);
 
   const validateStep = (stepIndex) => {
     switch (STEP_IDS[stepIndex]) {
@@ -8661,30 +8928,41 @@ const JobCardFormPublic = () => {
         {renderNavigationButtons({ placement: 'footer' })}
       </div>
 
-      {photoLightboxUrl ? (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4 sm:p-6"
-          onClick={closePhotoLightbox}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo preview"
-        >
-          <button
-            type="button"
-            className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
-            onClick={closePhotoLightbox}
-            aria-label="Close photo preview"
-          >
-            <i className="fa-solid fa-xmark" />
-          </button>
-          <img
-            src={photoLightboxUrl}
-            alt="Full-size attachment"
-            className="max-h-[92vh] max-w-[96vw] rounded-lg object-contain"
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      ) : null}
+      {photoLightboxUrl
+        ? (() => {
+            const lightbox = (
+              <div
+                className="job-card-photo-lightbox fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 p-4 sm:p-6"
+                onClick={closePhotoLightbox}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Photo preview"
+              >
+                <button
+                  type="button"
+                  className="job-card-photo-lightbox-close absolute left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] inline-flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-white/25 text-white hover:bg-white/35 touch-manipulation shadow-lg"
+                  onClick={event => {
+                    event.stopPropagation();
+                    closePhotoLightbox();
+                  }}
+                  aria-label="Close photo preview"
+                >
+                  <i className="fa-solid fa-xmark text-lg" />
+                </button>
+                <img
+                  src={photoLightboxUrl}
+                  alt="Full-size attachment"
+                  className="max-h-[88vh] max-w-[96vw] rounded-lg object-contain touch-none select-none"
+                  onClick={event => event.stopPropagation()}
+                />
+              </div>
+            );
+            if (typeof window !== 'undefined' && window.ReactDOM?.createPortal) {
+              return window.ReactDOM.createPortal(lightbox, document.body);
+            }
+            return lightbox;
+          })()
+        : null}
 
       {/* Map Selection Modal */}
       {showMapModal && (
