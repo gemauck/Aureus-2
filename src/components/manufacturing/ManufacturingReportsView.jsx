@@ -260,20 +260,22 @@
     return '';
   }
 
-  /** QuickBooks journal "Name" — "Client - Site" when site present, else client only. */
+  /** QuickBooks journal "Name" — "Client:Site" when site present, else client only. */
   function getJournalCustomerNameFromRow(row) {
     if (row.customerName != null && String(row.customerName).trim()) {
       const cn = String(row.customerName).trim();
-      const colonIdx = cn.indexOf(': ');
+      const colonIdx = cn.indexOf(':');
       if (colonIdx >= 0) {
-        return formatClientSiteLabel(cn.slice(0, colonIdx), cn.slice(colonIdx + 2), ' - ');
+        const client = cn.slice(0, colonIdx).trim();
+        const site = cn.slice(colonIdx + 1).trim();
+        return formatClientSiteLabel(client, site, ':');
       }
       return cn;
     }
     return formatClientSiteLabel(
       getClientNameFromAllocationRow(row),
       getSiteNameFromAllocationRow(row),
-      ' - '
+      ':'
     );
   }
 
