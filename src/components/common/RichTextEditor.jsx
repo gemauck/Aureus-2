@@ -247,9 +247,28 @@ const RichTextEditor = ({
     /** CSS length for max editor body height when `autoGrow` is true (caps at roughly one screen). */
     maxEditorHeight = 'min(85vh, 900px)',
     /** Insert table and edit rows/columns (toolbar popover + Tab between cells). */
-    tableTools = false
+    tableTools = false,
+    /** Force touch-friendly toolbar (defaults to viewport ≤1023px). */
+    mobileToolbar = null
 }) => {
     const editorRef = useRef(null);
+    const [isMobileToolbar, setIsMobileToolbar] = useState(() => {
+        if (mobileToolbar != null) {
+            return !!mobileToolbar;
+        }
+        return typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
+    });
+    useEffect(() => {
+        if (mobileToolbar != null) {
+            setIsMobileToolbar(!!mobileToolbar);
+            return undefined;
+        }
+        const mq = window.matchMedia('(max-width: 1023px)');
+        const apply = () => setIsMobileToolbar(mq.matches);
+        apply();
+        mq.addEventListener('change', apply);
+        return () => mq.removeEventListener('change', apply);
+    }, [mobileToolbar]);
     // Use a ref to store the actual DOM value - this is the source of truth when focused
     const domValueRef = useRef(value || '');
     const [html, setHtml] = useState(value || '');
@@ -1116,6 +1135,12 @@ const RichTextEditor = ({
         }
     };
 
+    const toolbarBtnBase = isMobileToolbar
+        ? `inline-flex shrink-0 items-center justify-center min-h-[2.75rem] min-w-[2.75rem] rounded-lg active:scale-[0.97] transition ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-200 text-gray-700'}`
+        : compact
+          ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`
+          : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`;
+
     const getToolbarButton = (icon, command, label, value = null) => (
         <button
             type="button"
@@ -1123,15 +1148,12 @@ const RichTextEditor = ({
                 e.preventDefault();
                 handleCommand(command, value);
             }}
-            className={
-                compact
-                    ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`
-                    : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`
-            }
+            className={toolbarBtnBase}
             title={label}
+            aria-label={label}
             onMouseDown={(e) => e.preventDefault()} // Prevent focus loss
         >
-            <i className={`fas ${icon} ${compact ? 'text-[10px]' : 'text-sm'}`}></i>
+            <i className={`fas ${icon} ${isMobileToolbar ? 'text-base' : compact ? 'text-[10px]' : 'text-sm'}`}></i>
         </button>
     );
 
@@ -1146,10 +1168,23 @@ const RichTextEditor = ({
         <div
             className={`border ${compact ? 'rounded-md' : 'rounded-lg'} ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-300'} ${className}`}
         >
-            {/* Toolbar */}
+            {/* Toolbar — horizontal scroll on narrow viewports; alignment hidden on mobile */}
             <div
-                className={`flex items-center border-b ${compact ? 'flex-wrap gap-0.5 px-1 py-0.5' : 'gap-1 p-2'} ${isDark ? 'border-slate-600' : 'border-gray-200'}`}
+                className={`border-b ${isDark ? 'border-slate-600' : 'border-gray-200'} ${
+                    isMobileToolbar
+                        ? 'rich-text-editor-toolbar-mobile overflow-x-auto overscroll-x-contain touch-pan-x'
+                        : compact
+                          ? 'flex flex-wrap items-center gap-0.5 px-1 py-0.5'
+                          : 'flex items-center gap-1 p-2'
+                }`}
             >
+                <div
+                    className={
+                        isMobileToolbar
+                            ? 'flex min-w-min items-center gap-0.5 px-1 py-1'
+                            : 'contents'
+                    }
+                >
                 {getToolbarButton('fa-bold', 'bold', 'Bold')}
                 {getToolbarButton('fa-italic', 'italic', 'Italic')}
                 {getToolbarButton('fa-underline', 'underline', 'Underline')}
@@ -1170,13 +1205,9 @@ const RichTextEditor = ({
                             setTableMenuOpen(false);
                             setColorMenuOpen((open) => !open);
                         }}
-                        className={
-                            compact
-                                ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${colorMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
-                                : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${colorMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
-                        }
+                        className={`${toolbarBtnBase} ${colorMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`}
                     >
-                        <i className={`fas fa-palette ${compact ? 'text-[10px]' : 'text-sm'}`} />
+                        <i className={`fas fa-palette ${isMobileToolbar ? 'text-base' : compact ? 'text-[10px]' : 'text-sm'}`} />
                     </button>
                     {colorMenuOpen ? (
                         <div
@@ -1227,10 +1258,14 @@ const RichTextEditor = ({
                 {getToolbarButton('fa-list-ol', 'insertOrderedList', 'Numbered List')}
                 {getToolbarButton('fa-indent', 'indent', 'Indent (Tab in list)')}
                 {getToolbarButton('fa-outdent', 'outdent', 'Outdent (Shift+Tab in list)')}
-                {tbDivider}
-                {getToolbarButton('fa-align-left', 'justifyLeft', 'Align Left')}
-                {getToolbarButton('fa-align-center', 'justifyCenter', 'Align Center')}
-                {getToolbarButton('fa-align-right', 'justifyRight', 'Align Right')}
+                {!isMobileToolbar ? (
+                    <>
+                        {tbDivider}
+                        {getToolbarButton('fa-align-left', 'justifyLeft', 'Align Left')}
+                        {getToolbarButton('fa-align-center', 'justifyCenter', 'Align Center')}
+                        {getToolbarButton('fa-align-right', 'justifyRight', 'Align Right')}
+                    </>
+                ) : null}
                 {tableTools ? (
                     <>
                         {tbDivider}
@@ -1249,13 +1284,9 @@ const RichTextEditor = ({
                                     setColorMenuOpen(false);
                                     setTableMenuOpen((open) => !open);
                                 }}
-                                className={
-                                    compact
-                                        ? `p-0.5 rounded-sm leading-none hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${tableMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
-                                        : `p-1.5 rounded hover:bg-opacity-70 transition ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-200 text-gray-600'} ${tableMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`
-                                }
+                                className={`${toolbarBtnBase} ${tableMenuOpen ? (isDark ? 'bg-gray-700' : 'bg-gray-200') : ''}`}
                             >
-                                <i className={`fas fa-table ${compact ? 'text-[10px]' : 'text-sm'}`} />
+                                <i className={`fas fa-table ${isMobileToolbar ? 'text-base' : compact ? 'text-[10px]' : 'text-sm'}`} />
                             </button>
                             {tableMenuOpen ? (
                                 <div
@@ -1499,6 +1530,7 @@ const RichTextEditor = ({
                         </div>
                     </>
                 ) : null}
+                </div>
             </div>
 
             {/* Editor */}

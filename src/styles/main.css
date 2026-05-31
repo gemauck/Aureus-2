@@ -816,6 +816,36 @@ html.dark .meeting-notes-week-nav-scroll::-webkit-scrollbar-thumb {
     background-color: #64748b;
 }
 
+/* Rich text editor — scrollable touch toolbar on narrow viewports */
+.rich-text-editor-toolbar-mobile {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.rich-text-editor-toolbar-mobile::-webkit-scrollbar {
+    display: none;
+}
+
+/* Management meeting notes — department chip strip (mobile) */
+.meeting-notes-dept-nav-scroll {
+    scrollbar-gutter: stable;
+    overscroll-behavior-x: contain;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.meeting-notes-dept-nav-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+@media (max-width: 1023px) {
+    .meeting-notes-grid-h-scroll--body {
+        overflow-x: visible !important;
+    }
+    .meeting-notes-grid-h-scroll--body .inline-grid {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
 /* General minutes inline comment anchors (content inside RichTextEditor) */
 [data-gm-editor-host] .gm-thread-anchor {
     box-decoration-break: clone;

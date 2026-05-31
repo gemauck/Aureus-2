@@ -1358,6 +1358,50 @@ const ManagementMeetingNotes = () => {
         }
         setMeetingNotesMonthlyGoalsColumnVisible(!!next);
     }, []);
+    const [isMeetingNotesMobile, setIsMeetingNotesMobile] = useState(() =>
+        typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches
+    );
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 1023px)');
+        const apply = () => setIsMeetingNotesMobile(mq.matches);
+        apply();
+        mq.addEventListener('change', apply);
+        return () => mq.removeEventListener('change', apply);
+    }, []);
+    const [mobileActiveDepartmentId, setMobileActiveDepartmentId] = useState(() => {
+        try {
+            const stored = typeof localStorage !== 'undefined' && localStorage.getItem('managementMeetingMobileDept');
+            if (stored && DEPARTMENTS.some((d) => d.id === stored)) {
+                return stored;
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        return DEPARTMENTS[0]?.id || 'management';
+    });
+    const setMobileActiveDepartmentIdPersisted = useCallback((deptId) => {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('managementMeetingMobileDept', deptId);
+            }
+        } catch (_) {
+            /* ignore */
+        }
+        setMobileActiveDepartmentId(deptId);
+    }, []);
+    const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
+    useEffect(() => {
+        if (!mobileHeaderMenuOpen) {
+            return undefined;
+        }
+        const onDocMouseDown = (e) => {
+            if (e.target.closest && !e.target.closest('[data-meeting-notes-mobile-header-menu]')) {
+                setMobileHeaderMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocMouseDown, true);
+        return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+    }, [mobileHeaderMenuOpen]);
     // { weeklyNotesId, weekKey, start, end, quote, phase: 'chip'|'compose', top, left }
     
     // Refs for cursor position preservation
@@ -2408,6 +2452,29 @@ const ManagementMeetingNotes = () => {
     /** Week whose general minutes are shown (falls back to first week when needed) */
     const weekForGeneralMinutes = selectedWeekObj ?? (weeks.length ? weeks[0] : null);
 
+    /** Mobile: one week column + one department row; desktop: full grid. */
+    const layoutWeeks = useMemo(() => {
+        if (!isMeetingNotesMobile) {
+            return weeks;
+        }
+        if (selectedWeekObj) {
+            return [selectedWeekObj];
+        }
+        return weeks.length ? [weeks[0]] : [];
+    }, [isMeetingNotesMobile, weeks, selectedWeekObj]);
+
+    const layoutDepartments = useMemo(() => {
+        if (!isMeetingNotesMobile) {
+            return DEPARTMENTS;
+        }
+        const match = DEPARTMENTS.find((d) => d.id === mobileActiveDepartmentId);
+        return match ? [match] : DEPARTMENTS.slice(0, 1);
+    }, [isMeetingNotesMobile, mobileActiveDepartmentId]);
+
+    const meetingNotesRteMobileProps = isMeetingNotesMobile
+        ? { compact: true, autoGrow: true, maxEditorHeight: 'min(60vh, 520px)' }
+        : {};
+
     /**
      * Presence room = whole month (not per selected week). Per-week keys split users who had
      * different week columns focused, so "Viewing now" looked empty even when both were on the page.
@@ -2449,22 +2516,44 @@ const ManagementMeetingNotes = () => {
     }, [weekForGeneralMinutes?.id, weekForGeneralMinutes?.generalMinutes]);
 
     /** Column 1 = monthly goals when visible; else week 0 starts at column 1. */
-    const getWeekGridColumn = (weekIndex) => weekIndex + (meetingNotesMonthlyGoalsColumnVisible ? 2 : 1);
+    const getWeekGridColumn = (weekIndex) =>
+        isMeetingNotesMobile ? 1 : weekIndex + (meetingNotesMonthlyGoalsColumnVisible ? 2 : 1);
     const getMonthlyGoalsGridColumn = () => 1;
+    const getDeptMonthlyGoalsGridRow = (deptIndex) =>
+        isMeetingNotesMobile && meetingNotesMonthlyGoalsColumnVisible ? deptIndex * 2 + 2 : deptIndex + 2;
+    const getDeptWeekNotesGridRow = (deptIndex) =>
+        isMeetingNotesMobile
+            ? meetingNotesMonthlyGoalsColumnVisible
+                ? deptIndex * 2 + 3
+                : deptIndex + 2
+            : deptIndex + 2;
 
     /** Column 1 = monthly goals (slightly narrower); week columns stay wide for editors. */
-    const meetingNotesMonthlyGoalsColumnWidth = 'minmax(400px, 460px)';
-    const meetingNotesWeekColumnWidth = 'minmax(520px, 560px)';
-    const meetingNotesMainGridTemplateColumns = meetingNotesMonthlyGoalsColumnVisible
-        ? `${meetingNotesMonthlyGoalsColumnWidth} repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`
-        : `repeat(${weeks.length}, ${meetingNotesWeekColumnWidth})`;
-    const stickyMonthlyGoalsHeaderCol = isDark
-        ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
-        : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
+    const meetingNotesMonthlyGoalsColumnWidth = isMeetingNotesMobile
+        ? 'minmax(0, 1fr)'
+        : 'minmax(400px, 460px)';
+    const meetingNotesWeekColumnWidth = isMeetingNotesMobile
+        ? 'minmax(0, 1fr)'
+        : 'minmax(520px, 560px)';
+    const meetingNotesMainGridTemplateColumns = isMeetingNotesMobile
+        ? 'minmax(0, 1fr)'
+        : meetingNotesMonthlyGoalsColumnVisible
+          ? `${meetingNotesMonthlyGoalsColumnWidth} repeat(${layoutWeeks.length}, ${meetingNotesWeekColumnWidth})`
+          : `repeat(${layoutWeeks.length}, ${meetingNotesWeekColumnWidth})`;
+    const meetingNotesBodyGridTemplateRows = isMeetingNotesMobile
+        ? `auto repeat(${layoutDepartments.length * (meetingNotesMonthlyGoalsColumnVisible ? 2 : 1)}, minmax(200px, max-content))`
+        : `auto repeat(${layoutDepartments.length}, minmax(200px, max-content))`;
+    const stickyMonthlyGoalsHeaderCol = isMeetingNotesMobile
+        ? ''
+        : isDark
+          ? 'sticky left-0 z-[25] bg-slate-800 shadow-[6px_0_16px_-6px_rgba(0,0,0,0.55)]'
+          : 'sticky left-0 z-[25] bg-white shadow-[6px_0_16px_-6px_rgba(0,0,0,0.14)]';
     /** Higher z-index than week columns so horizontal scroll slides weeks under this column (no bleed-through). Fully opaque backgrounds — no /opacity or translucent slate. */
-    const stickyMonthlyGoalsBodyCol = isDark
-        ? 'sticky left-0 z-[26] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
-        : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
+    const stickyMonthlyGoalsBodyCol = isMeetingNotesMobile
+        ? ''
+        : isDark
+          ? 'sticky left-0 z-[26] bg-slate-800 shadow-[8px_0_20px_-4px_rgba(0,0,0,0.55)]'
+          : 'sticky left-0 z-[26] bg-white shadow-[8px_0_20px_-4px_rgba(0,0,0,0.12)]';
 
     const scrollToWeekId = useCallback((weekId) => {
         if (!weekId || !Array.isArray(weeks) || weeks.length === 0) {
@@ -5926,7 +6015,7 @@ const ManagementMeetingNotes = () => {
                         <select
                             value={selectedMonth || ''}
                             onChange={(e) => setSelectedMonth(e.target.value)}
-                            className={`min-w-[10rem] px-3.5 py-2.5 text-sm font-medium rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:ring-offset-2 ${
+                            className={`w-full sm:w-auto min-w-[10rem] px-3.5 py-2.5 text-sm font-medium rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:ring-offset-2 ${
                                 isDark
                                     ? 'border-slate-600 bg-slate-800/80 text-slate-100 hover:border-slate-500 focus:ring-offset-slate-900'
                                     : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:ring-offset-white shadow-sm'
@@ -5937,6 +6026,90 @@ const ManagementMeetingNotes = () => {
                                 <option key={month} value={month}>{formatMonth(month)}</option>
                             ))}
                         </select>
+                        {isMeetingNotesMobile ? (
+                            <div className="relative w-full sm:w-auto" data-meeting-notes-mobile-header-menu>
+                                <button
+                                    type="button"
+                                    onClick={() => setMobileHeaderMenuOpen((open) => !open)}
+                                    className={`inline-flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border transition ${
+                                        isDark
+                                            ? 'border-slate-600 bg-slate-800/80 text-slate-100 hover:bg-slate-800'
+                                            : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50 shadow-sm'
+                                    }`}
+                                    aria-expanded={mobileHeaderMenuOpen}
+                                    aria-haspopup="true"
+                                >
+                                    <i className="fas fa-ellipsis-h text-xs" aria-hidden />
+                                    Month actions
+                                </button>
+                                {mobileHeaderMenuOpen ? (
+                                    <div
+                                        className={`absolute right-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-xl border p-2 shadow-xl ${
+                                            isDark ? 'border-slate-600 bg-slate-900' : 'border-slate-200 bg-white'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col gap-2">
+                                            <input
+                                                type="month"
+                                                value={newMonthKey}
+                                                onChange={(e) => setNewMonthKey(e.target.value)}
+                                                aria-label="Create month"
+                                                className={`w-full px-3 py-2.5 text-sm font-medium rounded-xl border ${
+                                                    isDark
+                                                        ? 'border-slate-600 bg-slate-800/80 text-slate-100'
+                                                        : 'border-slate-200 bg-white text-slate-900'
+                                                }`}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    setMobileHeaderMenuOpen(false);
+                                                    try {
+                                                        await handleCreateMonth();
+                                                    } catch (error) {
+                                                        console.error('Error creating month from button:', error);
+                                                    }
+                                                }}
+                                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-primary-600 text-white"
+                                            >
+                                                <i className="fas fa-plus text-xs" />
+                                                Create Month
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setMobileHeaderMenuOpen(false);
+                                                    handleGenerateMonth();
+                                                }}
+                                                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 text-white"
+                                            >
+                                                <i className="fas fa-magic text-xs" />
+                                                Generate Month
+                                            </button>
+                                            {currentMonthlyNotes ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setMobileHeaderMenuOpen(false);
+                                                        setShowAllocationModal(true);
+                                                    }}
+                                                    className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl ${
+                                                        isDark ? 'bg-slate-100 text-slate-900' : 'bg-slate-800 text-white'
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-users text-xs" />
+                                                    Allocate Users
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : (
+                        <>
                         <div className="flex items-center gap-2">
                             <input
                                 type="month"
@@ -6009,6 +6182,8 @@ const ManagementMeetingNotes = () => {
                                 <i className="fas fa-users text-xs" />
                                 Allocate Users
                             </button>
+                        )}
+                        </>
                         )}
                     </div>
                 </div>
@@ -6196,7 +6371,9 @@ const ManagementMeetingNotes = () => {
                                     Week navigation
                                 </p>
                                 <p className={`text-sm font-medium leading-snug max-w-xl ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                                    Pick a week to focus the grid. Scroll sideways when there are many weeks in the month.
+                                    {isMeetingNotesMobile
+                                        ? 'Pick a week, then scroll down to edit notes for that week.'
+                                        : 'Pick a week to focus the grid. Scroll sideways when there are many weeks in the month.'}
                                 </p>
                             </div>
                         </div>
@@ -6227,7 +6404,7 @@ const ManagementMeetingNotes = () => {
                                                 setSelectedWeek(identifier);
                                                 scrollToWeekId(identifier);
                                             }}
-                                            className={`relative text-left whitespace-nowrap min-w-[9.5rem] px-3.5 py-2.5 rounded-xl text-xs font-medium transition-[box-shadow,transform,border-color,background-color] duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
+                                            className={`relative text-left whitespace-nowrap min-w-[8.5rem] sm:min-w-[9.5rem] px-3.5 py-2.5 rounded-xl text-xs font-medium transition-[box-shadow,transform,border-color,background-color] duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
                                                 isDark ? 'focus-visible:ring-offset-slate-900' : 'focus-visible:ring-offset-white'
                                             } ${
                                                 isSelected
@@ -6271,6 +6448,70 @@ const ManagementMeetingNotes = () => {
                             </div>
                         </div>
                     </div>
+
+                    {isMeetingNotesMobile && selectedMonth && currentMonthlyNotes && weeks.length > 0 ? (
+                        <div
+                            className={`rounded-2xl border p-3 sm:p-4 ${
+                                isDark
+                                    ? 'border-slate-700/80 bg-slate-900/40'
+                                    : 'border-slate-200/90 bg-white shadow-sm'
+                            }`}
+                        >
+                            <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                Department
+                            </p>
+                            <div className="meeting-notes-dept-nav-scroll overflow-x-auto -mx-1 touch-pan-x">
+                                <div className="flex gap-2 px-1 pb-1 min-w-min">
+                                    {DEPARTMENTS.map((dept) => {
+                                        const isActive = dept.id === mobileActiveDepartmentId;
+                                        const deptSurface = meetingNotesDeptSurface(dept.id);
+                                        return (
+                                            <button
+                                                key={dept.id}
+                                                type="button"
+                                                onClick={() => setMobileActiveDepartmentIdPersisted(dept.id)}
+                                                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                                                    isActive
+                                                        ? isDark
+                                                            ? 'border-primary-500/60 bg-slate-800 text-slate-100 ring-1 ring-primary-500/30'
+                                                            : 'border-primary-300 bg-white text-slate-900 ring-1 ring-primary-400/25 shadow-sm'
+                                                        : isDark
+                                                          ? 'border-slate-700 bg-slate-900/50 text-slate-400 hover:border-slate-600'
+                                                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+                                                }`}
+                                                aria-pressed={isActive}
+                                            >
+                                                <span
+                                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] ${
+                                                        isDark ? deptSurface.chipD : deptSurface.chipL
+                                                    }`}
+                                                >
+                                                    <i className={`fas ${dept.icon}`} aria-hidden />
+                                                </span>
+                                                <span className="max-w-[9rem] truncate">{dept.name}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setMeetingNotesMonthlyGoalsColumnVisiblePersisted(!meetingNotesMonthlyGoalsColumnVisible)
+                                    }
+                                    className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${
+                                        isDark
+                                            ? 'border-slate-600 bg-slate-800/80 text-slate-200'
+                                            : 'border-slate-200 bg-white text-slate-700 shadow-sm'
+                                    }`}
+                                >
+                                    <i className={`fas mr-1.5 ${meetingNotesMonthlyGoalsColumnVisible ? 'fa-eye-slash' : 'fa-bullseye'}`} aria-hidden />
+                                    {meetingNotesMonthlyGoalsColumnVisible ? 'Hide monthly goals' : 'Show monthly goals'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
 
                     <div className="flex flex-wrap items-center justify-end gap-3 px-0.5">
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -6361,7 +6602,7 @@ const ManagementMeetingNotes = () => {
                     <div className="min-w-0 pb-2 space-y-4">
                         {/* Offset matches MainLayout main#page-scroll: py-4 sm:p-6 so the bar sits flush under the app header when stuck */}
                         <div
-                            className={`sticky z-40 -top-4 sm:-top-6 -mx-0.5 border-b px-0 py-0 shadow-sm backdrop-blur-md ${
+                            className={`${isMeetingNotesMobile ? 'hidden' : ''} sticky z-40 -top-4 sm:-top-6 -mx-0.5 border-b px-0 py-0 shadow-sm backdrop-blur-md ${
                                 isDark
                                     ? 'border-slate-800/80 bg-slate-900/95 supports-[backdrop-filter]:bg-slate-900/80'
                                     : 'border-slate-200/90 bg-white/95 supports-[backdrop-filter]:bg-white/85'
@@ -6424,7 +6665,7 @@ const ManagementMeetingNotes = () => {
                                 ) : null}
 
                                 {/* Week headers row — columns 2+ */}
-                                {weeks.map((week, index) => {
+                                {layoutWeeks.map((week, index) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${index}`;
                                     const isActualCurrentWeek = identifier === currentWeekId;
@@ -6513,18 +6754,18 @@ const ManagementMeetingNotes = () => {
                         {/* Grid layout: General minutes row, then departments as rows, weeks as columns (horizontal scroll synced with header row above) */}
                         <div
                             ref={meetingNotesHorizontalScrollRef}
-                            className="meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--body overflow-x-auto sm:overflow-x-scroll touch-pan-x"
+                            className={`meeting-notes-grid-h-scroll meeting-notes-grid-h-scroll--body ${isMeetingNotesMobile ? 'overflow-x-visible' : 'overflow-x-auto sm:overflow-x-scroll touch-pan-x'}`}
                         >
                         <div
                             className="inline-grid items-stretch gap-4 sm:gap-5"
                             style={{
                                 gridTemplateColumns: meetingNotesMainGridTemplateColumns,
-                                gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
+                                gridTemplateRows: meetingNotesBodyGridTemplateRows,
                                 alignItems: 'stretch',
                                 gridAutoFlow: 'row'
                             }}
                         >
-                            {meetingNotesMonthlyGoalsColumnVisible ? (
+                            {meetingNotesMonthlyGoalsColumnVisible && !isMeetingNotesMobile ? (
                                 <div
                                     key="general-minutes-monthly-placeholder"
                                     style={{
@@ -6546,7 +6787,7 @@ const ManagementMeetingNotes = () => {
                                 </div>
                             ) : null}
 
-                            {weeks.map((week, gmWeekIndex) => {
+                            {layoutWeeks.map((week, gmWeekIndex) => {
                                 const rawGmId = getWeekIdentifier(week);
                                 const gmIdentifier = rawGmId || `week-${gmWeekIndex}`;
                                 const gmSelected = gmIdentifier === selectedWeek;
@@ -6622,7 +6863,7 @@ const ManagementMeetingNotes = () => {
                                                                 rows={6}
                                                                 compact
                                                                 autoGrow
-                                                                maxEditorHeight="min(82vh, 900px)"
+                                                                maxEditorHeight={isMeetingNotesMobile ? 'min(60vh, 520px)' : 'min(82vh, 900px)'}
                                                                 tableTools
                                                                 isDark={isDark}
                                                             />
@@ -6759,7 +7000,7 @@ const ManagementMeetingNotes = () => {
                             })}
 
                             {/* Department rows - each department spans all weeks */}
-                            {DEPARTMENTS.map((dept, deptIndex) => {
+                            {layoutDepartments.map((dept, deptIndex) => {
                                 const deptMonthlyGoal = monthlyGoalsByDepartment?.[dept.id] || '';
                                 const deptSurface = meetingNotesDeptSurface(dept.id);
                                 return (
@@ -6774,7 +7015,7 @@ const ManagementMeetingNotes = () => {
                                                 }`}
                                                 style={{
                                                     minHeight: '200px',
-                                                    gridRow: `${deptIndex + 2}`,
+                                                    gridRow: `${getDeptMonthlyGoalsGridRow(deptIndex)}`,
                                                     gridColumn: `${getMonthlyGoalsGridColumn()}`
                                                 }}
                                             >
@@ -6814,6 +7055,7 @@ const ManagementMeetingNotes = () => {
                                                             placeholder="Capture the month's goals for this department."
                                                             rows={6}
                                                             isDark={isDark}
+                                                            {...meetingNotesRteMobileProps}
                                                         />
                                                     ) : (
                                                         <textarea
@@ -6829,7 +7071,7 @@ const ManagementMeetingNotes = () => {
                                             </div>
                                         ) : null}
 
-                                        {weeks.map((week, weekIndex) => {
+                                        {layoutWeeks.map((week, weekIndex) => {
                                             const rawId = getWeekIdentifier(week);
                                             const identifier = rawId || `week-${weekIndex}`;
                                             const weekSelected = identifier === selectedWeek;
@@ -6855,7 +7097,7 @@ const ManagementMeetingNotes = () => {
                                                     }`}
                                                     style={{ 
                                                         minHeight: '200px',
-                                                        gridRow: `${deptIndex + 2}`,
+                                                        gridRow: `${getDeptWeekNotesGridRow(deptIndex)}`,
                                                         gridColumn: `${getWeekGridColumn(weekIndex)}`
                                                     }}
                                                 >
@@ -7066,6 +7308,7 @@ const ManagementMeetingNotes = () => {
                                 placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                             rows={4}
                                                                             isDark={isDark}
+                                                                            {...meetingNotesRteMobileProps}
                                                                         />
                                                                     ) : (
                                                                         <textarea
@@ -7128,6 +7371,7 @@ const ManagementMeetingNotes = () => {
                                                                     placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
+                                                                    {...meetingNotesRteMobileProps}
                                                                 />
                                                             ) : (
                                                                 <textarea
@@ -7190,6 +7434,7 @@ const ManagementMeetingNotes = () => {
                                                                     placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
+                                                                    {...meetingNotesRteMobileProps}
                                                                 />
                                                             ) : (
                                                                 <textarea
