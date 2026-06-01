@@ -1449,7 +1449,7 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        { id: 'leave-platform', label: 'Leave & HR', icon: 'fa-user-clock', permission: 'ACCESS_LEAVE_PLATFORM' },
+        // Leave & HR hidden from nav for now — restore: { id: 'leave-platform', label: 'Leave & HR', icon: 'fa-user-clock', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'helpdesk', label: 'Helpdesk', icon: 'fa-headset', permission: 'ACCESS_HELPDESK' },
@@ -1503,24 +1503,6 @@ const MainLayout = () => {
             // If no permission specified, always show (dashboard, documents)
             if (!item.permission) {
                 return true;
-            }
-
-            // Leave & HR: admins bypass; access_leave_platform or manage_hr_admin (or legacy email in checker)
-            if (item.id === 'leave-platform') {
-                if (adminOrSuperAdmin) {
-                    return true;
-                }
-                if (permissionChecker && window.PERMISSIONS) {
-                    const leaveKey = window.PERMISSIONS.ACCESS_LEAVE_PLATFORM;
-                    const hrAdminKey = window.PERMISSIONS.MANAGE_HR_ADMIN;
-                    if (leaveKey && permissionChecker.hasPermission(leaveKey)) {
-                        return true;
-                    }
-                    if (hrAdminKey && permissionChecker.hasPermission(hrAdminKey)) {
-                        return true;
-                    }
-                }
-                return false;
             }
 
             // Admin and SuperAdmin users always have access to everything
