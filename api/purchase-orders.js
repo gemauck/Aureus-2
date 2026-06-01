@@ -11,6 +11,11 @@ import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 import { createStockMovementTx } from './_lib/movementId.js'
 import { applyLocationInventoryDeltaTx } from './_lib/locationInventoryQty.js'
+import {
+  applyCatalogWeightedAverageCostTx,
+  findCanonicalInventoryItemBySkuTx,
+  syncCatalogTotalValueForSkuTx
+} from './_lib/weightedAverageUnitCost.js'
 
 const S_DRAFT = 'draft'
 const S_FINAL = 'final'
@@ -312,48 +317,40 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
       ownerId: null
     })
 
-    let inventoryItem = await tx.inventoryItem.findFirst({
-      where: { sku: item.sku }
-    })
+    let inventoryItem = await findCanonicalInventoryItemBySkuTx(tx, item.sku)
 
     if (!inventoryItem) {
-      const totalValue = computedInventoryTotalValue(quantity, unitCost)
-      inventoryItem = await tx.inventoryItem.create({
-        data: {
-          sku: item.sku,
-          name: item.name || item.sku,
-          category: 'components',
-          type: 'raw_material',
-          quantity: quantity,
-          unit: 'pcs',
-          reorderPoint: 0,
-          reorderQty: 0,
-          unitCost: unitCost,
-          totalValue: totalValue,
-          status: quantity > 0 ? 'in_stock' : 'out_of_stock',
-          lastRestocked: now,
-          ownerId: null,
-          locationId: toLocationId
-        }
+      const initialUnitCost = unitCost > 0 ? unitCost : 0
+      const totalValue = computedInventoryTotalValue(quantity, initialUnitCost)
+      const createData = {
+        sku: item.sku,
+        name: item.name || item.sku,
+        category: 'components',
+        type: 'raw_material',
+        quantity: quantity,
+        unit: 'pcs',
+        reorderPoint: 0,
+        reorderQty: 0,
+        unitCost: initialUnitCost,
+        totalValue: totalValue,
+        status: quantity > 0 ? 'in_stock' : 'out_of_stock',
+        lastRestocked: now,
+        ownerId: null,
+        locationId: toLocationId
+      }
+      if (unitCost > 0) {
+        createData.lastInboundUnitPrice = unitCost
+        createData.lastInboundAt = now
+      }
+      inventoryItem = await tx.inventoryItem.create({ data: createData })
+    } else if (quantity > 0 && unitCost > 0) {
+      await applyCatalogWeightedAverageCostTx(tx, {
+        sku: item.sku,
+        inboundQty: quantity,
+        inboundUnitPrice: unitCost,
+        inboundAt: now
       })
-    } else {
-      const newQuantity = (inventoryItem.quantity || 0) + quantity
-      const newUnitCost = unitCost > 0 ? unitCost : inventoryItem.unitCost || 0
-      const totalValue = computedInventoryTotalValue(newQuantity, newUnitCost)
-      const reorderPoint = inventoryItem.reorderPoint || 0
-      const status =
-        newQuantity > reorderPoint ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock'
-
-      await tx.inventoryItem.update({
-        where: { id: inventoryItem.id },
-        data: {
-          quantity: newQuantity,
-          unitCost: newUnitCost,
-          totalValue: totalValue,
-          status: status,
-          lastRestocked: now
-        }
-      })
+      inventoryItem = await findCanonicalInventoryItemBySkuTx(tx, item.sku)
     }
 
     if (toLocationId) {
@@ -371,18 +368,24 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
         where: { sku: item.sku }
       })
       const aggQty = totalAtLocations._sum.quantity || 0
-
-      const costForValue = unitCost > 0 ? unitCost : inventoryItem.unitCost || 0
-      await tx.inventoryItem.update({
+      const uc = inventoryItem?.unitCost || 0
+      inventoryItem = await syncCatalogTotalValueForSkuTx(tx, item.sku, aggQty, uc)
+    } else if (inventoryItem && quantity > 0) {
+      const newQuantity = (inventoryItem.quantity || 0) + quantity
+      const uc = inventoryItem.unitCost || 0
+      const reorderPoint = inventoryItem.reorderPoint || 0
+      inventoryItem = await tx.inventoryItem.update({
         where: { id: inventoryItem.id },
         data: {
-          quantity: aggQty,
-          totalValue: computedInventoryTotalValue(aggQty, costForValue),
+          quantity: newQuantity,
+          totalValue: computedInventoryTotalValue(newQuantity, uc),
           status:
-            aggQty > (inventoryItem.reorderPoint || 0) ? 'in_stock' : aggQty > 0 ? 'low_stock' : 'out_of_stock'
+            newQuantity > reorderPoint ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock',
+          lastRestocked: now
         }
       })
     }
+
   }
 
   const finalUpdate = {

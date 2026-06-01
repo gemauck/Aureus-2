@@ -1,5 +1,9 @@
 import { computedInventoryTotalValue } from './inventoryValue.js'
 import { applyLocationInventoryDeltaTx } from './locationInventoryQty.js'
+import {
+  applyCatalogWeightedAverageCostTx,
+  syncCatalogTotalValueForSkuTx
+} from './weightedAverageUnitCost.js'
 
 /**
  * Stock-count location semantics (movements vs on-hand):
@@ -128,13 +132,23 @@ export async function applyStockCountAdjustmentTx(tx, params) {
   })
 
   let item = await findCanonicalInventoryItemBySkuTx(tx, sku)
-  let newQuantity = item?.quantity || 0
+  const inboundUnitCost = parseFloat(unitCost) || 0
+
+  if (item && qty > 0 && inboundUnitCost > 0) {
+    await applyCatalogWeightedAverageCostTx(tx, {
+      sku: String(sku).trim(),
+      inboundQty: qty,
+      inboundUnitPrice: inboundUnitCost,
+      inboundAt: movDate
+    })
+    item = await findCanonicalInventoryItemBySkuTx(tx, sku)
+  }
 
   if (!item) {
     if (qty < 0) {
       throw new Error(`Cannot adjust non-existent item ${sku} with negative quantity`)
     }
-    const uc = parseFloat(unitCost) || 0
+    const uc = inboundUnitCost
     const rp = parseFloat(reorderPoint) || 0
     const rq = parseFloat(reorderQty) || 0
     const totalValue = computedInventoryTotalValue(qty, uc)
@@ -163,6 +177,7 @@ export async function applyStockCountAdjustmentTx(tx, params) {
       reorderPoint: rp,
       reorderQty: rq,
       unitCost: uc,
+      ...(uc > 0 ? { lastInboundUnitPrice: uc, lastInboundAt: movDate } : {}),
       totalValue,
       supplier: sup,
       status: qty > rp ? 'in_stock' : qty > 0 ? 'low_stock' : 'out_of_stock',
@@ -209,9 +224,10 @@ export async function applyStockCountAdjustmentTx(tx, params) {
         throw createError
       }
     }
-  } else {
-    newQuantity = (item.quantity || 0) + qty
-    const totalValue = computedInventoryTotalValue(newQuantity, item.unitCost)
+  } else if (qty !== 0) {
+    const uc = Number(item.unitCost) || 0
+    const newQuantity = (item.quantity || 0) + qty
+    const totalValue = computedInventoryTotalValue(newQuantity, uc)
     const rp = item.reorderPoint || 0
     const status = newQuantity > rp ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock'
     item = await tx.inventoryItem.update({
@@ -239,15 +255,7 @@ export async function applyStockCountAdjustmentTx(tx, params) {
   const aggQty = totalAtLocations._sum.quantity || 0
 
   if (item) {
-    item = await tx.inventoryItem.update({
-      where: { id: item.id },
-      data: {
-        quantity: aggQty,
-        totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
-        status:
-          aggQty > (item.reorderPoint || 0) ? 'in_stock' : aggQty > 0 ? 'low_stock' : 'out_of_stock'
-      }
-    })
+    item = await syncCatalogTotalValueForSkuTx(tx, String(sku).trim(), aggQty, item.unitCost)
   }
 
   return { movement, item }

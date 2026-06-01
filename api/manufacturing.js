@@ -34,6 +34,10 @@ import {
 } from './_lib/stockTakeSubmission.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
 import { applyLocationInventoryDeltaTx } from './_lib/locationInventoryQty.js'
+import {
+  applyCatalogWeightedAverageCostTx,
+  syncCatalogTotalValueForSkuTx
+} from './_lib/weightedAverageUnitCost.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
   buildCombinedMovementNetBySkuFromMovementRows,
@@ -55,6 +59,8 @@ const INVENTORY_TEMPLATE_FIELDS = {
   reorderPoint: true,
   reorderQty: true,
   unitCost: true,
+  lastInboundUnitPrice: true,
+  lastInboundAt: true,
   supplier: true,
   supplierPartNumbers: true,
   manufacturingPartNumber: true,
@@ -479,6 +485,8 @@ const buildInventoryClone = (baseItem, location, overrides = {}) => ({
   location: overrides.locationLabel ?? (location.name || ''),
   locationId: location.id,
   unitCost: baseItem.unitCost ?? 0,
+  lastInboundUnitPrice: baseItem.lastInboundUnitPrice ?? 0,
+  lastInboundAt: baseItem.lastInboundAt ?? null,
   totalValue: overrides.totalValue ?? 0,
   supplier: baseItem.supplier || '',
   supplierPartNumbers: baseItem.supplierPartNumbers || '[]',
@@ -1465,6 +1473,15 @@ async function handler(req, res) {
           // Adjust per type
           if (type === 'receipt') {
             if (!body.toLocationId) throw httpError(400, 'toLocationId required for receipt')
+            const receiptUnitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : 0
+            if (master && qty > 0 && receiptUnitCost > 0) {
+              await applyCatalogWeightedAverageCostTx(tx, {
+                sku: body.sku,
+                inboundQty: qty,
+                inboundUnitPrice: receiptUnitCost,
+                inboundAt: now
+              })
+            }
             const toLi = await upsertLocationSku(body.toLocationId)
             const newQtyTo = (toLi.quantity || 0) + qty
             await tx.locationInventory.update({ where: { id: toLi.id }, data: {
@@ -1472,20 +1489,11 @@ async function handler(req, res) {
               lastRestocked: now,
               status: newQtyTo > toLi.reorderPoint ? 'in_stock' : (newQtyTo > 0 ? 'low_stock' : 'out_of_stock')
             }})
-            // Update master aggregate
             const totalAtLocations = await tx.locationInventory.aggregate({ _sum: { quantity: true }, where: { sku: body.sku } })
             const aggQty = totalAtLocations._sum.quantity || 0
             if (master) {
-              await tx.inventoryItem.update({ where: { id: master.id }, data: {
-                quantity: aggQty,
-                unitCost: body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost,
-                totalValue: computedInventoryTotalValue(
-                  aggQty,
-                  body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost
-                ),
-                lastRestocked: now,
-                status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
-              }})
+              const refreshed = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
+              await syncCatalogTotalValueForSkuTx(tx, body.sku, aggQty, refreshed?.unitCost ?? master.unitCost)
             }
           }
 
@@ -4414,13 +4422,18 @@ async function handler(req, res) {
             
             // BOM `totalMaterialCost`: when set in the BOM editor, treated as finished-good unit material cost for this completion path.
             const unitCost = bom.totalMaterialCost != null ? parseFloat(bom.totalMaterialCost) || 0 : 0
-            
-            // Calculate new quantity and value (incremental valuation to preserve prior stock value basis)
-            const newQuantity = (finishedProduct.quantity || 0) + quantityProduced
-            const existingTotalValue = computedInventoryTotalValue(finishedProduct.quantity || 0, finishedProduct.unitCost || 0)
-            const producedValue = computedInventoryTotalValue(quantityProduced, unitCost)
-            const newTotalValue = existingTotalValue + producedValue
-            
+            const completionAt = new Date()
+
+            if (quantityProduced > 0 && unitCost > 0) {
+              await applyCatalogWeightedAverageCostTx(tx, {
+                sku: finishedProduct.sku,
+                inboundQty: quantityProduced,
+                inboundUnitPrice: unitCost,
+                inboundAt: completionAt
+              })
+              finishedProduct = await findCanonicalInventoryItemBySkuTx(tx, finishedProduct.sku)
+            }
+
             // Get default location (main warehouse) for finished product
             // If no location exists, create a default one to ensure LocationInventory is always updated
             let toLocationId = finishedProduct.locationId || null
@@ -4461,50 +4474,34 @@ async function handler(req, res) {
               console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
             }
             
-            const movement = await createStockMovementTx(tx, {
-                date: new Date(),
-                type: 'receipt', // Finished product receipt (increases stock)
+            await createStockMovementTx(tx, {
+                date: completionAt,
+                type: 'receipt',
                 itemName: finishedProduct.name,
                 sku: finishedProduct.sku,
-                quantity: quantityProduced, // positive for receipt
+                quantity: quantityProduced,
                 fromLocation: '',
                 toLocation: toLocationId || '',
                 reference: orderInTx.workOrderNumber || id,
                 performedBy: req.user?.name || 'System',
                 notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
             })
-            
-            
-            // Update master inventory item directly (increment quantity)
-            // This ensures the master is updated even if LocationInventory doesn't exist
-            const currentMasterQty = finishedProduct.quantity || 0
-            const newMasterQty = currentMasterQty + quantityProduced
-            
-            // Also recalculate from LocationInventory if it exists (for consistency)
-            const totalAtLocations = await tx.locationInventory.aggregate({ 
-              _sum: { quantity: true }, 
-              where: { sku: finishedProduct.sku } 
+
+            const totalAtLocations = await tx.locationInventory.aggregate({
+              _sum: { quantity: true },
+              where: { sku: finishedProduct.sku }
             })
             const aggQtyFromLocations = totalAtLocations._sum.quantity || 0
-            
-            // Use the direct update as source of truth, but log if there's a discrepancy
-            const finalQty = toLocationId ? aggQtyFromLocations : newMasterQty
-            if (toLocationId && Math.abs(finalQty - newMasterQty) > 0.01) {
-              console.warn(`⚠️ Quantity mismatch for ${finishedProduct.sku}: direct=${newMasterQty}, from locations=${aggQtyFromLocations}`)
-            }
-            const finalUnitCost = finalQty > 0 ? (newTotalValue / finalQty) : unitCost
-            
-            // Update inventory item with final quantity
-            await tx.inventoryItem.update({
-              where: { id: finishedProduct.id },
-              data: {
-                quantity: finalQty,
-                unitCost: finalUnitCost,
-                totalValue: computedInventoryTotalValue(finalQty, finalUnitCost),
-                status: finalQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (finalQty > 0 ? 'low_stock' : 'out_of_stock'),
-                lastRestocked: new Date()
-              }
-            })
+            const finalQty = toLocationId
+              ? aggQtyFromLocations
+              : (finishedProduct.quantity || 0) + quantityProduced
+            const refreshed = await findCanonicalInventoryItemBySkuTx(tx, finishedProduct.sku)
+            await syncCatalogTotalValueForSkuTx(
+              tx,
+              finishedProduct.sku,
+              finalQty,
+              refreshed?.unitCost ?? finishedProduct.unitCost
+            )
             
             // Update production order status to completed, and set completedDate if provided
             const completionUpdate = { status: 'completed' }
@@ -5585,11 +5582,21 @@ async function handler(req, res) {
               })
             }
           } else if (type === 'receipt') {
+            const receiptUnitCost = parseFloat(body.unitCost) || 0
+            const receiptAt = body.date ? new Date(body.date) : movementRestockedAt
+            if (item && quantity > 0 && receiptUnitCost > 0) {
+              await applyCatalogWeightedAverageCostTx(tx, {
+                sku: body.sku,
+                inboundQty: quantity,
+                inboundUnitPrice: receiptUnitCost,
+                inboundAt: receiptAt
+              })
+              item = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
+            }
             // Create item on first receipt if it doesn't exist
             if (!item) {
-              const unitCost = parseFloat(body.unitCost) || 0
               const reorderPoint = parseFloat(body.reorderPoint) || 0
-              const totalValue = computedInventoryTotalValue(quantity, unitCost)
+              const totalValue = computedInventoryTotalValue(quantity, receiptUnitCost)
               // Create with core fields
               const createData = {
                 sku: body.sku,
@@ -5601,11 +5608,14 @@ async function handler(req, res) {
                 unit: body.unit || 'pcs',
                 reorderPoint,
                 reorderQty: parseFloat(body.reorderQty) || 0,
-                unitCost,
+                unitCost: receiptUnitCost,
+                ...(receiptUnitCost > 0
+                  ? { lastInboundUnitPrice: receiptUnitCost, lastInboundAt: receiptAt }
+                  : {}),
                 totalValue,
                 supplier: body.supplier || '',
                 status: quantity > reorderPoint ? 'in_stock' : (quantity > 0 ? 'low_stock' : 'out_of_stock'),
-                lastRestocked: body.date ? new Date(body.date) : new Date(),
+                lastRestocked: receiptAt,
                 ownerId: null,
                 locationId: toLocationId || null
               };
@@ -5628,23 +5638,6 @@ async function handler(req, res) {
                   throw createError;
                 }
               }
-            } else {
-              // Increment quantity and update value (quantity is already positive for receipts)
-              const unitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : item.unitCost
-              newQuantity = (item.quantity || 0) + quantity // quantity is positive for receipts
-              const totalValue = computedInventoryTotalValue(newQuantity, unitCost)
-              const reorderPoint = item.reorderPoint || 0
-              const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
-              item = await tx.inventoryItem.update({
-                where: { id: item.id },
-                data: {
-                  quantity: newQuantity,
-                  unitCost,
-                  totalValue,
-                  status,
-                  lastRestocked: body.date ? new Date(body.date) : new Date()
-                }
-              })
             }
             
             // Update LocationInventory for receipt
@@ -5654,23 +5647,35 @@ async function handler(req, res) {
                 lastRestocked: movementRestockedAt
               })
               
-              // Recalculate master aggregate
-              const totalAtLocations = await tx.locationInventory.aggregate({ 
-                _sum: { quantity: true }, 
-                where: { sku: body.sku } 
+              const totalAtLocations = await tx.locationInventory.aggregate({
+                _sum: { quantity: true },
+                where: { sku: body.sku }
               })
               const aggQty = totalAtLocations._sum.quantity || 0
               
               if (item) {
-                item = await tx.inventoryItem.update({
-                  where: { id: item.id },
-                  data: {
-                    quantity: aggQty,
-                    totalValue: computedInventoryTotalValue(aggQty, item.unitCost),
-                    status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
-                  }
-                })
+                const refreshed = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
+                item = await syncCatalogTotalValueForSkuTx(
+                  tx,
+                  body.sku,
+                  aggQty,
+                  refreshed?.unitCost ?? item.unitCost
+                )
               }
+            } else if (item) {
+              newQuantity = (item.quantity || 0) + quantity
+              const uc = item.unitCost || 0
+              const reorderPoint = item.reorderPoint || 0
+              item = await tx.inventoryItem.update({
+                where: { id: item.id },
+                data: {
+                  quantity: newQuantity,
+                  totalValue: computedInventoryTotalValue(newQuantity, uc),
+                  status:
+                    newQuantity > reorderPoint ? 'in_stock' : newQuantity > 0 ? 'low_stock' : 'out_of_stock',
+                  lastRestocked: receiptAt
+                }
+              })
             }
           } else if (type === 'production') {
             // Production reduces stock (consumes materials) - same logic as consumption

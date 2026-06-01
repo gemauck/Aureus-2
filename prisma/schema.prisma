@@ -1601,6 +1601,9 @@ model InventoryItem {
   reorderQty              Float          @default(0)
   location                String         @default("")
   unitCost                Float          @default(0)
+  /// Most recent inbound unit price (>0); not averaged — see unitCost for WAC.
+  lastInboundUnitPrice    Float          @default(0)
+  lastInboundAt           DateTime?
   totalValue              Float          @default(0)
   supplier                String         @default("")
   status                  String         @default("in_stock")

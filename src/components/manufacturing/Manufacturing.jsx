@@ -1817,6 +1817,7 @@ try {
         'availableQuantity',
         'reorderPoint',
         'unitCost',
+        'lastInboundUnitPrice',
         'totalValue',
         'location',
         'manufacturerPartNumber',
@@ -1831,6 +1832,13 @@ try {
         ...preferredOrder.filter((key) => uniqueKeys.has(key)),
         ...[...uniqueKeys].filter((key) => !preferredOrder.includes(key)).sort()
       ];
+
+      const inventoryExportHeaderLabels = {
+        unitCost: 'Average unit cost',
+        lastInboundUnitPrice: 'Latest unit price',
+        totalValue: 'Total value'
+      };
+      const headerLabel = (key) => inventoryExportHeaderLabels[key] || key;
 
       const formatValueForCell = (value) => {
         if (value === null || value === undefined) {
@@ -1895,7 +1903,7 @@ try {
       };
 
       if (XLSXLib && XLSXLib.utils) {
-        const headerRow = orderedKeys.slice();
+        const headerRow = orderedKeys.map(headerLabel);
         const dataRows = exportInventory.map((item) =>
           orderedKeys.map((key) => formatValueForCell(inventoryExportCell(item, key)))
         );
@@ -1927,7 +1935,7 @@ try {
           if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
           return s;
         };
-        const headerLine = orderedKeys.map(sanitizeCsv).join(',');
+        const headerLine = orderedKeys.map((key) => sanitizeCsv(headerLabel(key))).join(',');
         const dataLines = exportInventory.map((item) =>
           orderedKeys.map((key) => sanitizeCsv(formatValueForCell(inventoryExportCell(item, key)))).join(',')
         );
