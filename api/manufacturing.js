@@ -3551,7 +3551,24 @@ async function handler(req, res) {
         if (body.reorderPoint !== undefined) updateData.reorderPoint = parseFloat(body.reorderPoint)
         if (body.reorderQty !== undefined) updateData.reorderQty = parseFloat(body.reorderQty)
         // Location removed - don't update it
-        if (body.unitCost !== undefined) updateData.unitCost = parseFloat(body.unitCost)
+        if (body.unitCost !== undefined) {
+          const requestedCost = parseFloat(body.unitCost)
+          const existingCost = Number(existing.unitCost) || 0
+          const costChanged =
+            Number.isFinite(requestedCost) &&
+            Math.abs(requestedCost - existingCost) > 0.0001
+          const canEditUnitCost =
+            isAdminRole(req.user?.role) || isSuperAdminUser(req.user)
+          if (costChanged && !canEditUnitCost) {
+            return forbidden(
+              res,
+              'Only administrators can change unit cost. Average cost updates automatically when stock is received at a price.'
+            )
+          }
+          if (canEditUnitCost) {
+            updateData.unitCost = Number.isFinite(requestedCost) ? requestedCost : existingCost
+          }
+        }
         if (body.supplier !== undefined) updateData.supplier = body.supplier
         
         // New fields - only include if provided (safe for backwards compatibility)
@@ -3671,11 +3688,22 @@ async function handler(req, res) {
           }
         }
 
-        auditManufacturing('update', 'inventory', id, {
+        const auditDetails = {
           summary: `Updated inventory ${item.sku} ${item.name}`,
           sku: item.sku,
           fieldsUpdated: Object.keys(updateData)
-        })
+        }
+        if (updateData.unitCost !== undefined) {
+          const previousUnitCost = Number(existing.unitCost) || 0
+          const newUnitCost = Number(updateData.unitCost) || 0
+          if (Math.abs(newUnitCost - previousUnitCost) > 0.0001) {
+            auditDetails.costOverride = true
+            auditDetails.previousUnitCost = previousUnitCost
+            auditDetails.newUnitCost = newUnitCost
+            auditDetails.summary = `Manual average unit cost override for ${item.sku}`
+          }
+        }
+        auditManufacturing('update', 'inventory', id, auditDetails)
         const hydrated = (await hydrateInventoryAlternativeSuppliers([item]))[0] || item
         return ok(res, { 
           item: {

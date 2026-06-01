@@ -11,7 +11,9 @@
   const REPORT_TABS = [
     { id: 'stock-movements', label: 'Stock Movement Report', icon: 'fa-exchange-alt' },
     { id: 'client-allocation', label: 'Client Allocation Report', icon: 'fa-users' },
-    { id: 'receipts', label: 'Receipt of Stock Report', icon: 'fa-truck-loading' }
+    { id: 'receipts', label: 'Receipt of Stock Report', icon: 'fa-truck-loading' },
+    { id: 'inventory-valuation', label: 'Inventory Valuation', icon: 'fa-coins' },
+    { id: 'cost-overrides', label: 'Cost Overrides', icon: 'fa-user-shield', adminOnly: true }
   ];
 
   const DATE_PRESET_LAST_CALENDAR_MONTH = 'last-calendar-month';
@@ -480,8 +482,100 @@
     return out;
   }
 
+  function formatReportDate(isoOrDate) {
+    if (!isoOrDate) return '';
+    const d = new Date(isoOrDate);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function roundMoney(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+  }
+
+  function buildInventoryValuationRows(inventoryList, locationFilterId) {
+    const asAt = formatYmd(new Date());
+    const bySku = new Map();
+    for (const item of inventoryList || []) {
+      if (!item?.sku) continue;
+      if (locationFilterId && locationFilterId !== 'all') {
+        if (String(item.locationId || '') !== String(locationFilterId)) continue;
+      }
+      const sku = String(item.sku).trim();
+      const qty = Number(item.quantity) || 0;
+      const averageCost = Number(item.unitCost) || 0;
+      const latestPrice = Number(item.lastInboundUnitPrice) || 0;
+      const lineValue = roundMoney(qty * averageCost);
+      const row = {
+        as_at_date: asAt,
+        sku,
+        name: item.name || sku,
+        category: item.category || '',
+        unit: item.unit || 'pcs',
+        location: item.location || '',
+        quantity: qty,
+        average_unit_cost: averageCost,
+        latest_unit_price: latestPrice,
+        last_priced_receipt: formatReportDate(item.lastInboundAt),
+        total_value: lineValue
+      };
+      if (bySku.has(sku)) {
+        const prev = bySku.get(sku);
+        prev.quantity = roundMoney(prev.quantity + qty);
+        prev.total_value = roundMoney(prev.quantity * prev.average_unit_cost);
+        if (!prev.location && row.location) prev.location = row.location;
+      } else {
+        bySku.set(sku, row);
+      }
+    }
+    return Array.from(bySku.values()).sort((a, b) =>
+      String(a.sku).localeCompare(String(b.sku))
+    );
+  }
+
+  async function fetchCostOverrideRows(startStr, endStr) {
+    if (!window.DatabaseAPI?.getManufacturingActivity) return [];
+    const out = [];
+    const pageSize = 500;
+    let offset = 0;
+    let total = Infinity;
+    while (offset < total) {
+      const res = await window.DatabaseAPI.getManufacturingActivity({
+        startDate: startStr || undefined,
+        endDate: endStr || undefined,
+        limit: pageSize,
+        offset
+      });
+      const logs = res?.data?.logs || [];
+      total = Number(res?.data?.total) || logs.length;
+      for (const log of logs) {
+        if (log.module !== 'manufacturing' || log.action !== 'update') continue;
+        const d = log.details && typeof log.details === 'object' ? log.details : {};
+        const prev = d.previousUnitCost;
+        const next = d.newUnitCost;
+        const isOverride =
+          d.costOverride === true ||
+          (prev != null && next != null && Math.abs(Number(next) - Number(prev)) > 0.0001);
+        if (!isOverride) continue;
+        out.push({
+          timestamp: log.timestamp,
+          user: log.user,
+          user_email: log.userEmail || '',
+          sku: d.sku || '',
+          previous_unit_cost: prev != null ? prev : '',
+          new_unit_cost: next != null ? next : '',
+          summary: d.summary || ''
+        });
+      }
+      offset += logs.length;
+      if (!logs.length || logs.length < pageSize) break;
+    }
+    return out;
+  }
+
   function ManufacturingReportsView({
     isDark = false,
+    isAdmin = false,
     getLocationLabel,
     inventory = [],
     stockLocations = []
@@ -495,8 +589,17 @@
     const [rows, setRows] = useState([]);
     const [exporting, setExporting] = useState(false);
     const [journalExporting, setJournalExporting] = useState(false);
+    const [valuationLocationId, setValuationLocationId] = useState('all');
 
     const inventoryCostMap = useMemo(() => buildInventoryCostMap(inventory), [inventory]);
+
+    const visibleReportTabs = useMemo(
+      () => REPORT_TABS.filter((tab) => !tab.adminOnly || isAdmin),
+      [isAdmin]
+    );
+
+    const isValuationTab = reportTab === 'inventory-valuation';
+    const isCostOverrideTab = reportTab === 'cost-overrides';
 
     const resolveLocationLabel = useCallback(
       (locIdOrCode) => {
@@ -732,6 +835,27 @@
         } else if (reportTab === 'receipts') {
           const movements = await fetchAllStockMovements();
           setRows(await buildReceiptRows(movements));
+        } else if (reportTab === 'inventory-valuation') {
+          const masterFromApi = await fetchMasterInventoryCostMap();
+          let list = inventory || [];
+          if (!list.length && window.DatabaseAPI?.getInventory) {
+            const res = await window.DatabaseAPI.getInventory(null, { forceRefresh: true });
+            list = res?.data?.inventory || [];
+          }
+          const costBySku = masterFromApi;
+          const merged = list.map((row) => {
+            const sku = row?.sku;
+            const fromMaster = sku ? costBySku.get(String(sku)) : undefined;
+            return {
+              ...row,
+              unitCost: row.unitCost != null ? row.unitCost : fromMaster,
+              lastInboundUnitPrice: row.lastInboundUnitPrice ?? 0,
+              lastInboundAt: row.lastInboundAt ?? null
+            };
+          });
+          setRows(buildInventoryValuationRows(merged, valuationLocationId));
+        } else if (reportTab === 'cost-overrides') {
+          setRows(await fetchCostOverrideRows(dateStart, dateEnd));
         } else {
           setRows([]);
         }
@@ -742,7 +866,14 @@
       } finally {
         setLoading(false);
       }
-    }, [reportTab, buildStockMovementRows, buildClientAllocationRows, buildReceiptRows]);
+    }, [
+      reportTab,
+      buildStockMovementRows,
+      buildClientAllocationRows,
+      buildReceiptRows,
+      valuationLocationId,
+      inventory
+    ]);
 
     useEffect(() => {
       void loadReport();
@@ -783,12 +914,24 @@
     };
 
     const periodLabel = useMemo(() => {
+      if (isValuationTab) {
+        const loc =
+          valuationLocationId === 'all'
+            ? 'All locations'
+            : resolveLocationLabel(valuationLocationId) || valuationLocationId;
+        return `As at ${formatYmd(new Date())} · ${loc}`;
+      }
       if (datePreset === DATE_PRESET_ALL) return 'All dates';
       if (dateStart && dateEnd) return `${dateStart} → ${dateEnd}`;
       if (dateStart) return `From ${dateStart}`;
       if (dateEnd) return `Until ${dateEnd}`;
       return 'All dates';
-    }, [datePreset, dateStart, dateEnd]);
+    }, [datePreset, dateStart, dateEnd, isValuationTab, valuationLocationId, resolveLocationLabel]);
+
+    const valuationGrandTotal = useMemo(() => {
+      if (!isValuationTab) return 0;
+      return roundMoney(rows.reduce((sum, r) => sum + (Number(r.total_value) || 0), 0));
+    }, [isValuationTab, rows]);
 
     const handleExport = async () => {
       setExporting(true);
@@ -867,12 +1010,31 @@
             React.createElement(
               'p',
               { className: `text-xs mt-1 ${textMuted}` },
-              'Export full field sets to Excel for stock movements, client stock allocation (sales orders & job card consumption), and stock receipts. Default period: current calendar month.'
+              'Export stock movements, allocations, receipts, inventory valuation (average & latest cost), and admin cost overrides. Default period: current calendar month (except valuation: point-in-time).'
             )
           ),
           React.createElement(
             'div',
             { className: 'flex flex-wrap items-center gap-2' },
+            isValuationTab &&
+              React.createElement(
+                'select',
+                {
+                  value: valuationLocationId,
+                  onChange: (e) => setValuationLocationId(e.target.value),
+                  className: `px-2 py-1.5 text-sm border rounded-lg max-w-[220px] ${inputCls}`,
+                  'aria-label': 'Valuation location filter'
+                },
+                React.createElement('option', { value: 'all' }, 'All locations'),
+                ...(stockLocations || []).map((loc) =>
+                  React.createElement(
+                    'option',
+                    { key: loc.id, value: loc.id },
+                    `${loc.code || ''} — ${loc.name || loc.id}`
+                  )
+                )
+              ),
+            !isValuationTab &&
             React.createElement(
               'select',
               {
@@ -894,6 +1056,7 @@
               React.createElement('option', { value: DATE_PRESET_CUSTOM }, 'Custom range'),
               React.createElement('option', { value: DATE_PRESET_ALL }, 'All time')
             ),
+            !isValuationTab &&
             React.createElement('input', {
               type: 'date',
               value: dateStart,
@@ -902,7 +1065,9 @@
               className: `px-2 py-1.5 text-sm border rounded-lg ${inputCls} disabled:opacity-50`,
               'aria-label': 'From date'
             }),
+            !isValuationTab &&
             React.createElement('span', { className: `text-xs ${textMuted}` }, 'to'),
+            !isValuationTab &&
             React.createElement('input', {
               type: 'date',
               value: dateEnd,
@@ -957,7 +1122,7 @@
         React.createElement(
           'div',
           { className: 'flex flex-wrap gap-1' },
-          REPORT_TABS.map((tab) =>
+          visibleReportTabs.map((tab) =>
             React.createElement(
               'button',
               {
@@ -1001,7 +1166,9 @@
             { className: `text-xs ${textMuted}` },
             loading
               ? 'Loading…'
-              : `${rows.length} row${rows.length === 1 ? '' : 's'} · ${columns.length} columns · ${periodLabel}`
+              : isValuationTab && rows.length
+                ? `${rows.length} SKU${rows.length === 1 ? '' : 's'} · Total value R ${valuationGrandTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${periodLabel}`
+                : `${rows.length} row${rows.length === 1 ? '' : 's'} · ${columns.length} columns · ${periodLabel}`
           )
         ),
         React.createElement(
@@ -1023,7 +1190,11 @@
               ? React.createElement(
                   'div',
                   { className: `px-4 py-12 text-center text-sm ${textMuted}` },
-                  'No data for this report and date range.'
+                  isValuationTab
+                    ? 'No inventory rows for this location filter.'
+                    : isCostOverrideTab
+                      ? 'No manual average cost overrides in this period.'
+                      : 'No data for this report and date range.'
                 )
               : React.createElement(
                   'table',

@@ -257,7 +257,7 @@ const INVENTORY_DESKTOP_OPTIONAL_COLUMN_META = [
   { key: 'type', label: 'Type' },
   { key: 'quantity', label: 'Quantity' },
   { key: 'location', label: 'Location' },
-  { key: 'unitCost', label: 'Unit Cost' },
+  { key: 'unitCost', label: 'Average cost' },
   { key: 'totalValue', label: 'Total Value' },
   { key: 'status', label: 'Status' }
 ];
@@ -4850,7 +4850,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
                           {item.unitCost > 0 && (
                             <div>
-                              <span className="text-xs text-gray-500">Unit Cost:</span>
+                              <span className="text-xs text-gray-500">Average cost:</span>
                               <span className="ml-1 text-sm font-semibold text-gray-900">{formatCurrency(item.unitCost)}</span>
                             </div>
                           )}
@@ -5041,7 +5041,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
                       title="Click to sort"
                     >
-                      <span>Unit Cost</span>
+                      <span>Average cost</span>
                       {getSortIcon('unitCost')}
                     </button>
                   </th>
@@ -6648,9 +6648,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         unit: formData.unit,
         reorderPoint: formData.reorderPoint === undefined || formData.reorderPoint === null || formData.reorderPoint === '' ? undefined : parseFloat(formData.reorderPoint),
         reorderQty: formData.reorderQty === undefined || formData.reorderQty === null || formData.reorderQty === '' ? undefined : parseFloat(formData.reorderQty),
-        unitCost: formData.unitCost === undefined || formData.unitCost === null || formData.unitCost === '' ? undefined : parseFloat(formData.unitCost),
         supplier: formData.supplier || ''
       };
+      if (isAdmin) {
+        itemData.unitCost =
+          formData.unitCost === undefined || formData.unitCost === null || formData.unitCost === ''
+            ? undefined
+            : parseFloat(formData.unitCost);
+      }
       if (formData.thumbnail) {
         if (formData.thumbnailSource !== undefined && formData.thumbnailSource !== null) {
           itemData.thumbnailSource = formData.thumbnailSource;
@@ -8748,16 +8753,29 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   />
                 </div>
 
-                {/* Unit Cost */}
+                {/* Unit Cost — admins only (WAC updates on inbound) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost (R) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={(formData.unitCost === undefined || formData.unitCost === null) ? '' : formData.unitCost}
-                    onChange={(e) => setFormData({ ...formData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isAdmin ? 'Unit Cost (R) *' : 'Average unit cost (R)'}
+                  </label>
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={(formData.unitCost === undefined || formData.unitCost === null) ? '' : formData.unitCost}
+                      onChange={(e) => setFormData({ ...formData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  ) : (
+                    <div className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                      {formData.unitCost > 0 ? formatCurrency(formData.unitCost) : '—'}
+                    </div>
+                  )}
+                  {!isAdmin && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Updated when stock is received. Ask an administrator to correct the average.
+                    </p>
+                  )}
                 </div>
 
                 {/* Supplier */}
@@ -11603,6 +11621,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
               <div className="p-4 space-y-3 text-sm">
                 <p className="text-xs text-gray-500">Adjust quantity received and unit price per line. Received quantity cannot exceed ordered.</p>
+                <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                  Line unit prices update each SKU&apos;s <span className="font-medium">weighted average cost</span> when you post this receipt.
+                </p>
                 {poReceiptLines.map((row, idx) => (
                   <div key={row.sku || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
                     <p className="font-medium text-gray-900">{row.name || row.sku}</p>
@@ -14183,9 +14204,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           unit: editFormData.unit,
           reorderPoint: editFormData.reorderPoint === undefined || editFormData.reorderPoint === null || editFormData.reorderPoint === '' ? undefined : parseFloat(editFormData.reorderPoint),
           reorderQty: editFormData.reorderQty === undefined || editFormData.reorderQty === null || editFormData.reorderQty === '' ? undefined : parseFloat(editFormData.reorderQty),
-          unitCost: editFormData.unitCost === undefined || editFormData.unitCost === null || editFormData.unitCost === '' ? undefined : parseFloat(editFormData.unitCost),
           supplier: editFormData.supplier || ''
         };
+        if (isAdmin) {
+          itemData.unitCost =
+            editFormData.unitCost === undefined || editFormData.unitCost === null || editFormData.unitCost === ''
+              ? undefined
+              : parseFloat(editFormData.unitCost);
+        }
         const alternativeSuppliersPayload = buildAlternativeSuppliersPayload(editFormData, suppliers);
         if (alternativeSuppliersPayload.length > 0) {
           itemData.alternativeSuppliers = alternativeSuppliersPayload;
@@ -14618,14 +14644,45 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost (R) *</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editFormData.unitCost === undefined || editFormData.unitCost === null ? '' : editFormData.unitCost}
-                        onChange={(e) => setEditFormData({ ...editFormData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {isAdmin ? 'Unit Cost (R) *' : 'Average unit cost (R)'}
+                      </label>
+                      {isAdmin ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editFormData.unitCost === undefined || editFormData.unitCost === null ? '' : editFormData.unitCost}
+                          onChange={(e) => setEditFormData({ ...editFormData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      ) : (
+                        <div className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                          {editFormData.unitCost > 0 ? formatCurrency(editFormData.unitCost) : '—'}
+                        </div>
+                      )}
+                      {!isAdmin && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Updated when stock is received (weighted average). Only administrators can edit this.
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Latest unit price</p>
+                      <p className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        {item.lastInboundUnitPrice > 0 ? formatCurrency(item.lastInboundUnitPrice) : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Last priced receipt</p>
+                      <p className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        {item.lastInboundAt
+                          ? new Date(item.lastInboundAt).toLocaleDateString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })
+                          : '—'}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
@@ -14779,14 +14836,42 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-xs text-gray-500 mb-1">Reorder Quantity</p>
                       <p className="text-sm font-semibold text-gray-900">{item.reorderQty || '-'} {item.unit}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Unit Cost</p>
-                      <p className="text-sm font-semibold text-gray-900">{item.unitCost > 0 ? formatCurrency(item.unitCost) : '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Total Value</p>
-                      <p className="text-sm font-semibold text-blue-600">{catalogLineTotalValue > 0 ? formatCurrency(catalogLineTotalValue) : '-'}</p>
-                      <p className="text-xs text-gray-400 mt-1">Quantity × unit cost</p>
+                    <div className="col-span-2 border-t border-gray-100 pt-3 mt-1">
+                      <p className="text-xs font-medium text-gray-600 mb-2">Costing (company-wide)</p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Average unit cost</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.unitCost > 0 ? formatCurrency(item.unitCost) : '—'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">Weighted average (WAC)</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Latest unit price</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.lastInboundUnitPrice > 0 ? formatCurrency(item.lastInboundUnitPrice) : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Last priced receipt</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.lastInboundAt
+                              ? new Date(item.lastInboundAt).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })
+                              : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Line value (this view)</p>
+                          <p className="text-sm font-semibold text-blue-600">
+                            {catalogLineTotalValue > 0 ? formatCurrency(catalogLineTotalValue) : '—'}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">Qty shown × average cost</p>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Supplier</p>
@@ -14849,10 +14934,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <div>
                   <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Value</p>
                   <p className={`text-lg font-bold mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{formatCurrency(catalogLineTotalValue || 0)}</p>
-                  <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quantity × unit cost</p>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Quantity × average unit cost</p>
+                  {item.lastInboundUnitPrice > 0 && (
+                    <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Latest receipt price: {formatCurrency(item.lastInboundUnitPrice)}
+                      {item.lastInboundAt
+                        ? ` · ${new Date(item.lastInboundAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+                        : ''}
+                    </p>
+                  )}
                   {(!item.unitCost || Number(item.unitCost) <= 0) && (displayQuantity > 0) && (
                     <p className={`text-xs mt-2 ${isDark ? 'text-amber-300/90' : 'text-amber-700'}`}>
-                      No unit cost on this item — set <span className="font-medium">Unit cost</span> under Edit Item to show value here.
+                      No average cost on this item — receive stock on a PO or ask an admin to set average cost under Edit.
                     </p>
                   )}
                 </div>
@@ -15374,6 +15467,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               (window.ManufacturingReportsView
                 ? createElement(window.ManufacturingReportsView, {
                     isDark,
+                    isAdmin,
                     inventory,
                     stockLocations,
                     getLocationLabel
