@@ -71,6 +71,16 @@ function PoaInfoTip({ children, isDark }) {
     );
 }
 
+const BATCH_WINDOW_HELP = (
+    <>
+        <strong className="block mb-1">Batch window</strong>
+        Maximum time gap between fuel dispenses on the same asset that still count as one
+        dispensing session. Closer fills are grouped into a single batch for POA strength,
+        compliance points, and proof linking. A later fill after this window starts a new batch
+        (new label on the report). Default is 1 hour.
+    </>
+);
+
 const SHIFT_FALLBACK_HELP = (
     <>
         <strong className="block mb-1">Shift POA fallback</strong>
@@ -1443,31 +1453,55 @@ self.onmessage = async (e) => {
                     Org-wide defaults (saved for all users with access). Used for batch grouping, shift POA fallback, and large SMR checks.
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[
-                        { key: 'batchWindowHours', label: 'Batch window (hours)', step: '0.5' },
-                        { key: 'smrUsageMaxPerActivity', label: 'Max SMR delta per activity row', step: '1' },
-                    ].map((field) => (
-                        <label key={field.key} className="block text-xs">
-                            <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>{field.label}</span>
-                            <input
-                                type="number"
-                                min="0"
-                                step={field.step}
-                                value={poaSettings[field.key] ?? ''}
-                                onChange={(e) =>
-                                    setPoaSettings((s) => ({
-                                        ...s,
-                                        [field.key]: parseFloat(e.target.value) || 0,
-                                    }))
-                                }
-                                className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
-                                    isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
-                                }`}
-                            />
-                        </label>
-                    ))}
+                <div className="max-w-sm">
+                    <div className="flex items-center gap-1.5 mb-1">
+                        <span className={`text-xs font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                            Batch window
+                        </span>
+                        <PoaInfoTip isDark={isDark}>{BATCH_WINDOW_HELP}</PoaInfoTip>
+                    </div>
+                    <label className="block text-xs">
+                        <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>
+                            Batch window (hours)
+                        </span>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={poaSettings.batchWindowHours ?? ''}
+                            onChange={(e) =>
+                                setPoaSettings((s) => ({
+                                    ...s,
+                                    batchWindowHours: parseFloat(e.target.value) || 0,
+                                }))
+                            }
+                            className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
+                                isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
+                            }`}
+                        />
+                    </label>
                 </div>
+
+                <label className="mt-3 block max-w-sm text-xs">
+                    <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>
+                        Max SMR delta per activity row
+                    </span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={poaSettings.smrUsageMaxPerActivity ?? ''}
+                        onChange={(e) =>
+                            setPoaSettings((s) => ({
+                                ...s,
+                                smrUsageMaxPerActivity: parseFloat(e.target.value) || 0,
+                            }))
+                        }
+                        className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
+                            isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
+                        }`}
+                    />
+                </label>
 
                 <div className="mt-3 max-w-sm">
                     <div className="flex items-center gap-1.5 mb-1">
