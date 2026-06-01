@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -1627,7 +1628,7 @@ def evaluate_all_labels(
     labels = relevant.unique()
     n_labels = len(labels)
     if n_labels > 500:
-        print(f"Evaluating POA strength for {n_labels} batches...", flush=True)
+        print(f"Evaluating POA strength for {n_labels} batches...", file=sys.stderr, flush=True)
 
     proof_groups = {
         str(label): grp
@@ -1645,7 +1646,7 @@ def evaluate_all_labels(
 
     for i, label in enumerate(labels):
         if n_labels > 500 and i > 0 and i % 500 == 0:
-            print(f"  POA strength progress: {i}/{n_labels}", flush=True)
+            print(f"  POA strength progress: {i}/{n_labels}", file=sys.stderr, flush=True)
 
         label_str = str(label)
         proof_rows = proof_groups.get(label_str)
