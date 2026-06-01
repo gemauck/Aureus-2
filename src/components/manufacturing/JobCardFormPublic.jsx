@@ -1969,6 +1969,9 @@ const JobCardFormPublic = () => {
   const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false);
   const [arrivalConfirmPickMode, setArrivalConfirmPickMode] = useState(false);
   const [arrivalConfirmDraft, setArrivalConfirmDraft] = useState('');
+  const [departureConfirmOpen, setDepartureConfirmOpen] = useState(false);
+  const [departureConfirmPickMode, setDepartureConfirmPickMode] = useState(false);
+  const [departureConfirmDraft, setDepartureConfirmDraft] = useState('');
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
   const [stockTakeLocationId, setStockTakeLocationId] = useState('');
@@ -2067,6 +2070,9 @@ const JobCardFormPublic = () => {
   const sessionActivityQueueRef = useRef([]);
   const activeEditCardIdRef = useRef(null);
   const persistWizardDraftRef = useRef(null);
+  const handleSaveRef = useRef(null);
+  /** Resume submit after arrival/departure confirmation modal */
+  const pendingSubmitOptionsRef = useRef(null);
 
   const stockTakeFilteredRows = useMemo(() => {
     const q = stockTakeLineSearch.trim().toLowerCase();
@@ -4268,6 +4274,10 @@ const JobCardFormPublic = () => {
     setArrivalConfirmOpen(false);
     setArrivalConfirmPickMode(false);
     setArrivalConfirmDraft('');
+    setDepartureConfirmOpen(false);
+    setDepartureConfirmPickMode(false);
+    setDepartureConfirmDraft('');
+    pendingSubmitOptionsRef.current = null;
     resetForm();
     setWizardFlow('landing');
   };
@@ -4283,6 +4293,12 @@ const JobCardFormPublic = () => {
       void persistWizardDraftRef.current?.({
         syncServer: Boolean(editingMeta?.serverJobCardId)
       });
+      const pendingSubmit = pendingSubmitOptionsRef.current;
+      if (pendingSubmit) {
+        queueMicrotask(() => {
+          void handleSaveRef.current?.({ ...pendingSubmit, timeOfArrivalOverride: v });
+        });
+      }
     },
     [arrivalConfirmDraft, editingMeta?.serverJobCardId, pushWizardActivity]
   );
@@ -5098,6 +5114,9 @@ const JobCardFormPublic = () => {
     });
     setArrivalConfirmOpen(false);
     setArrivalConfirmPickMode(false);
+    setDepartureConfirmOpen(false);
+    setDepartureConfirmPickMode(false);
+    pendingSubmitOptionsRef.current = null;
     activeEditCardIdRef.current = localId;
 
     applyPhotosToEditState(localId, full.photos);
@@ -5525,6 +5544,15 @@ const JobCardFormPublic = () => {
       setIsSubmitting(false);
     };
 
+    const timeOfArrivalForSave =
+      options?.timeOfArrivalOverride != null
+        ? String(options.timeOfArrivalOverride)
+        : formData.timeOfArrival;
+    const departureFromSiteForSave =
+      options?.departureFromSiteOverride != null
+        ? String(options.departureFromSiteOverride)
+        : formData.departureFromSite;
+
     const forceDraft = options?.forceDraft === true;
     const forceSubmitted = options?.forceSubmitted === true;
     const normalizedStatus = forceDraft
@@ -5563,17 +5591,30 @@ const JobCardFormPublic = () => {
       releaseSaveLock();
       return;
     }
-    if (
-      editingMeta?.useNewJobTimeFlow &&
-      normalizedStatus !== 'draft' &&
-      !String(formData.departureFromSite || '').trim()
-    ) {
-      setStepError('Select your departure from site time before submitting.');
-      setCurrentStep(STEP_IDS.indexOf('signoff'));
-      releaseSaveLock();
-      return;
+    if (normalizedStatus !== 'draft') {
+      if (editingMeta?.useNewJobTimeFlow && !String(timeOfArrivalForSave || '').trim()) {
+        pendingSubmitOptionsRef.current = options;
+        setArrivalConfirmDraft(toDatetimeLocalInput(new Date()));
+        setArrivalConfirmPickMode(false);
+        setArrivalConfirmOpen(true);
+        setCurrentStep(STEP_IDS.indexOf('visit'));
+        setStepError('');
+        releaseSaveLock();
+        return;
+      }
+      if (!String(departureFromSiteForSave || '').trim()) {
+        pendingSubmitOptionsRef.current = options;
+        setDepartureConfirmDraft(toDatetimeLocalInput(new Date()));
+        setDepartureConfirmPickMode(false);
+        setDepartureConfirmOpen(true);
+        setCurrentStep(STEP_IDS.indexOf('signoff'));
+        setStepError('');
+        releaseSaveLock();
+        return;
+      }
     }
 
+    pendingSubmitOptionsRef.current = null;
     setIsSubmitting(true);
     setStepError('');
     try {
@@ -5590,8 +5631,14 @@ const JobCardFormPublic = () => {
         }));
         activeEditCardIdRef.current = draftLocalId;
       }
+      const totalMinutesForSave =
+        jobSiteMinutesFromDatetimeLocals(timeOfArrivalForSave, departureFromSiteForSave) ??
+        jobSiteDurationMinutes ??
+        0;
       const jobCardData = {
         ...formData,
+        timeOfArrival: timeOfArrivalForSave,
+        departureFromSite: departureFromSiteForSave,
         customerSignature: signatureForSave,
         customerPosition: formData.customerTitle || '',
         id: draftLocalId,
@@ -5638,7 +5685,7 @@ const JobCardFormPublic = () => {
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
-      jobCardData.totalTimeMinutes = jobSiteDurationMinutes ?? 0;
+      jobCardData.totalTimeMinutes = totalMinutesForSave;
       jobCardData.totalMaterialsCost = totalMaterialCost;
       jobCardData.stockUsed = sanitizeJobCardStockUsedForSave(jobCardData.stockUsed);
 
@@ -5932,6 +5979,25 @@ const JobCardFormPublic = () => {
       releaseSaveLock();
     }
   };
+  handleSaveRef.current = handleSave;
+
+  const confirmDepartureFromSite = useCallback(
+    (departureValue) => {
+      const v = String(departureValue || departureConfirmDraft || '').trim();
+      if (!v) return;
+      setFormData(prev => ({ ...prev, departureFromSite: v }));
+      setDepartureConfirmOpen(false);
+      setDepartureConfirmPickMode(false);
+      pushWizardActivity('job_time_departure_confirmed', { departureFromSite: v });
+      const pendingSubmit = pendingSubmitOptionsRef.current;
+      queueMicrotask(() => {
+        if (pendingSubmit) {
+          void handleSaveRef.current?.({ ...pendingSubmit, departureFromSiteOverride: v });
+        }
+      });
+    },
+    [departureConfirmDraft, pushWizardActivity]
+  );
 
   const buildWizardPhotosPayload = useCallback(() => {
     const draftSignature =
@@ -6062,8 +6128,8 @@ const JobCardFormPublic = () => {
   }, [persistWizardDraft]);
 
   const validateStep = (stepIndex) => {
-    if (arrivalConfirmOpen) {
-      return 'Confirm your arrival on site time to continue.';
+    if (arrivalConfirmOpen || departureConfirmOpen) {
+      return 'Confirm the date and time to continue.';
     }
     switch (STEP_IDS[stepIndex]) {
       case 'assignment':
@@ -6082,8 +6148,8 @@ const JobCardFormPublic = () => {
 
   const goToStep = (stepIndex) => {
     if (stepIndex === currentStep) return;
-    if (arrivalConfirmOpen) {
-      setStepError('Confirm your arrival on site time to continue.');
+    if (arrivalConfirmOpen || departureConfirmOpen) {
+      setStepError('Confirm the date and time to continue.');
       return;
     }
     // Already-submitted cards: allow moving between steps to review (saved data may not re-pass assignment checks).
@@ -6101,8 +6167,8 @@ const JobCardFormPublic = () => {
   };
 
   const handleNext = () => {
-    if (arrivalConfirmOpen) {
-      setStepError('Confirm your arrival on site time to continue.');
+    if (arrivalConfirmOpen || departureConfirmOpen) {
+      setStepError('Confirm the date and time to continue.');
       return;
     }
     if (!editingMeta?.synced) {
@@ -9224,6 +9290,91 @@ const JobCardFormPublic = () => {
                     type="button"
                     disabled={!arrivalConfirmDraft}
                     onClick={() => confirmArrivalOnSite(arrivalConfirmDraft)}
+                    className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Confirm time
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {departureConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="jobcard-departure-confirm-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 id="jobcard-departure-confirm-title" className="text-lg font-semibold text-gray-900">
+              Departure from site
+            </h2>
+            <p className="text-sm text-gray-600 mt-2">
+              Confirm the date and time you left the site before submitting this job card.
+            </p>
+            {formData.timeOfArrival ? (
+              <p className="text-sm text-gray-500 mt-2">
+                Arrival on site:{' '}
+                <span className="font-medium text-gray-800">
+                  {formatWizardDatetimeLabel(formData.timeOfArrival)}
+                </span>
+              </p>
+            ) : null}
+            {!departureConfirmPickMode ? (
+              <>
+                <p className="mt-4 text-xl font-semibold text-gray-900 tabular-nums">
+                  {formatWizardDatetimeLabel(departureConfirmDraft) || '—'}
+                </p>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setDepartureConfirmPickMode(true)}
+                    className="w-full sm:w-auto rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                  >
+                    Change time
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => confirmDepartureFromSite(departureConfirmDraft)}
+                    className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    Yes, this is correct
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                  Departure from site
+                </label>
+                <input
+                  type="datetime-local"
+                  value={departureConfirmDraft}
+                  onChange={e => setDepartureConfirmDraft(e.target.value)}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  style={{ fontSize: '16px' }}
+                />
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDepartureConfirmPickMode(false);
+                      setDepartureConfirmDraft(toDatetimeLocalInput(new Date()));
+                    }}
+                    className="w-full sm:w-auto rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!departureConfirmDraft}
+                    onClick={() => confirmDepartureFromSite(departureConfirmDraft)}
                     className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     Confirm time
