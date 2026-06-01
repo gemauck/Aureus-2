@@ -58,6 +58,148 @@ function InventoryAiThumbnailBadge({ className = '' }) {
   );
 }
 
+/** Shared image upload + AI suggest UI for inventory add/edit modal and detail editor. */
+function InventoryThumbnailField({
+  form,
+  setForm,
+  thumbSuggest,
+  onSuggest,
+  onApply,
+  onClearSuggest
+}) {
+  const patchForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
+  return (
+    <div className="col-span-2">
+      <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
+      <div className="flex flex-wrap gap-2 mb-2">
+        <button
+          type="button"
+          onClick={onSuggest}
+          disabled={thumbSuggest.loading || !String(form?.name || '').trim()}
+          className="px-3 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Search the web for a product photo (review before saving)"
+        >
+          {thumbSuggest.loading ? (
+            <>
+              <i className="fas fa-spinner fa-spin mr-1"></i>
+              Searching…
+            </>
+          ) : (
+            <>
+              <i className="fas fa-wand-magic-sparkles mr-1"></i>
+              Suggest image (AI)
+            </>
+          )}
+        </button>
+        {isAiInventoryThumbnail(form) && form?.thumbnail && (
+          <button
+            type="button"
+            onClick={() => {
+              patchForm({ thumbnail: '', thumbnailSource: '' });
+              onClearSuggest();
+            }}
+            className="px-3 py-2 text-sm border border-violet-300 text-violet-800 rounded-lg hover:bg-violet-50"
+          >
+            Remove AI image
+          </button>
+        )}
+      </div>
+      {thumbSuggest.error && (
+        <p className="text-xs text-amber-700 mb-2">{thumbSuggest.error}</p>
+      )}
+      {thumbSuggest.imageUrl && (
+        <div className="mb-3 p-3 rounded-lg border border-violet-200 bg-violet-50">
+          <p className="text-xs text-violet-900 mb-2">
+            AI suggestion
+            {thumbSuggest.searchQuery ? (
+              <span className="text-violet-700"> — searched: &quot;{thumbSuggest.searchQuery}&quot;</span>
+            ) : null}
+          </p>
+          <div className="flex items-start gap-3">
+            <div className="relative shrink-0">
+              <img
+                src={thumbSuggest.previewUrl || thumbSuggest.imageUrl}
+                alt="Suggested product"
+                className="w-20 h-20 object-cover rounded border border-violet-200 bg-white"
+              />
+              <InventoryAiThumbnailBadge />
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={onApply}
+                className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700"
+              >
+                Use this image
+              </button>
+              <button
+                type="button"
+                onClick={onClearSuggest}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            patchForm({ thumbnail: reader.result, thumbnailSource: 'manual' });
+            onClearSuggest();
+          };
+          reader.readAsDataURL(file);
+        }}
+        className="w-full text-sm mb-2"
+      />
+      <div className="mt-2 flex gap-2">
+        <input
+          type="url"
+          placeholder="Or paste image URL (https://...)"
+          value={form?.thumbnail || ''}
+          onChange={(e) =>
+            patchForm({
+              thumbnail: e.target.value,
+              thumbnailSource: e.target.value ? 'manual' : ''
+            })
+          }
+          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const clip = await navigator.clipboard.readText();
+              if (clip) {
+                patchForm({ thumbnail: clip, thumbnailSource: 'manual' });
+                onClearSuggest();
+              }
+            } catch (_) {}
+          }}
+          className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
+        >
+          Paste
+        </button>
+      </div>
+      {form?.thumbnail && (
+        <div className="mt-2 relative inline-block">
+          <img src={form.thumbnail} alt="Preview" className="w-20 h-20 object-cover rounded border" />
+          {isAiInventoryThumbnail(form) && <InventoryAiThumbnailBadge />}
+        </div>
+      )}
+      {isAiInventoryThumbnail(form) && form?.thumbnail && (
+        <p className="mt-1 text-xs text-violet-700">Marked as AI image — verify it matches this SKU before saving.</p>
+      )}
+    </div>
+  );
+}
+
 const inventoryRowTotalValueForQuantity =
   typeof inventoryRowTotalValueForQuantityRequire === 'function'
     ? inventoryRowTotalValueForQuantityRequire
@@ -6175,8 +6317,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setShowModal(true);
   };
 
-  const handleSuggestInventoryThumbnail = async () => {
-    if (!String(formData.name || '').trim()) {
+  const suggestInventoryThumbnailForForm = async (formSnapshot, itemId) => {
+    if (!String(formSnapshot?.name || '').trim()) {
       alert('Enter an item name before suggesting an image.');
       return;
     }
@@ -6186,16 +6328,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
     setInventoryThumbSuggest((prev) => ({ ...prev, loading: true, error: '' }));
     try {
-      const targetId = selectedItem ? getInventoryItemId(selectedItem) : null;
-      const response = targetId
-        ? await window.DatabaseAPI.suggestInventoryThumbnail(targetId)
+      const response = itemId
+        ? await window.DatabaseAPI.suggestInventoryThumbnail(itemId)
         : await window.DatabaseAPI.suggestInventoryThumbnailPreview({
-            name: formData.name,
-            sku: formData.sku,
-            category: formData.category,
-            supplier: formData.supplier,
-            manufacturingPartNumber: formData.manufacturingPartNumber,
-            legacyPartNumber: formData.legacyPartNumber
+            name: formSnapshot.name,
+            sku: formSnapshot.sku,
+            category: formSnapshot.category,
+            supplier: formSnapshot.supplier,
+            manufacturingPartNumber: formSnapshot.manufacturingPartNumber,
+            legacyPartNumber: formSnapshot.legacyPartNumber
           });
       const suggestion = response?.data?.suggestion;
       if (!suggestion?.imageUrl) {
@@ -6230,14 +6371,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
   };
 
-  const handleApplySuggestedInventoryThumbnail = () => {
+  const applySuggestedInventoryThumbnailTo = (setForm) => {
     if (!inventoryThumbSuggest.imageUrl) return;
-    setFormData((prev) => ({
+    setForm((prev) => ({
       ...prev,
       thumbnail: inventoryThumbSuggest.imageUrl,
       thumbnailSource: 'ai'
     }));
   };
+
+  const handleSuggestInventoryThumbnail = () =>
+    suggestInventoryThumbnailForForm(formData, selectedItem ? getInventoryItemId(selectedItem) : null);
+
+  const handleApplySuggestedInventoryThumbnail = () => applySuggestedInventoryThumbnailTo(setFormData);
 
   // Generate next PSKU number
   const getNextPSKU = () => {
@@ -8315,145 +8461,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   />
                 </div>
 
-                {/* Image / Thumbnail */
-                }
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={handleSuggestInventoryThumbnail}
-                      disabled={inventoryThumbSuggest.loading || !String(formData.name || '').trim()}
-                      className="px-3 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Search the web for a product photo (review before saving)"
-                    >
-                      {inventoryThumbSuggest.loading ? (
-                        <>
-                          <i className="fas fa-spinner fa-spin mr-1"></i>
-                          Searching…
-                        </>
-                      ) : (
-                        <>
-                          <i className="fas fa-wand-magic-sparkles mr-1"></i>
-                          Suggest image (AI)
-                        </>
-                      )}
-                    </button>
-                    {isAiInventoryThumbnail(formData) && formData.thumbnail && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData((prev) => ({ ...prev, thumbnail: '', thumbnailSource: '' }));
-                          clearInventoryThumbSuggest();
-                        }}
-                        className="px-3 py-2 text-sm border border-violet-300 text-violet-800 rounded-lg hover:bg-violet-50"
-                      >
-                        Remove AI image
-                      </button>
-                    )}
-                  </div>
-                  {inventoryThumbSuggest.error && (
-                    <p className="text-xs text-amber-700 mb-2">{inventoryThumbSuggest.error}</p>
-                  )}
-                  {inventoryThumbSuggest.imageUrl && (
-                    <div className="mb-3 p-3 rounded-lg border border-violet-200 bg-violet-50">
-                      <p className="text-xs text-violet-900 mb-2">
-                        AI suggestion
-                        {inventoryThumbSuggest.searchQuery ? (
-                          <span className="text-violet-700"> — searched: &quot;{inventoryThumbSuggest.searchQuery}&quot;</span>
-                        ) : null}
-                      </p>
-                      <div className="flex items-start gap-3">
-                        <div className="relative shrink-0">
-                          <img
-                            src={inventoryThumbSuggest.previewUrl || inventoryThumbSuggest.imageUrl}
-                            alt="Suggested product"
-                            className="w-20 h-20 object-cover rounded border border-violet-200 bg-white"
-                          />
-                          <InventoryAiThumbnailBadge />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={handleApplySuggestedInventoryThumbnail}
-                            className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700"
-                          >
-                            Use this image
-                          </button>
-                          <button
-                            type="button"
-                            onClick={clearInventoryThumbSuggest}
-                            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
-                          >
-                            Discard
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files && e.target.files[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setFormData((prev) => ({
-                          ...prev,
-                          thumbnail: reader.result,
-                          thumbnailSource: 'manual'
-                        }));
-                        clearInventoryThumbSuggest();
-                      };
-                      reader.readAsDataURL(file);
-                    }}
-                    className="w-full text-sm"
-                  />
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      type="url"
-                      placeholder="Or paste image URL (https://...)"
-                      value={formData.thumbnail || ''}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          thumbnail: e.target.value,
-                          thumbnailSource: e.target.value ? 'manual' : ''
-                        }))
-                      }
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const clip = await navigator.clipboard.readText();
-                          if (clip) {
-                            setFormData((prev) => ({
-                              ...prev,
-                              thumbnail: clip,
-                              thumbnailSource: 'manual'
-                            }));
-                            clearInventoryThumbSuggest();
-                          }
-                        } catch (_) {}
-                      }}
-                      className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
-                    >
-                      Paste
-                    </button>
-                  </div>
-                  {formData.thumbnail && (
-                    <div className="mt-2 relative inline-block">
-                      <img src={formData.thumbnail} alt="Preview" className="w-20 h-20 object-cover rounded border" />
-                      {isAiInventoryThumbnail(formData) && <InventoryAiThumbnailBadge />}
-                    </div>
-                  )}
-                  {isAiInventoryThumbnail(formData) && formData.thumbnail && (
-                    <p className="mt-1 text-xs text-violet-700">Marked as AI image — verify it matches this SKU before saving.</p>
-                  )}
-                </div>
+                <InventoryThumbnailField
+                  form={formData}
+                  setForm={setFormData}
+                  thumbSuggest={inventoryThumbSuggest}
+                  onSuggest={handleSuggestInventoryThumbnail}
+                  onApply={handleApplySuggestedInventoryThumbnail}
+                  onClearSuggest={clearInventoryThumbSuggest}
+                />
 
                 {/* Category - with create/delete functionality */}
                 <div>
@@ -14177,6 +14192,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         if (editFormData.legacyPartNumber !== undefined) {
           itemData.legacyPartNumber = editFormData.legacyPartNumber || '';
         }
+        if (editFormData.thumbnail) {
+          if (editFormData.thumbnailSource !== undefined && editFormData.thumbnailSource !== null) {
+            itemData.thumbnailSource = editFormData.thumbnailSource;
+          }
+        } else {
+          itemData.thumbnailSource = '';
+        }
 
         const targetId = getInventoryItemId(item);
         const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
@@ -14189,6 +14211,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           setViewingInventoryItemDetail(normalized);
           setIsEditingInventoryItem(false);
+          clearInventoryThumbSuggest();
           alert('Item updated successfully!');
         }
       } catch (error) {
@@ -14230,7 +14253,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               {!isEditingInventoryItem ? (
                 <>
                   <button
-                    onClick={() => setIsEditingInventoryItem(true)}
+                    onClick={() => {
+                      clearInventoryThumbSuggest();
+                      setIsEditingInventoryItem(true);
+                    }}
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                   >
                     <i className="fas fa-edit"></i>
@@ -14250,6 +14276,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     onClick={() => {
                       setIsEditingInventoryItem(false);
                       setEditFormData({ ...item });
+                      clearInventoryThumbSuggest();
                     }}
                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                   >
@@ -14625,35 +14652,16 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         placeholder="e.g., OLD-PART-123"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files && e.target.files[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            setEditFormData(prev => ({ ...prev, thumbnail: reader.result }));
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                        className="w-full text-sm mb-2"
-                      />
-                      <input
-                        type="url"
-                        placeholder="Or paste image URL (https://...)"
-                        value={editFormData.thumbnail || ''}
-                        onChange={(e) => setEditFormData(prev => ({ ...prev, thumbnail: e.target.value }))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      {editFormData.thumbnail && (
-                        <div className="mt-2">
-                          <img src={editFormData.thumbnail} alt="Preview" className="w-20 h-20 object-cover rounded border" />
-                        </div>
-                      )}
-                    </div>
+                    <InventoryThumbnailField
+                      form={editFormData}
+                      setForm={setEditFormData}
+                      thumbSuggest={inventoryThumbSuggest}
+                      onSuggest={() =>
+                        suggestInventoryThumbnailForForm(editFormData, getInventoryItemId(item))
+                      }
+                      onApply={() => applySuggestedInventoryThumbnailTo(setEditFormData)}
+                      onClearSuggest={clearInventoryThumbSuggest}
+                    />
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Part Numbers</label>
                       <div className="space-y-2">
