@@ -6,9 +6,18 @@
 const SMR_SOURCES_KEY = 'poaReviewSmrSources';
 
 function authHeaders() {
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
+    const token =
+        (typeof window !== 'undefined' && window.storage?.getToken?.()) ||
+        (typeof localStorage !== 'undefined' &&
+            (localStorage.getItem('abcotronics_token') ||
+                localStorage.getItem('authToken') ||
+                localStorage.getItem('auth_token') ||
+                localStorage.getItem('token'))) ||
+        null;
     const headers = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token && token !== 'undefined' && token !== 'null') {
+        headers.Authorization = `Bearer ${token}`;
+    }
     return headers;
 }
 

@@ -45,6 +45,43 @@ async function runPoaAnalysis(rows, sources, extraOptions = {}) {
     return null;
 }
 
+function PoaInfoTip({ children, isDark }) {
+    return (
+        <span className="relative inline-flex group align-middle">
+            <button
+                type="button"
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
+                    isDark ? 'text-slate-400 hover:text-slate-200' : 'text-blue-600 hover:text-blue-800'
+                }`}
+                aria-label="More information"
+            >
+                <i className="fas fa-info-circle text-sm" aria-hidden="true" />
+            </button>
+            <span
+                role="tooltip"
+                className={`pointer-events-none absolute left-1/2 z-50 w-72 -translate-x-1/2 bottom-[calc(100%+6px)] rounded-lg border px-3 py-2 text-left text-xs leading-snug shadow-lg opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                    isDark
+                        ? 'bg-slate-900 text-slate-100 border-slate-600'
+                        : 'bg-white text-gray-800 border-gray-200'
+                }`}
+            >
+                {children}
+            </span>
+        </span>
+    );
+}
+
+const SHIFT_FALLBACK_HELP = (
+    <>
+        <strong className="block mb-1">Shift POA fallback</strong>
+        Used when a dispense has no proof row linked directly to that fill. The tool may reuse
+        same-asset proof from the same calendar day (within the window below), but only if that
+        proof describes a single activity for the day. The report marks these with{' '}
+        <em>Shift POA Fallback = Yes</em> — verify manually; this is not the same as proof
+        immediately before the pump.
+    </>
+);
+
 function suggestColumnMapping(headers, resolution) {
     const mapping = {};
     const specs = window.COLUMN_SPECS || [];
@@ -1403,12 +1440,12 @@ self.onmessage = async (e) => {
                     Processing thresholds
                 </h4>
                 <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                    Org-wide defaults (saved for all users with access). Used for batch grouping, shift POA fallback window, and large SMR checks.
+                    Org-wide defaults (saved for all users with access). Used for batch grouping, shift POA fallback, and large SMR checks.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[
                         { key: 'batchWindowHours', label: 'Batch window (hours)', step: '0.5' },
-                        { key: 'shiftProofWindowHours', label: 'Shift fallback window (hours)', step: '1' },
                         { key: 'smrUsageMaxPerActivity', label: 'Max SMR delta per activity row', step: '1' },
                     ].map((field) => (
                         <label key={field.key} className="block text-xs">
@@ -1430,6 +1467,35 @@ self.onmessage = async (e) => {
                             />
                         </label>
                     ))}
+                </div>
+
+                <div className="mt-3 max-w-sm">
+                    <div className="flex items-center gap-1.5 mb-1">
+                        <span className={`text-xs font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                            Shift POA fallback
+                        </span>
+                        <PoaInfoTip isDark={isDark}>{SHIFT_FALLBACK_HELP}</PoaInfoTip>
+                    </div>
+                    <label className="block text-xs">
+                        <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>
+                            Shift fallback window (hours)
+                        </span>
+                        <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={poaSettings.shiftProofWindowHours ?? ''}
+                            onChange={(e) =>
+                                setPoaSettings((s) => ({
+                                    ...s,
+                                    shiftProofWindowHours: parseFloat(e.target.value) || 0,
+                                }))
+                            }
+                            className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
+                                isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
+                            }`}
+                        />
+                    </label>
                 </div>
                 <div className="flex items-center gap-3 mt-3">
                     <button
