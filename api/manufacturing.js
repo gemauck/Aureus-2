@@ -21,6 +21,10 @@ import { createStockMovementTx } from './_lib/movementId.js'
 import { assertValidTransferLocations } from './_lib/stockMovementTransfer.js'
 import { runStockCountTemplateImport } from './_lib/stockCountTemplateImport.js'
 import { runFlexibleStockCountByLocationImport } from './_lib/flexibleStockCountImport.js'
+import {
+  buildStockTakeVarianceWorkbookBuffer,
+  stockTakeVarianceExportFilename
+} from './_lib/stockTakeVarianceExport.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
@@ -1834,6 +1838,35 @@ async function handler(req, res) {
       } catch (error) {
         console.error('❌ Stock-take submission list failed:', error)
         return serverError(res, 'Failed to load stock-take submissions', error.message)
+      }
+    }
+
+    if (req.method === 'GET' && id && action === 'variance-export') {
+      try {
+        const submission = await prisma.stockTakeSubmission.findUnique({
+          where: { id },
+          include: {
+            lines: {
+              orderBy: [{ itemName: 'asc' }, { sku: 'asc' }]
+            },
+            participants: true
+          }
+        })
+        if (!submission) return notFound(res, 'Stock-take submission not found')
+        if (!stockTakeViewerAllowed(req, submission, submission.participants)) {
+          return forbidden(res, 'You do not have access to this stock take.')
+        }
+        if (!isAdminRole(req.user?.role)) {
+          return forbidden(res, 'Only administrators can export stock-take variance reports.')
+        }
+        const buf = buildStockTakeVarianceWorkbookBuffer(submission, submission.lines)
+        const fname = stockTakeVarianceExportFilename(submission)
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
+        return res.status(200).send(Buffer.from(buf))
+      } catch (error) {
+        console.error('❌ Stock-take variance export failed:', error)
+        return serverError(res, 'Failed to export variance report', error.message)
       }
     }
 

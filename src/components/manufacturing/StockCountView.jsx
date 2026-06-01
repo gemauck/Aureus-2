@@ -471,6 +471,7 @@
     const [applyingSubmissionId, setApplyingSubmissionId] = React.useState('');
     const [rejectingSubmissionId, setRejectingSubmissionId] = React.useState('');
     const [reviewSaving, setReviewSaving] = React.useState(false);
+    const [varianceExportBusy, setVarianceExportBusy] = React.useState(false);
     /** lineId -> counted qty string while reviewing a pending submission */
     const [reviewCounts, setReviewCounts] = React.useState({});
     const fileInputRef = React.useRef(null);
@@ -1653,6 +1654,49 @@
       e.target.value = '';
       if (!f) return;
       void runImport(f, { dryRun, forceDup });
+    };
+
+    const downloadVarianceReport = async (submissionId) => {
+      if (!submissionId) return;
+      setVarianceExportBusy(true);
+      setError(null);
+      setMessage(null);
+      try {
+        const res = await fetch(
+          apiBase +
+            '/api/manufacturing/stock-take-submissions/' +
+            encodeURIComponent(submissionId) +
+            '/variance-export',
+          { method: 'GET', headers: authHeaders() }
+        );
+        if (!res.ok) {
+          const txt = await res.text();
+          let msg = txt || res.statusText;
+          try {
+            const data = JSON.parse(txt);
+            msg = data?.error?.message || data?.message || data?.error || msg;
+          } catch {}
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition');
+        let name = 'stock-take-variance.xlsx';
+        if (cd) {
+          const m = /filename="([^"]+)"/.exec(cd);
+          if (m) name = m[1];
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage('Variance report download started.');
+      } catch (e) {
+        setError(e.message || 'Failed to download variance report');
+      } finally {
+        setVarianceExportBusy(false);
+      }
     };
 
     const openSubmissionDetail = async (submissionId) => {
@@ -3348,6 +3392,25 @@
                 (submissionDetail.locationName || '') +
                   ' · submitted ' +
                   new Date(submissionDetail.submittedAt || Date.now()).toLocaleString()
+              ),
+              React.createElement(
+                'div',
+                { className: 'mt-3 flex flex-wrap gap-2' },
+                React.createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: btn,
+                    disabled: varianceExportBusy,
+                    onClick: () => void downloadVarianceReport(submissionDetail.id)
+                  },
+                  varianceExportBusy ? 'Preparing Excel…' : 'Download variance report (Excel)'
+                ),
+                React.createElement(
+                  'span',
+                  { className: 'text-xs self-center ' + muted },
+                  'Variances sheet includes a Comment column for explanations.'
+                )
               ),
               submissionDetail.status === 'pending_review'
                 ? React.createElement(
