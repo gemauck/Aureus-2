@@ -50,7 +50,6 @@ async function applyInventoryReversalForRemovedMovementTx(tx, movement, id) {
         sku,
         itemName: itemName || sku,
         quantity: 0,
-        unitCost: master?.unitCost || 0,
         reorderPoint: master?.reorderPoint || 0,
         status: 'out_of_stock'
       }

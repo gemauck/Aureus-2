@@ -420,7 +420,7 @@ async function main() {
       locationId: locId,
       quantity: opening,
       itemName: item?.name || li.itemName || sku,
-      unitCost: li.unitCost ?? item?.unitCost ?? 0,
+      unitCost: item?.unitCost ?? 0,
       current,
       netSinceCutoff: net
     })

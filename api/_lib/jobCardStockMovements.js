@@ -8,6 +8,7 @@ import {
 } from './stockCountAdjustment.js'
 import { createStockMovementTx } from './movementId.js'
 import { computedInventoryTotalValue } from './inventoryValue.js'
+import { applyLocationInventoryDeltaTx } from './locationInventoryQty.js'
 
 export function parseJobCardStockUsed(raw) {
   if (!raw) return []
@@ -129,44 +130,11 @@ async function reverseMovementOnLocationInventory(tx, movement) {
   if (!loc) return
   const qty = Number(movement.quantity)
   if (!Number.isFinite(qty) || qty === 0) return
-  await upsertLocationInventoryDelta(
-    tx,
-    loc,
-    movement.sku,
-    movement.itemName || movement.sku,
-    -qty,
-    undefined
-  )
+  await upsertLocationInventoryDelta(tx, loc, movement.sku, movement.itemName || movement.sku, -qty)
 }
 
-async function upsertLocationInventoryDelta(tx, locationId, sku, itemName, quantityDelta, unitCost) {
-  let li = await tx.locationInventory.findUnique({
-    where: { locationId_sku: { locationId, sku } }
-  })
-  if (!li) {
-    li = await tx.locationInventory.create({
-      data: {
-        locationId,
-        sku,
-        itemName,
-        quantity: 0,
-        unitCost: unitCost || 0,
-        reorderPoint: 0,
-        status: 'out_of_stock'
-      }
-    })
-  }
-  const newQty = (li.quantity || 0) + quantityDelta
-  const st = getStatusFromQuantity(newQty, li.reorderPoint || 0)
-  await tx.locationInventory.update({
-    where: { id: li.id },
-    data: {
-      quantity: newQty,
-      unitCost: unitCost !== undefined && !Number.isNaN(unitCost) ? unitCost : li.unitCost,
-      status: st,
-      itemName: itemName || li.itemName
-    }
-  })
+async function upsertLocationInventoryDelta(tx, locationId, sku, itemName, quantityDelta) {
+  await applyLocationInventoryDeltaTx(tx, locationId, sku, itemName, quantityDelta)
 }
 
 async function reconcileInventoryMasterTx(tx, sku) {
@@ -281,27 +249,12 @@ export async function syncJobCardStockMovements(prisma, opts) {
                   oldLoc,
                   oldSku,
                   existing.itemName || oldSku,
-                  -existing.quantity,
-                  undefined
+                  -existing.quantity
                 )
               }
-              await upsertLocationInventoryDelta(
-                tx,
-                locationId,
-                line.sku,
-                line.itemName,
-                targetQty,
-                line.unitCost
-              )
+              await upsertLocationInventoryDelta(tx, locationId, line.sku, line.itemName, targetQty)
             } else {
-              await upsertLocationInventoryDelta(
-                tx,
-                locationId,
-                line.sku,
-                line.itemName,
-                liDelta,
-                line.unitCost
-              )
+              await upsertLocationInventoryDelta(tx, locationId, line.sku, line.itemName, liDelta)
             }
             await reconcileInventoryMasterTx(tx, line.sku)
             if (oldSku !== line.sku) await reconcileInventoryMasterTx(tx, oldSku)
@@ -341,14 +294,7 @@ export async function syncJobCardStockMovements(prisma, opts) {
           ownerId: null
         })
 
-        await upsertLocationInventoryDelta(
-          tx,
-          locationId,
-          line.sku,
-          line.itemName,
-          targetQty,
-          line.unitCost
-        )
+        await upsertLocationInventoryDelta(tx, locationId, line.sku, line.itemName, targetQty)
         await reconcileInventoryMasterTx(tx, line.sku)
 
         result.created++

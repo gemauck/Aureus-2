@@ -44,7 +44,6 @@ async function createZeroStockNewLineTx(tx, sku, pr) {
         sku,
         itemName: pr.itemName,
         quantity: 0,
-        unitCost: pr.unitCost ?? 0,
         reorderPoint: pr.reorderPoint ?? 0,
         status
       }

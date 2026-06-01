@@ -228,7 +228,6 @@ async function handler(req, res) {
                       sku,
                       itemName,
                       quantity: 0,
-                      unitCost: 0,
                       reorderPoint: 0,
                       status: 'out_of_stock'
                     }

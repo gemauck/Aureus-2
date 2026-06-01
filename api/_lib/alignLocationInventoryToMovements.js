@@ -346,7 +346,6 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
           (a, b) => (parseFloat(b.quantity) || 0) - (parseFloat(a.quantity) || 0)
         )
         const canon = await findCanonicalInventoryItemBySkuTx(tx, skuTrim)
-        const uc = Number(canon?.unitCost) || Number(sorted[0]?.unitCost) || 0
         const rp = Number(canon?.reorderPoint) || Number(sorted[0]?.reorderPoint) || 0
 
         if (sorted.length === 0) {
@@ -359,7 +358,6 @@ export async function alignSkuInventoryToCombinedMovements(prisma, sku, options 
               sku: skuTrim,
               itemName,
               quantity: nq,
-              unitCost: uc,
               reorderPoint: rp,
               status: getStatusFromQuantity(nq, rp)
             }

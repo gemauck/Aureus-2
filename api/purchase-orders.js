@@ -10,6 +10,7 @@ import { isAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
 import { createStockMovementTx } from './_lib/movementId.js'
+import { applyLocationInventoryDeltaTx } from './_lib/locationInventoryQty.js'
 
 const S_DRAFT = 'draft'
 const S_FINAL = 'final'
@@ -232,45 +233,6 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
     toLocationId = mainWarehouse?.id || null
   }
 
-  async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-    if (!locationId) return null
-
-    let li = await tx.locationInventory.findUnique({
-      where: { locationId_sku: { locationId, sku } }
-    })
-
-    if (!li) {
-      li = await tx.locationInventory.create({
-        data: {
-          locationId,
-          sku,
-          itemName,
-          quantity: 0,
-          unitCost: unitCost || 0,
-          reorderPoint: reorderPoint || 0,
-          status: 'out_of_stock'
-        }
-      })
-    }
-
-    const now = new Date()
-    const newQty = (li.quantity || 0) + quantityDelta
-    const status =
-      newQty > (li.reorderPoint || reorderPoint || 0) ? 'in_stock' : newQty > 0 ? 'low_stock' : 'out_of_stock'
-
-    return await tx.locationInventory.update({
-      where: { id: li.id },
-      data: {
-        quantity: newQty,
-        unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-        reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-        status,
-        itemName: itemName || li.itemName,
-        lastRestocked: quantityDelta > 0 ? now : li.lastRestocked
-      }
-    })
-  }
-
   const now = new Date()
 
   for (const item of mergedItems) {
@@ -340,13 +302,13 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
     }
 
     if (toLocationId) {
-      await upsertLocationInventory(
+      await applyLocationInventoryDeltaTx(
+        tx,
         toLocationId,
         item.sku,
         item.name || item.sku,
         quantity,
-        unitCost,
-        inventoryItem?.reorderPoint || 0
+        { reorderPoint: inventoryItem?.reorderPoint || 0, lastRestocked: now }
       )
 
       const totalAtLocations = await tx.locationInventory.aggregate({

@@ -72,11 +72,11 @@ async function createStockMovement(tx, movementData) {
 }
 
 // Helper to upsert LocationInventory
-async function upsertLocationInventory(tx, locationId, sku, itemName, quantity, unitCost, reorderPoint) {
+async function upsertLocationInventory(tx, locationId, sku, itemName, quantity, reorderPoint) {
   let li = await tx.locationInventory.findUnique({
     where: { locationId_sku: { locationId, sku } }
   })
-  
+
   if (!li) {
     li = await tx.locationInventory.create({
       data: {
@@ -84,21 +84,19 @@ async function upsertLocationInventory(tx, locationId, sku, itemName, quantity, 
         sku,
         itemName,
         quantity: 0,
-        unitCost: unitCost || 0,
         reorderPoint: reorderPoint || 0,
         status: 'out_of_stock'
       }
     })
   }
-  
+
   const newQty = (li.quantity || 0) + quantity
-  const status = getStatusFromQuantity(newQty, reorderPoint || 0)
-  
+  const status = getStatusFromQuantity(newQty, reorderPoint ?? li.reorderPoint ?? 0)
+
   return await tx.locationInventory.update({
     where: { id: li.id },
     data: {
       quantity: newQty,
-      unitCost: unitCost !== undefined ? unitCost : li.unitCost,
       reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
       status,
       itemName: itemName || li.itemName,
@@ -223,7 +221,7 @@ async function generateDummyData() {
         components.push(item)
         
         // Create LocationInventory
-        await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, data.quantity, data.unitCost, data.reorderPoint)
+        await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, data.quantity, data.reorderPoint)
         
         // Create stock movement for initial balance
         await createStockMovement(tx, {
@@ -270,7 +268,7 @@ async function generateDummyData() {
         finishedProducts.push(item)
         
         // Create LocationInventory (even with 0 quantity)
-        await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, 0, data.unitCost, data.reorderPoint)
+        await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, 0, data.reorderPoint)
         
         console.log(`   ✅ Created: ${item.name} (${item.sku})`)
       }
@@ -441,7 +439,7 @@ async function generateDummyData() {
           })
           
           // Update LocationInventory
-          await upsertLocationInventory(tx, mainWarehouse.id, component.sku, component.name, -requiredQty, component.unitCost, component.reorderPoint)
+          await upsertLocationInventory(tx, mainWarehouse.id, component.sku, component.name, -requiredQty, component.reorderPoint)
           
           // Create stock movement
           await createStockMovement(tx, {
@@ -491,7 +489,7 @@ async function generateDummyData() {
             }
           })
           
-          await upsertLocationInventory(tx, mainWarehouse.id, component.sku, component.name, -requiredQty, component.unitCost, component.reorderPoint)
+          await upsertLocationInventory(tx, mainWarehouse.id, component.sku, component.name, -requiredQty, component.reorderPoint)
           
           await createStockMovement(tx, {
             type: 'consumption',
@@ -515,7 +513,7 @@ async function generateDummyData() {
         }
       })
       
-      await upsertLocationInventory(tx, mainWarehouse.id, finishedProducts[1].sku, finishedProducts[1].name, order3.quantityProduced, unitCost, finishedProducts[1].reorderPoint)
+      await upsertLocationInventory(tx, mainWarehouse.id, finishedProducts[1].sku, finishedProducts[1].name, order3.quantityProduced, finishedProducts[1].reorderPoint)
       
       await createStockMovement(tx, {
         type: 'receipt',
@@ -634,7 +632,7 @@ async function generateDummyData() {
             }
           })
           
-          await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, -item.quantity, inventoryItem.unitCost, inventoryItem.reorderPoint)
+          await upsertLocationInventory(tx, mainWarehouse.id, item.sku, item.name, -item.quantity, inventoryItem.reorderPoint)
           
           await createStockMovement(tx, {
             type: 'sale',

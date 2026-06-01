@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bulk-set catalog unit cost (InventoryItem.unitCost + LocationInventory.unitCost) by SKU.
+ * Bulk-set catalog unit cost (InventoryItem.unitCost) by SKU.
  * Mirrors PATCH /api/manufacturing/inventory/:id unitCost behaviour for every row with that SKU.
  *
  * Usage:
@@ -276,10 +276,6 @@ async function main() {
     if (!items.length) continue
 
     await prisma.$transaction(async (tx) => {
-      await tx.locationInventory.updateMany({
-        where: { sku },
-        data: { unitCost }
-      })
       for (const item of items) {
         const qty = Number(item.quantity) || 0
         const rp = Number(item.reorderPoint) || 0

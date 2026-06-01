@@ -9,6 +9,7 @@ import { isSuperAdminUser } from './_lib/adminRoles.js'
 import { logAuditFromRequest } from './_lib/manufacturingAuditLog.js'
 import { parseJsonBody } from './_lib/body.js'
 import { computedInventoryTotalValue } from './_lib/inventoryValue.js'
+import { catalogUnitCostForSku as inventoryCatalogUnitCostForSku } from './_lib/inventoryCatalogUnitCost.js'
 import { encodeInventoryQrPayload } from './_lib/inventoryQrPayload.js'
 import {
   getStatusFromQuantity,
@@ -32,6 +33,7 @@ import {
   resolveStockTakeMovementDate
 } from './_lib/stockTakeSubmission.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
+import { applyLocationInventoryDeltaTx } from './_lib/locationInventoryQty.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
   buildCombinedMovementNetBySkuFromMovementRows,
@@ -65,6 +67,28 @@ const GLOBAL_LOCATION_SYNC_INTERVAL_MS = 1000 * 60 * 10 // 10 minutes
 let lastGlobalLocationSync = 0
 let globalSyncPromise = null
 
+const VALID_INVENTORY_THUMBNAIL_SOURCES = new Set(['', 'manual', 'ai'])
+
+function normalizeInventoryThumbnailSource(value) {
+  const v = String(value ?? '').trim().toLowerCase()
+  if (v === 'ai' || v === 'manual') return v
+  return ''
+}
+
+/** @param {Record<string, unknown>} body @param {{ existingThumbnail?: string, previousSource?: string }} ctx */
+function resolveInventoryThumbnailSourceForWrite(body, ctx = {}) {
+  if (body.thumbnailSource !== undefined) {
+    return normalizeInventoryThumbnailSource(body.thumbnailSource)
+  }
+  const nextThumb = String(body.thumbnail ?? '').trim()
+  if (!nextThumb) return ''
+  const prevThumb = String(ctx.existingThumbnail ?? '').trim()
+  if (nextThumb === prevThumb) {
+    return normalizeInventoryThumbnailSource(ctx.previousSource)
+  }
+  return 'manual'
+}
+
 const VALID_PRODUCTION_ORDER_STATUSES = new Set([
   'requested',
   'received',
@@ -90,29 +114,6 @@ function normalizeProductionOrderStatus(status, fallback = 'requested') {
 function parseFiniteNumber(value, fallback = 0) {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
-}
-
-/**
- * One unit price per SKU: always the catalog (`InventoryItem`) row when it exists.
- * `LocationInventory.unitCost` is kept in sync for legacy/exports but must not drive valuation.
- * If there is no catalog row yet, fall back to the location row (orphan / legacy rows only).
- */
-function inventoryCatalogUnitCostForSku(template, locationRecord) {
-  const hasCatalog = Boolean(template && template.id)
-  if (hasCatalog) {
-    return parseFiniteNumber(template.unitCost, 0)
-  }
-  return parseFiniteNumber(locationRecord?.unitCost, 0)
-}
-
-/** After catalog `unitCost` changes, mirror it onto every LocationInventory row for that SKU. */
-async function syncAllLocationInventoryUnitCostsToCatalogTx(tx, sku, catalogUnitCost) {
-  const s = String(sku || '').trim()
-  if (!s) return
-  await tx.locationInventory.updateMany({
-    where: { sku: s },
-    data: { unitCost: parseFiniteNumber(catalogUnitCost, 0) }
-  })
 }
 
 function parseNonNegativeFiniteNumber(value, fieldName) {
@@ -514,7 +515,6 @@ async function ensureLocationInventoryPlaceholder(locationId, item) {
         sku: item.sku,
         itemName: item.name,
         quantity: 0,
-        unitCost: item.unitCost || 0,
         reorderPoint: item.reorderPoint || 0,
         status: 'out_of_stock'
       }
@@ -534,7 +534,6 @@ async function upsertLocationInventoryQuantity(locationId, item, quantity) {
     update: {
       itemName: item.name,
       quantity,
-      unitCost: item.unitCost || 0,
       reorderPoint: item.reorderPoint || 0,
       status,
       lastRestocked: item.lastRestocked || new Date()
@@ -544,7 +543,6 @@ async function upsertLocationInventoryQuantity(locationId, item, quantity) {
       sku: item.sku,
       itemName: item.name,
       quantity,
-      unitCost: item.unitCost || 0,
       reorderPoint: item.reorderPoint || 0,
       status
     }
@@ -657,7 +655,7 @@ async function buildLocationInventoryResponse(locationId) {
     const template = metadataBySku.get(record.sku) || {}
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
-    const unitCost = inventoryCatalogUnitCostForSku(template, record)
+    const unitCost = parseFiniteNumber(inventoryCatalogUnitCostForSku(template), 0)
     // Quantity is authoritative for stock state; stored/template status can be stale after transfers.
     const status = getStatusFromQuantity(quantity, reorderPoint)
 
@@ -752,7 +750,7 @@ async function buildAllLocationsInventoryResponse(options = {}) {
     const template = templateBySku.get(sku) || {}
     const quantity = record.quantity ?? 0
     const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
-    const unitCost = inventoryCatalogUnitCostForSku(template, record)
+    const unitCost = parseFiniteNumber(inventoryCatalogUnitCostForSku(template), 0)
     const status = getStatusFromQuantity(quantity, reorderPoint)
 
     if (!bySku.has(sku)) {
@@ -850,7 +848,7 @@ async function buildInventoryLocationValueSummary() {
       orderBy: [{ code: 'asc' }]
     }),
     prisma.locationInventory.findMany({
-      select: { locationId: true, sku: true, quantity: true, unitCost: true }
+      select: { locationId: true, sku: true, quantity: true }
     }),
     prisma.inventoryItem.findMany({
       orderBy: [{ updatedAt: 'desc' }],
@@ -899,7 +897,7 @@ async function buildInventoryLocationValueSummary() {
     if (!sku) continue
     const template = templateBySku.get(sku) || {}
     const unitCost =
-      unitCostBySku.get(sku) ?? inventoryCatalogUnitCostForSku(template, record)
+      unitCostBySku.get(sku) ?? parseFiniteNumber(inventoryCatalogUnitCostForSku(template), 0)
     const quantity = parseFiniteNumber(record.quantity, 0)
     const lineValue = computedInventoryTotalValue(quantity, unitCost)
     totalUnitsOnHand += quantity
@@ -1401,12 +1399,10 @@ async function handler(req, res) {
         const result = await prisma.$transaction(async (tx) => {
           // Helper to get or create per-location record
           async function upsertLocationSku(locationId) {
-            const catalogCost = master ? parseFiniteNumber(master.unitCost, 0) : parseFloat(body.unitCost) || 0
             return await tx.locationInventory.upsert({
               where: { locationId_sku: { locationId, sku: body.sku } },
               update: {
                 itemName: body.itemName,
-                unitCost: catalogCost,
                 reorderPoint: parseFloat(body.reorderPoint) || 0
               },
               create: {
@@ -1414,7 +1410,6 @@ async function handler(req, res) {
                 sku: body.sku,
                 itemName: body.itemName,
                 quantity: 0,
-                unitCost: catalogCost,
                 reorderPoint: parseFloat(body.reorderPoint) || 0,
                 status: 'in_stock'
               }
@@ -1473,12 +1468,6 @@ async function handler(req, res) {
             const newQtyTo = (toLi.quantity || 0) + qty
             await tx.locationInventory.update({ where: { id: toLi.id }, data: {
               quantity: newQtyTo,
-              unitCost: master
-                ? parseFiniteNumber(
-                    body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost,
-                    0
-                  )
-                : parseFloat(body.unitCost) || 0,
               lastRestocked: now,
               status: newQtyTo > toLi.reorderPoint ? 'in_stock' : (newQtyTo > 0 ? 'low_stock' : 'out_of_stock')
             }})
@@ -1566,11 +1555,6 @@ async function handler(req, res) {
                 status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
               }})
             }
-          }
-
-          const masterFinal = await findCanonicalInventoryItemBySkuTx(tx, body.sku)
-          if (masterFinal?.sku) {
-            await syncAllLocationInventoryUnitCostsToCatalogTx(tx, masterFinal.sku, masterFinal.unitCost)
           }
 
           let movementFromLoc = body.fromLocationId || body.locationId || ''
@@ -2540,7 +2524,7 @@ async function handler(req, res) {
             const t = templateBySku.get(rec.sku) || {}
             const qty = rec.quantity ?? 0
             const rp = rec.reorderPoint ?? t.reorderPoint ?? 0
-            const uc = inventoryCatalogUnitCostForSku(t, rec)
+            const uc = inventoryCatalogUnitCostForSku(t)
             const st = getStatusFromQuantity(qty, rp)
             const sp = firstSupplierPartFromJson(t.supplierPartNumbers || '[]')
             aoa.push([
@@ -2735,6 +2719,60 @@ async function handler(req, res) {
     // Location value summary (GET /api/manufacturing/inventory/location-value-summary)
     if (req.method === 'GET' && id === 'location-value-summary' && !action) {
       return respondInventoryLocationValueSummary(res)
+    }
+
+    // Suggest product thumbnail from web image search (GET .../inventory/:id/suggest-thumbnail or GET .../inventory/suggest-thumbnail?name=...)
+    if (req.method === 'GET' && (action === 'suggest-thumbnail' || id === 'suggest-thumbnail')) {
+      try {
+        let itemMeta = null
+        if (action === 'suggest-thumbnail' && id && id !== 'suggest-thumbnail') {
+          itemMeta = await prisma.inventoryItem.findUnique({
+            where: { id },
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              category: true,
+              supplier: true,
+              manufacturingPartNumber: true,
+              legacyPartNumber: true,
+              thumbnail: true,
+              thumbnailSource: true
+            }
+          })
+          if (!itemMeta) {
+            return notFound(res, 'Inventory item not found')
+          }
+        } else if (id === 'suggest-thumbnail') {
+          const params = new URL(req.url || '', 'http://localhost').searchParams
+          itemMeta = {
+            sku: String(params.get('sku') || '').trim(),
+            name: String(params.get('name') || '').trim(),
+            category: String(params.get('category') || '').trim(),
+            supplier: String(params.get('supplier') || '').trim(),
+            manufacturingPartNumber: String(params.get('manufacturingPartNumber') || '').trim(),
+            legacyPartNumber: String(params.get('legacyPartNumber') || '').trim()
+          }
+        } else {
+          return badRequest(res, 'Invalid suggest-thumbnail path')
+        }
+
+        if (!String(itemMeta.name || '').trim()) {
+          return badRequest(res, 'Item name is required to suggest an image')
+        }
+
+        const suggestion = await suggestInventoryThumbnail(itemMeta)
+        if (!suggestion) {
+          return ok(res, {
+            suggestion: null,
+            message: 'No suitable image found. Refine the item name or add a manufacturing part number, then try again.'
+          })
+        }
+        return ok(res, { suggestion })
+      } catch (error) {
+        console.error('❌ Inventory thumbnail suggest failed:', error)
+        return serverError(res, 'Failed to suggest inventory image', error.message)
+      }
     }
 
     /**
@@ -3625,18 +3663,6 @@ async function handler(req, res) {
           }
         }
 
-        // Single catalog unit cost per SKU: mirror onto every LocationInventory row (list/export parity).
-        if (item?.sku) {
-          try {
-            await prisma.locationInventory.updateMany({
-              where: { sku: item.sku },
-              data: { unitCost: Number(item.unitCost) || 0 }
-            })
-          } catch (locErr) {
-            console.warn('⚠️ locationInventory unitCost sync skipped:', locErr.message)
-          }
-        }
-        
         auditManufacturing('update', 'inventory', id, {
           summary: `Updated inventory ${item.sku} ${item.name}`,
           sku: item.sku,
@@ -4298,52 +4324,15 @@ async function handler(req, res) {
                 )
               }
                 
-              // Helper to update LocationInventory for consumed components
-              async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-                if (!locationId) return null
-                
-                let li = await tx.locationInventory.findUnique({ 
-                  where: { locationId_sku: { locationId, sku } } 
-                })
-                
-                if (!li) {
-                  li = await tx.locationInventory.create({ 
-                    data: {
-                      locationId,
-                      sku,
-                      itemName,
-                      quantity: 0,
-                      unitCost: unitCost || 0,
-                      reorderPoint: reorderPoint || 0,
-                      status: 'out_of_stock'
-                    }
-                  })
-                }
-                
-                const newQty = (li.quantity || 0) + quantityDelta
-                const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-                
-                return await tx.locationInventory.update({
-                  where: { id: li.id },
-                  data: {
-                    quantity: newQty,
-                    unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-                    reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-                    status,
-                    itemName: itemName || li.itemName
-                  }
-                })
-              }
-                
               // Update LocationInventory for consumed component (decrease quantity)
               if (componentLocationId) {
-                await upsertLocationInventory(
+                await applyLocationInventoryDeltaTx(
+                  tx,
                   componentLocationId,
                   component.sku,
                   component.name || component.sku,
-                  -requiredQty, // Negative for consumption
-                  inventoryItem.unitCost,
-                  inventoryItem.reorderPoint
+                  -requiredQty,
+                  { reorderPoint: inventoryItem.reorderPoint }
                 )
               }
                 
@@ -4458,53 +4447,15 @@ async function handler(req, res) {
               toLocationId = mainWarehouse.id
             }
             
-            // Helper to update LocationInventory
-            async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-              if (!locationId) return null
-              
-              let li = await tx.locationInventory.findUnique({ 
-                where: { locationId_sku: { locationId, sku } } 
-              })
-              
-              if (!li) {
-                li = await tx.locationInventory.create({ 
-                  data: {
-                    locationId,
-                    sku,
-                    itemName,
-                    quantity: 0,
-                    unitCost: unitCost || 0,
-                    reorderPoint: reorderPoint || 0,
-                    status: 'out_of_stock'
-                  }
-                })
-              }
-              
-              const newQty = (li.quantity || 0) + quantityDelta
-              const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-              
-              return await tx.locationInventory.update({
-                where: { id: li.id },
-                data: {
-                  quantity: newQty,
-                  unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-                  reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-                  status,
-                  itemName: itemName || li.itemName,
-                  lastRestocked: quantityDelta > 0 ? new Date() : li.lastRestocked
-                }
-              })
-            }
-            
             // Update LocationInventory for finished product
             if (toLocationId) {
-              await upsertLocationInventory(
+              await applyLocationInventoryDeltaTx(
+                tx,
                 toLocationId,
                 finishedProduct.sku,
                 finishedProduct.name,
-                quantityProduced, // positive quantity for receipt
-                unitCost,
-                finishedProduct.reorderPoint || 0
+                quantityProduced,
+                { reorderPoint: finishedProduct.reorderPoint || 0 }
               )
             } else {
               console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
@@ -5222,42 +5173,6 @@ async function handler(req, res) {
                   
                   if (!inventoryItem) continue
                   
-                  async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-                    if (!locationId) return null
-
-                    let li = await tx.locationInventory.findUnique({
-                      where: { locationId_sku: { locationId, sku } }
-                    })
-
-                    if (!li) {
-                      li = await tx.locationInventory.create({
-                        data: {
-                          locationId,
-                          sku,
-                          itemName,
-                          quantity: 0,
-                          unitCost: unitCost || 0,
-                          reorderPoint: reorderPoint || 0,
-                          status: 'out_of_stock'
-                        }
-                      })
-                    }
-
-                    const newQty = (li.quantity || 0) + quantityDelta
-                    const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-                    return await tx.locationInventory.update({
-                      where: { id: li.id },
-                      data: {
-                        quantity: newQty,
-                        unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-                        reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-                        status,
-                        itemName: itemName || li.itemName,
-                        lastRestocked: quantityDelta > 0 ? now : li.lastRestocked
-                      }
-                    })
-                  }
-
                   const updateData = {}
                   
                   if (orderToDelete.status === 'in_production') {
@@ -5286,13 +5201,13 @@ async function handler(req, res) {
                         locationId = mainWarehouse?.id || null
                       }
                       if (locationId) {
-                        await upsertLocationInventory(
+                        await applyLocationInventoryDeltaTx(
+                          tx,
                           locationId,
                           component.sku,
                           component.name || component.sku,
                           returnQty,
-                          inventoryItem.unitCost || 0,
-                          inventoryItem.reorderPoint || 0
+                          { reorderPoint: inventoryItem.reorderPoint || 0, lastRestocked: now }
                         )
                       }
                     }
@@ -5597,43 +5512,7 @@ async function handler(req, res) {
             assertValidTransferLocations(fromLocationId, toLocationId)
           }
 
-          // Helper to get or create LocationInventory record
-          async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-            if (!locationId) return null
-
-            let li = await tx.locationInventory.findUnique({
-              where: { locationId_sku: { locationId, sku } }
-            })
-
-            if (!li) {
-              li = await tx.locationInventory.create({
-                data: {
-                  locationId,
-                  sku,
-                  itemName,
-                  quantity: 0,
-                  unitCost: unitCost || 0,
-                  reorderPoint: reorderPoint || 0,
-                  status: 'out_of_stock'
-                }
-              })
-            }
-
-            const newQty = (li.quantity || 0) + quantityDelta
-            const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
-
-            return await tx.locationInventory.update({
-              where: { id: li.id },
-              data: {
-                quantity: newQty,
-                unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-                reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-                status,
-                itemName: itemName || li.itemName,
-                lastRestocked: quantityDelta > 0 ? (body.date ? new Date(body.date) : new Date()) : li.lastRestocked
-              }
-            })
-          }
+          const movementRestockedAt = body.date ? new Date(body.date) : new Date()
 
           // Create movement record (persist location IDs so ledger filtering by location is consistent)
           const movement = await tx.stockMovement.create({
@@ -5670,23 +5549,22 @@ async function handler(req, res) {
             }
             
             // Update source location (decrease)
-            await upsertLocationInventory(
-              fromLocationId, 
-              body.sku, 
-              body.itemName, 
+            await applyLocationInventoryDeltaTx(
+              tx,
+              fromLocationId,
+              body.sku,
+              body.itemName,
               -Math.abs(quantity),
-              parseFloat(body.unitCost) || undefined,
-              parseFloat(body.reorderPoint) || undefined
+              { reorderPoint: parseFloat(body.reorderPoint) || undefined }
             )
-            
-            // Update destination location (increase)
-            await upsertLocationInventory(
-              toLocationId, 
-              body.sku, 
-              body.itemName, 
+
+            await applyLocationInventoryDeltaTx(
+              tx,
+              toLocationId,
+              body.sku,
+              body.itemName,
               Math.abs(quantity),
-              parseFloat(body.unitCost) || undefined,
-              parseFloat(body.reorderPoint) || undefined
+              { reorderPoint: parseFloat(body.reorderPoint) || undefined, lastRestocked: movementRestockedAt }
             )
             
             // Recalculate master aggregate from all locations
@@ -5771,14 +5649,10 @@ async function handler(req, res) {
             
             // Update LocationInventory for receipt
             if (toLocationId) {
-              await upsertLocationInventory(
-                toLocationId,
-                body.sku,
-                body.itemName,
-                quantity,
-                parseFloat(body.unitCost) || item?.unitCost || 0,
-                parseFloat(body.reorderPoint) || item?.reorderPoint || 0
-              )
+              await applyLocationInventoryDeltaTx(tx, toLocationId, body.sku, body.itemName, quantity, {
+                reorderPoint: parseFloat(body.reorderPoint) || item?.reorderPoint || 0,
+                lastRestocked: movementRestockedAt
+              })
               
               // Recalculate master aggregate
               const totalAtLocations = await tx.locationInventory.aggregate({ 
@@ -5838,22 +5712,14 @@ async function handler(req, res) {
             
             // Update LocationInventory for production
             if (locationId) {
-              await upsertLocationInventory(
-                locationId,
-                body.sku,
-                body.itemName,
-                quantity, // already negative
-                undefined,
-                undefined
-              )
-              
-              // Recalculate master aggregate
-              const totalAtLocations = await tx.locationInventory.aggregate({ 
-                _sum: { quantity: true }, 
-                where: { sku: body.sku } 
+              await applyLocationInventoryDeltaTx(tx, locationId, body.sku, body.itemName, quantity)
+
+              const totalAtLocations = await tx.locationInventory.aggregate({
+                _sum: { quantity: true },
+                where: { sku: body.sku }
               })
               const aggQty = totalAtLocations._sum.quantity || 0
-              
+
               item = await tx.inventoryItem.update({
                 where: { id: item.id },
                 data: {
@@ -5902,22 +5768,14 @@ async function handler(req, res) {
             
             // Update LocationInventory for consumption/sale
             if (locationId) {
-              await upsertLocationInventory(
-                locationId,
-                body.sku,
-                body.itemName,
-                quantity, // already negative
-                undefined,
-                undefined
-              )
-              
-              // Recalculate master aggregate
-              const totalAtLocations = await tx.locationInventory.aggregate({ 
-                _sum: { quantity: true }, 
-                where: { sku: body.sku } 
+              await applyLocationInventoryDeltaTx(tx, locationId, body.sku, body.itemName, quantity)
+
+              const totalAtLocations = await tx.locationInventory.aggregate({
+                _sum: { quantity: true },
+                where: { sku: body.sku }
               })
               const aggQty = totalAtLocations._sum.quantity || 0
-              
+
               item = await tx.inventoryItem.update({
                 where: { id: item.id },
                 data: {
@@ -5996,14 +5854,10 @@ async function handler(req, res) {
               throw new Error('No stock location configured. Create at least one location, then record the adjustment again.')
             }
 
-            await upsertLocationInventory(
-              locationId,
-              body.sku,
-              body.itemName,
-              quantity,
-              parseFloat(body.unitCost) || undefined,
-              parseFloat(body.reorderPoint) || undefined
-            )
+            await applyLocationInventoryDeltaTx(tx, locationId, body.sku, body.itemName, quantity, {
+              reorderPoint: parseFloat(body.reorderPoint) || undefined,
+              lastRestocked: quantity > 0 ? movementRestockedAt : undefined
+            })
 
             const totalAtLocations = await tx.locationInventory.aggregate({
               _sum: { quantity: true },
@@ -6210,43 +6064,6 @@ async function handler(req, res) {
       const result = await prisma.$transaction(async (tx) => {
         const now = new Date()
 
-        // Helper to update LocationInventory
-        async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
-          if (!locationId) return null
-          
-          let li = await tx.locationInventory.findUnique({ 
-            where: { locationId_sku: { locationId, sku } } 
-          })
-          
-          if (!li) {
-            li = await tx.locationInventory.create({ 
-              data: {
-                locationId,
-                sku,
-                itemName,
-                quantity: 0,
-                unitCost: unitCost || 0,
-                reorderPoint: reorderPoint || 0,
-                status: 'out_of_stock'
-              }
-            })
-          }
-          
-          const newQty = (li.quantity || 0) + quantityDelta
-          const status = newQty > (li.reorderPoint || reorderPoint || 0) ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
-          
-          return await tx.locationInventory.update({
-            where: { id: li.id },
-            data: {
-              quantity: newQty,
-              unitCost: unitCost !== undefined ? unitCost : li.unitCost,
-              reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
-              status,
-              itemName: itemName || li.itemName
-            }
-          })
-        }
-
         const createdMovements = []
         for (const reqComp of requirements) {
           const item = inventoryBySku.get(reqComp.sku)
@@ -6258,13 +6075,13 @@ async function handler(req, res) {
 
           // Update LocationInventory if location is specified
           if (productionLocationId) {
-            await upsertLocationInventory(
+            await applyLocationInventoryDeltaTx(
+              tx,
               productionLocationId,
               reqComp.sku,
               reqComp.itemName || item.name,
-              -consumeQty, // negative for consumption
-              item.unitCost,
-              item.reorderPoint
+              -consumeQty,
+              { reorderPoint: item.reorderPoint }
             )
             
             // Recalculate master aggregate from all locations

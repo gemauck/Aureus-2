@@ -8,7 +8,7 @@
  * For every orphan SKU we aggregate across its LocationInventory rows:
  *   - quantity            -> sum across all locations
  *   - name                -> longest non-empty `itemName`
- *   - unitCost            -> non-zero cost backing the most stock (qty-weighted)
+ *   - unitCost            -> 0 (set on catalog after backfill via inventory UI or bulk cost script)
  *   - reorderPoint        -> max across location rows
  *   - lastRestocked       -> latest non-null `lastRestocked`
  *   - primary locationId  -> location with the most stock (ties: earliest code)
@@ -55,38 +55,8 @@ function num(v) {
   return Number.isFinite(n) ? n : 0
 }
 
-/**
- * Choose the canonical unit cost across location rows for one SKU.
- * Same idea as `resolveCanonicalUnitCost` in reconcile-inventory-unit-costs-to-loc1.js
- * but without LOC1-bias (we have no catalog row to anchor to).
- */
-function pickUnitCost(rows) {
-  const positive = rows
-    .map((r) => ({ uc: num(r.unitCost), qty: num(r.quantity) }))
-    .filter((r) => r.uc > 0)
-  if (positive.length === 0) return { unitCost: 0, reason: 'no_positive_unit_cost' }
-
-  const distinct = [...new Set(positive.map((r) => Math.round(r.uc * 1e6) / 1e6))]
-  if (distinct.length === 1) {
-    return { unitCost: distinct[0], reason: 'single_positive_cost' }
-  }
-
-  const byCost = new Map()
-  for (const r of positive) {
-    const k = Math.round(r.uc * 1e6) / 1e6
-    byCost.set(k, (byCost.get(k) || 0) + Math.max(0, r.qty))
-  }
-  let bestUc = distinct[0]
-  let bestQty = -Infinity
-  for (const [uc, sumQty] of byCost) {
-    if (sumQty > bestQty) {
-      bestUc = uc
-      bestQty = sumQty
-    } else if (sumQty === bestQty && uc < bestUc) {
-      bestUc = uc
-    }
-  }
-  return { unitCost: bestUc, reason: 'qty_weighted_dominant_cost' }
+function pickUnitCost() {
+  return { unitCost: 0, reason: 'catalog_only_set_cost_after_backfill' }
 }
 
 function pickName(rows) {
@@ -162,7 +132,7 @@ async function buildPlan(skuFilter) {
   const plan = []
   for (const [sku, rows] of bySku) {
     const totalQty = rows.reduce((sum, r) => sum + num(r.quantity), 0)
-    const { unitCost, reason: unitCostReason } = pickUnitCost(rows)
+    const { unitCost, reason: unitCostReason } = pickUnitCost()
     const name = pickName(rows) || sku
     const primary = pickPrimaryLocation(rows)
     const reorderPoint = rows.reduce((m, r) => Math.max(m, num(r.reorderPoint)), 0)
@@ -184,7 +154,6 @@ async function buildPlan(skuFilter) {
         code: r.location?.code || '',
         name: r.location?.name || '',
         quantity: num(r.quantity),
-        unitCost: num(r.unitCost),
         itemName: r.itemName || ''
       }))
     })
@@ -229,11 +198,6 @@ async function applyPlan(plan, opts) {
             location: row.primaryLocationLabel || '',
             needsCatalogReview
           }
-        })
-
-        await tx.locationInventory.updateMany({
-          where: { sku: row.sku },
-          data: { unitCost: row.unitCost }
         })
 
         return { created: true, id: item.id }

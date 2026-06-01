@@ -1609,6 +1609,8 @@ model InventoryItem {
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
   thumbnail               String         @default("")
+  /// Origin of thumbnail: "" (legacy/unknown), "manual", "ai"
+  thumbnailSource         String         @default("")
   legacyPartNumber        String         @default("")
   supplierPartNumbers     String         @default("[]")
   allocatedQuantity       Float          @default(0)

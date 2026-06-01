@@ -30,15 +30,6 @@ function parseFiniteNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
-async function syncAllLocationInventoryUnitCostsToCatalogTx(tx, sku, catalogUnitCost) {
-  const s = String(sku || '').trim()
-  if (!s) return
-  await tx.locationInventory.updateMany({
-    where: { sku: s },
-    data: { unitCost: parseFiniteNumber(catalogUnitCost, 0) }
-  })
-}
-
 async function resolveActorId() {
   const envId = String(process.env.ERP_SCRIPT_ACTOR_ID || '').trim()
   if (envId) {
@@ -166,11 +157,6 @@ async function runTransferTx(tx, { fromLocationId, toLocationId, sku, itemName, 
         status: getStatusFromQuantity(aggQty, master.reorderPoint || 0)
       }
     })
-  }
-
-  const masterFinal = await findCanonicalInventoryItemBySkuTx(tx, sku)
-  if (masterFinal?.sku) {
-    await syncAllLocationInventoryUnitCostsToCatalogTx(tx, masterFinal.sku, masterFinal.unitCost)
   }
 
   const now = new Date()

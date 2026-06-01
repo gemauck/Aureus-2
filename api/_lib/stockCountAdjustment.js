@@ -1,4 +1,5 @@
 import { computedInventoryTotalValue } from './inventoryValue.js'
+import { applyLocationInventoryDeltaTx } from './locationInventoryQty.js'
 
 /**
  * Stock-count location semantics (movements vs on-hand):
@@ -108,38 +109,6 @@ export async function applyStockCountAdjustmentTx(tx, params) {
   const movementId = buildMovementId()
   const qty = quantityDelta
   const movDate = importDate || new Date()
-
-  async function upsertLocationInventoryAdj(locId, skuStr, nameStr, quantityD, uc, rp) {
-    let li = await tx.locationInventory.findUnique({
-      where: { locationId_sku: { locationId: locId, sku: skuStr } }
-    })
-    if (!li) {
-      li = await tx.locationInventory.create({
-        data: {
-          locationId: locId,
-          sku: skuStr,
-          itemName: nameStr,
-          quantity: 0,
-          unitCost: uc || 0,
-          reorderPoint: rp || 0,
-          status: 'out_of_stock'
-        }
-      })
-    }
-    const newQty = (li.quantity || 0) + quantityD
-    const st = getStatusFromQuantity(newQty, li.reorderPoint || rp || 0)
-    return tx.locationInventory.update({
-      where: { id: li.id },
-      data: {
-        quantity: newQty,
-        unitCost: uc !== undefined ? uc : li.unitCost,
-        reorderPoint: rp !== undefined ? rp : li.reorderPoint,
-        status: st,
-        itemName: nameStr || li.itemName,
-        lastRestocked: quantityD > 0 ? movDate : li.lastRestocked
-      }
-    })
-  }
 
   const movement = await tx.stockMovement.create({
     data: {
@@ -251,16 +220,16 @@ export async function applyStockCountAdjustmentTx(tx, params) {
     })
   }
 
-  const catalogUnitCostForLi = Number(item?.unitCost)
-  const liUnitCost = Number.isFinite(catalogUnitCostForLi) ? catalogUnitCostForLi : 0
-
-  await upsertLocationInventoryAdj(
+  await applyLocationInventoryDeltaTx(
+    tx,
     locationId,
     String(sku).trim(),
     String(itemName || sku).trim(),
     qty,
-    liUnitCost,
-    parseFloat(reorderPoint) || undefined
+    {
+      reorderPoint: parseFloat(reorderPoint) || undefined,
+      lastRestocked: qty > 0 ? movDate : undefined
+    }
   )
 
   const totalAtLocations = await tx.locationInventory.aggregate({

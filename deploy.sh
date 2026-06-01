@@ -261,6 +261,16 @@ if [ -f add-client-allocation-journal-seq-migration.sql ]; then
   fi
 fi
 
+if [ -f prisma/scripts/add-inventory-thumbnail-source.sql ]; then
+  echo
+  echo "-> Applying migration (InventoryItem.thumbnailSource)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f prisma/scripts/add-inventory-thumbnail-source.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  else
+    npx prisma db execute --file prisma/scripts/add-inventory-thumbnail-source.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  fi
+fi
+
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then

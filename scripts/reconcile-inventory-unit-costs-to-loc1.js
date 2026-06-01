@@ -1,18 +1,12 @@
 #!/usr/bin/env node
 /**
- * Reconcile **unit cost** so every SKU has one price aligned with **LOC1** rules:
+ * Reconcile **catalog** unit cost per SKU using legacy LOC1 rules (reads `InventoryItem` rows only).
  *
- * 1. If **01_LOC1** (or `--loc1-code=`) has a non-zero unit cost on `LocationInventory`, that value wins
- *    for the whole SKU (catalog + every location row). Other locations are overwritten.
- * 2. If LOC1 has **no** price (0 / missing row) but **exactly one** distinct positive price exists on
- *    other locations, that price becomes the canonical price everywhere (including creating a LOC1
- *    placeholder row at qty 0 if needed).
- * 3. If LOC1 has no price and **multiple** conflicting positive prices exist elsewhere, pick the unit
- *    cost that carries the **largest total quantity** (tie-break: lower numeric cost, then location id).
+ * 1. Prefer non-zero `unitCost` on the catalog row tied to LOC1 (`locationId`).
+ * 2. Else promote a single positive cost from other catalog rows for that SKU.
+ * 3. Else qty-weighted dominant cost across catalog rows.
  *
- * Updates:
- * - All `LocationInventory` rows for the SKU → `unitCost = canonical`
- * - All `InventoryItem` rows for the SKU → `unitCost` + `totalValue = qty × unitCost` per row
+ * Updates `InventoryItem` only (`unitCost` + `totalValue`). Per-location rows do not store price.
  *
  * Usage:
  *   node scripts/reconcile-inventory-unit-costs-to-loc1.js
@@ -128,12 +122,12 @@ async function main() {
   console.log('')
 
   const skuRows = singleSku
-    ? await prisma.locationInventory.findMany({
+    ? await prisma.inventoryItem.findMany({
         where: { sku: String(singleSku).trim() },
-        select: { sku: true, locationId: true, unitCost: true, quantity: true, itemName: true }
+        select: { sku: true, locationId: true, unitCost: true, quantity: true, name: true }
       })
-    : await prisma.locationInventory.findMany({
-        select: { sku: true, locationId: true, unitCost: true, quantity: true, itemName: true }
+    : await prisma.inventoryItem.findMany({
+        select: { sku: true, locationId: true, unitCost: true, quantity: true, name: true }
       })
 
   const bySku = new Map()
@@ -171,52 +165,13 @@ async function main() {
     return
   }
 
-  let updatedLi = 0
   let updatedIi = 0
-  let createdLoc1 = 0
   const orphanSkus = []
-
-  for (const p of planned) {
-    const { sku, canonical, rows } = p
-    const hasLoc1 = rows.some((r) => r.locationId === loc1.id)
-    const nameHint = rows.find((r) => String(r.itemName || '').trim())?.itemName || sku
-
-    if (!hasLoc1 && canonical > 0) {
-      try {
-        await prisma.locationInventory.create({
-          data: {
-            locationId: loc1.id,
-            sku,
-            itemName: String(nameHint).slice(0, 500),
-            quantity: 0,
-            unitCost: canonical,
-            reorderPoint: 0,
-            status: 'out_of_stock'
-          }
-        })
-        createdLoc1 += 1
-      } catch (e) {
-        if (e?.code === 'P2002') {
-          /* row appeared concurrently */
-        } else {
-          throw e
-        }
-      }
-    }
-  }
 
   const BATCH = 60
   for (const part of chunkArray(planned, BATCH)) {
     const valueTuples = part.map((p) => Prisma.sql`(${p.sku}, ${p.canonical}::double precision)`)
     const valuesSql = Prisma.join(valueTuples, ', ')
-
-    const liCount = await prisma.$executeRaw(Prisma.sql`
-      UPDATE "LocationInventory" AS li
-      SET "unitCost" = v.price
-      FROM (VALUES ${valuesSql}) AS v(sku, price)
-      WHERE li.sku = v.sku
-    `)
-    updatedLi += Number(liCount) || 0
 
     const iiCount = await prisma.$executeRaw(Prisma.sql`
       UPDATE "InventoryItem" AS ii
@@ -247,12 +202,10 @@ async function main() {
   }
 
   console.log('Done.')
-  console.log('  LocationInventory rows touched (PG row count):', updatedLi)
   console.log('  InventoryItem rows touched (PG row count):', updatedIi)
-  console.log('  LOC1 placeholder rows created:', createdLoc1)
   if (orphanSkus.length) {
     console.log(
-      '  Warning: SKUs with LocationInventory but no InventoryItem catalog row (only LI unit costs updated):',
+      '  Warning: SKUs with stock rows but no InventoryItem catalog row (set cost after creating catalog):',
       orphanSkus.length
     )
     console.log('   ', orphanSkus.slice(0, 25).join(', '), orphanSkus.length > 25 ? '…' : '')

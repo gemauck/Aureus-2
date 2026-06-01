@@ -2,12 +2,8 @@
 import 'dotenv/config'
 
 /**
- * One-off repair: align LocationInventory.unitCost and InventoryItem (unitCost, totalValue)
- * with the canonical catalog row per SKU (same template resolution as api/manufacturing.js).
- *
- * The "correct" economics are: catalog unit cost on InventoryItem × quantities — not a sum of
- * stale per-location costs. This script pushes the template unit cost to every location row
- * and sets totalValue = quantity × unitCost on every InventoryItem row for that SKU.
+ * One-off repair: set InventoryItem unitCost + totalValue from the canonical catalog row per SKU.
+ * (Location rows no longer store unit cost — catalog only.)
  *
  * Usage: npm run repair:inventory-location-costs
  */
@@ -29,18 +25,11 @@ async function canonicalTemplateBySku() {
 
 async function main() {
   const templateBySku = await canonicalTemplateBySku()
-  let locationBatches = 0
   let inventoryBatches = 0
 
   for (const [, template] of templateBySku) {
     const sku = template.sku
     const c = Number(template.unitCost) || 0
-
-    const loc = await prisma.locationInventory.updateMany({
-      where: { sku },
-      data: { unitCost: c }
-    })
-    if (loc.count > 0) locationBatches++
 
     const inv = await prisma.$executeRaw`
       UPDATE "InventoryItem"
@@ -55,7 +44,6 @@ async function main() {
     JSON.stringify(
       {
         skusProcessed: templateBySku.size,
-        locationInventoryUpdateManyCalls: locationBatches,
         inventoryItemRowsUpdatedStatementRuns: inventoryBatches
       },
       null,

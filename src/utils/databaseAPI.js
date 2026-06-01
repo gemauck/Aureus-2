@@ -1942,6 +1942,30 @@ const DatabaseAPI = {
         return response;
     },
 
+    /** Web image search suggestion for an existing inventory item (does not save). */
+    async suggestInventoryThumbnail(itemId) {
+        const response = await this.makeRequest(
+            `/manufacturing/inventory/${encodeURIComponent(itemId)}/suggest-thumbnail`,
+            { method: 'GET' }
+        );
+        return response;
+    },
+
+    /** Web image search suggestion from item metadata before the SKU exists (does not save). */
+    async suggestInventoryThumbnailPreview(itemMeta) {
+        const meta = itemMeta || {};
+        const qs = new URLSearchParams();
+        ['name', 'sku', 'category', 'supplier', 'manufacturingPartNumber', 'legacyPartNumber'].forEach((key) => {
+            const val = meta[key];
+            if (val != null && String(val).trim() !== '') qs.set(key, String(val).trim());
+        });
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        const response = await this.makeRequest(`/manufacturing/inventory/suggest-thumbnail${suffix}`, {
+            method: 'GET'
+        });
+        return response;
+    },
+
     async deleteInventoryItem(id) {
         const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
             method: 'DELETE'

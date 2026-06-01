@@ -1,5 +1,6 @@
 // Public API endpoint for job card form - returns inventory items without authentication
 import { prisma } from '../_lib/prisma.js'
+import { catalogUnitCostForSku } from '../_lib/inventoryCatalogUnitCost.js'
 import { ok, serverError } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 
@@ -43,16 +44,6 @@ async function loadThumbnailsBySku(skus) {
     if (thumb) out[sku] = thumb
   }
   return out
-}
-
-/** One unit price per SKU: catalog (InventoryItem) when it exists; else location row (orphan only). */
-function catalogUnitCostForSku(template, locationRecord) {
-  if (template?.id) {
-    const n = Number(template.unitCost)
-    return Number.isFinite(n) ? n : 0
-  }
-  const n = Number(locationRecord?.unitCost)
-  return Number.isFinite(n) ? n : 0
 }
 
 /** One canonical template per SKU (newest row wins) for merging global catalog into a location view. */
@@ -139,7 +130,7 @@ async function inventoryForLocation(locationId, options = {}) {
       template: item,
       sku: item.sku,
       quantity: Number(item.quantity) || 0,
-      unitCost: catalogUnitCostForSku(item, null),
+      unitCost: catalogUnitCostForSku(item),
       name: item.name || item.sku,
       status: item.status || 'in_stock'
     })
@@ -158,7 +149,7 @@ async function inventoryForLocation(locationId, options = {}) {
         template,
         sku,
         quantity: currentQty,
-        unitCost: catalogUnitCostForSku(template, record),
+        unitCost: catalogUnitCostForSku(template),
         name: template.name || record.itemName || sku,
         status: template.status || record.status || 'in_stock'
       })
@@ -166,7 +157,7 @@ async function inventoryForLocation(locationId, options = {}) {
     }
 
     existing.quantity += currentQty
-    existing.unitCost = catalogUnitCostForSku(template, record)
+    existing.unitCost = catalogUnitCostForSku(template)
     if (!existing.name && (record.itemName || template.name)) {
       existing.name = template.name || record.itemName || sku
     }
@@ -180,7 +171,7 @@ async function inventoryForLocation(locationId, options = {}) {
         template,
         sku,
         quantity: 0,
-        unitCost: catalogUnitCostForSku(template, null),
+        unitCost: catalogUnitCostForSku(template),
         name: template.name || sku,
         status: template.status || 'in_stock'
       })

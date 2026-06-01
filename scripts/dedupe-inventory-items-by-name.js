@@ -111,23 +111,16 @@ async function mergeLocationInventorySkus(tx, keeperSku, dupSku, keeperItemName)
       where: { locationId_sku: { locationId: row.locationId, sku: keeperSku } }
     })
     const q2 = num(row.quantity)
-    const c2 = num(row.unitCost)
     const name = String(keeperItemName || row.itemName || '').trim()
 
     if (existing) {
       const q1 = num(existing.quantity)
-      const c1 = num(existing.unitCost)
       const newQty = q1 + q2
-      let newCost = c1
-      if (newQty > 0) {
-        newCost = (q1 * c1 + q2 * c2) / newQty
-      }
       const rp = Math.max(num(existing.reorderPoint), num(row.reorderPoint))
       await tx.locationInventory.update({
         where: { id: existing.id },
         data: {
           quantity: newQty,
-          unitCost: newCost,
           reorderPoint: rp,
           itemName: name || existing.itemName,
           status: getStatusFromQuantity(newQty, rp),
@@ -141,7 +134,6 @@ async function mergeLocationInventorySkus(tx, keeperSku, dupSku, keeperItemName)
           sku: keeperSku,
           itemName: name || row.itemName,
           quantity: q2,
-          unitCost: c2,
           reorderPoint: num(row.reorderPoint),
           status: row.status || getStatusFromQuantity(q2, num(row.reorderPoint)),
           lastRestocked: row.lastRestocked
