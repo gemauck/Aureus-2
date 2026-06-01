@@ -1,6 +1,6 @@
 // Suggest inventory product thumbnails via web image search (Openverse + optional SerpAPI) with optional OpenAI query refinement.
 
-const OPENVERSE_BASE = 'https://api.openverse.engineering/v1/images/'
+const OPENVERSE_BASE = 'https://api.openverse.org/v1/images/'
 const IMAGE_FETCH_TIMEOUT_MS = 12000
 const MAX_QUERY_LEN = 180
 
@@ -55,8 +55,11 @@ export async function refineInventoryImageSearchQuery(item, baseQuery) {
   if (!key) return baseQuery
 
   try {
-    const openaiModule = await import('openai')
-    const openai = new openaiModule.OpenAI({ apiKey: key })
+    const openaiModule = await import('openai').catch(() => null)
+    if (!openaiModule) return baseQuery
+    const OpenAI = openaiModule.OpenAI || openaiModule.default
+    if (!OpenAI) return baseQuery
+    const openai = new OpenAI({ apiKey: key })
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
     const completion = await openai.chat.completions.create({
       model,

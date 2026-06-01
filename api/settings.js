@@ -57,7 +57,7 @@ async function handler(req, res) {
                 where: { userId }
             });
             if (!userSettings) {
-                userSettings = USER_SETTINGS_DEFAULTS;
+                userSettings = { ...USER_SETTINGS_DEFAULTS };
             } else {
                 userSettings = {
                     ...USER_SETTINGS_DEFAULTS,
@@ -74,13 +74,28 @@ async function handler(req, res) {
                     googleCalendar: userSettings.googleCalendar ?? USER_SETTINGS_DEFAULTS.googleCalendar,
                     quickbooks: userSettings.quickbooks ?? USER_SETTINGS_DEFAULTS.quickbooks,
                     slack: userSettings.slack ?? USER_SETTINGS_DEFAULTS.slack,
-                    inventoryStockView: normalizeInventoryStockView(userSettings.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView,
-                    crmClientsStatusFilter: normalizeCrmClientsStatusFilter(userSettings.crmClientsStatusFilter) ?? USER_SETTINGS_DEFAULTS.crmClientsStatusFilter
+                    inventoryStockView:
+                        normalizeInventoryStockView(userSettings.inventoryStockView) ??
+                        USER_SETTINGS_DEFAULTS.inventoryStockView,
+                    crmClientsStatusFilter:
+                        normalizeCrmClientsStatusFilter(userSettings.crmClientsStatusFilter) ??
+                        USER_SETTINGS_DEFAULTS.crmClientsStatusFilter
                 };
             }
             const companyName = await getCompanyName();
             return ok(res, { settings: userSettings, companyName });
         } catch (error) {
+            // Missing columns on older DBs (e.g. inventoryStockView) — return defaults instead of 500.
+            const msg = String(error?.message || '');
+            if (
+                msg.includes('inventoryStockView') ||
+                msg.includes('crmClientsStatusFilter') ||
+                error?.code === 'P2022'
+            ) {
+                console.warn('Get user settings: schema drift, using defaults:', msg);
+                const companyName = await getCompanyName().catch(() => 'Abcotronics');
+                return ok(res, { settings: { ...USER_SETTINGS_DEFAULTS }, companyName });
+            }
             console.error('Get user settings error:', error);
             return serverError(res, 'Failed to get settings', error.message);
         }

@@ -43,6 +43,7 @@ import {
 } from './_lib/alignLocationInventoryToMovements.js'
 import XLSX from 'xlsx'
 import QRCode from 'qrcode'
+import { suggestInventoryThumbnail } from './_lib/inventoryThumbnailSuggest.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -2736,8 +2737,7 @@ async function handler(req, res) {
               supplier: true,
               manufacturingPartNumber: true,
               legacyPartNumber: true,
-              thumbnail: true,
-              thumbnailSource: true
+              thumbnail: true
             }
           })
           if (!itemMeta) {
