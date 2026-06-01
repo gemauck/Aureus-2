@@ -234,6 +234,7 @@ const RichTextEditor = ({
     value = '', 
     onChange, 
     onBlur,
+    onFocus,
     placeholder = 'Type your text...', 
     rows = 4,
     isDark = false,
@@ -1540,6 +1541,9 @@ const RichTextEditor = ({
                 contentEditable
                 onInput={() => handleInput(false)}
                 onFocus={(e) => {
+                    if (typeof onFocus === 'function') {
+                        onFocus(e);
+                    }
                     // CRITICAL: Save scroll position BEFORE any browser behavior
                     const scrollBeforeFocus = window.scrollY || window.pageYOffset;
                     savedScrollPositionRef.current = scrollBeforeFocus;

@@ -378,6 +378,42 @@ const normalizeMonthKeyInput = (value) => {
     return parsed ? getMonthKeyFromDate(parsed) : null;
 };
 
+/** Poll interval when SSE is unavailable (ms). */
+const MEETING_NOTES_LIVE_POLL_MS = 1000;
+
+const MEETING_NOTES_DEPT_TEXT_FIELDS = ['successes', 'weekToFollow', 'frustrations'];
+
+function mergeMeetingNotesActionItems(remoteList, localList, editingId) {
+    const remote = Array.isArray(remoteList) ? remoteList : [];
+    const local = Array.isArray(localList) ? localList : [];
+    const localById = new Map(local.filter((i) => i?.id).map((i) => [i.id, i]));
+    const merged = remote.map((item) => {
+        if (editingId && item?.id === editingId) {
+            return localById.get(item.id) || item;
+        }
+        return item;
+    });
+    const remoteIds = new Set(remote.map((i) => i?.id).filter(Boolean));
+    for (const item of local) {
+        const id = item?.id;
+        if (id && String(id).startsWith('temp-') && !remoteIds.has(id)) {
+            merged.push(item);
+        }
+    }
+    return merged;
+}
+
+function meetingNotesPayloadSignature(note) {
+    if (!note) {
+        return '';
+    }
+    try {
+        return JSON.stringify(note);
+    } catch (_) {
+        return String(note?.id || '');
+    }
+}
+
 const normalizeMonthlyGoalsByDepartment = (value) => {
     if (!value) return {};
     if (typeof value === 'object') {
@@ -1317,9 +1353,45 @@ const ManagementMeetingNotes = () => {
     const generalMinutesTimers = useRef({});
     const generalMinutesEditingWeekIdRef = useRef(null);
     const generalMinutesValuesRef = useRef({});
+    const monthlyGoalsEditingDeptIdRef = useRef(null);
+    const monthlyGoalsSaveTimers = useRef(null);
+    /** While set, live poll keeps local values for this department note field. */
+    const deptFieldFocusRef = useRef(null);
+    const editingActionItemRef = useRef(null);
+    const showAllocationModalRef = useRef(false);
+    const uploadingAttachmentsRef = useRef({});
+    const lastLivePayloadSigRef = useRef('');
+    const liveFetchInFlightRef = useRef(false);
+    const gmMinuteInlinePopoverRef = useRef(null);
+    const uploadingGeneralMinutesAttachmentsRef = useRef({});
+
+    useEffect(() => {
+        lastLivePayloadSigRef.current = '';
+    }, [selectedMonth]);
+
+    useEffect(() => {
+        editingActionItemRef.current = editingActionItem;
+    }, [editingActionItem]);
+
+    useEffect(() => {
+        showAllocationModalRef.current = showAllocationModal;
+    }, [showAllocationModal]);
+
+    useEffect(() => {
+        uploadingAttachmentsRef.current = uploadingAttachments;
+    }, [uploadingAttachments]);
+
     const lastSavedGeneralMinutesHash = useRef({});
     /** Google Docs–style: selection in general minutes → floating comment chip + compose. */
     const [gmMinuteInlinePopover, setGmMinuteInlinePopover] = useState(null);
+
+    useEffect(() => {
+        gmMinuteInlinePopoverRef.current = gmMinuteInlinePopover;
+    }, [gmMinuteInlinePopover]);
+
+    useEffect(() => {
+        uploadingGeneralMinutesAttachmentsRef.current = uploadingGeneralMinutesAttachments;
+    }, [uploadingGeneralMinutesAttachments]);
     /** Clicking a highlight in the editor focuses that thread in the right sidebar. */
     const [gmSidebarFocusThreadId, setGmSidebarFocusThreadId] = useState(null);
     /** General minutes comment threads panel (xl: right column). Persisted so preference survives reload. */
@@ -2379,30 +2451,57 @@ const ManagementMeetingNotes = () => {
         }
     }, [currentMonthlyNotes?.id]);
 
-    const handleMonthlyGoalsChange = useCallback((departmentId, value) => {
-        const nextGoals = { ...(monthlyGoalsRef.current || {}) };
-        const normalizedValue = typeof value === 'string' ? value : '';
-        if (normalizedValue.trim() === '') {
-            delete nextGoals[departmentId];
-        } else {
-            nextGoals[departmentId] = normalizedValue;
-        }
-        const serialized = JSON.stringify(nextGoals);
-        updateMonthlyGoalsLocal(serialized);
-    }, [updateMonthlyGoalsLocal]);
+    const scheduleMonthlyGoalsPersist = useCallback(
+        (serializedGoals) => {
+            if (monthlyGoalsSaveTimers.current) {
+                clearTimeout(monthlyGoalsSaveTimers.current);
+            }
+            monthlyGoalsSaveTimers.current = setTimeout(() => {
+                void persistMonthlyGoals(serializedGoals);
+                monthlyGoalsSaveTimers.current = null;
+            }, AUTO_SAVE_DELAY);
+        },
+        [persistMonthlyGoals]
+    );
 
-    const handleMonthlyGoalsBlur = useCallback((departmentId, value) => {
-        const nextGoals = { ...(monthlyGoalsRef.current || {}) };
-        const normalizedValue = typeof value === 'string' ? value : '';
-        if (normalizedValue.trim() === '') {
-            delete nextGoals[departmentId];
-        } else {
-            nextGoals[departmentId] = normalizedValue;
-        }
-        const serialized = JSON.stringify(nextGoals);
-        updateMonthlyGoalsLocal(serialized);
-        persistMonthlyGoals(serialized);
-    }, [persistMonthlyGoals, updateMonthlyGoalsLocal]);
+    const handleMonthlyGoalsChange = useCallback(
+        (departmentId, value) => {
+            const nextGoals = { ...(monthlyGoalsRef.current || {}) };
+            const normalizedValue = typeof value === 'string' ? value : '';
+            if (normalizedValue.trim() === '') {
+                delete nextGoals[departmentId];
+            } else {
+                nextGoals[departmentId] = normalizedValue;
+            }
+            const serialized = JSON.stringify(nextGoals);
+            updateMonthlyGoalsLocal(serialized);
+            scheduleMonthlyGoalsPersist(serialized);
+        },
+        [updateMonthlyGoalsLocal, scheduleMonthlyGoalsPersist]
+    );
+
+    const handleMonthlyGoalsBlur = useCallback(
+        (departmentId, value) => {
+            if (monthlyGoalsEditingDeptIdRef.current === departmentId) {
+                monthlyGoalsEditingDeptIdRef.current = null;
+            }
+            if (monthlyGoalsSaveTimers.current) {
+                clearTimeout(monthlyGoalsSaveTimers.current);
+                monthlyGoalsSaveTimers.current = null;
+            }
+            const nextGoals = { ...(monthlyGoalsRef.current || {}) };
+            const normalizedValue = typeof value === 'string' ? value : '';
+            if (normalizedValue.trim() === '') {
+                delete nextGoals[departmentId];
+            } else {
+                nextGoals[departmentId] = normalizedValue;
+            }
+            const serialized = JSON.stringify(nextGoals);
+            updateMonthlyGoalsLocal(serialized);
+            persistMonthlyGoals(serialized);
+        },
+        [persistMonthlyGoals, updateMonthlyGoalsLocal]
+    );
 
     const getWeekIdentifier = (week) => {
         if (!week) {
@@ -3727,6 +3826,21 @@ const ManagementMeetingNotes = () => {
     const getFieldKey = (departmentNotesId, field) => {
         return `${departmentNotesId}-${field}`;
     };
+
+    const captureDeptFieldFocus = useCallback((departmentNotesId, field) => {
+        deptFieldFocusRef.current = { departmentNotesId, field };
+    }, []);
+
+    const releaseDeptFieldFocus = useCallback((departmentNotesId, field) => {
+        const focused = deptFieldFocusRef.current;
+        if (
+            focused &&
+            focused.departmentNotesId === departmentNotesId &&
+            focused.field === field
+        ) {
+            deptFieldFocusRef.current = null;
+        }
+    }, []);
     
     // Helper function to save cursor position for contentEditable elements and textareas
     const saveCursorPositionForField = (departmentNotesId, field) => {
@@ -4304,6 +4418,7 @@ const ManagementMeetingNotes = () => {
     
     // Update field value on blur - triggers immediate save to prevent data loss
     const handleFieldBlur = (departmentNotesId, field, value) => {
+        releaseDeptFieldFocus(departmentNotesId, field);
         // Update local state with the value
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
@@ -4395,70 +4510,195 @@ const ManagementMeetingNotes = () => {
         void triggerGeneralMinutesSave(weeklyNotesId);
     };
 
-    // Live sync: poll month payload so other admins see general minutes (and related week data) without refresh
+    // Live sync: SSE push on any save + 1s poll fallback — merges all month fields for every viewer
     useEffect(() => {
         if (!isAdminUser || !selectedMonth) {
             return undefined;
         }
         let cancelled = false;
+        let liveStream = null;
 
-        const tick = async () => {
-            if (cancelled || document.hidden) {
+        const mergeDepartmentNoteFromRemote = (remoteDn, localDn, editingActionItemId) => {
+            if (!localDn) {
+                return remoteDn;
+            }
+            const focused = deptFieldFocusRef.current;
+            const uploading = uploadingAttachmentsRef.current || {};
+            const merged = { ...remoteDn };
+            for (const field of MEETING_NOTES_DEPT_TEXT_FIELDS) {
+                const isFocused =
+                    focused &&
+                    focused.departmentNotesId === remoteDn.id &&
+                    focused.field === field;
+                if (!isFocused) {
+                    continue;
+                }
+                const fieldKey = `${remoteDn.id}-${field}`;
+                merged[field] =
+                    (currentFieldValues.current[fieldKey] ?? localDn[field] ?? remoteDn[field]) || '';
+            }
+            if (uploading[remoteDn.id]) {
+                merged.attachments = localDn.attachments ?? remoteDn.attachments;
+            }
+            merged.actionItems = mergeMeetingNotesActionItems(
+                remoteDn.actionItems,
+                localDn.actionItems,
+                editingActionItemId
+            );
+            merged.comments = remoteDn.comments;
+            merged.agendaPoints = remoteDn.agendaPoints;
+            merged.assignedUserId =
+                remoteDn.assignedUserId !== undefined ? remoteDn.assignedUserId : localDn.assignedUserId;
+            return merged;
+        };
+
+        const mergeMonthNote = (prevNote, remoteNote) => {
+            if (!prevNote || !remoteNote || prevNote.id !== remoteNote.id) {
+                return prevNote;
+            }
+            const editingActionItemId = editingActionItemRef.current?.id || null;
+            const prevWeekMap = new Map((prevNote.weeklyNotes || []).map((w) => [w.id, w]));
+            const lockedGmWeekId = generalMinutesEditingWeekIdRef.current;
+            const editingGoalsDeptId = monthlyGoalsEditingDeptIdRef.current;
+            const gmPopoverActive = !!gmMinuteInlinePopoverRef.current;
+
+            const mergedWeeks = (remoteNote.weeklyNotes || []).map((rw) => {
+                const lw = prevWeekMap.get(rw.id);
+                let week = { ...rw };
+                const uploadingGm = uploadingGeneralMinutesAttachmentsRef.current || {};
+                if (uploadingGm[rw.id] && lw) {
+                    week.generalMinutesAttachments = lw.generalMinutesAttachments ?? rw.generalMinutesAttachments;
+                }
+                if (lockedGmWeekId && rw.id === lockedGmWeekId && lw) {
+                    week.generalMinutes = lw.generalMinutes ?? rw.generalMinutes ?? '';
+                    if (!uploadingGm[rw.id]) {
+                        week.generalMinutesAttachments =
+                            lw.generalMinutesAttachments !== undefined && lw.generalMinutesAttachments !== null
+                                ? lw.generalMinutesAttachments
+                                : rw.generalMinutesAttachments;
+                    }
+                    if (!gmPopoverActive) {
+                        week.generalMinutesThreads =
+                            lw.generalMinutesThreads !== undefined && lw.generalMinutesThreads !== null
+                                ? lw.generalMinutesThreads
+                                : rw.generalMinutesThreads;
+                    }
+                }
+                week.actionItems = mergeMeetingNotesActionItems(
+                    rw.actionItems,
+                    lw?.actionItems,
+                    editingActionItemId
+                );
+                if (lw && Array.isArray(week.departmentNotes)) {
+                    const localDnMap = new Map((lw.departmentNotes || []).map((dn) => [dn.id, dn]));
+                    week.departmentNotes = week.departmentNotes.map((rdn) =>
+                        mergeDepartmentNoteFromRemote(
+                            rdn,
+                            localDnMap.get(rdn.id),
+                            editingActionItemId
+                        )
+                    );
+                }
+                return week;
+            });
+
+            let monthlyGoals = remoteNote.monthlyGoals ?? prevNote.monthlyGoals;
+            if (editingGoalsDeptId) {
+                const remoteGoals = normalizeMonthlyGoalsByDepartment(remoteNote.monthlyGoals);
+                const localGoals = normalizeMonthlyGoalsByDepartment(prevNote.monthlyGoals);
+                monthlyGoals = JSON.stringify({
+                    ...remoteGoals,
+                    [editingGoalsDeptId]: localGoals[editingGoalsDeptId] ?? remoteGoals[editingGoalsDeptId] ?? ''
+                });
+            }
+
+            const userAllocations = showAllocationModalRef.current
+                ? prevNote.userAllocations
+                : remoteNote.userAllocations ?? prevNote.userAllocations;
+
+            return {
+                ...prevNote,
+                status: remoteNote.status ?? prevNote.status,
+                monthKey: remoteNote.monthKey ?? prevNote.monthKey,
+                monthlyGoals,
+                userAllocations,
+                comments: remoteNote.comments ?? prevNote.comments,
+                actionItems: mergeMeetingNotesActionItems(
+                    remoteNote.actionItems,
+                    prevNote.actionItems,
+                    editingActionItemId
+                ),
+                weeklyNotes: mergedWeeks
+            };
+        };
+
+        const applyRemoteMonth = (remote) => {
+            if (!remote || cancelled) {
+                return;
+            }
+            const sig = meetingNotesPayloadSignature(remote);
+            if (sig && sig === lastLivePayloadSigRef.current) {
+                return;
+            }
+            setCurrentMonthlyNotes((prev) => {
+                const merged = mergeMonthNote(prev, remote);
+                const mergedSig = meetingNotesPayloadSignature(merged);
+                if (mergedSig === meetingNotesPayloadSignature(prev)) {
+                    return prev;
+                }
+                lastLivePayloadSigRef.current = meetingNotesPayloadSignature(remote);
+                return merged;
+            });
+            setMonthlyNotesList((prevList) => {
+                if (!Array.isArray(prevList)) {
+                    return prevList;
+                }
+                return prevList.map((note) =>
+                    note?.monthKey === selectedMonth ? mergeMonthNote(note, remote) : note
+                );
+            });
+        };
+
+        const fetchAndApply = async () => {
+            if (cancelled || document.hidden || liveFetchInFlightRef.current) {
                 return;
             }
             if (!window.DatabaseAPI?.getMeetingNotes) {
                 return;
             }
+            liveFetchInFlightRef.current = true;
             try {
-                const res = await window.DatabaseAPI.getMeetingNotes(selectedMonth, { bustCache: true });
-                const remote = res?.data?.monthlyNotes || res?.monthlyNotes;
-                if (!remote || cancelled) {
-                    return;
-                }
-                const lockedId = generalMinutesEditingWeekIdRef.current;
-                const mergeWeeks = (prevNote) => {
-                    if (!prevNote || prevNote.id !== remote.id) {
-                        return prevNote;
-                    }
-                    const prevWeekMap = new Map((prevNote.weeklyNotes || []).map((w) => [w.id, w]));
-                    const mergedWeeks = (remote.weeklyNotes || []).map((rw) => {
-                        if (lockedId && rw.id === lockedId) {
-                            const lw = prevWeekMap.get(rw.id);
-                            if (!lw) return rw;
-                            return {
-                                ...rw,
-                                generalMinutes: lw.generalMinutes ?? rw.generalMinutes ?? '',
-                                generalMinutesAttachments:
-                                    lw.generalMinutesAttachments !== undefined && lw.generalMinutesAttachments !== null
-                                        ? lw.generalMinutesAttachments
-                                        : rw.generalMinutesAttachments,
-                                generalMinutesThreads:
-                                    lw.generalMinutesThreads !== undefined && lw.generalMinutesThreads !== null
-                                        ? lw.generalMinutesThreads
-                                        : rw.generalMinutesThreads
-                            };
-                        }
-                        return rw;
-                    });
-                    return { ...prevNote, weeklyNotes: mergedWeeks };
-                };
-                setCurrentMonthlyNotes((prev) => mergeWeeks(prev));
-                setMonthlyNotesList((prevList) => {
-                    if (!Array.isArray(prevList)) {
-                        return prevList;
-                    }
-                    return prevList.map((note) => (note?.monthKey === selectedMonth ? mergeWeeks(note) : note));
+                const res = await window.DatabaseAPI.getMeetingNotes(selectedMonth, {
+                    bustCache: true,
+                    forceRefresh: true
                 });
-            } catch (e) {
-                // silent — polling is best-effort
+                const remote = res?.data?.monthlyNotes || res?.monthlyNotes;
+                applyRemoteMonth(remote);
+            } catch (_) {
+                /* silent — live sync is best-effort */
+            } finally {
+                liveFetchInFlightRef.current = false;
             }
         };
 
-        const id = setInterval(tick, 2000);
-        void tick();
+        if (typeof window.DatabaseAPI?.openMeetingNotesLiveStream === 'function') {
+            liveStream = window.DatabaseAPI.openMeetingNotesLiveStream(selectedMonth, () => {
+                void fetchAndApply();
+            });
+        }
+
+        const pollId = setInterval(() => {
+            if (!document.hidden) {
+                void fetchAndApply();
+            }
+        }, MEETING_NOTES_LIVE_POLL_MS);
+
+        void fetchAndApply();
+
         return () => {
             cancelled = true;
-            clearInterval(id);
+            clearInterval(pollId);
+            liveStream?.close?.();
         };
     }, [isAdminUser, selectedMonth]);
 
@@ -7051,6 +7291,9 @@ const ManagementMeetingNotes = () => {
                                                             key={`rich-editor-monthly-goals-${dept.id}`}
                                                             value={deptMonthlyGoal}
                                                             onChange={(html) => handleMonthlyGoalsChange(dept.id, html)}
+                                                            onFocus={() => {
+                                                                monthlyGoalsEditingDeptIdRef.current = dept.id;
+                                                            }}
                                                             onBlur={(html) => handleMonthlyGoalsBlur(dept.id, html)}
                                                             placeholder="Capture the month's goals for this department."
                                                             rows={6}
@@ -7293,7 +7536,7 @@ const ManagementMeetingNotes = () => {
                                                                             onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
                                                                             onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
                                                                             onFocus={() => {
-                                                                                // Preserve scroll position when focusing RichTextEditor
+                                                                                captureDeptFieldFocus(deptNote.id, 'successes');
                                                                                 const currentScroll = window.scrollY || window.pageYOffset;
                                                                                 requestAnimationFrame(() => {
                                                                                     window.scrollTo(0, currentScroll);
@@ -7368,6 +7611,7 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.weekToFollow || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'weekToFollow', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'weekToFollow', html)}
+                                                                    onFocus={() => captureDeptFieldFocus(deptNote.id, 'weekToFollow')}
                                                                     placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
@@ -7431,6 +7675,7 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.frustrations || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'frustrations', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'frustrations', html)}
+                                                                    onFocus={() => captureDeptFieldFocus(deptNote.id, 'frustrations')}
                                                                     placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}

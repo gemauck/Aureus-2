@@ -2744,7 +2744,9 @@ const DatabaseAPI = {
         }
         const qs = params.toString();
         const url = qs ? `/meeting-notes?${qs}` : '/meeting-notes';
-        const response = await this.makeRequest(url);
+        const response = await this.makeRequest(url, {
+            forceRefresh: options.bustCache === true || options.forceRefresh === true
+        });
         return response;
     },
 
@@ -2775,6 +2777,51 @@ const DatabaseAPI = {
         }
         const q = encodeURIComponent(roomKey);
         return await this.makeRequest(`/meeting-notes?action=presence&roomKey=${q}&_t=${Date.now()}`);
+    },
+
+    /**
+     * SSE stream: server pushes { revision } when any client saves this month.
+     * EventSource cannot send Authorization — pass JWT as access_token (see authRequired).
+     * @returns {{ close: () => void }}
+     */
+    openMeetingNotesLiveStream(monthKey, onRevision) {
+        if (!monthKey) {
+            throw new Error('monthKey is required');
+        }
+        if (typeof EventSource === 'undefined') {
+            return { close: () => {} };
+        }
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            return { close: () => {} };
+        }
+        const params = new URLSearchParams({
+            action: 'live',
+            monthKey: String(monthKey),
+            access_token: token,
+            _t: String(Date.now())
+        });
+        const url = `${this.API_BASE}/api/meeting-notes?${params.toString()}`;
+        const es = new EventSource(url);
+        es.onmessage = (event) => {
+            try {
+                const payload = JSON.parse(event.data || '{}');
+                if (payload?.revision != null && typeof onRevision === 'function') {
+                    onRevision(payload.revision, payload);
+                }
+            } catch (_) {
+                /* ignore malformed events */
+            }
+        };
+        return {
+            close: () => {
+                try {
+                    es.close();
+                } catch (_) {
+                    /* ignore */
+                }
+            }
+        };
     },
 
     async createMonthlyNotes(monthKey, monthlyGoals = '') {

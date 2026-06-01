@@ -8,6 +8,12 @@ import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
 import { notifyCommentParticipants, resolveMentionedUserIds } from './_lib/notifyCommentParticipants.js'
 import { resolveMeetingNotesLinkContext, buildMeetingNotesAppLink } from './_lib/meetingNotesDeepLink.js'
 import { touchMeetingNotesPresence, getMeetingNotesPresence } from './_lib/meetingNotesPresence.js'
+import {
+  bumpMeetingNotesLive,
+  bumpMeetingNotesLiveFromContext,
+  getMeetingNotesLiveRevision,
+  subscribeMeetingNotesLive
+} from './_lib/meetingNotesLive.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -110,6 +116,45 @@ async function handler(req, res) {
 
   const rawActionParam = req.query?.action ?? req.body?.action ?? ''
   const action = typeof rawActionParam === 'string' ? rawActionParam.trim().toLowerCase() : ''
+
+  // SSE: push revision bumps when any client saves this month (EventSource uses ?access_token=)
+  if (action === 'live') {
+    if (req.method !== 'GET') {
+      return badRequest(res, 'Live stream requires GET')
+    }
+    const monthKey = typeof req.query?.monthKey === 'string' ? req.query.monthKey.trim() : ''
+    if (!monthKey) {
+      return badRequest(res, 'monthKey is required')
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    })
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders()
+    }
+    const sendRevision = (revision) => {
+      if (res.writableEnded) return
+      res.write(`data: ${JSON.stringify({ revision, monthKey })}\n\n`)
+    }
+    sendRevision(getMeetingNotesLiveRevision(monthKey))
+    const unsubscribe = subscribeMeetingNotesLive(monthKey, sendRevision)
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': ping\n\n')
+      }
+    }, 20000)
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      unsubscribe()
+      if (!res.writableEnded) {
+        res.end()
+      }
+    })
+    return undefined
+  }
 
   // Live viewers for a meeting-notes "room" (month + week scope); in-memory per server process
   if (action === 'presence') {
@@ -429,6 +474,7 @@ async function handler(req, res) {
         }
       })
 
+      bumpMeetingNotesLive(monthKey)
       return ok(res, { monthlyNotes })
     } catch (error) {
       console.error('Error creating monthly meeting notes:', error)
@@ -481,6 +527,7 @@ async function handler(req, res) {
         }
       })
 
+      bumpMeetingNotesLive(monthlyNotes.monthKey)
       return ok(res, { monthlyNotes })
     } catch (error) {
       console.error('Error updating monthly meeting notes:', error)
@@ -523,6 +570,7 @@ async function handler(req, res) {
         where: whereClause
       })
 
+      bumpMeetingNotesLive(deleted?.monthKey || monthKey)
       return ok(res, { deleted: true, monthlyNotes: deleted })
     } catch (error) {
       if (error.code === 'P2025') {
@@ -546,6 +594,7 @@ async function handler(req, res) {
         where: { id: targetId }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { weeklyNotesId: targetId })
       return ok(res, { deleted: true, weeklyNotes: deleted })
     } catch (error) {
       if (error.code === 'P2025') {
@@ -619,6 +668,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { monthlyNotesId })
       return ok(res, { weeklyNotes: completeWeeklyNotes })
     } catch (error) {
       console.error('Error creating weekly meeting notes:', error)
@@ -727,6 +777,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { weeklyNotesId: id })
       return ok(res, { weeklyNotes })
     } catch (error) {
       console.error('Error updating weekly meeting notes:', error)
@@ -773,6 +824,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { departmentNotesId: id })
       return ok(res, { departmentNotes })
     } catch (error) {
       console.error('Error updating department notes:', error)
@@ -817,6 +869,11 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, {
+        monthlyNotesId,
+        weeklyNotesId,
+        departmentNotesId
+      })
       return ok(res, { actionItem })
     } catch (error) {
       console.error('Error creating action item:', error)
@@ -860,6 +917,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { actionItemId: id })
       return ok(res, { actionItem })
     } catch (error) {
       console.error('Error updating action item:', error)
@@ -895,6 +953,7 @@ async function handler(req, res) {
         where: { id }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { actionItemId: id })
       return ok(res, { success: true })
     } catch (error) {
       if (error.code === 'P2025') {
@@ -1003,6 +1062,11 @@ async function handler(req, res) {
         console.error('Notify comment participants failed (meeting notes):', notifyErr)
       }
 
+      await bumpMeetingNotesLiveFromContext(prisma, {
+        monthlyNotesId,
+        departmentNotesId,
+        actionItemId
+      })
       return ok(res, { comment })
     } catch (error) {
       console.error('Error creating comment:', error)
@@ -1028,6 +1092,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { commentId: targetId })
       return ok(res, { success: true, comment: deletedComment })
     } catch (error) {
       if (error.code === 'P2025') {
@@ -1071,6 +1136,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { monthlyNotesId })
       return ok(res, { allocation })
     } catch (error) {
       console.error('Error updating user allocation:', error)
@@ -1097,6 +1163,7 @@ async function handler(req, res) {
         }
       })
 
+      await bumpMeetingNotesLiveFromContext(prisma, { monthlyNotesId })
       return ok(res, { success: true })
     } catch (error) {
       console.error('Error deleting user allocation:', error)
@@ -1158,6 +1225,7 @@ async function handler(req, res) {
         }
       })
 
+      bumpMeetingNotesLive(monthKey)
       return ok(res, { monthlyNotes: completeMonthlyNotes })
     } catch (error) {
       console.error('Error generating monthly plan:', error)
