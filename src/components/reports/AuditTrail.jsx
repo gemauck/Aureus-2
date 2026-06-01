@@ -46,7 +46,7 @@ const AuditTrail = () => {
     const [filterAction, setFilterAction] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
     const [filterByEmail, setFilterByEmail] = useState('');
-    const [dateRange, setDateRange] = useState('all');
+    const [dateRange, setDateRange] = useState('1'); // Last 24 hours
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -641,7 +641,7 @@ const AuditTrail = () => {
                                 setFilterAction('all');
                                 setFilterUser('all');
                                 setFilterByEmail('');
-                                setDateRange('all');
+                                setDateRange('1');
                                 loadLogs({ email: '' });
                             }}
                             className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 hover:bg-white rounded transition-colors"
