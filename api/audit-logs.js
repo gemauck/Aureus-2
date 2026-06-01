@@ -5,6 +5,61 @@ import { created, ok, badRequest, serverError, unauthorized, forbidden } from '.
 import { isAdminRole, isSuperAdminRole } from './_lib/authRoles.js';
 
 const MAX_AUDIT_LOG_LIMIT = 5000;
+const AUDIT_REPORT_TZ = 'Africa/Johannesburg';
+
+function buildActivityTimeFromTimestamps(rows) {
+  const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+  const dowOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const byDayOfWeek = dowOrder.map((day, dayIndex) => ({ day, dayIndex, count: 0 }));
+  const byDateMap = new Map();
+
+  const hourFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: AUDIT_REPORT_TZ,
+    hour: 'numeric',
+    hour12: false
+  });
+  const weekdayFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: AUDIT_REPORT_TZ,
+    weekday: 'short'
+  });
+  const dateFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: AUDIT_REPORT_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+
+  for (const row of rows) {
+    const d = new Date(row.createdAt);
+    if (Number.isNaN(d.getTime())) continue;
+
+    const hour = parseInt(hourFmt.format(d), 10);
+    if (hour >= 0 && hour < 24) byHour[hour].count += 1;
+
+    const dow = weekdayFmt.format(d);
+    const dowIdx = dowOrder.indexOf(dow);
+    if (dowIdx >= 0) byDayOfWeek[dowIdx].count += 1;
+
+    const dateKey = dateFmt.format(d);
+    byDateMap.set(dateKey, (byDateMap.get(dateKey) || 0) + 1);
+  }
+
+  const byDate = [...byDateMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+
+  const peakHour = byHour.reduce((best, cur) => (cur.count > best.count ? cur : best), byHour[0]);
+  const peakDay = byDayOfWeek.reduce((best, cur) => (cur.count > best.count ? cur : best), byDayOfWeek[0]);
+
+  return {
+    timezone: AUDIT_REPORT_TZ,
+    byHour,
+    byDayOfWeek,
+    byDate,
+    peakHour: peakHour.count ? { hour: peakHour.hour, count: peakHour.count } : null,
+    peakDay: peakDay.count ? { day: peakDay.day, count: peakDay.count } : null
+  };
+}
 
 async function buildAuditLogWhere(queryParams, prisma) {
   const userId = queryParams.get('userId');
@@ -128,7 +183,7 @@ async function fetchAuditStats(prisma, where) {
       count: g._count.id
     }));
 
-  const [distinctActors, distinctEntities] = await Promise.all([
+  const [distinctActors, distinctEntities, timestampRows] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       distinct: ['actorId'],
@@ -138,8 +193,14 @@ async function fetchAuditStats(prisma, where) {
       where,
       distinct: ['entity'],
       select: { entity: true }
+    }),
+    prisma.auditLog.findMany({
+      where,
+      select: { createdAt: true }
     })
   ]);
+
+  const activityTime = buildActivityTimeFromTimestamps(timestampRows);
 
   return {
     total,
@@ -148,7 +209,8 @@ async function fetchAuditStats(prisma, where) {
     dateMin: dateBounds._min.createdAt,
     dateMax: dateBounds._max.createdAt,
     topUsers,
-    topModules
+    topModules,
+    activityTime
   };
 }
 
