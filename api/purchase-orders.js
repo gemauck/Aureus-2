@@ -220,6 +220,61 @@ function mergeReceipt(items, receivedLines, taxOverride, existingOrder) {
   return { items: merged, subtotal, tax, total }
 }
 
+/**
+ * Apply supplier return quantities to PO lines (cumulative quantityReturned per SKU).
+ * @param {Array} items - PO lines after goods receipt
+ * @param {Array} returnLines - { sku, quantityReturned, reason? }
+ */
+function mergeReturnLines(items, returnLines) {
+  if (!Array.isArray(returnLines) || returnLines.length === 0) {
+    throw new Error('returnLines array is required')
+  }
+  const activeReturns = returnLines.filter((r) => {
+    const q = parseFloat(r.quantityReturned)
+    return r.sku && !Number.isNaN(q) && q > 0
+  })
+  if (activeReturns.length === 0) {
+    throw new Error('At least one line must have quantityReturned greater than zero')
+  }
+  const bySku = new Map(activeReturns.map((r) => [r.sku, r]))
+  const merged = items.map((line) => {
+    const sku = line.sku
+    if (!sku) return line
+    const r = bySku.get(sku)
+    if (!r) return line
+
+    const qtyRec = parseFloat(line.quantityReceived) || 0
+    if (qtyRec <= 0) {
+      throw new Error(`SKU ${sku} was not received on this purchase order`)
+    }
+    const alreadyReturned = parseFloat(line.quantityReturned) || 0
+    const qtyRet = parseFloat(r.quantityReturned)
+    if (Number.isNaN(qtyRet) || qtyRet < 0) {
+      throw new Error(`Invalid return quantity for ${sku}`)
+    }
+    const remaining = qtyRec - alreadyReturned
+    if (qtyRet > remaining + 1e-9) {
+      throw new Error(
+        `Return quantity exceeds remaining received for ${sku} (received: ${qtyRec}, already returned: ${alreadyReturned})`
+      )
+    }
+    const reason = (r.reason != null ? String(r.reason) : r.notes != null ? String(r.notes) : '').trim()
+    return {
+      ...line,
+      quantityReturned: alreadyReturned + qtyRet,
+      ...(reason ? { lastReturnReason: reason } : {})
+    }
+  })
+
+  for (const r of activeReturns) {
+    if (!items.some((l) => l.sku === r.sku)) {
+      throw new Error(`SKU ${r.sku} is not on this purchase order`)
+    }
+  }
+
+  return { items: merged, returnLines: activeReturns }
+}
+
 async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, subtotal, tax, total, updateData, req, id }) {
   let toLocationId = existingOrder.receivingLocationId || null
   let mainWarehouse = null
@@ -343,6 +398,97 @@ async function runGoodsReceiptInTransaction(tx, { existingOrder, mergedItems, su
   await tx.purchaseOrder.update({
     where: { id },
     data: finalUpdate
+  })
+}
+
+async function runSupplierReturnInTransaction(tx, { existingOrder, mergedItems, returnLines, req, id }) {
+  let fromLocationId = existingOrder.receivingLocationId || null
+  let warehouse = null
+  if (fromLocationId) {
+    warehouse = await tx.stockLocation.findUnique({ where: { id: fromLocationId } })
+  }
+  if (!warehouse) {
+    warehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
+    fromLocationId = warehouse?.id || null
+  }
+  if (!fromLocationId) {
+    throw new Error('No receiving location on this purchase order and no default warehouse (LOC001)')
+  }
+
+  const now = new Date()
+  const supplierLabel = existingOrder.supplierName || 'N/A'
+
+  for (const r of returnLines) {
+    const quantity = parseFloat(r.quantityReturned) || 0
+    if (quantity <= 0) continue
+
+    const line = mergedItems.find((it) => it.sku === r.sku)
+    const itemName = line?.name || line?.itemName || r.sku
+    const reason = (r.reason != null ? String(r.reason) : r.notes != null ? String(r.notes) : '').trim()
+
+    const li = await tx.locationInventory.findUnique({
+      where: { locationId_sku: { locationId: fromLocationId, sku: r.sku } }
+    })
+    const onHand = li?.quantity || 0
+    if (onHand < quantity) {
+      throw new Error(
+        `Insufficient stock at receiving location for ${r.sku}. On hand: ${onHand}, return qty: ${quantity}`
+      )
+    }
+
+    const notesParts = [
+      `Supplier return for PO ${existingOrder.orderNumber || id}`,
+      `Supplier: ${supplierLabel}`
+    ]
+    if (reason) notesParts.push(reason)
+
+    await createStockMovementTx(tx, {
+      date: now,
+      type: 'supplier_return',
+      itemName,
+      sku: r.sku,
+      quantity: -quantity,
+      fromLocation: fromLocationId,
+      toLocation: '',
+      reference: existingOrder.orderNumber || id,
+      performedBy: req.user?.name || 'System',
+      notes: notesParts.join(' — '),
+      ownerId: null
+    })
+
+    let inventoryItem = await tx.inventoryItem.findFirst({ where: { sku: r.sku } })
+
+    await applyLocationInventoryDeltaTx(tx, fromLocationId, r.sku, itemName, -quantity, {
+      reorderPoint: inventoryItem?.reorderPoint || 0
+    })
+
+    const totalAtLocations = await tx.locationInventory.aggregate({
+      _sum: { quantity: true },
+      where: { sku: r.sku }
+    })
+    const aggQty = totalAtLocations._sum.quantity || 0
+
+    if (inventoryItem) {
+      const costForValue = inventoryItem.unitCost || 0
+      await tx.inventoryItem.update({
+        where: { id: inventoryItem.id },
+        data: {
+          quantity: aggQty,
+          totalValue: computedInventoryTotalValue(aggQty, costForValue),
+          status:
+            aggQty > (inventoryItem.reorderPoint || 0)
+              ? 'in_stock'
+              : aggQty > 0
+                ? 'low_stock'
+                : 'out_of_stock'
+        }
+      })
+    }
+  }
+
+  await tx.purchaseOrder.update({
+    where: { id },
+    data: { items: JSON.stringify(mergedItems) }
   })
 }
 
@@ -567,6 +713,74 @@ async function handler(req, res) {
 
         const oldStatus = existingOrder.status
         const admin = isAdminUser(req.user)
+
+        if (body.returnLines !== undefined) {
+          const otherKeys = Object.keys(body).filter(
+            (k) => k !== 'returnLines' && body[k] !== undefined
+          )
+          if (otherKeys.length > 0) {
+            return badRequest(
+              res,
+              'When posting a supplier return, send only returnLines (no status or other field changes).'
+            )
+          }
+          if (oldStatus !== S_GOODS_RECEIVED) {
+            return badRequest(
+              res,
+              'Supplier returns are only allowed on purchase orders with status goods_received'
+            )
+          }
+          const itemsArr = parseItemsJson(existingOrder)
+          let mergedReturn
+          try {
+            mergedReturn = mergeReturnLines(itemsArr, body.returnLines)
+          } catch (e) {
+            return badRequest(res, e.message || 'Invalid return data')
+          }
+
+          try {
+            await prisma.$transaction(
+              async (tx) => {
+                await runSupplierReturnInTransaction(tx, {
+                  existingOrder,
+                  mergedItems: mergedReturn.items,
+                  returnLines: mergedReturn.returnLines,
+                  req,
+                  id
+                })
+              },
+              { timeout: 30000 }
+            )
+
+            const purchaseOrder = await prisma.purchaseOrder.findUnique({
+              where: { id },
+              include: { supplier: true, receivingLocation: locationInclude }
+            })
+            const responseOrder = {
+              ...purchaseOrder,
+              items: parseItemsJson(purchaseOrder)
+            }
+            const returnedSkus = mergedReturn.returnLines.map((r) => r.sku).join(', ')
+            void logAuditFromRequest(prisma, req, {
+              action: 'update',
+              entity: 'purchase_orders',
+              entityId: id,
+              details: {
+                resource: 'purchase-orders',
+                method: req.method,
+                path: urlPath,
+                summary: `Supplier return ${purchaseOrder.orderNumber}`,
+                orderNumber: purchaseOrder.orderNumber,
+                returnedSkus,
+                returnLines: mergedReturn.returnLines
+              }
+            })
+            return ok(res, { purchaseOrder: responseOrder })
+          } catch (stockError) {
+            console.error('❌ Error recording supplier return:', stockError)
+            return serverError(res, 'Failed to record supplier return', stockError.message)
+          }
+        }
 
         if (oldStatus === S_GOODS_RECEIVED || oldStatus === S_CANCELLED) {
           const allowedTerminal = ['internalNotes']

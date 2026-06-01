@@ -19,7 +19,7 @@ function normalizeCombined(m) {
   if (t === 'transfer') return 0
   if (t === 'receipt') return Math.abs(qty)
   if (t === 'production') return -Math.abs(qty)
-  if (t === 'consumption' || t === 'sale') return -Math.abs(qty)
+  if (t === 'consumption' || t === 'sale' || t === 'supplier_return') return -Math.abs(qty)
   if (t === 'issue') return -Math.abs(qty)
   return qty
 }

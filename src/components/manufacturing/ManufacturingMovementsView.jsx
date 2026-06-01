@@ -35,7 +35,7 @@
     const normalizedQty = movement.type === 'production' ? -Math.abs(qty) : qty;
     if (movement.type === 'receipt') return '+' + Math.abs(qty);
     if (movement.type === 'production') return '' + normalizedQty;
-    if (movement.type === 'consumption' || movement.type === 'sale') return '' + (-Math.abs(qty));
+    if (movement.type === 'consumption' || movement.type === 'sale' || movement.type === 'supplier_return') return '' + (-Math.abs(qty));
     if (movement.type === 'transfer') return '' + Math.abs(qty);
     return qty > 0 ? '+' + qty : '' + qty;
   }
@@ -277,7 +277,7 @@
       const qtyClass =
         movement.type === 'receipt'
           ? 'text-green-600'
-          : movement.type === 'consumption' || movement.type === 'sale' || movement.type === 'production'
+          : movement.type === 'consumption' || movement.type === 'sale' || movement.type === 'supplier_return' || movement.type === 'production'
             ? 'text-red-600'
             : 'text-gray-900';
       return React.createElement(

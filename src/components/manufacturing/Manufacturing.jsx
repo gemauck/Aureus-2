@@ -552,6 +552,9 @@ try {
   const [poReceiptOpen, setPoReceiptOpen] = useState(false);
   const [poReceiptLines, setPoReceiptLines] = useState([]);
   const [poReceiptSaving, setPoReceiptSaving] = useState(false);
+  const [poReturnOpen, setPoReturnOpen] = useState(false);
+  const [poReturnLines, setPoReturnLines] = useState([]);
+  const [poReturnSaving, setPoReturnSaving] = useState(false);
   const [poPdfLoading, setPoPdfLoading] = useState(false);
   const [poEditMode, setPoEditMode] = useState(false);
   const [poEditDraft, setPoEditDraft] = useState(null);
@@ -2641,7 +2644,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       receipt: 'text-green-600 bg-green-50',
       production: 'text-blue-600 bg-blue-50',
       transfer: 'text-primary-600 bg-primary-50',
-      adjustment: 'text-orange-600 bg-orange-50'
+      adjustment: 'text-orange-600 bg-orange-50',
+      supplier_return: 'text-amber-700 bg-amber-50',
+      sale: 'text-red-600 bg-red-50'
     };
     return colors[status] || 'text-gray-600 bg-gray-50';
   };
@@ -3405,7 +3410,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         const q = parseFloat(movement.quantity) || 0;
                         if (movement.type === 'receipt') return `+${Math.abs(q)}`;
                         if (movement.type === 'production') return String(-Math.abs(q));
-                        if (movement.type === 'consumption' || movement.type === 'sale') return String(-Math.abs(q));
+                        if (movement.type === 'consumption' || movement.type === 'sale' || movement.type === 'supplier_return') return String(-Math.abs(q));
                         if (movement.type === 'transfer') return String(Math.abs(q));
                         return `${q > 0 ? '+' : ''}${q}`;
                       })()}
@@ -10883,7 +10888,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Purchase Order Details</h2>
               <button
-                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
+                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); setPoReturnOpen(false); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <i className="fas fa-times"></i>
@@ -10979,6 +10984,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                                     {item.quantityReceived != null && (
                                       <p className="text-xs text-green-700 mt-1">
                                         Received: {item.quantityReceived} @ {formatCurrency(item.receivedUnitPrice || 0)}
+                                      </p>
+                                    )}
+                                    {(parseFloat(item.quantityReturned) || 0) > 0 && (
+                                      <p className="text-xs text-amber-700 mt-1">
+                                        Returned to supplier: {item.quantityReturned}
+                                        {item.lastReturnReason ? ` — ${item.lastReturnReason}` : ''}
                                       </p>
                                     )}
                                   </div>
@@ -11483,6 +11494,44 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     Confirm goods receipt
                   </button>
                 )}
+                {selectedItem && poSt === 'goods_received' && !poEditMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const items = typeof selectedItem.items === 'string' ? JSON.parse(selectedItem.items || '[]') : (selectedItem.items || []);
+                      const returnable = items.filter((it) => {
+                        const received = parseFloat(it.quantityReceived) || 0;
+                        const returned = parseFloat(it.quantityReturned) || 0;
+                        return it.sku && received > returned;
+                      });
+                      if (returnable.length === 0) {
+                        alert('All received lines on this order have already been fully returned to the supplier.');
+                        return;
+                      }
+                      setPoReturnLines(
+                        returnable.map((it) => {
+                          const received = parseFloat(it.quantityReceived) || 0;
+                          const returned = parseFloat(it.quantityReturned) || 0;
+                          const remaining = received - returned;
+                          return {
+                            sku: it.sku,
+                            name: it.name || it.itemName || '',
+                            quantityReceived: received,
+                            quantityReturnedSoFar: returned,
+                            quantityRemaining: remaining,
+                            quantityReturnNow: remaining,
+                            reason: ''
+                          };
+                        })
+                      );
+                      setPoReturnOpen(true);
+                    }}
+                    className="px-3 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+                  >
+                    <i className="fas fa-undo mr-1"></i>
+                    Return to supplier
+                  </button>
+                )}
                 {selectedItem && poCanAmend && !poEditMode && (
                   <button
                     type="button"
@@ -11512,7 +11561,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
               <button
                 type="button"
-                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); }}
+                onClick={() => { resetPurchaseOrderEditUi(); setShowModal(false); setSelectedItem(null); setPoReceiptOpen(false); setPoReturnOpen(false); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Close
@@ -11603,6 +11652,105 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
                   {poReceiptSaving ? 'Saving…' : 'Post receipt'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {poReturnOpen && selectedItem && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-md font-semibold text-gray-900">Return to supplier</h3>
+                <button type="button" onClick={() => setPoReturnOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="p-4 space-y-3 text-sm">
+                <p className="text-xs text-gray-500">
+                  Stock will leave <span className="font-medium">{poRecvLabel || poRecvFallback || 'the receiving location'}</span> and be recorded as a supplier return against {selectedItem.orderNumber}. Return quantity cannot exceed what was received minus prior returns, or current on-hand at that location.
+                </p>
+                {poReturnLines.map((row, idx) => (
+                  <div key={row.sku || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                    <p className="font-medium text-gray-900">{row.name || row.sku}</p>
+                    <p className="text-xs text-gray-500">
+                      SKU: {row.sku} · Received: {row.quantityReceived}
+                      {row.quantityReturnedSoFar > 0 ? ` · Already returned: ${row.quantityReturnedSoFar}` : ''}
+                      {' · '}Max this return: {row.quantityRemaining}
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-600">Qty to return now</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={row.quantityRemaining}
+                          step="1"
+                          value={row.quantityReturnNow}
+                          onChange={(e) => {
+                            const next = [...poReturnLines];
+                            next[idx] = { ...next[idx], quantityReturnNow: parseFloat(e.target.value) || 0 };
+                            setPoReturnLines(next);
+                          }}
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600">Reason (optional)</label>
+                        <input
+                          type="text"
+                          value={row.reason}
+                          onChange={(e) => {
+                            const next = [...poReturnLines];
+                            next[idx] = { ...next[idx], reason: e.target.value };
+                            setPoReturnLines(next);
+                          }}
+                          className="w-full px-2 py-1 border border-gray-300 rounded"
+                          placeholder="e.g. wrong part, RMA #…"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+                <button type="button" onClick={() => setPoReturnOpen(false)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg">Cancel</button>
+                <button
+                  type="button"
+                  disabled={poReturnSaving}
+                  onClick={async () => {
+                    const linesToPost = poReturnLines
+                      .filter((r) => (parseFloat(r.quantityReturnNow) || 0) > 0)
+                      .map((r) => ({
+                        sku: r.sku,
+                        quantityReturned: parseFloat(r.quantityReturnNow) || 0,
+                        reason: (r.reason || '').trim()
+                      }));
+                    if (linesToPost.length === 0) {
+                      alert('Enter a return quantity greater than zero for at least one line.');
+                      return;
+                    }
+                    try {
+                      setPoReturnSaving(true);
+                      const response = await safeCallAPI('updatePurchaseOrder', selectedItem.id, {
+                        returnLines: linesToPost
+                      });
+                      if (response?.data?.purchaseOrder) {
+                        mergePoIntoLists(response.data.purchaseOrder);
+                        await refreshInvAfterPo();
+                        setPoReturnOpen(false);
+                        setDetailLedgerRefreshNonce((n) => n + 1);
+                        alert('Supplier return recorded and inventory updated.');
+                      }
+                    } catch (e) {
+                      alert(e?.message || 'Supplier return failed');
+                    } finally {
+                      setPoReturnSaving(false);
+                    }
+                  }}
+                  className="px-3 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {poReturnSaving ? 'Saving…' : 'Post return'}
                 </button>
               </div>
             </div>
@@ -13841,9 +13989,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         'adjustment': 'Adjustment',
         'sale': 'Sale',
         'production': 'Production',
-        'consumption': 'Consumption'
+        'consumption': 'Consumption',
+        'supplier_return': 'Supplier return'
       };
-      return typeMap[type] || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Movement');
+      return typeMap[type] || (type ? type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ') : 'Movement');
     }, []);
 
     const getMovementDescription = useCallback((movement) => {
@@ -14765,7 +14914,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               if (t === 'transfer') return 0;
               if (t === 'receipt') return Math.abs(qty);
               if (t === 'production') return -Math.abs(qty);
-              if (t === 'consumption' || t === 'sale') return -Math.abs(qty);
+              if (t === 'consumption' || t === 'sale' || t === 'supplier_return') return -Math.abs(qty);
               if (t === 'issue') return -Math.abs(qty);
               return qty;
             };
@@ -14790,7 +14939,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               if (!touches) return 0;
               if (t === 'receipt') return Math.abs(qty);
               if (t === 'production') return -Math.abs(qty);
-              if (t === 'consumption' || t === 'sale') return -Math.abs(qty);
+              if (t === 'consumption' || t === 'sale' || t === 'supplier_return') return -Math.abs(qty);
               if (t === 'issue') return -Math.abs(qty);
               return qty;
             };

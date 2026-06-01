@@ -820,6 +820,32 @@ async function run() {
     recordResult('Purchase order receive is idempotent', repeatReceive.status === 200, repeatReceive.status === 200 ? '' : apiErrorMessage(repeatReceive))
     const compBAfterRepeat = await getInventoryItem(componentB.id)
     assertEqual(compBAfterRepeat?.quantity, compBAfterPurchase?.quantity, 'Repeat receive does not double stock')
+
+    const supplierReturnRes = await updatePurchaseOrder(purchaseOrder.id, {
+      returnLines: [{ sku: componentB.sku, quantityReturned: 3, reason: 'Test supplier return' }]
+    })
+    const supplierReturnOk = supplierReturnRes.status === 200
+    recordResult(
+      'Purchase order supplier return',
+      supplierReturnOk,
+      supplierReturnOk ? '' : apiErrorMessage(supplierReturnRes)
+    )
+    if (supplierReturnOk) {
+      const compBAfterReturn = await getInventoryItem(componentB.id)
+      assertEqual(
+        compBAfterReturn?.quantity,
+        (compBAfterPurchase?.quantity || 0) - 3,
+        'Supplier return decreases stock'
+      )
+      const overReturnRes = await updatePurchaseOrder(purchaseOrder.id, {
+        returnLines: [{ sku: componentB.sku, quantityReturned: 999 }]
+      })
+      recordResult(
+        'Purchase order over-return rejected',
+        overReturnRes.status >= 400,
+        overReturnRes.status >= 400 ? '' : 'Expected failure for excessive return qty'
+      )
+    }
   }
 
   // --- Data Integrity: LocationInventory sums match master ---
