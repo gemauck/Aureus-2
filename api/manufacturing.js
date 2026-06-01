@@ -25,6 +25,12 @@ import {
   buildStockTakeVarianceWorkbookBuffer,
   stockTakeVarianceExportFilename
 } from './_lib/stockTakeVarianceExport.js'
+import {
+  computeMovementNetAtLocationSinceTx,
+  computeStockTakeApplyDeltaQty,
+  refreshStockTakeLinesSystemQtyAtSubmitTx,
+  resolveStockTakeMovementDate
+} from './_lib/stockTakeSubmission.js'
 import { reverseStockMovementDeletionTx } from './_lib/reverseStockMovementDeletion.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
@@ -1859,8 +1865,21 @@ async function handler(req, res) {
         if (!isAdminRole(req.user?.role)) {
           return forbidden(res, 'Only administrators can export stock-take variance reports.')
         }
-        const buf = buildStockTakeVarianceWorkbookBuffer(submission, submission.lines)
-        const fname = stockTakeVarianceExportFilename(submission)
+        let submitterEmail = ''
+        const submitterUserId = String(submission.submittedById || submission.ownerId || '').trim()
+        if (submitterUserId) {
+          const submitter = await prisma.user.findUnique({
+            where: { id: submitterUserId },
+            select: { email: true }
+          })
+          submitterEmail = submitter?.email || ''
+        }
+        if (!submitterEmail && String(submission.submittedBy || '').includes('@')) {
+          submitterEmail = String(submission.submittedBy).trim()
+        }
+        const submissionForExport = { ...submission, submitterEmail }
+        const buf = buildStockTakeVarianceWorkbookBuffer(submissionForExport, submission.lines)
+        const fname = stockTakeVarianceExportFilename(submissionForExport, submitterEmail)
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
         return res.status(200).send(Buffer.from(buf))
@@ -2221,6 +2240,8 @@ async function handler(req, res) {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+          await refreshStockTakeLinesSystemQtyAtSubmitTx(tx, submission.id, submission.locationId)
+
           const lines = await tx.stockTakeSubmissionLine.findMany({ where: { submissionId: submission.id } })
           for (const line of lines) {
             const meta = parseStockTakeLineMeta(line)
@@ -2287,15 +2308,11 @@ async function handler(req, res) {
             throw httpError(400, `Submission is already ${submission.status}`)
           }
 
+          const movementEffectiveDate = resolveStockTakeMovementDate(submission)
           let movementsCreated = 0
           let skipped = 0
 
           for (const line of submission.lines) {
-            const delta = Number(line.deltaQty) || 0
-            if (Math.abs(delta) < 0.0001) {
-              skipped++
-              continue
-            }
             let meta = {}
             try {
               meta = line?.meta ? JSON.parse(line.meta) : {}
@@ -2303,6 +2320,43 @@ async function handler(req, res) {
               meta = {}
             }
             const isNewItem = meta?.isNewItem === true
+            const countedQty = Number(line.countedQty) || 0
+
+            let currentQty = 0
+            if (!isNewItem) {
+              const li = await tx.locationInventory.findUnique({
+                where: {
+                  locationId_sku: {
+                    locationId: submission.locationId,
+                    sku: String(line.sku || '').trim()
+                  }
+                },
+                select: { quantity: true }
+              })
+              currentQty = li ? Number(li.quantity) || 0 : 0
+            }
+
+            const netSinceSubmit = isNewItem
+              ? 0
+              : await computeMovementNetAtLocationSinceTx(tx, {
+                  sku: line.sku,
+                  locationId: submission.locationId,
+                  locationCode: submission.locationCode,
+                  since: movementEffectiveDate
+                })
+
+            const delta = computeStockTakeApplyDeltaQty({
+              countedQty,
+              currentQty,
+              netMovementSinceSubmit: netSinceSubmit,
+              isNewItem
+            })
+
+            if (Math.abs(delta) < 0.0001) {
+              skipped++
+              continue
+            }
+
             const proposed = meta?.proposedItemDetails && typeof meta.proposedItemDetails === 'object'
               ? meta.proposedItemDetails
               : {}
@@ -2316,14 +2370,14 @@ async function handler(req, res) {
               quantityDelta: delta,
               locationId: submission.locationId,
               reference: `Stock take ${submission.submissionRef}`,
-              notes: `Submitted stock-take apply (submission=${submission.id}, line=${line.id})`,
+              notes: `Submitted stock-take apply (submission=${submission.id}, line=${line.id}, effective=${movementEffectiveDate.toISOString()})`,
               unit: proposed?.unit || line.unit || 'pcs',
               unitCost: Number(proposed?.unitCost) || 0,
               reorderPoint: Number(proposed?.reorderPoint) || 0,
               category: String(proposed?.category || 'components').trim() || 'components',
               itemType: String(proposed?.type || 'raw_material').trim() || 'raw_material',
               needsCatalogReview: isNewItem,
-              importDate: new Date()
+              importDate: movementEffectiveDate
             })
             if (movement) movementsCreated++
           }

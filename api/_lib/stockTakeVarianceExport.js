@@ -40,6 +40,7 @@ export function buildStockTakeVarianceWorkbookBuffer(submission, lines = []) {
     ['Location code', submission?.locationCode || ''],
     ['Status', submission?.status || ''],
     ['Submitted by', submission?.submittedBy || ''],
+    ['Submitter email', submission?.submitterEmail || ''],
     ['Submitted at', formatIsoDate(submission?.submittedAt)],
     ['Started at', formatIsoDate(submission?.startedAt)],
     ['Finished at', formatIsoDate(submission?.finishedAt)],
@@ -89,10 +90,23 @@ export function buildStockTakeVarianceWorkbookBuffer(submission, lines = []) {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
 }
 
-export function stockTakeVarianceExportFilename(submission) {
+/** Safe email segment for attachment filenames (Windows-friendly). */
+export function sanitizeEmailForFilename(email) {
+  const raw = String(email || '').trim().toLowerCase()
+  if (!raw) return 'unknown-user'
+  return raw
+    .replace(/@/g, '-at-')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_-]+|[_-]+$/g, '')
+    .slice(0, 64) || 'unknown-user'
+}
+
+export function stockTakeVarianceExportFilename(submission, submitterEmail = '') {
+  const emailPart = sanitizeEmailForFilename(submitterEmail)
   const ref = String(submission?.submissionRef || submission?.id || 'stock-take')
     .replace(/[^\w.-]+/g, '_')
     .slice(0, 48)
   const date = new Date().toISOString().slice(0, 10)
-  return `stock-take-variance-${ref}-${date}.xlsx`
+  return `stock-take-variance-${emailPart}-${ref}-${date}.xlsx`
 }
