@@ -128,18 +128,23 @@ async function fetchAuditStats(prisma, where) {
       count: g._count.id
     }));
 
-  const [uniqueUserGroups, uniqueModuleGroups] = await Promise.all([
-    prisma.auditLog.groupBy({ by: ['actorId'], where }),
-    prisma.auditLog.groupBy({
-      by: ['entity'],
-      where: { ...where, entity: { not: null } }
+  const [distinctActors, distinctEntities] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      distinct: ['actorId'],
+      select: { actorId: true }
+    }),
+    prisma.auditLog.findMany({
+      where,
+      distinct: ['entity'],
+      select: { entity: true }
     })
   ]);
 
   return {
     total,
-    uniqueUsers: uniqueUserGroups.length,
-    uniqueModules: uniqueModuleGroups.length,
+    uniqueUsers: distinctActors.filter((row) => row.actorId).length,
+    uniqueModules: distinctEntities.filter((row) => row.entity).length,
     dateMin: dateBounds._min.createdAt,
     dateMax: dateBounds._max.createdAt,
     topUsers,
@@ -315,11 +320,19 @@ async function handler(req, res) {
           skip: offset
         });
 
-        const [auditLogs, total, stats] = await Promise.all([
+        const [auditLogs, total] = await Promise.all([
           listPromise,
-          prisma.auditLog.count({ where }),
-          includeStats ? fetchAuditStats(prisma, where) : Promise.resolve(null)
+          prisma.auditLog.count({ where })
         ]);
+
+        let stats = null;
+        if (includeStats) {
+          try {
+            stats = await fetchAuditStats(prisma, where);
+          } catch (statsError) {
+            console.error('❌ Audit stats aggregation failed (logs still returned):', statsError);
+          }
+        }
 
         const transformedLogs = auditLogs.map(transformAuditLogRow);
 

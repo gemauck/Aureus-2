@@ -351,8 +351,15 @@ const AuditTrail = () => {
         if (filteredLogs.length === 0) return [];
         const byKey = {};
         filteredLogs.forEach(log => {
-            const key = (log.userId || log.userEmail || log.user || 'Unknown').toString().trim() || 'Unknown';
-            if (!byKey[key]) byKey[key] = { label: log.user || log.userEmail || key, email: log.userEmail || null, count: 0 };
+            const key = (log.userId || log.userEmail || '').toString().trim()
+                || `unknown:${(log.user || 'Unknown').toString().trim()}`;
+            if (!byKey[key]) {
+                byKey[key] = {
+                    label: log.user || log.userEmail || key.replace(/^unknown:/, ''),
+                    email: log.userEmail || null,
+                    count: 0
+                };
+            }
             byKey[key].count += 1;
         });
         return Object.values(byKey)
@@ -469,6 +476,12 @@ const AuditTrail = () => {
                     <i className="fas fa-info-circle mr-1"></i>
                     Showing the latest {totalLoaded.toLocaleString()} of {matchTotal.toLocaleString()} matching logs.
                     User/module charts use full filtered totals; narrow the date range for faster loads.
+                </div>
+            )}
+            {!serverStats && matchTotal > 0 && !isLoading && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <i className="fas fa-exclamation-triangle mr-1"></i>
+                    Summary stats unavailable; charts below are from loaded rows only. Refresh or narrow filters if numbers look wrong.
                 </div>
             )}
 

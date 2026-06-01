@@ -286,7 +286,10 @@ const AuditLogger = {
                 return payload;
             }
         } catch (error) {
-            console.error('❌ Error fetching audit logs from backend, using localStorage:', error);
+            console.error('❌ Error fetching audit logs from backend:', error);
+            if (window.storage?.getToken?.()) {
+                throw error;
+            }
         }
 
         const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
