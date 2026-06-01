@@ -147,6 +147,26 @@ function inventoryItemLinkedToSupplierName(item, supplierName) {
   }
 }
 
+/** Resolve PO line picker input (SKU, id, or exact name / "name (sku)") to an inventory row. */
+function resolvePoInventoryFromQuery(options, query) {
+  const q = String(query || '').trim();
+  if (!q || !Array.isArray(options)) return null;
+  const qLower = q.toLowerCase();
+  return (
+    options.find((item) => String(item.sku || '') === q || String(item.id || '') === q) ||
+    options.find(
+      (item) =>
+        String(item.sku || '').toLowerCase() === qLower || String(item.id || '').toLowerCase() === qLower
+    ) ||
+    options.find((item) => String(item.name || '').trim().toLowerCase() === qLower) ||
+    options.find((item) => {
+      const label = `${item.name || ''} (${item.sku || item.id || ''})`.trim().toLowerCase();
+      return label === qLower;
+    }) ||
+    null
+  );
+}
+
 function parseSupplierPartNumbersSafe(raw) {
   try {
     const parts = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);
@@ -12115,10 +12135,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           )
         : [];
       const selectedInvForPoLine = newPurchaseOrderItem.sku
-        ? poInventoryOptions.find(
-            (item) =>
-              item.sku === newPurchaseOrderItem.sku || item.id === newPurchaseOrderItem.sku
-          )
+        ? resolvePoInventoryFromQuery(poInventoryOptions, newPurchaseOrderItem.sku)
         : null;
       const inventoryListedUnitCost =
         selectedInvForPoLine != null ? parseFloat(selectedInvForPoLine.unitCost) : NaN;
@@ -12235,12 +12252,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   {/* Add Item Form */}
                   <div className="grid grid-cols-12 gap-2 mb-3">
                     <div className="col-span-3">
-                      <select
+                      <input
+                        type="text"
+                        list="purchase-order-inventory-options"
                         value={newPurchaseOrderItem.sku}
                         disabled={!formData.supplierId}
                         onChange={(e) => {
-                          const sku = e.target.value;
-                          const invItem = poInventoryOptions.find(item => item.sku === sku || item.id === sku);
+                          const raw = e.target.value;
+                          const invItem = resolvePoInventoryFromQuery(poInventoryOptions, raw);
+                          const sku = invItem ? invItem.sku || invItem.id || '' : raw;
                           const costFromInv = invItem != null ? parseFloat(invItem.unitCost) : NaN;
                           const hasListedCost = Number.isFinite(costFromInv) && costFromInv > 0;
                           setNewPurchaseOrderItem((prev) => ({
@@ -12250,15 +12270,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                             unitPrice: !sku ? 0 : hasListedCost ? costFromInv : prev.unitPrice
                           }));
                         }}
+                        placeholder={
+                          formData.supplierId
+                            ? 'Search inventory by SKU or name'
+                            : 'Select a supplier first'
+                        }
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
-                      >
-                        <option value="">{formData.supplierId ? 'Select from inventory' : 'Select a supplier first'}</option>
-                        {poInventoryOptions.map(item => (
+                      />
+                      <datalist id="purchase-order-inventory-options">
+                        {poInventoryOptions.map((item) => (
                           <option key={item.id || item.sku} value={item.sku || item.id}>
                             {item.name} ({item.sku || item.id})
                           </option>
                         ))}
-                      </select>
+                      </datalist>
                     </div>
                     <div className="col-span-3">
                       <input
