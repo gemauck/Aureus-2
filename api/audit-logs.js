@@ -7,11 +7,21 @@ import { isAdminRole, isSuperAdminRole } from './_lib/authRoles.js';
 const MAX_AUDIT_LOG_LIMIT = 5000;
 const AUDIT_REPORT_TZ = 'Africa/Johannesburg';
 
-function buildActivityTimeFromTimestamps(rows) {
-  const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+function emptyHourBuckets() {
+  return Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+}
+
+function peakHourFromBuckets(byHour) {
+  const peak = byHour.reduce((best, cur) => (cur.count > best.count ? cur : best), byHour[0]);
+  return peak.count ? { hour: peak.hour, count: peak.count } : null;
+}
+
+function buildActivityTimeFromTimestamps(rows, actorById = {}) {
+  const byHour = emptyHourBuckets();
   const dowOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const byDayOfWeek = dowOrder.map((day, dayIndex) => ({ day, dayIndex, count: 0 }));
   const byDateMap = new Map();
+  const userBucketMap = new Map();
 
   const hourFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: AUDIT_REPORT_TZ,
@@ -42,22 +52,47 @@ function buildActivityTimeFromTimestamps(rows) {
 
     const dateKey = dateFmt.format(d);
     byDateMap.set(dateKey, (byDateMap.get(dateKey) || 0) + 1);
+
+    const actorKey = row.actorId || '__unknown__';
+    if (!userBucketMap.has(actorKey)) {
+      userBucketMap.set(actorKey, { byHour: emptyHourBuckets(), total: 0 });
+    }
+    const userBucket = userBucketMap.get(actorKey);
+    userBucket.total += 1;
+    if (hour >= 0 && hour < 24) userBucket.byHour[hour].count += 1;
   }
 
   const byDate = [...byDateMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, count]) => ({ date, count }));
 
-  const peakHour = byHour.reduce((best, cur) => (cur.count > best.count ? cur : best), byHour[0]);
-  const peakDay = byDayOfWeek.reduce((best, cur) => (cur.count > best.count ? cur : best), byDayOfWeek[0]);
+  const byUser = [...userBucketMap.entries()]
+    .map(([userId, bucket]) => {
+      const actor = actorById[userId];
+      const label = actor?.name || actor?.email || (userId === '__unknown__' ? 'Unknown' : userId);
+      return {
+        userId,
+        label,
+        email: actor?.email || null,
+        total: bucket.total,
+        byHour: bucket.byHour,
+        peakHour: peakHourFromBuckets(bucket.byHour)
+      };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 15);
 
   return {
     timezone: AUDIT_REPORT_TZ,
     byHour,
     byDayOfWeek,
     byDate,
-    peakHour: peakHour.count ? { hour: peakHour.hour, count: peakHour.count } : null,
-    peakDay: peakDay.count ? { day: peakDay.day, count: peakDay.count } : null
+    peakHour: peakHourFromBuckets(byHour),
+    peakDay: (() => {
+      const peak = byDayOfWeek.reduce((best, cur) => (cur.count > best.count ? cur : best), byDayOfWeek[0]);
+      return peak.count ? { day: peak.day, count: peak.count } : null;
+    })(),
+    byUser
   };
 }
 
@@ -196,11 +231,23 @@ async function fetchAuditStats(prisma, where) {
     }),
     prisma.auditLog.findMany({
       where,
-      select: { createdAt: true }
+      select: { createdAt: true, actorId: true }
     })
   ]);
 
-  const activityTime = buildActivityTimeFromTimestamps(timestampRows);
+  const activityActorIds = [...new Set(timestampRows.map((r) => r.actorId).filter(Boolean))];
+  const activityActors = activityActorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: activityActorIds } },
+        select: { id: true, name: true, email: true }
+      })
+    : [];
+  const activityActorById = Object.fromEntries([
+    ...actors.map((a) => [a.id, a]),
+    ...activityActors.map((a) => [a.id, a])
+  ]);
+
+  const activityTime = buildActivityTimeFromTimestamps(timestampRows, activityActorById);
 
   return {
     total,

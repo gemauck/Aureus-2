@@ -38,11 +38,19 @@ const formatAuditDate = (d) => d.toLocaleDateString('en-ZA', {
 
 const formatAuditHour = (hour) => `${String(hour).padStart(2, '0')}:00`;
 
+const emptyHourBuckets = () => Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+
+const peakHourFromBuckets = (byHour) => {
+    const peak = byHour.reduce((best, cur) => (cur.count > best.count ? cur : best), byHour[0]);
+    return peak.count ? { hour: peak.hour, count: peak.count } : null;
+};
+
 const buildActivityTimeFromLogs = (logs) => {
-    const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+    const byHour = emptyHourBuckets();
     const dowOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const byDayOfWeek = dowOrder.map((day, dayIndex) => ({ day, dayIndex, count: 0 }));
     const byDateMap = new Map();
+    const userBucketMap = new Map();
     const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: AUDIT_TZ, hour: 'numeric', hour12: false });
     const weekdayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: AUDIT_TZ, weekday: 'short' });
     const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: AUDIT_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -57,23 +65,87 @@ const buildActivityTimeFromLogs = (logs) => {
         if (dowIdx >= 0) byDayOfWeek[dowIdx].count += 1;
         const dateKey = dateFmt.format(d);
         byDateMap.set(dateKey, (byDateMap.get(dateKey) || 0) + 1);
+
+        const actorKey = (log.userId || log.userEmail || '').toString().trim() || '__unknown__';
+        if (!userBucketMap.has(actorKey)) {
+            userBucketMap.set(actorKey, {
+                label: log.user || log.userEmail || 'Unknown',
+                email: log.userEmail || null,
+                byHour: emptyHourBuckets(),
+                total: 0
+            });
+        }
+        const bucket = userBucketMap.get(actorKey);
+        bucket.total += 1;
+        if (hour >= 0 && hour < 24) bucket.byHour[hour].count += 1;
     });
 
     const byDate = [...byDateMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, count]) => ({ date, count }));
-    const peakHour = byHour.reduce((best, cur) => (cur.count > best.count ? cur : best), byHour[0]);
     const peakDay = byDayOfWeek.reduce((best, cur) => (cur.count > best.count ? cur : best), byDayOfWeek[0]);
+
+    const byUser = [...userBucketMap.entries()]
+        .map(([userId, bucket]) => ({
+            userId,
+            label: bucket.label,
+            email: bucket.email,
+            total: bucket.total,
+            byHour: bucket.byHour,
+            peakHour: peakHourFromBuckets(bucket.byHour)
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 15);
 
     return {
         timezone: AUDIT_TZ,
         byHour,
         byDayOfWeek,
         byDate,
-        peakHour: peakHour.count ? { hour: peakHour.hour, count: peakHour.count } : null,
-        peakDay: peakDay.count ? { day: peakDay.day, count: peakDay.count } : null
+        peakHour: peakHourFromBuckets(byHour),
+        peakDay: peakDay.count ? { day: peakDay.day, count: peakDay.count } : null,
+        byUser
     };
 };
+
+const UserHourActivityChart = ({ user, maxHourCount }) => (
+    <div className="rounded-lg border border-violet-100 bg-white/80 p-3 dark:border-violet-900/40 dark:bg-gray-900/40">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+            <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate" title={user.email || user.label}>
+                    {user.label}
+                </p>
+                {user.email && user.email !== user.label && (
+                    <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                )}
+            </div>
+            <div className="text-right text-[10px] text-violet-800 dark:text-violet-200">
+                <span className="font-semibold tabular-nums">{user.total.toLocaleString()}</span> actions
+                {user.peakHour && (
+                    <span className="block text-gray-500">
+                        Peak: {formatAuditHour(user.peakHour.hour)} ({user.peakHour.count})
+                    </span>
+                )}
+            </div>
+        </div>
+        <div className="flex items-end gap-px h-16" role="img" aria-label={`${user.label} activity by hour`}>
+            {user.byHour.map(({ hour, count }) => (
+                <div key={hour} className="flex-1 flex flex-col items-center justify-end min-w-0 group">
+                    <div
+                        className="w-full rounded-t bg-gradient-to-t from-violet-600 to-violet-400 dark:from-violet-500 dark:to-violet-300"
+                        style={{ height: `${Math.max(count ? 4 : 1, (count / maxHourCount) * 100)}%`, minHeight: count ? '4px' : '1px' }}
+                        title={`${formatAuditHour(hour)}: ${count}`}
+                    />
+                </div>
+            ))}
+        </div>
+        <div className="flex justify-between text-[8px] text-gray-400 mt-1">
+            <span>00</span>
+            <span>12</span>
+            <span>23</span>
+        </div>
+    </div>
+);
 
 const AuditTrail = () => {
     const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
@@ -93,6 +165,7 @@ const AuditTrail = () => {
     const [error, setError] = useState(null);
     const [expandedLogId, setExpandedLogId] = useState(null);
     const [auditReportTab, setAuditReportTab] = useState('log');
+    const [activityUserFocus, setActivityUserFocus] = useState('all');
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -149,6 +222,7 @@ const AuditTrail = () => {
 
     // Reload from API when server-side filters change
     useEffect(() => {
+        setActivityUserFocus('all');
         loadLogs();
     }, [dateRange, filterModule, filterAction]);
 
@@ -431,15 +505,13 @@ const AuditTrail = () => {
         if (filteredLogs.length === 0) return null;
         return buildActivityTimeFromLogs(filteredLogs);
     })();
-    const maxHourCount = activityTime?.byHour?.length
-        ? Math.max(...activityTime.byHour.map((h) => h.count), 1)
+    const activityByUser = activityTime?.byUser || [];
+    const maxUserHourCount = activityByUser.length
+        ? Math.max(...activityByUser.flatMap((u) => u.byHour.map((h) => h.count)), 1)
         : 1;
-    const maxDowCount = activityTime?.byDayOfWeek?.length
-        ? Math.max(...activityTime.byDayOfWeek.map((d) => d.count), 1)
-        : 1;
-    const maxDateCount = activityTime?.byDate?.length
-        ? Math.max(...activityTime.byDate.map((d) => d.count), 1)
-        : 1;
+    const displayedActivityUsers = activityUserFocus === 'all'
+        ? activityByUser
+        : activityByUser.filter((u) => u.userId === activityUserFocus);
 
     // Pagination
     const indexOfLastLog = currentPage * logsPerPage;
@@ -590,7 +662,7 @@ const AuditTrail = () => {
                         { id: 'log', label: 'Audit log', icon: 'fa-list-alt' },
                         { id: 'users', label: 'Most active users', icon: 'fa-users' },
                         { id: 'modules', label: 'Most used modules', icon: 'fa-cubes' },
-                        { id: 'activity', label: 'Active times', icon: 'fa-clock' }
+                        { id: 'activity', label: 'Active times by user', icon: 'fa-clock' }
                     ].map(({ id, label, icon }) => (
                         <button
                             key={id}
@@ -860,91 +932,46 @@ const AuditTrail = () => {
                     <div className="border-b border-violet-100 bg-violet-50/80 px-4 py-3 dark:border-violet-900/40 dark:bg-violet-950/30">
                         <h2 className="flex items-center gap-2 text-sm font-semibold text-violet-900 dark:text-violet-100">
                             <i className="fas fa-clock text-violet-600 dark:text-violet-400"></i>
-                            Active times
+                            Active times by user
                         </h2>
                         <p className="mt-0.5 text-[10px] text-violet-600 dark:text-violet-300">
-                            When activity happens ({AUDIT_TZ}) — respects current filters
+                            Hour-of-day pattern per person ({AUDIT_TZ}) — uses full filtered dataset
                         </p>
-                        {activityTime?.peakHour && (
+                        {activityTime?.peakHour && activityByUser.length > 1 && (
                             <p className="mt-1 text-[10px] text-violet-800 dark:text-violet-200">
-                                Busiest hour: <strong>{formatAuditHour(activityTime.peakHour.hour)}</strong> ({activityTime.peakHour.count.toLocaleString()} actions)
-                                {activityTime.peakDay ? (
-                                    <> · Busiest day: <strong>{activityTime.peakDay.day}</strong> ({activityTime.peakDay.count.toLocaleString()})</>
-                                ) : null}
+                                Team busiest hour: <strong>{formatAuditHour(activityTime.peakHour.hour)}</strong> ({activityTime.peakHour.count.toLocaleString()} actions combined)
                             </p>
                         )}
                     </div>
-                    <div className="p-4 space-y-6">
-                        {!activityTime || (activityTime.byHour.every((h) => h.count === 0)) ? (
-                            <p className="text-xs text-gray-500 py-4 text-center">No activity in current filters.</p>
+                    <div className="p-4 space-y-4">
+                        {activityByUser.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-4 text-center">No user activity in current filters.</p>
                         ) : (
                             <>
-                                <div>
-                                    <h3 className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-2">By hour of day</h3>
-                                    <div className="flex items-end gap-0.5 h-28 px-1" role="img" aria-label="Activity by hour chart">
-                                        {activityTime.byHour.map(({ hour, count }) => (
-                                            <div key={hour} className="flex-1 flex flex-col items-center justify-end min-w-0 group">
-                                                <span className="text-[8px] text-violet-700 dark:text-violet-300 opacity-0 group-hover:opacity-100 mb-0.5 tabular-nums">
-                                                    {count > 0 ? count : ''}
-                                                </span>
-                                                <div
-                                                    className="w-full rounded-t bg-gradient-to-t from-violet-600 to-violet-400 dark:from-violet-500 dark:to-violet-300 transition-all duration-300"
-                                                    style={{ height: `${Math.max(count ? 6 : 2, (count / maxHourCount) * 100)}%` }}
-                                                    title={`${formatAuditHour(hour)}: ${count.toLocaleString()} actions`}
-                                                />
-                                                <span className="text-[8px] text-gray-500 mt-1 truncate w-full text-center">
-                                                    {hour % 3 === 0 ? formatAuditHour(hour).slice(0, 2) : ''}
-                                                </span>
-                                            </div>
+                                <div className="flex flex-wrap items-end gap-2">
+                                    <label className="text-[10px] font-medium text-gray-700 block">Show user</label>
+                                    <select
+                                        value={activityUserFocus}
+                                        onChange={(e) => setActivityUserFocus(e.target.value)}
+                                        className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 min-w-[180px]"
+                                    >
+                                        <option value="all">All users ({activityByUser.length})</option>
+                                        {activityByUser.map((u) => (
+                                            <option key={u.userId} value={u.userId}>
+                                                {u.label} ({u.total.toLocaleString()})
+                                            </option>
                                         ))}
-                                    </div>
-                                    <div className="flex justify-between text-[9px] text-gray-400 mt-1 px-1">
-                                        <span>00:00</span>
-                                        <span>12:00</span>
-                                        <span>23:00</span>
-                                    </div>
+                                    </select>
                                 </div>
-
-                                <div>
-                                    <h3 className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-2">By day of week</h3>
-                                    <div className="space-y-2">
-                                        {activityTime.byDayOfWeek.map(({ day, count }) => (
-                                            <div key={day} className="flex items-center gap-3">
-                                                <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300 w-8">{day}</span>
-                                                <div className="flex-1 h-2 overflow-hidden rounded-full bg-violet-100 dark:bg-violet-950/60">
-                                                    <div
-                                                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400"
-                                                        style={{ width: `${Math.max(4, (count / maxDowCount) * 100)}%` }}
-                                                    />
-                                                </div>
-                                                <span className="text-[10px] tabular-nums font-semibold text-violet-700 dark:text-violet-300 w-10 text-right">
-                                                    {count.toLocaleString()}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div className={activityUserFocus === 'all' ? 'grid grid-cols-1 lg:grid-cols-2 gap-3' : 'max-w-2xl'}>
+                                    {displayedActivityUsers.map((u) => (
+                                        <UserHourActivityChart
+                                            key={u.userId}
+                                            user={u}
+                                            maxHourCount={maxUserHourCount}
+                                        />
+                                    ))}
                                 </div>
-
-                                {activityTime.byDate.length > 1 && (
-                                    <div>
-                                        <h3 className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-2">Daily activity</h3>
-                                        <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
-                                            {activityTime.byDate.map(({ date, count }) => (
-                                                <div key={date} className="flex flex-col items-center justify-end flex-shrink-0 w-8 group">
-                                                    <span className="text-[8px] text-violet-700 opacity-0 group-hover:opacity-100 mb-0.5 tabular-nums">{count}</span>
-                                                    <div
-                                                        className="w-6 rounded-t bg-violet-500/90 dark:bg-violet-400"
-                                                        style={{ height: `${Math.max(6, (count / maxDateCount) * 88)}px` }}
-                                                        title={`${date}: ${count.toLocaleString()}`}
-                                                    />
-                                                    <span className="text-[7px] text-gray-500 mt-1 -rotate-45 origin-top-left whitespace-nowrap">
-                                                        {date.slice(5)}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                             </>
                         )}
                     </div>
