@@ -1528,7 +1528,19 @@ function formatWizardDatetimeLabel(val) {
   if (!val) return '';
   const d = new Date(val);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString(undefined, { weekday: 'short', dateStyle: 'medium', timeStyle: 'short' });
+  try {
+    // dateStyle/timeStyle cannot be mixed with weekday (throws in strict Intl engines).
+    return d.toLocaleString(undefined, {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  } catch {
+    return d.toLocaleString();
+  }
 }
 
 /** Stable local id for one wizard session (offline queue + POST idempotency). */
