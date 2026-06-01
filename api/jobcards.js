@@ -1437,6 +1437,11 @@ async function handler(req, res) {
             locationLongitude: lng,
             timeOfDeparture: body.timeOfDeparture ? new Date(body.timeOfDeparture) : null,
             timeOfArrival: body.timeOfArrival ? new Date(body.timeOfArrival) : null,
+            departureFromSite: body.departureFromSite ? new Date(body.departureFromSite) : null,
+            totalTimeMinutes: (() => {
+              const mins = parseInt(body.totalTimeMinutes, 10)
+              return Number.isFinite(mins) && mins >= 0 ? mins : 0
+            })(),
             vehicleUsed: body.vehicleUsed || '',
             kmReadingBefore: kmBefore,
             kmReadingAfter: kmAfter,
@@ -1577,6 +1582,13 @@ async function handler(req, res) {
         }
         if (body.timeOfDeparture !== undefined) updateData.timeOfDeparture = body.timeOfDeparture ? new Date(body.timeOfDeparture) : null
         if (body.timeOfArrival !== undefined) updateData.timeOfArrival = body.timeOfArrival ? new Date(body.timeOfArrival) : null
+        if (body.departureFromSite !== undefined) {
+          updateData.departureFromSite = body.departureFromSite ? new Date(body.departureFromSite) : null
+        }
+        if (body.totalTimeMinutes !== undefined) {
+          const mins = parseInt(body.totalTimeMinutes, 10)
+          updateData.totalTimeMinutes = Number.isFinite(mins) && mins >= 0 ? mins : 0
+        }
         if (body.vehicleUsed !== undefined) updateData.vehicleUsed = body.vehicleUsed
         if (body.kmReadingBefore !== undefined) updateData.kmReadingBefore = parseFiniteNumber(body.kmReadingBefore, 0)
         if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFiniteNumber(body.kmReadingAfter, 0)

@@ -190,6 +190,11 @@ async function handler(req, res) {
         locationLongitude: lng,
         timeOfDeparture: body.timeOfDeparture ? new Date(body.timeOfDeparture) : null,
         timeOfArrival: body.timeOfArrival ? new Date(body.timeOfArrival) : null,
+        departureFromSite: body.departureFromSite ? new Date(body.departureFromSite) : null,
+        totalTimeMinutes: (() => {
+          const mins = parseInt(body.totalTimeMinutes, 10)
+          return Number.isFinite(mins) && mins >= 0 ? mins : 0
+        })(),
         vehicleUsed: body.vehicleUsed || '',
         kmReadingBefore: kmBefore,
         kmReadingAfter: kmAfter,

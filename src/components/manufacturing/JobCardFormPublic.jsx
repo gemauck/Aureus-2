@@ -5,7 +5,7 @@ import {
   formatJobCardActivityDetail,
   formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
-  travelMinutesFromDatetimeLocals,
+  jobSiteMinutesFromDatetimeLocals,
   formatTravelDurationMinutes,
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 } from './jobCardActivityDisplay.js';
@@ -675,8 +675,15 @@ function buildFormDataFromJobCard(full) {
         : full.locationLongitude != null && full.locationLongitude !== ''
           ? String(full.locationLongitude)
           : '',
-    timeOfDeparture: toDatetimeLocalInput(full.timeOfDeparture),
     timeOfArrival: toDatetimeLocalInput(full.timeOfArrival),
+    departureFromSite: toDatetimeLocalInput(
+      full.departureFromSite ||
+        (full.timeOfDeparture &&
+        full.timeOfArrival &&
+        new Date(full.timeOfDeparture).getTime() > new Date(full.timeOfArrival).getTime()
+          ? full.timeOfDeparture
+          : null)
+    ),
     vehicleUsed: full.vehicleUsed || '',
     kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
     kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
@@ -1881,8 +1888,8 @@ const JobCardFormPublic = () => {
     location: '',
     latitude: '',
     longitude: '',
-    timeOfDeparture: '',
     timeOfArrival: '',
+    departureFromSite: '',
     vehicleUsed: '',
     kmReadingBefore: '',
     kmReadingAfter: '',
@@ -2642,13 +2649,13 @@ const JobCardFormPublic = () => {
     []
   );
 
-  const travelDurationMinutes = useMemo(
-    () => travelMinutesFromDatetimeLocals(formData.timeOfDeparture, formData.timeOfArrival),
-    [formData.timeOfDeparture, formData.timeOfArrival]
+  const jobSiteDurationMinutes = useMemo(
+    () => jobSiteMinutesFromDatetimeLocals(formData.timeOfArrival, formData.departureFromSite),
+    [formData.timeOfArrival, formData.departureFromSite]
   );
-  const travelDurationLabel = useMemo(
-    () => formatTravelDurationMinutes(travelDurationMinutes),
-    [travelDurationMinutes]
+  const jobSiteDurationLabel = useMemo(
+    () => formatTravelDurationMinutes(jobSiteDurationMinutes),
+    [jobSiteDurationMinutes]
   );
 
   const totalMaterialCost = useMemo(
@@ -4169,8 +4176,8 @@ const JobCardFormPublic = () => {
         location: '',
         latitude: '',
         longitude: '',
-        timeOfDeparture: '',
         timeOfArrival: '',
+        departureFromSite: '',
         vehicleUsed: '',
         kmReadingBefore: '',
         kmReadingAfter: '',
@@ -5577,6 +5584,7 @@ const JobCardFormPublic = () => {
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
+      jobCardData.totalTimeMinutes = jobSiteDurationMinutes ?? 0;
       jobCardData.totalMaterialsCost = totalMaterialCost;
       jobCardData.stockUsed = sanitizeJobCardStockUsedForSave(jobCardData.stockUsed);
 
@@ -5930,6 +5938,7 @@ const JobCardFormPublic = () => {
           0,
           (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
         ),
+        totalTimeMinutes: jobSiteDurationMinutes ?? 0,
         stockUsed: sanitizeJobCardStockUsedForSave(formData.stockUsed),
         photos: buildWizardPhotosPayload(),
         activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
@@ -5986,6 +5995,7 @@ const JobCardFormPublic = () => {
       formData,
       signatureLocked,
       totalMaterialCost,
+      jobSiteDurationMinutes,
       buildWizardPhotosPayload,
       exportSignature,
       isOnline
@@ -6352,17 +6362,17 @@ const JobCardFormPublic = () => {
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Job Time</h2>
-          <p className="text-sm text-gray-500 mt-1">Record time on clients job</p>
+          <p className="text-sm text-gray-500 mt-1">Arrival on site through departure from site; total is calculated automatically.</p>
         </header>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Departure time
+              Arrival on site
             </label>
             <input
               type="datetime-local"
-              name="timeOfDeparture"
-              value={formData.timeOfDeparture}
+              name="timeOfArrival"
+              value={formData.timeOfArrival}
               onChange={handleChange}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               style={{ fontSize: '16px' }}
@@ -6370,12 +6380,12 @@ const JobCardFormPublic = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Arrival time
+              Departure from site
             </label>
             <input
               type="datetime-local"
-              name="timeOfArrival"
-              value={formData.timeOfArrival}
+              name="departureFromSite"
+              value={formData.departureFromSite}
               onChange={handleChange}
               className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               style={{ fontSize: '16px' }}
@@ -6390,7 +6400,7 @@ const JobCardFormPublic = () => {
               style={{ fontSize: '16px' }}
               aria-live="polite"
             >
-              {travelDurationLabel || '—'}
+              {jobSiteDurationLabel || '—'}
             </div>
           </div>
         </div>
@@ -7315,7 +7325,7 @@ const JobCardFormPublic = () => {
           />
           <SummaryRow label="Client" value={formData.clientName || clients.find(c => c.id === formData.clientId)?.name} />
           <SummaryRow label="Site" value={formData.siteName} />
-          <SummaryRow label="Travel time" value={travelDurationLabel} />
+          <SummaryRow label="Time on job" value={jobSiteDurationLabel} />
           <SummaryRow label="Stock Lines" value={formData.stockUsed.length > 0 ? `${formData.stockUsed.length}` : ''} />
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
           <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />

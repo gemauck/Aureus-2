@@ -32,9 +32,9 @@ export const JOB_CARD_FIELD_LABELS = {
   location: 'Location description',
   locationLatitude: 'GPS latitude',
   locationLongitude: 'GPS longitude',
-  timeOfDeparture: 'Departure time',
+  timeOfDeparture: 'Departure (office)',
   timeOfArrival: 'Arrival on site',
-  departureFromSite: 'Left site',
+  departureFromSite: 'Departure from site',
   arrivalBackAtOffice: 'Back at office',
   vehicleUsed: 'Vehicle',
   vehicleId: 'Vehicle (id)',
@@ -238,7 +238,7 @@ export function sortJobCardActivitiesChronological(activities) {
 }
 
 /**
- * Minutes between departure and arrival (datetime-local or ISO strings).
+ * Minutes between office departure and site arrival (travel to job).
  * @returns {number|null} null when incomplete or arrival is before departure
  */
 export function travelMinutesFromDatetimeLocals(departure, arrival) {
@@ -247,6 +247,20 @@ export function travelMinutesFromDatetimeLocals(departure, arrival) {
   const arr = new Date(arrival);
   if (Number.isNaN(dep.getTime()) || Number.isNaN(arr.getTime())) return null;
   const diffMs = arr.getTime() - dep.getTime();
+  if (diffMs < 0) return null;
+  return Math.round(diffMs / 60000);
+}
+
+/**
+ * Minutes on site between arrival and departure (job time).
+ * @returns {number|null} null when incomplete or departure is before arrival
+ */
+export function jobSiteMinutesFromDatetimeLocals(arrivalOnSite, departureFromSite) {
+  if (!arrivalOnSite || !departureFromSite) return null;
+  const arr = new Date(arrivalOnSite);
+  const dep = new Date(departureFromSite);
+  if (Number.isNaN(arr.getTime()) || Number.isNaN(dep.getTime())) return null;
+  const diffMs = dep.getTime() - arr.getTime();
   if (diffMs < 0) return null;
   return Math.round(diffMs / 60000);
 }
@@ -268,6 +282,7 @@ const jobCardActivityHelpers = {
   formatJobCardActivitySource,
   sortJobCardActivitiesChronological,
   travelMinutesFromDatetimeLocals,
+  jobSiteMinutesFromDatetimeLocals,
   formatTravelDurationMinutes,
   JOB_CARD_ACTIVITY_STEP_LABELS,
   JOB_CARD_FIELD_LABELS,

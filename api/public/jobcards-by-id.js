@@ -64,6 +64,7 @@ async function handler(req, res) {
           futureWorkScheduledAt: formatDate(jobCard.futureWorkScheduledAt),
           timeOfDeparture: formatDate(jobCard.timeOfDeparture),
           timeOfArrival: formatDate(jobCard.timeOfArrival),
+          departureFromSite: formatDate(jobCard.departureFromSite),
           submittedAt: formatDate(jobCard.submittedAt),
           completedAt: formatDate(jobCard.completedAt),
           startedAt: formatDate(jobCard.startedAt),
@@ -205,6 +206,13 @@ async function handler(req, res) {
     }
     if (body.timeOfArrival !== undefined) {
       data.timeOfArrival = body.timeOfArrival ? new Date(body.timeOfArrival) : null
+    }
+    if (body.departureFromSite !== undefined) {
+      data.departureFromSite = body.departureFromSite ? new Date(body.departureFromSite) : null
+    }
+    if (body.totalTimeMinutes !== undefined) {
+      const mins = parseInt(body.totalTimeMinutes, 10)
+      data.totalTimeMinutes = Number.isFinite(mins) && mins >= 0 ? mins : 0
     }
     if (body.vehicleUsed !== undefined) data.vehicleUsed = body.vehicleUsed
     if (body.kmReadingBefore !== undefined) data.kmReadingBefore = parseFloat(body.kmReadingBefore) || 0
