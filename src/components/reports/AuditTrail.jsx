@@ -108,7 +108,43 @@ const buildActivityTimeFromLogs = (logs) => {
     };
 };
 
-const UserHourActivityChart = ({ user, maxHourCount }) => (
+const HourOfDayChart = ({ byHour, maxHourCount, title, subtitle, barHeightClass = 'h-20' }) => (
+    <div>
+        {(title || subtitle) && (
+            <div className="mb-2">
+                {title && <h3 className="text-xs font-semibold text-gray-800 dark:text-gray-200">{title}</h3>}
+                {subtitle && <p className="text-[10px] text-violet-600 dark:text-violet-300">{subtitle}</p>}
+            </div>
+        )}
+        <div className="overflow-x-auto pb-1">
+            <div className="min-w-[720px]" role="img" aria-label={title || 'Activity by hour'}>
+                <div className={`flex items-end gap-0.5 ${barHeightClass}`}>
+                    {byHour.map(({ hour, count }) => (
+                        <div key={hour} className="flex flex-col items-center justify-end flex-1 min-w-[28px] group">
+                            <span className="text-[8px] text-violet-700 dark:text-violet-300 tabular-nums mb-0.5 min-h-[10px] opacity-0 group-hover:opacity-100">
+                                {count > 0 ? count : ''}
+                            </span>
+                            <div
+                                className="w-full max-w-[24px] mx-auto rounded-t bg-gradient-to-t from-violet-600 to-violet-400 dark:from-violet-500 dark:to-violet-300"
+                                style={{
+                                    height: `${Math.max(count ? 8 : 2, (count / maxHourCount) * 100)}%`,
+                                    minHeight: count ? '6px' : '2px'
+                                }}
+                                title={`${formatAuditHour(hour)}: ${count.toLocaleString()} actions`}
+                            />
+                            <span className="text-[9px] text-gray-500 dark:text-gray-400 mt-1 tabular-nums font-medium">
+                                {formatAuditHour(hour)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+        <p className="text-[9px] text-gray-400 mt-1">All times shown in {AUDIT_TZ} (00:00–23:00)</p>
+    </div>
+);
+
+const UserHourActivityChart = ({ user, maxHourCount, expanded = false }) => (
     <div className="rounded-lg border border-violet-100 bg-white/80 p-3 dark:border-violet-900/40 dark:bg-gray-900/40">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <div className="min-w-0">
@@ -123,27 +159,16 @@ const UserHourActivityChart = ({ user, maxHourCount }) => (
                 <span className="font-semibold tabular-nums">{user.total.toLocaleString()}</span> actions
                 {user.peakHour && (
                     <span className="block text-gray-500">
-                        Peak: {formatAuditHour(user.peakHour.hour)} ({user.peakHour.count})
+                        Peak: {formatAuditHour(user.peakHour.hour)}–{formatAuditHour((user.peakHour.hour + 1) % 24)} ({user.peakHour.count})
                     </span>
                 )}
             </div>
         </div>
-        <div className="flex items-end gap-px h-16" role="img" aria-label={`${user.label} activity by hour`}>
-            {user.byHour.map(({ hour, count }) => (
-                <div key={hour} className="flex-1 flex flex-col items-center justify-end min-w-0 group">
-                    <div
-                        className="w-full rounded-t bg-gradient-to-t from-violet-600 to-violet-400 dark:from-violet-500 dark:to-violet-300"
-                        style={{ height: `${Math.max(count ? 4 : 1, (count / maxHourCount) * 100)}%`, minHeight: count ? '4px' : '1px' }}
-                        title={`${formatAuditHour(hour)}: ${count}`}
-                    />
-                </div>
-            ))}
-        </div>
-        <div className="flex justify-between text-[8px] text-gray-400 mt-1">
-            <span>00</span>
-            <span>12</span>
-            <span>23</span>
-        </div>
+        <HourOfDayChart
+            byHour={user.byHour}
+            maxHourCount={maxHourCount}
+            barHeightClass={expanded ? 'h-28' : 'h-16'}
+        />
     </div>
 );
 
@@ -508,6 +533,9 @@ const AuditTrail = () => {
     const activityByUser = activityTime?.byUser || [];
     const maxUserHourCount = activityByUser.length
         ? Math.max(...activityByUser.flatMap((u) => u.byHour.map((h) => h.count)), 1)
+        : 1;
+    const maxTeamHourCount = activityTime?.byHour?.length
+        ? Math.max(...activityTime.byHour.map((h) => h.count), 1)
         : 1;
     const displayedActivityUsers = activityUserFocus === 'all'
         ? activityByUser
@@ -963,12 +991,24 @@ const AuditTrail = () => {
                                         ))}
                                     </select>
                                 </div>
-                                <div className={activityUserFocus === 'all' ? 'grid grid-cols-1 lg:grid-cols-2 gap-3' : 'max-w-2xl'}>
+                                {activityTime?.byHour && (
+                                    <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-900/40 dark:bg-violet-950/20">
+                                        <HourOfDayChart
+                                            byHour={activityTime.byHour}
+                                            maxHourCount={maxTeamHourCount}
+                                            title="All users combined"
+                                            subtitle={`${matchTotal.toLocaleString()} actions in filter period`}
+                                            barHeightClass="h-24"
+                                        />
+                                    </div>
+                                )}
+                                <div className={activityUserFocus === 'all' ? 'grid grid-cols-1 gap-3' : ''}>
                                     {displayedActivityUsers.map((u) => (
                                         <UserHourActivityChart
                                             key={u.userId}
                                             user={u}
                                             maxHourCount={maxUserHourCount}
+                                            expanded={activityUserFocus !== 'all'}
                                         />
                                     ))}
                                 </div>
