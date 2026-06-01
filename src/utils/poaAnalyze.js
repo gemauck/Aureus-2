@@ -15,6 +15,8 @@ const COLUMN_SPECS = [
     { key: 'location', label: 'Location.1', aliases: ['location.1', 'location'] },
     { key: 'material', label: 'Material', aliases: ['material'] },
     { key: 'loadsTonnes', label: 'Loads / Tonnes', aliases: ['loads / tonnes', 'loads/tonnes'] },
+    { key: 'openingSmr', label: 'Opening SMR', aliases: ['opening smr'] },
+    { key: 'closingSmr', label: 'Closing SMR', aliases: ['closing smr'] },
     { key: 'operationComment', label: 'Operation Description / Comment', aliases: ['operation description / comment'] },
     { key: 'comments', label: 'Comments', aliases: ['comments'] },
 ];
@@ -29,7 +31,7 @@ const DEFAULT_STRENGTH_RULES = {
     secondaryLocations: ['plant', 'processing plant', 'crusher', 'workshop', 'office', 'depot', 'chpp', 'prep plant', 'stockyard'],
     primaryMaterials: ['coal', 'rom', 'overburden', 'topsoil', 'hards', 'softs', 'waste', 'ore'],
     secondaryMaterials: ['processed', 'crushed', 'screened', 'product coal', 'fines'],
-    intensityTextKeywords: ['load', 'loads', 'haul', 'tonne', 'hour', 'hours', 'hr', 'km', 'shift'],
+    smrUsageMaxPerActivity: 1000,
     shiftProofFallback: {
         enabled: true,
         windowHours: 24,
@@ -45,6 +47,64 @@ function containsAny(text, terms) {
         if (term && t.includes(String(term).toLowerCase())) return term;
     }
     return null;
+}
+
+const INTENSITY_QUANTITY_RE = /\b\d+(?:\.\d+)?\s*(?:loads?|tonnes?|tons?|hours?|hrs?|km|ha|bales?|litres?|l)\b/i;
+
+function collectProofIntensity(proofs, rules = DEFAULT_STRENGTH_RULES) {
+    const intensityValues = {};
+    const smrNotes = [];
+    const maxDelta = Number(rules.smrUsageMaxPerActivity) || 1000;
+
+    let loadsSum = 0;
+    let smrSum = 0;
+    let hasLoads = false;
+    let hasSmrCol = false;
+    proofs.forEach((p) => {
+        if (p.loadsTonnes > 0) loadsSum += p.loadsTonnes;
+        if (p.loadsTonnes != null && !Number.isNaN(p.loadsTonnes)) hasLoads = true;
+        if (p.smrUsage > 0) smrSum += p.smrUsage;
+        if (p.smrUsage != null && !Number.isNaN(p.smrUsage)) hasSmrCol = true;
+    });
+    if (loadsSum > 0) intensityValues['Loads / Tonnes'] = loadsSum;
+    else if (hasLoads && loadsSum === 0) smrNotes.push('Loads / Tonnes: zero usage recorded');
+    if (smrSum > 0) intensityValues['Total SMR Usage'] = smrSum;
+    else if (hasSmrCol && smrSum === 0) smrNotes.push('Total SMR Usage: zero usage recorded');
+
+    let totalDelta = 0;
+    let pairCount = 0;
+    proofs.forEach((p) => {
+        const o = p.openingSmr;
+        const c = p.closingSmr;
+        const oOk = o != null && !Number.isNaN(o);
+        const cOk = c != null && !Number.isNaN(c);
+        if (!oOk && !cOk) return;
+        if (oOk && !cOk) {
+            smrNotes.push(`Opening SMR ${o} without matching closing reading`);
+            return;
+        }
+        if (cOk && !oOk) {
+            smrNotes.push(`Closing SMR ${c} without matching opening reading`);
+            return;
+        }
+        pairCount += 1;
+        const delta = c - o;
+        if (delta === 0) smrNotes.push(`Opening/closing SMR equal (${o} → ${c}); zero meter usage`);
+        else if (delta < 0) smrNotes.push(`Closing SMR below opening (${o} → ${c}); review rollover or reset`);
+        else if (delta > maxDelta) smrNotes.push(`Large SMR delta ${delta} (${o} → ${c}); verify readings`);
+        else totalDelta += delta;
+    });
+    if (pairCount > 1 && totalDelta > 0) {
+        smrNotes.push(`${pairCount} opening/closing SMR sets; combined usage ${totalDelta}`);
+    }
+    if (totalDelta > 0) intensityValues['SMR usage (open→close)'] = totalDelta;
+
+    return { intensityValues, smrNotes };
+}
+
+function narrativeHasQuantifiedIntensity(batch) {
+    const parts = [...(batch.comments || []), ...(batch.opComments || [])];
+    return parts.some((part) => part && INTENSITY_QUANTITY_RE.test(String(part)));
 }
 
 function tierFromScore(score) {
@@ -111,7 +171,7 @@ function evaluateBatchStrength(batch, rules = DEFAULT_STRENGTH_RULES) {
     }
 
     let intensityOk = Object.keys(batch.intensityValues || {}).length > 0;
-    if (!intensityOk && containsAny(text, rules.intensityTextKeywords)) intensityOk = true;
+    if (!intensityOk && narrativeHasQuantifiedIntensity(batch)) intensityOk = true;
     if (!intensityOk) shortfalls.push('No usage intensity (loads, SMR, hours, or hauls)');
 
     const score = [activityOk, locationOk, materialOk, intensityOk].filter(Boolean).length;
@@ -203,17 +263,18 @@ function evaluatePoaStrengthFromRecords(records) {
         const locations = [];
         const materials = [];
         const comments = [];
-        const intensityValues = {};
-
+        const opComments = [];
         proofs.forEach((p) => {
             if (p.activity) activities.push(p.activity);
             if (p.location) locations.push(p.location);
             if (p.material) materials.push(p.material);
             if (p.comments) comments.push(p.comments);
-            if (p.operationComment) comments.push(p.operationComment);
-            if (p.loadsTonnes > 0) intensityValues['Loads / Tonnes'] = (intensityValues['Loads / Tonnes'] || 0) + p.loadsTonnes;
-            if (p.smrUsage > 0) intensityValues['Total SMR Usage'] = (intensityValues['Total SMR Usage'] || 0) + p.smrUsage;
+            if (p.operationComment) {
+                comments.push(p.operationComment);
+                opComments.push(p.operationComment);
+            }
         });
+        const { intensityValues, smrNotes } = collectProofIntensity(proofs);
 
         const combinedText = [...activities, ...locations, ...materials, ...comments].join(' | ');
         const batch = {
@@ -222,7 +283,10 @@ function evaluatePoaStrengthFromRecords(records) {
             locText: locations.join(' | '),
             matText: materials.join(' | '),
             combinedText,
+            comments,
+            opComments,
             intensityValues,
+            smrNotes,
             shiftProofApplied,
         };
         labelResults[label] = evaluateBatchStrength(batch);
@@ -374,6 +438,18 @@ export function analyzePoaRows(rows, options = {}) {
             comments: cellVal(row, cols.comments),
             operationComment: cellVal(row, cols.operationComment),
             loadsTonnes: parseFloat(String(cellVal(row, cols.loadsTonnes) || '').replace(/,/g, '')) || 0,
+            openingSmr: (() => {
+                const raw = cellVal(row, cols.openingSmr);
+                if (!raw) return null;
+                const n = parseFloat(String(raw).replace(/,/g, ''));
+                return Number.isNaN(n) ? null : n;
+            })(),
+            closingSmr: (() => {
+                const raw = cellVal(row, cols.closingSmr);
+                if (!raw) return null;
+                const n = parseFloat(String(raw).replace(/,/g, ''));
+                return Number.isNaN(n) ? null : n;
+            })(),
             label: null,
         });
     }

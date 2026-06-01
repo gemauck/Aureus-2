@@ -973,7 +973,128 @@ def load_rules(rules_path: str | None = None) -> dict:
     return rules
 
 
-def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
+INTENSITY_SUM_COLUMNS = ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr")
+OPENING_SMR_COL = "Opening SMR"
+CLOSING_SMR_COL = "Closing SMR"
+SMR_DELTA_LABEL = "SMR usage (open→close)"
+
+# Quantified usage in narrative fields only (not activity names like "load and haul").
+_INTENSITY_QUANTITY_RE = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:loads?|tonnes?|tons?|hours?|hrs?|km|ha|bales?|litres?|l)\b",
+    re.I,
+)
+
+
+def _smr_max_delta_per_activity(rules: dict | None) -> float:
+    if not rules:
+        return 1000.0
+    val = rules.get("smrUsageMaxPerActivity")
+    if val is None:
+        val = rules.get("smrUsageMaxReasonable")
+    try:
+        return float(val) if val is not None else 1000.0
+    except (TypeError, ValueError):
+        return 1000.0
+
+
+def _col_numeric(proof_df: pd.DataFrame, col: str) -> pd.Series | None:
+    if col not in proof_df.columns:
+        return None
+    return pd.to_numeric(proof_df[col], errors="coerce")
+
+
+def collect_batch_intensity(
+    proof_df: pd.DataFrame,
+    rules: dict | None = None,
+) -> tuple[dict[str, float], list[str]]:
+    """
+    Build intensity metrics and SMR compliance notes for one proof batch.
+
+    - Usage columns (loads, total SMR usage, km/hr): sum positive row values only.
+    - Opening/closing SMR: per-row delta (closing − opening), summed across rows — never sum
+      raw opening and closing columns together.
+    - Zero, negative, and very large deltas are recorded in smr_notes for compliance points
+      but do not count as positive usage intensity unless a positive delta exists.
+    """
+    intensity_values: dict[str, float] = {}
+    smr_notes: list[str] = []
+    max_delta = _smr_max_delta_per_activity(rules)
+
+    for col in INTENSITY_SUM_COLUMNS:
+        nums = _col_numeric(proof_df, col)
+        if nums is None:
+            continue
+        has_any = nums.notna().any()
+        positive = nums[nums > 0]
+        if len(positive) > 0:
+            intensity_values[col] = float(positive.sum())
+        elif has_any and (nums.fillna(0) == 0).all():
+            smr_notes.append(f"{col}: zero usage recorded")
+
+    opening = _col_numeric(proof_df, OPENING_SMR_COL)
+    closing = _col_numeric(proof_df, CLOSING_SMR_COL)
+    if opening is None and closing is None:
+        return intensity_values, smr_notes
+
+    n = len(proof_df)
+    if opening is None:
+        opening = pd.Series([np.nan] * n, index=proof_df.index)
+    if closing is None:
+        closing = pd.Series([np.nan] * n, index=proof_df.index)
+
+    total_delta = 0.0
+    pair_count = 0
+    for o, c in zip(opening.tolist(), closing.tolist()):
+        o_ok = o is not None and not (isinstance(o, float) and pd.isna(o))
+        c_ok = c is not None and not (isinstance(c, float) and pd.isna(c))
+        if not o_ok and not c_ok:
+            continue
+        if o_ok and not c_ok:
+            smr_notes.append(f"Opening SMR {float(o):g} without matching closing reading")
+            continue
+        if c_ok and not o_ok:
+            smr_notes.append(f"Closing SMR {float(c):g} without matching opening reading")
+            continue
+        pair_count += 1
+        o_f, c_f = float(o), float(c)
+        delta = c_f - o_f
+        if delta == 0:
+            smr_notes.append(f"Opening/closing SMR equal ({o_f:g} → {c_f:g}); zero meter usage")
+        elif delta < 0:
+            smr_notes.append(
+                f"Closing SMR below opening ({o_f:g} → {c_f:g}); review rollover or reset"
+            )
+        elif delta > max_delta:
+            smr_notes.append(
+                f"Large SMR delta {delta:g} ({o_f:g} → {c_f:g}); verify readings"
+            )
+        else:
+            total_delta += delta
+
+    if pair_count > 1 and total_delta > 0:
+        smr_notes.append(
+            f"{pair_count} opening/closing SMR sets; combined usage {total_delta:g}"
+        )
+    if total_delta > 0:
+        intensity_values[SMR_DELTA_LABEL] = total_delta
+
+    return intensity_values, smr_notes
+
+
+def _narrative_has_quantified_intensity(batch: dict) -> bool:
+    """True when comments/operation text cite a numeric load, hour, haul, etc."""
+    parts = (
+        (batch.get("comments") or [])
+        + (batch.get("opComments") or [])
+        + (batch.get("fieldSnippets") or [])
+    )
+    for part in parts:
+        if part and _INTENSITY_QUANTITY_RE.search(str(part)):
+            return True
+    return False
+
+
+def aggregate_proof_batch(proof_df: pd.DataFrame, rules: dict | None = None) -> dict:
     """Combine proof rows for one label into a single evaluation payload."""
     if proof_df is None or len(proof_df) == 0:
         return {
@@ -985,13 +1106,13 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             "comments": [],
             "fieldSnippets": [],
             "intensityValues": {},
+            "smrNotes": [],
             "combinedText": "",
             "holisticText": "",
         }
 
     activities, locations, materials, sources = [], [], [], []
     op_comments, comments_only, asset_descriptions, field_snippets = [], [], [], []
-    intensity_values: dict[str, float] = {}
 
     for col in HOLISTIC_ACTIVITY_COLUMNS:
         if col not in proof_df.columns:
@@ -1032,15 +1153,7 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
             if v_norm and len(v_norm) <= 120 and not _is_mostly_numeric(v_norm):
                 field_snippets.append(v_norm)
 
-    for col in proof_df.columns:
-        if col in ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr", "Opening SMR", "Closing SMR"):
-            try:
-                nums = pd.to_numeric(proof_df[col], errors="coerce").fillna(0)
-                total = float(nums.sum())
-                if total > 0:
-                    intensity_values[col] = total
-            except Exception:
-                pass
+    intensity_values, smr_notes = collect_batch_intensity(proof_df, rules)
 
     narrative_comments = op_comments + comments_only
     combined_parts = (
@@ -1075,6 +1188,7 @@ def aggregate_proof_batch(proof_df: pd.DataFrame) -> dict:
         "assetDescriptions": list(dict.fromkeys(asset_descriptions)),
         "fieldSnippets": list(dict.fromkeys(field_snippets)),
         "intensityValues": intensity_values,
+        "smrNotes": smr_notes,
         "combinedText": combined_text,
         "holisticText": holistic_text,
     }
@@ -1164,10 +1278,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
 
     intensity_vals = batch.get("intensityValues") or {}
     intensity_ok = len(intensity_vals) > 0
-    if not intensity_ok:
-        intensity_matcher = rules.get("_intensityMatcher")
-        if intensity_matcher and intensity_matcher.find(text):
-            intensity_ok = True
+    if not intensity_ok and _narrative_has_quantified_intensity(batch):
+        intensity_ok = True
     if not intensity_ok:
         shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
 
@@ -1290,13 +1402,16 @@ def build_compliance_points(
         else:
             points.append(f"{sector_name.title()} material specified on proof")
 
+    smr_notes = batch.get("smrNotes") or []
+    for note in smr_notes[:4]:
+        if note and note not in points:
+            points.append(note)
+
     if criteria.get("intensity"):
         intensity_vals = batch.get("intensityValues") or {}
         if intensity_vals:
             parts = [f"{col}: {float(val):g}" for col, val in list(intensity_vals.items())[:2]]
             points.append(f"Usage intensity recorded ({', '.join(parts)})")
-        else:
-            points.append("Usage intensity evidenced (loads, SMR, hours, or haulage)")
 
     if shift_applied:
         points.append("Shift/day POA fallback applied (single activity on asset/day)")
@@ -1458,7 +1573,7 @@ def evaluate_all_labels(
                 txn_rows, proofs_by_asset_index, rules
             )
 
-        batch = aggregate_proof_batch(proof_rows)
+        batch = aggregate_proof_batch(proof_rows, rules)
         batch["label"] = label_str
         batch["shiftProofApplied"] = shift_applied
         if len(proof_rows) > 0:

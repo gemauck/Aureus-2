@@ -1500,6 +1500,7 @@
       ]
     }
   },
+  "smrUsageMaxPerActivity": 1000,
   "intensityColumns": [
     "Loads / Tonnes",
     "Total SMR Usage",

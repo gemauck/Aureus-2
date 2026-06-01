@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"
 
 from poaStrengthEvaluator import (
     aggregate_proof_batch,
+    collect_batch_intensity,
     detect_sector,
     evaluate_batch_rules,
     evaluate_all_labels,
@@ -429,6 +430,84 @@ def test_asset_name_without_activity_not_eligible():
     assert "Primary mining activity identified (KOMATSU" not in joined_points
 
 
+def test_open_close_equal_no_false_intensity():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "EX-1",
+                    "Opening SMR": 406778,
+                    "Closing SMR": 406778,
+                    "Activity": "Breakdown / Maint",
+                }
+            ]
+        ),
+        rules,
+    )
+    assert batch["intensityValues"] == {}
+    assert any("zero meter usage" in n.lower() for n in batch["smrNotes"])
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["intensity"] is False
+    joined = " ".join(result.get("compliancePoints") or [])
+    assert "Usage intensity evidenced" not in joined
+
+
+def test_open_close_per_row_delta_not_summed():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "DT-1",
+                    "Opening SMR": 100,
+                    "Closing SMR": 110,
+                },
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "DT-1",
+                    "Opening SMR": 200,
+                    "Closing SMR": 215,
+                },
+            ]
+        ),
+        rules,
+    )
+    assert batch["intensityValues"].get("SMR usage (open→close)") == 25.0
+    assert any("2 opening/closing" in n for n in batch["smrNotes"])
+
+
+def test_load_and_haul_activity_does_not_imply_intensity():
+    rules = load_rules()
+    batch = {
+        "proofCount": 1,
+        "activities": ["load and haul in north pit"],
+        "locations": ["north pit"],
+        "materials": ["coal rom"],
+        "comments": [],
+        "sources": [],
+        "intensityValues": {},
+        "smrNotes": [],
+        "combinedText": "load and haul in north pit | north pit | coal rom",
+        "holisticText": "load and haul in north pit | coal rom | north pit",
+    }
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["intensity"] is False
+    assert any("usage intensity" in s.lower() for s in result["shortfalls"])
+
+
+def test_negative_smr_delta_noted():
+    rules = load_rules()
+    intensity, notes = collect_batch_intensity(
+        pd.DataFrame([{"Opening SMR": 500, "Closing SMR": 480}]),
+        rules,
+    )
+    assert intensity == {}
+    assert any("below opening" in n.lower() for n in notes)
+
+
 def test_diesel_bowser_activity_excluded():
     rules = load_rules()
     batch = {
@@ -466,4 +545,8 @@ if __name__ == "__main__":
     test_asset_name_without_activity_not_eligible()
     test_breakdown_maint_not_eligible_activity()
     test_standby_idle_not_eligible()
+    test_open_close_equal_no_false_intensity()
+    test_open_close_per_row_delta_not_summed()
+    test_load_and_haul_activity_does_not_imply_intensity()
+    test_negative_smr_delta_noted()
     print("All POA strength evaluator tests passed.")
