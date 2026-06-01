@@ -271,6 +271,16 @@ if [ -f prisma/scripts/add-inventory-thumbnail-source.sql ]; then
   fi
 fi
 
+if [ -f prisma/scripts/add-inventory-last-inbound-price.sql ]; then
+  echo
+  echo "-> Applying migration (InventoryItem.lastInboundUnitPrice / lastInboundAt)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f prisma/scripts/add-inventory-last-inbound-price.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  else
+    npx prisma db execute --file prisma/scripts/add-inventory-last-inbound-price.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  fi
+fi
+
 echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
