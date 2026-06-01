@@ -676,14 +676,7 @@ function buildFormDataFromJobCard(full) {
           ? String(full.locationLongitude)
           : '',
     timeOfArrival: toDatetimeLocalInput(full.timeOfArrival),
-    departureFromSite: toDatetimeLocalInput(
-      full.departureFromSite ||
-        (full.timeOfDeparture &&
-        full.timeOfArrival &&
-        new Date(full.timeOfDeparture).getTime() > new Date(full.timeOfArrival).getTime()
-          ? full.timeOfDeparture
-          : null)
-    ),
+    departureFromSite: toDatetimeLocalInput(full.departureFromSite),
     vehicleUsed: full.vehicleUsed || '',
     kmReadingBefore: full.kmReadingBefore != null ? String(full.kmReadingBefore) : '',
     kmReadingAfter: full.kmReadingAfter != null ? String(full.kmReadingAfter) : '',
@@ -1531,6 +1524,13 @@ const toDatetimeLocalInput = val => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+function formatWizardDatetimeLabel(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, { weekday: 'short', dateStyle: 'medium', timeStyle: 'short' });
+}
+
 /** Stable local id for one wizard session (offline queue + POST idempotency). */
 function generateClientDraftId() {
   return `jc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -1544,7 +1544,9 @@ function buildNewJobCardEditingMeta(nowIso = new Date().toISOString()) {
     startedAt: nowIso,
     createdAt: nowIso,
     synced: false,
-    jobCardNumber: ''
+    jobCardNumber: '',
+    /** New wizard time flow (arrival on open, departure on sign-off). Not applied to reopened legacy cards. */
+    useNewJobTimeFlow: true
   };
 }
 
@@ -1951,6 +1953,10 @@ const JobCardFormPublic = () => {
   const [formTemplates, setFormTemplates] = useState([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  /** New-job-only: blocking arrival confirmation before the wizard is usable */
+  const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false);
+  const [arrivalConfirmPickMode, setArrivalConfirmPickMode] = useState(false);
+  const [arrivalConfirmDraft, setArrivalConfirmDraft] = useState('');
   /** landing → pick create vs edit; prior_list → choose a saved card; form → wizard */
   const [wizardFlow, setWizardFlow] = useState('landing');
   const [stockTakeLocationId, setStockTakeLocationId] = useState('');
@@ -4247,9 +4253,27 @@ const JobCardFormPublic = () => {
     sessionActivityQueueRef.current = [];
     setPriorLoadedActivities([]);
     setPriorActivityLoading(false);
+    setArrivalConfirmOpen(false);
+    setArrivalConfirmPickMode(false);
+    setArrivalConfirmDraft('');
     resetForm();
     setWizardFlow('landing');
   };
+
+  const confirmArrivalOnSite = useCallback(
+    (arrivalValue) => {
+      const v = String(arrivalValue || arrivalConfirmDraft || '').trim();
+      if (!v) return;
+      setFormData(prev => ({ ...prev, timeOfArrival: v }));
+      setArrivalConfirmOpen(false);
+      setArrivalConfirmPickMode(false);
+      pushWizardActivity('job_time_arrival_confirmed', { timeOfArrival: v });
+      void persistWizardDraftRef.current?.({
+        syncServer: Boolean(editingMeta?.serverJobCardId)
+      });
+    },
+    [arrivalConfirmDraft, editingMeta?.serverJobCardId, pushWizardActivity]
+  );
 
   const startNewJobCard = () => {
     const meta = buildNewJobCardEditingMeta();
@@ -4261,6 +4285,10 @@ const JobCardFormPublic = () => {
     photosHydrationCompleteRef.current = true;
     editMediaDirtyRef.current = false;
     resetForm();
+    const nowLocal = toDatetimeLocalInput(new Date());
+    setArrivalConfirmDraft(nowLocal);
+    setArrivalConfirmPickMode(false);
+    setArrivalConfirmOpen(true);
     setWizardFlow('form');
   };
 
@@ -5053,8 +5081,11 @@ const JobCardFormPublic = () => {
       startedAt,
       createdAt,
       synced,
-      jobCardNumber
+      jobCardNumber,
+      useNewJobTimeFlow: Boolean(full.useNewJobTimeFlow)
     });
+    setArrivalConfirmOpen(false);
+    setArrivalConfirmPickMode(false);
     activeEditCardIdRef.current = localId;
 
     applyPhotosToEditState(localId, full.photos);
@@ -5520,6 +5551,16 @@ const JobCardFormPublic = () => {
       releaseSaveLock();
       return;
     }
+    if (
+      editingMeta?.useNewJobTimeFlow &&
+      normalizedStatus !== 'draft' &&
+      !String(formData.departureFromSite || '').trim()
+    ) {
+      setStepError('Select your departure from site time before submitting.');
+      setCurrentStep(STEP_IDS.indexOf('signoff'));
+      releaseSaveLock();
+      return;
+    }
 
     setIsSubmitting(true);
     setStepError('');
@@ -5547,7 +5588,8 @@ const JobCardFormPublic = () => {
         updatedAt: nowIso,
         synced: editingMeta?.synced ?? false,
         jobCardNumber: editingMeta?.jobCardNumber || '',
-        serverJobCardId: editingMeta?.serverJobCardId || null
+        serverJobCardId: editingMeta?.serverJobCardId || null,
+        useNewJobTimeFlow: Boolean(editingMeta?.useNewJobTimeFlow)
       };
 
       if (!jobCardData.projectName && jobCardData.projectId) {
@@ -5933,6 +5975,7 @@ const JobCardFormPublic = () => {
         completedAt: null,
         jobCardNumber: editingMeta?.jobCardNumber || '',
         serverJobCardId: editingMeta?.serverJobCardId || null,
+        useNewJobTimeFlow: Boolean(editingMeta?.useNewJobTimeFlow),
         totalMaterialsCost: totalMaterialCost,
         travelKilometers: Math.max(
           0,
@@ -6007,10 +6050,18 @@ const JobCardFormPublic = () => {
   }, [persistWizardDraft]);
 
   const validateStep = (stepIndex) => {
+    if (arrivalConfirmOpen) {
+      return 'Confirm your arrival on site time to continue.';
+    }
     switch (STEP_IDS[stepIndex]) {
       case 'assignment':
         if (!formData.agentName) return 'Select the attending technician to continue.';
         if (!formData.clientId) return 'Select a client or choose "No Client" to continue.';
+        return '';
+      case 'visit':
+        if (editingMeta?.useNewJobTimeFlow && !String(formData.timeOfArrival || '').trim()) {
+          return 'Set your arrival on site time (Site Visit step).';
+        }
         return '';
       default:
         return '';
@@ -6019,6 +6070,10 @@ const JobCardFormPublic = () => {
 
   const goToStep = (stepIndex) => {
     if (stepIndex === currentStep) return;
+    if (arrivalConfirmOpen) {
+      setStepError('Confirm your arrival on site time to continue.');
+      return;
+    }
     // Already-submitted cards: allow moving between steps to review (saved data may not re-pass assignment checks).
     if (stepIndex > currentStep && !editingMeta?.synced) {
       const validationError = validateStep(currentStep);
@@ -6034,6 +6089,10 @@ const JobCardFormPublic = () => {
   };
 
   const handleNext = () => {
+    if (arrivalConfirmOpen) {
+      setStepError('Confirm your arrival on site time to continue.');
+      return;
+    }
     if (!editingMeta?.synced) {
       const errorMessage = validateStep(currentStep);
       if (errorMessage) {
@@ -6362,48 +6421,81 @@ const JobCardFormPublic = () => {
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Job Time</h2>
-          <p className="text-sm text-gray-500 mt-1">Arrival on site through departure from site; total is calculated automatically.</p>
+          {editingMeta?.useNewJobTimeFlow ? (
+            <p className="text-sm text-gray-500 mt-1">
+              Arrival was set when you opened this job card. Adjust here if needed; departure is recorded on sign-off.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 mt-1">
+              Arrival on site through departure from site; total is calculated automatically.
+            </p>
+          )}
         </header>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Arrival on site
-            </label>
-            <input
-              type="datetime-local"
-              name="timeOfArrival"
-              value={formData.timeOfArrival}
-              onChange={handleChange}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              style={{ fontSize: '16px' }}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Departure from site
-            </label>
-            <input
-              type="datetime-local"
-              name="departureFromSite"
-              value={formData.departureFromSite}
-              onChange={handleChange}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              style={{ fontSize: '16px' }}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Total time
-            </label>
-            <div
-              className="w-full px-4 py-3 text-base border border-gray-200 rounded-lg bg-slate-50 text-gray-900"
-              style={{ fontSize: '16px' }}
-              aria-live="polite"
-            >
-              {jobSiteDurationLabel || '—'}
+        {editingMeta?.useNewJobTimeFlow ? (
+          <div className="space-y-3">
+            {formData.timeOfArrival ? (
+              <p className="text-base text-gray-900 font-medium" aria-live="polite">
+                Arrived: {formatWizardDatetimeLabel(formData.timeOfArrival)}
+              </p>
+            ) : (
+              <p className="text-sm text-amber-700">Arrival time not set yet.</p>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Arrival on site
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfArrival"
+                value={formData.timeOfArrival}
+                onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                style={{ fontSize: '16px' }}
+              />
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Arrival on site
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfArrival"
+                value={formData.timeOfArrival}
+                onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                style={{ fontSize: '16px' }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Departure from site
+              </label>
+              <input
+                type="datetime-local"
+                name="departureFromSite"
+                value={formData.departureFromSite}
+                onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                style={{ fontSize: '16px' }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total time
+              </label>
+              <div
+                className="w-full px-4 py-3 text-base border border-gray-200 rounded-lg bg-slate-50 text-gray-900"
+                style={{ fontSize: '16px' }}
+                aria-live="polite"
+              >
+                {jobSiteDurationLabel || '—'}
+              </div>
+            </div>
+          </div>
+        )}
       </section>
       {renderNavigationButtons({ placement: 'inline' })}
     </div>
@@ -7122,6 +7214,68 @@ const JobCardFormPublic = () => {
             )}
       </section>
 
+      {editingMeta?.useNewJobTimeFlow ? (
+        <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
+          <header className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">End of job</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Select when you left the site. Total time is calculated from your arrival on site.
+            </p>
+          </header>
+          <div className="space-y-4">
+            {formData.timeOfArrival ? (
+              <p className="text-sm text-gray-600">
+                Arrival on site:{' '}
+                <span className="font-medium text-gray-900">
+                  {formatWizardDatetimeLabel(formData.timeOfArrival)}
+                </span>
+              </p>
+            ) : null}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Departure from site
+                <span className="text-red-500"> *</span>
+              </label>
+              <input
+                type="datetime-local"
+                name="departureFromSite"
+                value={formData.departureFromSite}
+                onChange={handleChange}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                style={{ fontSize: '16px' }}
+                required
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  handleChange({
+                    target: {
+                      name: 'departureFromSite',
+                      value: toDatetimeLocalInput(new Date())
+                    }
+                  })
+                }
+                className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                Use current time
+              </button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Total time on job
+              </label>
+              <div
+                className="w-full px-4 py-3 text-base border border-gray-200 rounded-lg bg-slate-50 text-gray-900"
+                style={{ fontSize: '16px' }}
+                aria-live="polite"
+              >
+                {jobSiteDurationLabel || '—'}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-4 sm:p-6">
         <header className="mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Customer Acknowledgement</h2>
@@ -7325,7 +7479,25 @@ const JobCardFormPublic = () => {
           />
           <SummaryRow label="Client" value={formData.clientName || clients.find(c => c.id === formData.clientId)?.name} />
           <SummaryRow label="Site" value={formData.siteName} />
-          <SummaryRow label="Time on job" value={jobSiteDurationLabel} />
+          {editingMeta?.useNewJobTimeFlow ? (
+            <>
+              <SummaryRow
+                label="Arrival on site"
+                value={formData.timeOfArrival ? formatWizardDatetimeLabel(formData.timeOfArrival) : ''}
+              />
+              <SummaryRow
+                label="Departure from site"
+                value={
+                  formData.departureFromSite
+                    ? formatWizardDatetimeLabel(formData.departureFromSite)
+                    : ''
+                }
+              />
+              <SummaryRow label="Time on job" value={jobSiteDurationLabel} />
+            </>
+          ) : (
+            <SummaryRow label="Time on job" value={jobSiteDurationLabel} />
+          )}
           <SummaryRow label="Stock Lines" value={formData.stockUsed.length > 0 ? `${formData.stockUsed.length}` : ''} />
           <SummaryRow label="Materials Cost" value={totalMaterialCost > 0 ? `R ${totalMaterialCost.toFixed(2)}` : ''} />
           <SummaryRow label="Future Work" value={formData.futureWorkRequired || ''} />
@@ -8973,6 +9145,83 @@ const JobCardFormPublic = () => {
             return lightbox;
           })()
         : null}
+
+      {arrivalConfirmOpen && editingMeta?.useNewJobTimeFlow ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="jobcard-arrival-confirm-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 id="jobcard-arrival-confirm-title" className="text-lg font-semibold text-gray-900">
+              Arrival on site
+            </h2>
+            <p className="text-sm text-gray-600 mt-2">
+              Is this the correct time you arrived on site?
+            </p>
+            {!arrivalConfirmPickMode ? (
+              <>
+                <p className="mt-4 text-xl font-semibold text-gray-900 tabular-nums">
+                  {formatWizardDatetimeLabel(arrivalConfirmDraft) || '—'}
+                </p>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setArrivalConfirmPickMode(true)}
+                    className="w-full sm:w-auto rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                  >
+                    Change time
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => confirmArrivalOnSite(arrivalConfirmDraft)}
+                    className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    Yes, this is correct
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                  Arrival on site
+                </label>
+                <input
+                  type="datetime-local"
+                  value={arrivalConfirmDraft}
+                  onChange={e => setArrivalConfirmDraft(e.target.value)}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  style={{ fontSize: '16px' }}
+                />
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setArrivalConfirmPickMode(false);
+                      setArrivalConfirmDraft(toDatetimeLocalInput(new Date()));
+                    }}
+                    className="w-full sm:w-auto rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!arrivalConfirmDraft}
+                    onClick={() => confirmArrivalOnSite(arrivalConfirmDraft)}
+                    className="w-full sm:w-auto rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Confirm time
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Map Selection Modal */}
       {showMapModal && (
