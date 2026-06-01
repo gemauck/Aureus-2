@@ -1,20 +1,57 @@
 // Use React from window
 const { useState, useEffect } = React;
 
+const AUDIT_FETCH_LIMIT = 5000;
+const DATE_RANGE_LABELS = {
+    '1': 'Last 24 hours',
+    '7': 'Last 7 days',
+    '30': 'Last 30 days',
+    '90': 'Last 90 days',
+    all: 'All time'
+};
+
+const buildServerFetchOptions = (dateRange, filterModule, filterAction, filterByEmail, emailOverride) => {
+    const opts = { limit: AUDIT_FETCH_LIMIT, stats: true };
+    const email = emailOverride !== undefined ? emailOverride : filterByEmail;
+    if (email && String(email).trim()) opts.email = String(email).trim();
+    if (filterModule !== 'all') opts.module = filterModule;
+    if (filterAction !== 'all') opts.action = filterAction;
+    if (dateRange !== 'all') {
+        const days = parseInt(dateRange, 10);
+        if (Number.isFinite(days)) {
+            const start = new Date();
+            start.setDate(start.getDate() - days);
+            opts.startDate = start.toISOString();
+        }
+    }
+    return opts;
+};
+
+const formatAuditDate = (d) => d.toLocaleDateString('en-ZA', {
+    timeZone: 'Africa/Johannesburg',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+});
+
 const AuditTrail = () => {
+    const { isDark } = window.useTheme ? window.useTheme() : { isDark: false };
     const [logs, setLogs] = useState([]);
     const [filteredLogs, setFilteredLogs] = useState([]);
+    const [totalMatching, setTotalMatching] = useState(0);
+    const [serverStats, setServerStats] = useState(null);
+    const [isTruncated, setIsTruncated] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterModule, setFilterModule] = useState('all');
     const [filterAction, setFilterAction] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
     const [filterByEmail, setFilterByEmail] = useState('');
-    const [dateRange, setDateRange] = useState('all'); // Show all logs by default
+    const [dateRange, setDateRange] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [expandedLogId, setExpandedLogId] = useState(null); // For full-detail row expand
-    const [auditReportTab, setAuditReportTab] = useState('log'); // 'log' | 'users' | 'modules'
+    const [expandedLogId, setExpandedLogId] = useState(null);
+    const [auditReportTab, setAuditReportTab] = useState('log');
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -69,15 +106,15 @@ const AuditTrail = () => {
     };
     const isAdmin = () => isSuperadmin(); // For this report, only superadmins have full view
 
-    // Load logs
+    // Reload from API when server-side filters change
     useEffect(() => {
         loadLogs();
-    }, []);
+    }, [dateRange, filterModule, filterAction]);
 
-    // Apply filters whenever they change
+    // Client-side search / user filter on loaded rows
     useEffect(() => {
         applyFilters();
-    }, [logs, searchTerm, filterModule, filterAction, filterUser, filterByEmail, dateRange]);
+    }, [logs, searchTerm, filterUser]);
 
     const loadLogs = async (options = {}) => {
         if (!AuditLogger || typeof AuditLogger.getAll !== 'function') {
@@ -96,17 +133,23 @@ const AuditTrail = () => {
             } else if (options.email === '') {
                 setFilterByEmail('');
             }
-            console.log('📊 Loading audit logs...');
-            const getAllOptions = (emailFilter && isAdmin()) ? { email: emailFilter } : {};
-            const allLogs = await AuditLogger.getAll(getAllOptions);
-            console.log('📊 Raw audit logs response:', allLogs);
-            
-            // Ensure allLogs is an array
-            const logsArray = Array.isArray(allLogs) ? allLogs : (allLogs?.logs && Array.isArray(allLogs.logs) ? allLogs.logs : []);
-            
-            console.log(`📊 Extracted ${logsArray.length} audit log entries`);
-            
+            const emailForFetch = (emailFilter && isAdmin()) ? emailFilter : '';
+            const fetchOpts = buildServerFetchOptions(
+                dateRange,
+                filterModule,
+                filterAction,
+                filterByEmail,
+                emailForFetch
+            );
+            const result = await AuditLogger.getAll(fetchOpts);
+            const logsArray = Array.isArray(result)
+                ? result
+                : (result?.logs && Array.isArray(result.logs) ? result.logs : []);
+
             setLogs(logsArray);
+            setTotalMatching(typeof result?.total === 'number' ? result.total : logsArray.length);
+            setServerStats(result?.stats || null);
+            setIsTruncated(Boolean(result?.truncated));
             if (logsArray.length === 0) {
                 // Don't show error for empty logs - it's normal if no actions have been performed yet
                 console.log('ℹ️ No audit logs found. This is normal if no actions have been logged yet.');
@@ -152,38 +195,10 @@ const AuditTrail = () => {
                 return (logUser && (logUser === currentUserName || logUser === currentUserEmail));
             });
         }
-        // Admin users see all logs (no filtering by user)
+        // Date, module, action, and email are applied server-side when loading logs.
 
-        // Date range filter
-        if (dateRange !== 'all') {
-            const days = parseInt(dateRange);
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - days);
-            filtered = filtered.filter(log => new Date(log.timestamp) >= cutoffDate);
-        }
-
-        // Module filter
-        if (filterModule !== 'all') {
-            filtered = filtered.filter(log => log.module === filterModule);
-        }
-
-        // Action filter
-        if (filterAction !== 'all') {
-            filtered = filtered.filter(log => log.action === filterAction);
-        }
-
-        // User filter (only applies if admin, or if filtering own logs)
         if (filterUser !== 'all') {
             filtered = filtered.filter(log => log.userId === filterUser);
-        }
-
-        // Filter by email (admin: show only logs for this email; works with API or client-side)
-        if (filterByEmail && filterByEmail.trim()) {
-            const emailLower = filterByEmail.trim().toLowerCase();
-            filtered = filtered.filter(log => {
-                const logEmail = (log.userEmail || log.details?.email || '').toLowerCase();
-                return logEmail && logEmail.indexOf(emailLower) !== -1;
-            });
         }
 
         // Search filter
@@ -298,29 +313,41 @@ const AuditTrail = () => {
         return { id, name: log?.user || id };
     }) : [];
 
-    // Metrics derived from filtered results (so they match what the user is looking at)
     const totalLoaded = logsArray.length;
     const resultsCount = filteredLogs.length;
-    const uniqueUsersInResults = resultsCount > 0
-        ? new Set(filteredLogs.map(log => (log.userId || log.userEmail || log.user || '').toString().trim()).filter(Boolean)).size
-        : 0;
-    const modulesInResults = resultsCount > 0
-        ? new Set(filteredLogs.map(log => log.module).filter(Boolean)).size
-        : 0;
+    const hasSearchFilter = Boolean(searchTerm.trim()) || filterUser !== 'all';
+    const matchTotal = serverStats?.total ?? totalMatching;
+    const uniqueUsersInResults = serverStats?.uniqueUsers ?? (
+        resultsCount > 0
+            ? new Set(filteredLogs.map(log => (log.userId || log.userEmail || log.user || '').toString().trim()).filter(Boolean)).size
+            : 0
+    );
+    const modulesInResults = serverStats?.uniqueModules ?? (
+        resultsCount > 0
+            ? new Set(filteredLogs.map(log => log.module).filter(Boolean)).size
+            : 0
+    );
     const successCount = resultsCount > 0 ? filteredLogs.filter(log => log.success === true).length : 0;
     const successRate = resultsCount > 0 ? Math.round((successCount / resultsCount) * 100) : 0;
-    const dateSpan = (() => {
+    const filterPeriodLabel = DATE_RANGE_LABELS[dateRange] || 'Custom';
+    const dataSpan = (() => {
+        if (serverStats?.dateMin && serverStats?.dateMax) {
+            const min = new Date(serverStats.dateMin);
+            const max = new Date(serverStats.dateMax);
+            return min.getTime() === max.getTime() ? formatAuditDate(min) : `${formatAuditDate(min)} – ${formatAuditDate(max)}`;
+        }
         if (resultsCount === 0) return null;
         const dates = filteredLogs.map(log => new Date(log.timestamp).getTime()).filter(Boolean);
         if (dates.length === 0) return null;
         const min = new Date(Math.min(...dates));
         const max = new Date(Math.max(...dates));
-        const fmt = d => d.toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', year: 'numeric' });
-        return min.getTime() === max.getTime() ? fmt(min) : `${fmt(min)} – ${fmt(max)}`;
+        return min.getTime() === max.getTime() ? formatAuditDate(min) : `${formatAuditDate(min)} – ${formatAuditDate(max)}`;
     })();
 
-    // Most active users (from filtered results)
     const mostActiveUsers = (() => {
+        if (serverStats?.topUsers?.length && !hasSearchFilter) {
+            return serverStats.topUsers;
+        }
         if (filteredLogs.length === 0) return [];
         const byKey = {};
         filteredLogs.forEach(log => {
@@ -334,8 +361,10 @@ const AuditTrail = () => {
     })();
     const maxUserCount = mostActiveUsers.length ? Math.max(...mostActiveUsers.map(u => u.count)) : 1;
 
-    // Most used modules (from filtered results)
     const mostUsedModules = (() => {
+        if (serverStats?.topModules?.length && !hasSearchFilter) {
+            return serverStats.topModules;
+        }
         if (filteredLogs.length === 0) return [];
         const byModule = {};
         filteredLogs.forEach(log => {
@@ -435,17 +464,31 @@ const AuditTrail = () => {
                 </div>
             )}
 
-            {/* Summary Stats – all metrics refer to current filters */}
+            {isTruncated && matchTotal > totalLoaded && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    Showing the latest {totalLoaded.toLocaleString()} of {matchTotal.toLocaleString()} matching logs.
+                    User/module charts use full filtered totals; narrow the date range for faster loads.
+                </div>
+            )}
+
+            {/* Summary Stats – KPIs use server totals; search narrows the table only */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                     <p className="text-[10px] text-slate-600 font-medium mb-0.5">Logs loaded</p>
-                    <p className="text-xl font-bold text-slate-900">{totalLoaded}</p>
-                    <p className="text-[9px] text-slate-500 mt-0.5">in this session</p>
+                    <p className="text-xl font-bold text-slate-900">{totalLoaded.toLocaleString()}</p>
+                    <p className="text-[9px] text-slate-500 mt-0.5">
+                        {matchTotal > totalLoaded ? `of ${matchTotal.toLocaleString()} matching` : 'matching filters'}
+                    </p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-[10px] text-green-600 font-medium mb-0.5">Results</p>
-                    <p className="text-xl font-bold text-green-900">{resultsCount}</p>
-                    <p className="text-[9px] text-green-600 mt-0.5">matching filters</p>
+                    <p className="text-xl font-bold text-green-900">
+                        {hasSearchFilter ? resultsCount.toLocaleString() : matchTotal.toLocaleString()}
+                    </p>
+                    <p className="text-[9px] text-green-600 mt-0.5">
+                        {hasSearchFilter ? `search in ${matchTotal.toLocaleString()}` : 'matching filters'}
+                    </p>
                 </div>
                 <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
                     <p className="text-[10px] text-primary-600 font-medium mb-0.5">Unique users</p>
@@ -463,9 +506,11 @@ const AuditTrail = () => {
                     <p className="text-[9px] text-emerald-600 mt-0.5">{resultsCount ? `${successCount}/${resultsCount} successful` : 'no data'}</p>
                 </div>
                 <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30 p-3">
-                    <p className="text-[10px] text-blue-600 font-medium mb-0.5">Date range</p>
-                    <p className="text-sm font-bold text-blue-900 truncate" title={dateSpan || ''}>{dateSpan || '—'}</p>
-                    <p className="text-[9px] text-blue-600 mt-0.5">of results</p>
+                    <p className="text-[10px] text-blue-600 font-medium mb-0.5">Filter period</p>
+                    <p className="text-sm font-bold text-blue-900 truncate" title={filterPeriodLabel}>{filterPeriodLabel}</p>
+                    <p className="text-[9px] text-blue-600 mt-0.5 truncate" title={dataSpan || ''}>
+                        {dataSpan ? `Data: ${dataSpan}` : 'no logs in period'}
+                    </p>
                 </div>
             </div>
 
@@ -582,7 +627,9 @@ const AuditTrail = () => {
                                 setFilterModule('all');
                                 setFilterAction('all');
                                 setFilterUser('all');
-                                setDateRange('7');
+                                setFilterByEmail('');
+                                setDateRange('all');
+                                loadLogs({ email: '' });
                             }}
                             className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 hover:bg-white rounded transition-colors"
                         >

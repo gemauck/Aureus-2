@@ -4,6 +4,149 @@ import { parseJsonBody } from './_lib/body.js';
 import { created, ok, badRequest, serverError, unauthorized, forbidden } from './_lib/response.js';
 import { isAdminRole, isSuperAdminRole } from './_lib/authRoles.js';
 
+const MAX_AUDIT_LOG_LIMIT = 5000;
+
+async function buildAuditLogWhere(queryParams, prisma) {
+  const userId = queryParams.get('userId');
+  const email = queryParams.get('email');
+  const module = queryParams.get('module');
+  const action = queryParams.get('action');
+  const startDate = queryParams.get('startDate');
+  const endDate = queryParams.get('endDate');
+
+  const where = {};
+
+  if (email) {
+    const userByEmail = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true }
+    });
+    if (userByEmail) {
+      where.actorId = userByEmail.id;
+    } else {
+      where.actorId = '__no_match__';
+    }
+  } else if (userId) {
+    where.actorId = userId;
+  }
+
+  if (module) {
+    where.entity = module;
+  }
+
+  if (action) {
+    where.action = action;
+  }
+
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) {
+      where.createdAt.gte = new Date(startDate);
+    }
+    if (endDate) {
+      where.createdAt.lte = new Date(endDate);
+    }
+  }
+
+  return where;
+}
+
+function transformAuditLogRow(log) {
+  let diff = {};
+  try {
+    diff = JSON.parse(log.diff || '{}');
+  } catch (e) {
+    console.warn('⚠️ Failed to parse diff for log:', log.id, e);
+  }
+  const userName = log.actor?.name || log.actor?.email || diff.user || 'System';
+  const userRole = log.actor?.role || diff.userRole || 'System';
+
+  return {
+    id: log.id,
+    timestamp: log.createdAt.toISOString(),
+    user: userName,
+    userId: log.actorId,
+    userEmail: log.actor?.email || null,
+    userRole,
+    action: log.action,
+    module: log.entity,
+    entityId: log.entityId || null,
+    details: diff.details || {},
+    ipAddress: diff.ipAddress || 'N/A',
+    sessionId: diff.sessionId || 'N/A',
+    success: diff.success !== undefined ? diff.success : true
+  };
+}
+
+async function fetchAuditStats(prisma, where) {
+  const [total, dateBounds, userGroups, moduleGroups] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.aggregate({
+      where,
+      _min: { createdAt: true },
+      _max: { createdAt: true }
+    }),
+    prisma.auditLog.groupBy({
+      by: ['actorId'],
+      where,
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 15
+    }),
+    prisma.auditLog.groupBy({
+      by: ['entity'],
+      where,
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 20
+    })
+  ]);
+
+  const actorIds = userGroups.map((g) => g.actorId).filter(Boolean);
+  const actors = actorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true, email: true }
+      })
+    : [];
+  const actorById = Object.fromEntries(actors.map((a) => [a.id, a]));
+
+  const topUsers = userGroups.map((g) => {
+    const actor = actorById[g.actorId];
+    const label = actor?.name || actor?.email || g.actorId || 'Unknown';
+    return {
+      label,
+      email: actor?.email || null,
+      count: g._count.id
+    };
+  });
+
+  const topModules = moduleGroups
+    .filter((g) => g.entity)
+    .map((g) => ({
+      module: g.entity,
+      count: g._count.id
+    }));
+
+  const [uniqueUserGroups, uniqueModuleGroups] = await Promise.all([
+    prisma.auditLog.groupBy({ by: ['actorId'], where }),
+    prisma.auditLog.groupBy({
+      by: ['entity'],
+      where: { ...where, entity: { not: null } }
+    })
+  ]);
+
+  return {
+    total,
+    uniqueUsers: uniqueUserGroups.length,
+    uniqueModules: uniqueModuleGroups.length,
+    dateMin: dateBounds._min.createdAt,
+    dateMax: dateBounds._max.createdAt,
+    topUsers,
+    topModules
+  };
+}
+
 async function handler(req, res) {
   try {
     // Get authenticated user
@@ -142,137 +285,51 @@ async function handler(req, res) {
         return forbidden(res, 'Access to the detailed audit trail is restricted to super-admins only.');
       }
 
-      // Parse query parameters from req.url
       const url = new URL(req.url, `http://${req.headers.host}`);
       const queryParams = url.searchParams;
-      const userId = queryParams.get('userId');
-      const email = queryParams.get('email');
-      const module = queryParams.get('module');
-      const action = queryParams.get('action');
-      const startDate = queryParams.get('startDate');
-      const endDate = queryParams.get('endDate');
-      const limit = parseInt(queryParams.get('limit') || '1000');
-      const offset = parseInt(queryParams.get('offset') || '0');
+      const includeStats = queryParams.get('stats') === '1';
+      const requestedLimit = parseInt(queryParams.get('limit') || '1000', 10);
+      const limit = Math.min(
+        Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 1000,
+        MAX_AUDIT_LOG_LIMIT
+      );
+      const offset = Math.max(0, parseInt(queryParams.get('offset') || '0', 10) || 0);
 
-      const where = {};
-      
-      // Only superadmins can reach this GET; they see all users' activity.
-      const canViewAllActivity = true;
-      if (!canViewAllActivity) {
-        where.actorId = user.id;
-      } else {
-        if (email) {
-          const userByEmail = await prisma.user.findFirst({
-            where: { email: { equals: email, mode: 'insensitive' } },
-            select: { id: true }
-          });
-          if (userByEmail) {
-            where.actorId = userByEmail.id;
-          }
-        } else if (userId) {
-          where.actorId = userId;
-        }
-      }
-
-      if (module) {
-        where.entity = module;
-      }
-
-      if (action) {
-        where.action = action;
-      }
-
-      if (startDate || endDate) {
-        where.createdAt = {};
-        if (startDate) {
-          where.createdAt.gte = new Date(startDate);
-        }
-        if (endDate) {
-          where.createdAt.lte = new Date(endDate);
-        }
-      }
+      const where = await buildAuditLogWhere(queryParams, prisma);
 
       try {
-        console.log('📊 Fetching audit logs with where clause:', JSON.stringify(where, null, 2));
-        console.log('📊 User info:', { id: user.id, role: user.role, canViewAllActivity });
-        
-        // First, let's just count ALL audit logs to see if any exist
-        const totalAllLogs = await prisma.auditLog.count();
-        console.log('📊 Total audit logs in database (no filter):', totalAllLogs);
-        
-        // Debug: Get the 3 most recent logs directly
-        const recentLogs = await prisma.auditLog.findMany({
-          take: 3,
-          orderBy: { createdAt: 'desc' }
-        });
-        console.log('📊 Most recent 3 logs (raw):', recentLogs.map(l => ({ id: l.id, action: l.action, actorId: l.actorId, createdAt: l.createdAt })));
-        
-        const [auditLogs, total] = await Promise.all([
-          prisma.auditLog.findMany({
-            where,
-            include: {
-              actor: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  role: true
-                }
+        const listPromise = prisma.auditLog.findMany({
+          where,
+          include: {
+            actor: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true
               }
-            },
-            orderBy: {
-              createdAt: 'desc'
-            },
-            take: limit,
-            skip: offset
-          }),
-          prisma.auditLog.count({ where })
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: offset
+        });
+
+        const [auditLogs, total, stats] = await Promise.all([
+          listPromise,
+          prisma.auditLog.count({ where }),
+          includeStats ? fetchAuditStats(prisma, where) : Promise.resolve(null)
         ]);
 
-        console.log(`✅ Found ${auditLogs.length} audit logs (total: ${total}) for user: ${user.id}, role: ${user.role}`);
-        console.log('📊 First 3 logs:', auditLogs.slice(0, 3).map(l => ({ id: l.id, action: l.action, entity: l.entity, actorId: l.actorId })));
-
-        // Transform logs to match the frontend format
-        const transformedLogs = auditLogs.map(log => {
-          let diff = {};
-          try {
-            diff = JSON.parse(log.diff || '{}');
-          } catch (e) {
-            console.warn('⚠️ Failed to parse diff for log:', log.id, e);
-          }
-          // Prioritize actor relation (database user) over diff (which might have 'System')
-          // This ensures we show the actual user name from the database
-          const userName = log.actor?.name || log.actor?.email || diff.user || 'System';
-          const userRole = log.actor?.role || diff.userRole || 'System';
-          
-          // Log if actor is missing (for debugging)
-          if (!log.actor && log.actorId) {
-            console.warn(`⚠️ Audit log ${log.id} has actorId ${log.actorId} but actor relation is missing`);
-          }
-          
-          return {
-            id: log.id,
-            timestamp: log.createdAt.toISOString(),
-            user: userName,
-            userId: log.actorId,
-            userEmail: log.actor?.email || null,
-            userRole: userRole,
-            action: log.action,
-            module: log.entity,
-            entityId: log.entityId || null,
-            details: diff.details || {},
-            ipAddress: diff.ipAddress || 'N/A',
-            sessionId: diff.sessionId || 'N/A',
-            success: diff.success !== undefined ? diff.success : true
-          };
-        });
+        const transformedLogs = auditLogs.map(transformAuditLogRow);
 
         return ok(res, {
           logs: transformedLogs,
           total,
-          totalAllLogs, // Debug: total logs in database without any filter
           limit,
-          offset
+          offset,
+          truncated: total > auditLogs.length,
+          ...(stats ? { stats } : {})
         });
       } catch (dbError) {
         console.error('❌ Database error fetching audit logs:', dbError);

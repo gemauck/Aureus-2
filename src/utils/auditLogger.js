@@ -218,91 +218,114 @@ const AuditLogger = {
         }
     },
     
-    // Get all audit logs (from backend if available, otherwise from localStorage)
-    // options: { email: string } - filter by user email (admin only, server-side)
+    _buildAuditQueryParams: (options = {}) => {
+        const params = new URLSearchParams();
+        if (options.email) params.set('email', options.email);
+        if (options.module) params.set('module', options.module);
+        if (options.action) params.set('action', options.action);
+        if (options.startDate) params.set('startDate', options.startDate);
+        if (options.endDate) params.set('endDate', options.endDate);
+        if (options.userId) params.set('userId', options.userId);
+        if (options.limit) params.set('limit', String(options.limit));
+        if (options.offset) params.set('offset', String(options.offset));
+        if (options.stats) params.set('stats', '1');
+        return params;
+    },
+
+    _fetchFromBackend: async (options = {}) => {
+        const token = window.storage?.getToken?.();
+        if (!token) return null;
+        const params = AuditLogger._buildAuditQueryParams(options);
+        const query = params.toString();
+        const url = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch audit logs (${response.status}): ${errorText}`);
+        }
+        const responseData = await response.json();
+        const data = responseData.data || responseData;
+        return {
+            logs: data.logs || [],
+            total: typeof data.total === 'number' ? data.total : (data.logs?.length || 0),
+            limit: data.limit,
+            offset: data.offset,
+            truncated: Boolean(data.truncated),
+            stats: data.stats || null
+        };
+    },
+
+    // Get audit logs (backend with filters, or localStorage fallback).
+    // options: email, module, action, startDate, endDate, limit, stats
+    // Returns { logs, total, stats, truncated, limit, offset } or legacy array when raw: true
     getAll: async (options = {}) => {
+        const wantRawArray = options.raw === true;
         try {
-            const token = window.storage?.getToken?.();
-            if (token) {
-                const params = new URLSearchParams();
-                if (options.email) {
-                    params.set('email', options.email);
-                }
-                const query = params.toString();
-                const url = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    const responseData = await response.json();
-                    // API wraps response in { data: { logs: [...] } }
-                    const data = responseData.data || responseData;
-                    const logCount = data.logs?.length || 0;
-                    // Only log on first fetch or when logs exist (reduce spam)
-                    if (logCount > 0 || !window._auditLogsFetched) {
-                        console.log('✅ Fetched audit logs from backend:', logCount, 'logs');
-                        window._auditLogsFetched = true;
-                    }
-                    
-                    // If no logs in backend but we have localStorage logs, try to migrate (only once per session)
-                    const migrationAttemptedKey = 'audit_log_migration_attempted';
-                    if (logCount === 0 && !sessionStorage.getItem(migrationAttemptedKey)) {
-                        const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
-                        if (localLogs.length > 0) {
-                            sessionStorage.setItem(migrationAttemptedKey, 'true');
-                            console.log('🔄 No backend logs found, but localStorage has logs. Migrating...');
-                            // Migrate and wait for completion, then re-fetch
-                            const migrationResult = await AuditLogger.migrateLocalStorageLogs();
-                            if (migrationResult && migrationResult.migrated > 0) {
-                                console.log(`✅ Migrated ${migrationResult.migrated} logs, re-fetching from backend...`);
-                                // Re-fetch after migration
-                                const retryUrl = query ? `/api/audit-logs?${query}` : '/api/audit-logs';
-                                const retryResponse = await fetch(retryUrl, {
-                                    method: 'GET',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    }
-                                });
-                                if (retryResponse.ok) {
-                                    const retryResponseData = await retryResponse.json();
-                                    // API wraps response in { data: { logs: [...] } }
-                                    const retryData = retryResponseData.data || retryResponseData;
-                                    const retryLogCount = retryData.logs?.length || 0;
-                                    console.log('✅ Re-fetched audit logs from backend after migration:', retryLogCount, 'logs');
-                                    return retryData.logs || [];
-                                }
-                            }
+            let payload = await AuditLogger._fetchFromBackend(options);
+            if (payload && payload.logs.length === 0 && !options.email && !options.module && !options.action && !options.startDate) {
+                const migrationAttemptedKey = 'audit_log_migration_attempted';
+                if (!sessionStorage.getItem(migrationAttemptedKey)) {
+                    const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+                    if (localLogs.length > 0) {
+                        sessionStorage.setItem(migrationAttemptedKey, 'true');
+                        const migrationResult = await AuditLogger.migrateLocalStorageLogs();
+                        if (migrationResult?.migrated > 0) {
+                            payload = await AuditLogger._fetchFromBackend(options);
                         }
                     }
-                    
-                    return data.logs || [];
-                } else {
-                    const errorText = await response.text();
-                    console.error('❌ Failed to fetch audit logs:', response.status, errorText);
-                    console.error('❌ Response headers:', Object.fromEntries(response.headers.entries()));
                 }
-            } else {
-                console.warn('⚠️ No auth token available, using localStorage');
+            }
+            if (payload) {
+                if (wantRawArray) return payload.logs;
+                return payload;
             }
         } catch (error) {
             console.error('❌ Error fetching audit logs from backend, using localStorage:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                name: error.name
+        }
+
+        const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+        const filtered = AuditLogger._filterLocalLogs(localLogs, options);
+        const fallback = {
+            logs: filtered,
+            total: filtered.length,
+            truncated: false,
+            stats: null,
+            limit: filtered.length,
+            offset: 0
+        };
+        return wantRawArray ? fallback.logs : fallback;
+    },
+
+    _filterLocalLogs: (logs, options = {}) => {
+        let filtered = [...logs];
+        if (options.module) {
+            filtered = filtered.filter((log) => log.module === options.module);
+        }
+        if (options.action) {
+            filtered = filtered.filter((log) => log.action === options.action);
+        }
+        if (options.startDate) {
+            const start = new Date(options.startDate);
+            filtered = filtered.filter((log) => new Date(log.timestamp) >= start);
+        }
+        if (options.endDate) {
+            const end = new Date(options.endDate);
+            filtered = filtered.filter((log) => new Date(log.timestamp) <= end);
+        }
+        if (options.email) {
+            const emailLower = options.email.toLowerCase();
+            filtered = filtered.filter((log) => {
+                const logEmail = (log.userEmail || log.details?.email || '').toLowerCase();
+                return logEmail && logEmail.includes(emailLower);
             });
         }
-        
-        // Fallback to localStorage
-        const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
-        console.log('📦 Using localStorage logs:', localLogs.length, 'logs');
-        return localLogs;
+        return filtered;
     },
     
     // Get logs by date range
