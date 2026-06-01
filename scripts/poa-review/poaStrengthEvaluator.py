@@ -24,8 +24,13 @@ STRENGTH_FILL = {
 }
 
 POA_COMPLIANCE_POINTS_COL = "POA Compliance Points"
+POA_SHIFT_FALLBACK_COL = "Shift POA Fallback"
+POA_ELIGIBILITY_SHORTFALLS_COL = "POA Eligibility Shortfalls"
+POA_COMPLETENESS_SHORTFALLS_COL = "POA Completeness Shortfalls"
+POA_SHORTFALLS_COL = "POA Shortfalls"
 COMPLIANCE_POINTS_FILL = "D9EAD3"
 SHORTFALLS_COLUMN_FILL = "F4CCCC"
+ELIGIBILITY_SHORTFALLS_FILL = "FCE5CD"
 
 def _resolve_rules_path() -> str:
     """Resolve rules JSON path; Pyodide exec has no __file__."""
@@ -973,6 +978,64 @@ def load_rules(rules_path: str | None = None) -> dict:
     return rules
 
 
+def get_rules_meta(rules: dict | None = None) -> dict:
+    """Version metadata for UI display (from rulesMeta in JSON)."""
+    rules = rules or load_rules()
+    meta = rules.get("rulesMeta") if isinstance(rules.get("rulesMeta"), dict) else {}
+    return {
+        "version": meta.get("version") or meta.get("lastUpdated") or "unknown",
+        "lastUpdated": meta.get("lastUpdated") or meta.get("version") or "",
+        "description": meta.get("description") or "",
+    }
+
+
+DEFAULT_POA_SETTINGS = {
+    "smrUsageMaxPerActivity": 1000,
+    "batchWindowHours": 1,
+    "shiftProofWindowHours": 24,
+}
+
+
+def normalize_poa_settings(settings: dict | None) -> dict:
+    base = dict(DEFAULT_POA_SETTINGS)
+    if not settings or not isinstance(settings, dict):
+        return base
+    for key in base:
+        if settings.get(key) is not None:
+            try:
+                base[key] = float(settings[key]) if "Hours" in key or "Activity" in key else settings[key]
+            except (TypeError, ValueError):
+                pass
+    if settings.get("smrUsageMaxPerActivity") is not None:
+        try:
+            base["smrUsageMaxPerActivity"] = float(settings["smrUsageMaxPerActivity"])
+        except (TypeError, ValueError):
+            pass
+    return base
+
+
+def apply_runtime_settings(rules: dict, settings: dict | None) -> dict:
+    """Merge org/UI settings into rules for one evaluation run."""
+    cfg = normalize_poa_settings(settings)
+    if cfg.get("smrUsageMaxPerActivity") is not None:
+        rules["smrUsageMaxPerActivity"] = cfg["smrUsageMaxPerActivity"]
+    sfb = dict(rules.get("shiftProofFallback") or {})
+    if cfg.get("shiftProofWindowHours") is not None:
+        sfb["windowHours"] = int(cfg["shiftProofWindowHours"])
+    rules["shiftProofFallback"] = sfb
+    rules["_batchWindowHours"] = float(cfg.get("batchWindowHours") or 1)
+    return rules
+
+
+def batch_window_hours(rules: dict | None) -> float:
+    if not rules:
+        return 1.0
+    try:
+        return float(rules.get("_batchWindowHours") or 1)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 INTENSITY_SUM_COLUMNS = ("Loads / Tonnes", "Total SMR Usage", "Total Usage Km/Hr")
 OPENING_SMR_COL = "Opening SMR"
 CLOSING_SMR_COL = "Closing SMR"
@@ -1196,9 +1259,11 @@ def aggregate_proof_batch(proof_df: pd.DataFrame, rules: dict | None = None) -> 
 
 def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     """Return criteria booleans, tier, shortfalls, and score count."""
-    shortfalls: list[str] = []
+    activity_shortfalls: list[str] = []
+    completeness_shortfalls: list[str] = []
 
     if batch.get("proofCount", 0) == 0:
+        msg = "No proof-of-activity rows for this batch"
         return {
             "criteria": {
                 "activity": False,
@@ -1208,7 +1273,9 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
             },
             "score": 0,
             "strength": STRENGTH_INSUFFICIENT,
-            "shortfalls": ["No proof-of-activity rows for this batch"],
+            "shortfalls": [msg],
+            "activityShortfalls": [],
+            "completenessShortfalls": [msg],
             "compliancePoints": [],
             "method": "rules",
             "sector": None,
@@ -1236,7 +1303,7 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     activity_ok = bool(activity_eval.get("ok"))
     pri_act = activity_eval.get("matchedTerm")
     if activity_eval.get("shortfall"):
-        shortfalls.append(activity_eval["shortfall"])
+        activity_shortfalls.append(activity_eval["shortfall"])
 
     loc_text = " | ".join(batch.get("locations", []))
     sec_loc = _sector_matcher(sector_rules, "secondaryLocations").find(loc_text or text)
@@ -1244,17 +1311,21 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
 
     if not loc_text.strip() and not _sector_matcher(sector_rules, "primaryLocations").find(text):
         location_ok = False
-        shortfalls.append(f"No {location_label} location on proof records")
+        completeness_shortfalls.append(f"No {location_label} location on proof records")
     elif sec_loc and not pri_loc:
         location_ok = False
-        shortfalls.append(f"Secondary/non-primary {sector_label.lower()} location only ({sec_loc})")
+        completeness_shortfalls.append(
+            f"Secondary/non-primary {sector_label.lower()} location only ({sec_loc})"
+        )
     elif pri_loc:
         location_ok = True
     elif loc_text.strip():
         location_ok = True
     else:
         location_ok = False
-        shortfalls.append(f"No primary {sector_label.lower()} location identified")
+        completeness_shortfalls.append(
+            f"No primary {sector_label.lower()} location identified"
+        )
 
     mat_text = " | ".join(batch.get("materials", []))
     sec_mat = _sector_matcher(sector_rules, "secondaryMaterials").find(mat_text or text)
@@ -1262,10 +1333,10 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
 
     if not mat_text.strip():
         material_ok = False
-        shortfalls.append("No material type on proof records")
+        completeness_shortfalls.append("No material type on proof records")
     elif sec_mat and not pri_mat:
         material_ok = False
-        shortfalls.append(
+        completeness_shortfalls.append(
             f"Secondary/processed {sector_label.lower()} material only ({sec_mat})"
         )
     elif pri_mat:
@@ -1274,17 +1345,21 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         material_ok = True
     else:
         material_ok = False
-        shortfalls.append(f"No primary {sector_label.lower()} production material identified")
+        completeness_shortfalls.append(
+            f"No primary {sector_label.lower()} production material identified"
+        )
 
     intensity_vals = batch.get("intensityValues") or {}
     intensity_ok = len(intensity_vals) > 0
     if not intensity_ok and _narrative_has_quantified_intensity(batch):
         intensity_ok = True
     if not intensity_ok:
-        shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
+        completeness_shortfalls.append("No usage intensity (loads, SMR, hours, or hauls)")
 
     if sector_ctx.get("advisory"):
-        shortfalls.append(sector_ctx["advisory"])
+        completeness_shortfalls.append(sector_ctx["advisory"])
+
+    shortfalls = activity_shortfalls + completeness_shortfalls
 
     criteria = {
         "activity": activity_ok,
@@ -1294,10 +1369,12 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
     }
     score = sum(1 for v in criteria.values() if v)
     strength = tier_from_score(score)
+    shift_applied = bool(batch.get("shiftProofApplied"))
     compliance_points = build_compliance_points(
         batch,
         criteria,
         strength,
+        shift_applied=shift_applied,
         sector_context=sector_ctx,
         matched_activity=pri_act,
         activity_eval=activity_eval,
@@ -1308,6 +1385,8 @@ def evaluate_batch_rules(batch: dict, rules: dict) -> dict:
         "score": score,
         "strength": strength,
         "shortfalls": shortfalls,
+        "activityShortfalls": activity_shortfalls,
+        "completenessShortfalls": completeness_shortfalls,
         "compliancePoints": compliance_points,
         "method": "rules",
         "sector": sector,
@@ -1414,6 +1493,10 @@ def build_compliance_points(
             points.append(f"Usage intensity recorded ({', '.join(parts)})")
 
     if shift_applied:
+        points.insert(
+            1,
+            "Shift/day POA fallback — not direct proof immediately before dispense; verify coverage",
+        )
         points.append("Shift/day POA fallback applied (single activity on asset/day)")
 
     return points
@@ -1528,9 +1611,11 @@ def evaluate_all_labels(
     proof_mask: pd.Series,
     transaction_mask: pd.Series,
     rules: dict | None = None,
+    settings: dict | None = None,
 ) -> dict[str, dict]:
     """Evaluate every label that appears on transaction or proof rows."""
-    rules = rules or load_rules()
+    base_rules = rules or load_rules()
+    rules = apply_runtime_settings(base_rules, settings)
     if "label" not in data.columns:
         return {}
 
@@ -1590,10 +1675,13 @@ def evaluate_all_labels(
         eval_result = evaluate_batch_rules(batch, rules)
         if shift_applied:
             advisory = (rules.get("shiftProofFallback") or {}).get("advisoryNote", DEFAULT_SHIFT_ADVISORY)
-            shortfalls = list(eval_result.get("shortfalls") or [])
-            if advisory not in shortfalls:
-                shortfalls.append(advisory)
-            eval_result["shortfalls"] = shortfalls
+            comp = list(eval_result.get("completenessShortfalls") or [])
+            if advisory not in comp:
+                comp.append(advisory)
+            act = list(eval_result.get("activityShortfalls") or [])
+            eval_result["completenessShortfalls"] = comp
+            eval_result["activityShortfalls"] = act
+            eval_result["shortfalls"] = act + comp
             eval_result["shiftProofApplied"] = True
             eval_result["compliancePoints"] = build_compliance_points(
                 batch,
@@ -1601,6 +1689,7 @@ def evaluate_all_labels(
                 eval_result.get("strength"),
                 shift_applied=True,
                 sector_context=eval_result.get("sectorContext"),
+                activity_eval=eval_result.get("activityMatch"),
             )
 
         eval_result["batch"] = batch

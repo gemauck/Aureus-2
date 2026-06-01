@@ -3,7 +3,7 @@
  * Mirrors core rules in scripts/poa-review/ProofReview.py for preview stats.
  */
 
-const COLUMN_SPECS = [
+export const COLUMN_SPECS = [
     { key: 'transactionId', label: 'Transaction ID', aliases: ['transaction id', 'transactionid', 'txn id', 'txnid'] },
     { key: 'assetNumber', label: 'Asset Number', aliases: ['asset number', 'assetnumber', 'asset no', 'assetno'] },
     { key: 'dateTime', label: 'Date & Time', aliases: ['date & time', 'date and time', 'datetime', 'timestamp'] },
@@ -295,7 +295,12 @@ function evaluatePoaStrengthFromRecords(records) {
     return summarizeStrengthResults(Object.values(labelResults));
 }
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
+export const ONE_HOUR_MS = 60 * 60 * 1000;
+
+function batchWindowMs(settings) {
+    const h = Number(settings?.batchWindowHours);
+    return (Number.isFinite(h) && h > 0 ? h : 1) * ONE_HOUR_MS;
+}
 
 function normalizeHeader(name) {
     if (name == null) return '';
@@ -317,6 +322,42 @@ function resolveColumns(headers) {
         cols[spec.key] = findColumnKey(headers, spec.aliases);
     }
     return cols;
+}
+
+/** Map file header names → standard POA column labels for processing. */
+export function applyColumnMappingToRows(rows, mapping) {
+    if (!rows?.length || !mapping || !Object.keys(mapping).length) return rows;
+    return rows.map((row) => {
+        const out = {};
+        for (const [key, val] of Object.entries(row)) {
+            const target = mapping[key] || mapping[normalizeHeader(key)];
+            out[target || key] = val;
+        }
+        return out;
+    });
+}
+
+/**
+ * Resolve required/optional columns; returns missing required keys and suggested mappings.
+ */
+export function getColumnResolution(headers) {
+    const cols = resolveColumns(headers || []);
+    const required = [
+        { key: 'transactionId', label: 'Transaction ID' },
+        { key: 'assetNumber', label: 'Asset Number' },
+        { key: 'dateTime', label: 'Date & Time' },
+    ];
+    const optional = COLUMN_SPECS.filter(
+        (s) => !required.some((r) => r.key === s.key)
+    ).map((s) => ({ key: s.key, label: s.label, aliases: s.aliases }));
+
+    const missingRequired = required.filter((r) => !cols[r.key]);
+    const unmappedHeaders = (headers || []).filter((h) => {
+        const n = normalizeHeader(h);
+        return n && !Object.values(cols).some((c) => normalizeHeader(c) === n);
+    });
+
+    return { cols, missingRequired, optional, unmappedHeaders, headers: headers || [] };
 }
 
 function cellVal(row, colKey) {
@@ -358,6 +399,8 @@ function minMaxDateTimes(dates) {
  */
 export function analyzePoaRows(rows, options = {}) {
     const sources = Array.isArray(options.sources) ? options.sources.filter(Boolean) : [];
+    const settings = options.settings || {};
+    const batchMs = batchWindowMs(settings);
     const analyzedRowCount = options.analyzedRowCount ?? (rows?.length || 0);
     const fileRowHint = options.fileRowHint ?? analyzedRowCount;
 
@@ -533,7 +576,7 @@ export function analyzePoaRows(rows, options = {}) {
             let isNewGroup = 1;
             if (prevTxnTime && rec.dt) {
                 const diff = rec.dt - prevTxnTime;
-                if (diff > 0 && diff < ONE_HOUR_MS) isNewGroup = 0;
+                if (diff > 0 && diff < batchMs) isNewGroup = 0;
             }
             groupNum += isNewGroup;
             rec.label = `${asset}-${groupNum}`;
@@ -671,4 +714,7 @@ export function analyzePoaRows(rows, options = {}) {
 if (typeof window !== 'undefined') {
     window.analyzePoaRows = analyzePoaRows;
     window.evaluatePoaStrengthFromRecords = evaluatePoaStrengthFromRecords;
+    window.COLUMN_SPECS = COLUMN_SPECS;
+    window.getColumnResolution = getColumnResolution;
+    window.applyColumnMappingToRows = applyColumnMappingToRows;
 }

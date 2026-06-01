@@ -7,6 +7,7 @@ import sys
 import pandas as pd
 
 from ProofReview import POAReview, format_review
+from poaStrengthEvaluator import normalize_poa_settings
 
 MAX_ROWS_DEFAULT = 500000
 
@@ -121,11 +122,28 @@ def prepare_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
+def apply_extra_column_mapping(data: pd.DataFrame, column_mapping: dict | None) -> pd.DataFrame:
+    if not column_mapping:
+        return data
+    rename = {}
+    for raw, target in column_mapping.items():
+        if not raw or not target:
+            continue
+        found = find_column(data, raw) if raw not in data.columns else raw
+        if found and found != target:
+            rename[found] = target
+    if rename:
+        return data.rename(columns=rename)
+    return data
+
+
 def run_pipeline(
     input_file: str,
     output_file: str,
     sources: list,
     max_rows: int = MAX_ROWS_DEFAULT,
+    settings: dict | None = None,
+    column_mapping: dict | None = None,
 ) -> None:
     print('Reading CSV file...', flush=True)
     data = pd.read_csv(input_file, skiprows=0, low_memory=True)
@@ -143,16 +161,24 @@ def run_pipeline(
     # Drop prior computed columns if re-processing an already-reviewed export
     for col in (
         'No POA Asset', 'Count of proof before transaction', 'Time since last activity',
-        'total smr', 'POA Strength', 'POA Compliance Points', 'POA Shortfalls', 'label', 'is consec',
+        'total smr', 'POA Strength', 'POA Compliance Points', 'Shift POA Fallback',
+        'POA Eligibility Shortfalls', 'POA Completeness Shortfalls', 'POA Shortfalls',
+        'label', 'is consec',
     ):
         if col in data.columns:
             data = data.drop(columns=[col])
 
+    data = apply_extra_column_mapping(data, column_mapping)
     data = prepare_dataframe(data)
     original_columns = list(data.columns)
     print('Prepared dataframe', flush=True)
 
-    review = POAReview(data)
+    cfg = normalize_poa_settings(settings)
+    review_opts = {
+        'settings': cfg,
+        'batchWindowHours': cfg.get('batchWindowHours', 1),
+    }
+    review = POAReview(data, review_opts)
     print('POAReview initialized', flush=True)
     review.mark_consecutive_transactions()
     review.label_rows()
@@ -194,9 +220,11 @@ def main() -> int:
     output_file = sys.argv[2]
     sources = json.loads(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else ['Inmine: Daily Diesel Issues']
     max_rows = int(sys.argv[4]) if len(sys.argv) > 4 else MAX_ROWS_DEFAULT
+    settings = json.loads(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else None
+    column_mapping = json.loads(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else None
 
     try:
-        run_pipeline(input_file, output_file, sources, max_rows)
+        run_pipeline(input_file, output_file, sources, max_rows, settings, column_mapping)
         return 0
     except Exception as exc:
         print(f'Error: {exc}', file=sys.stderr)

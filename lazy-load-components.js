@@ -61,6 +61,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/SarsMonitoring.jsx',
         './src/utils/poaAnalyze.js',
+        './src/utils/poaReviewApi.js',
         './src/components/teams/POAReview.jsx',
         './src/components/teams/DFRRCheck.jsx',
         './src/components/manufacturing/JobCardVoiceNoteTextarea.jsx',

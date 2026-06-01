@@ -17,6 +17,8 @@ import { withLogging } from '../_lib/logger.js';
 import { authRequired } from '../_lib/authRequired.js';
 import { created, badRequest, serverError, ok } from '../_lib/response.js';
 import { parseJsonBody } from '../_lib/body.js';
+import { prisma } from '../_lib/prisma.js';
+import { loadPoaReviewSettings, normalizePoaReviewSettings } from './_lib/poaReviewSettings.js';
 
 const execAsync = promisify(exec);
 
@@ -55,6 +57,8 @@ function saveBatchMeta(batchId, tempDir, batchData) {
         batchFilePaths: batchData.batchFilePaths || [],
         totalBatches: batchData.totalBatches,
         sources: batchData.sources,
+        settings: batchData.settings,
+        columnMapping: batchData.columnMapping,
         fileName: batchData.fileName,
         receivedBatches: batchData.receivedBatches,
         receivedRowCount: batchData.receivedRowCount,
@@ -139,7 +143,17 @@ async function handler(req, res) {
             return badRequest(res, `Invalid JSON payload: ${parseError.message}`);
         }
 
-        const { batchId, batchNumber, totalBatches, rows, sources, fileName, isFinal } = payload || {};
+        const {
+            batchId,
+            batchNumber,
+            totalBatches,
+            rows,
+            sources,
+            settings: payloadSettings,
+            columnMapping: payloadColumnMapping,
+            fileName,
+            isFinal,
+        } = payload || {};
 
         console.log('POA Review Batch API - Received batch:', { 
             batchId, 
@@ -193,6 +207,8 @@ async function handler(req, res) {
                     batchFilePaths: diskMeta.batchFilePaths || [],
                     totalBatches: diskMeta.totalBatches,
                     sources: diskMeta.sources || ['Inmine: Daily Diesel Issues'],
+                    settings: diskMeta.settings || null,
+                    columnMapping: diskMeta.columnMapping || null,
                     fileName: diskMeta.fileName || 'poa-review',
                     receivedBatches: diskMeta.receivedBatches || 0,
                     receivedRowCount: diskMeta.receivedRowCount || 0,
@@ -205,6 +221,8 @@ async function handler(req, res) {
                     batchFilePaths: [], // index i = path for batch (i+1)
                     totalBatches: totalBatches || 1,
                     sources: sources || ['Inmine: Daily Diesel Issues'],
+                    settings: payloadSettings || null,
+                    columnMapping: payloadColumnMapping || null,
                     fileName: fileName || 'poa-review',
                     receivedBatches: 0,
                     receivedRowCount: 0,
@@ -301,147 +319,28 @@ async function handler(req, res) {
                 const outputFileName = `${baseName}_review_${timestamp}.xlsx`;
                 const outputFilePath = path.join(outputDir, outputFileName);
 
-                // Create Python script to process the CSV
-                const tempProcessScript = path.join(scriptsDir, `process_batch_${batchId}_${timestamp}.py`);
-                
-                const pythonScript = `
-import sys
-import os
-sys.path.insert(0, '${scriptsDir.replace(/\\/g, '/')}')
+                const orgSettings = await loadPoaReviewSettings(prisma);
+                const settings = normalizePoaReviewSettings({
+                    ...orgSettings,
+                    ...(batchData.settings || {}),
+                });
+                const columnMapping = batchData.columnMapping || {};
+                const processScriptPath = path.join(scriptsDir, 'process_poa_csv.py');
+                const pythonExec = venvPython === 'python3' ? 'python3' : `"${venvPython}"`;
+                const quotedArgs = [
+                    processScriptPath,
+                    tempCsvPath,
+                    outputFilePath,
+                    JSON.stringify(batchData.sources),
+                    String(MAX_TOTAL_ROWS),
+                    JSON.stringify(settings),
+                    JSON.stringify(columnMapping),
+                ]
+                    .map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`)
+                    .join(' ');
+                const pythonCommand = `${pythonExec} ${quotedArgs} 2>&1`;
 
-import pandas as pd
-from FormatExcel import Formatter
-from ProofReview import POAReview, format_review, review_cols
-
-# Input and output paths
-input_file = r'${tempCsvPath.replace(/\\/g, '/')}'
-output_file = r'${outputFilePath.replace(/\\/g, '/')}'
-sources = ${JSON.stringify(batchData.sources)}
-
-def normalize_column_name(col_name):
-    """Normalize column name for matching (case-insensitive, strip whitespace)"""
-    if pd.isna(col_name):
-        return None
-    return str(col_name).strip().lower()
-
-def find_column(df, target_name):
-    """Find a column in the dataframe by normalized name"""
-    normalized_target = normalize_column_name(target_name)
-    for col in df.columns:
-        if normalize_column_name(col) == normalized_target:
-            return col
-    return None
-
-try:
-    # Read CSV without strict dtypes: merged file can contain duplicate header rows (batch appends),
-    # so forcing float32 on read fails when a cell contains header text e.g. "Litres". Downcast after read.
-    data = pd.read_csv(input_file, skiprows=0, low_memory=True)
-    print(f"Read {len(data)} rows, {len(data.columns)} columns")
-    
-    # Required columns and their normalized names
-    required_columns = {
-        "Transaction ID": ["transaction id", "transactionid", "txn id", "txnid"],
-        "Asset Number": ["asset number", "assetnumber", "asset no", "assetno"],
-        "Date & Time": ["date & time", "date and time", "datetime", "date", "timestamp"]
-    }
-    
-    # Normalize column names - map actual columns to expected names
-    column_mapping = {}
-    missing_columns = []
-    
-    for expected_col, possible_names in required_columns.items():
-        found_col = None
-        # Try exact match first
-        if expected_col in data.columns:
-            found_col = expected_col
-        else:
-            # Try normalized matches
-            for possible_name in possible_names:
-                found_col = find_column(data, possible_name)
-                if found_col:
-                    break
-        
-        if found_col:
-            if found_col != expected_col:
-                print(f"Mapping column '{found_col}' to '{expected_col}'")
-                column_mapping[found_col] = expected_col
-        else:
-            missing_columns.append(expected_col)
-    
-    # Report missing columns
-    if missing_columns:
-        available_cols = ", ".join([f"'{col}'" for col in data.columns])
-        error_msg = f"Missing required columns: {', '.join(missing_columns)}.\\n"
-        error_msg += f"Available columns in your file: {available_cols}\\n"
-        raise ValueError(error_msg)
-    
-    # Rename columns to match expected names
-    if column_mapping:
-        data = data.rename(columns=column_mapping)
-    
-    # Reduce memory: coerce known numeric columns (handles duplicate header rows in merged CSV)
-    numeric_cols = ["Litres", "Opening SMR", "Closing SMR", "Total Fuel Used (L)",
-        "Eligible Volume (L) (Claimable % of Total)", "Eligible Price", "Eligible Total (R)",
-        "Total Usage Km/Hr", "Loads / Tonnes", "Pump Before", "Pump After", "Opening Odo", "Closing Odo",
-        "≈ Tank Litres Before", "≈ Tank Litres After"]
-    for col in numeric_cols:
-        if col in data.columns:
-            try:
-                data[col] = pd.to_numeric(data[col], errors="coerce").astype("float32")
-            except Exception:
-                pass
-    for col in data.columns:
-        if data[col].dtype == object or data[col].dtype.name == "string":
-            try:
-                n = data[col].nunique()
-                if n < len(data) * 0.5:
-                    data[col] = data[col].astype("category")
-            except Exception:
-                pass
-    for col in data.select_dtypes(include=["floating"]).columns:
-        try:
-            data[col] = data[col].astype("float32")
-        except Exception:
-            pass
-    
-    # Keep all columns; capture order for output (original columns + 4 computed only)
-    original_columns = list(data.columns)
-    
-    review = POAReview(data)
-    review.mark_consecutive_transactions()
-    review.label_rows()
-    review.mark_no_poa_assets()
-    review.count_proof_before_transaction()
-    review.time_since_last_activity()
-    if "label" not in review.data.columns:
-        review.label_rows()
-    review.total_smr(sources)
-    review.evaluate_poa_strength()
-    # Create output directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    
-    # Format and save - pass output_path and original_columns so output keeps same columns + 4 computed
-    format_review(review.data, os.path.basename(input_file), output_file, original_columns)
-    
-    if os.path.exists(output_file):
-        print(f"Success: {output_file}")
-    else:
-        print(f"ERROR: Output file not found at {output_file}", file=sys.stderr)
-    sys.exit(0)
-except Exception as e:
-    print(f"Error: {str(e)}", file=sys.stderr)
-    import traceback
-    traceback.print_exc(file=sys.stderr)
-    sys.exit(1)
-`;
-
-                fs.writeFileSync(tempProcessScript, pythonScript);
-
-                // Execute Python script
-                console.log('POA Review Batch API - Executing Python script...');
-                const pythonCommand = venvPython === 'python3'
-                    ? `python3 "${tempProcessScript}" 2>&1`
-                    : `"${venvPython}" "${tempProcessScript}" 2>&1`;
+                console.log('POA Review Batch API - Executing process_poa_csv.py...');
                 
                 let stdout, stderr, exitCode;
                 try {
@@ -502,10 +401,9 @@ except Exception as e:
                     throw new Error(`Output file was not created. Python output: ${stdout}\nErrors: ${stderr}`);
                 }
 
-                // Clean up temp files (merged CSV, per-batch CSVs, Python script)
+                // Clean up temp files (merged CSV, per-batch CSVs)
                 try {
                     if (fs.existsSync(tempCsvPath)) fs.unlinkSync(tempCsvPath);
-                    if (fs.existsSync(tempProcessScript)) fs.unlinkSync(tempProcessScript);
                     for (const p of batchData.batchFilePaths) {
                         if (p && fs.existsSync(p)) fs.unlinkSync(p);
                     }

@@ -2868,6 +2868,18 @@ app.post('/api/poa-review/process-batch', (req, res) =>
     routeLabel: 'POA Review process-batch',
   })
 )
+app.get('/api/poa-review/rules', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'rules.js'), { routeLabel: 'POA Review rules' })
+)
+app.all('/api/poa-review/settings', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'settings.js'), { routeLabel: 'POA Review settings' })
+)
+app.post('/api/poa-review/preflight-strength', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'poa-review', 'preflight-strength.js'), {
+    timeoutMs: 120000,
+    routeLabel: 'POA Review preflight-strength',
+  })
+)
 const FUEL_REFUND_AUDIT_TIMEOUT_MS = 600000 // 10m
 app.post('/api/fuel-refund-audit/process', (req, res) =>
   runLoadedHandler(req, res, path.join(apiDir, 'fuel-refund-audit', 'process.js'), {

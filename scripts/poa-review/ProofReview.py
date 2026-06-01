@@ -31,7 +31,12 @@ from poaStrengthEvaluator import (
 	STRENGTH_INSUFFICIENT,
 	COMPLIANCE_POINTS_FILL,
 	SHORTFALLS_COLUMN_FILL,
+	ELIGIBILITY_SHORTFALLS_FILL,
 	POA_COMPLIANCE_POINTS_COL,
+	POA_SHIFT_FALLBACK_COL,
+	POA_ELIGIBILITY_SHORTFALLS_COL,
+	POA_COMPLETENESS_SHORTFALLS_COL,
+	POA_SHORTFALLS_COL,
 	evaluate_all_labels,
 	format_shortfalls,
 	compliance_points_from_result,
@@ -48,7 +53,10 @@ COMPUTED_COLS = [
 	"total smr",
 	"POA Strength",
 	POA_COMPLIANCE_POINTS_COL,
-	"POA Shortfalls",
+	POA_SHIFT_FALLBACK_COL,
+	POA_ELIGIBILITY_SHORTFALLS_COL,
+	POA_COMPLETENESS_SHORTFALLS_COL,
+	POA_SHORTFALLS_COL,
 ]
 
 # Styles for write_only path (avoid loading full sheet into memory)
@@ -195,7 +203,8 @@ review_cols = [
     "Storage Tank","Fuel Pump","Litres","Total Fuel Used (L)","Operation Description / Comment","Refund Eligibility","Opening SMR",
     "Closing SMR","Total SMR Usage","Material","Location.1","Loads / Tonnes","Activity","Comments","Source","Custom Attribute",
     "No POA Asset","Count of proof before transaction","Time since last activity","total smr",
-    "POA Strength", POA_COMPLIANCE_POINTS_COL, "POA Shortfalls"
+    "POA Strength", POA_COMPLIANCE_POINTS_COL, POA_SHIFT_FALLBACK_COL,
+    POA_ELIGIBILITY_SHORTFALLS_COL, POA_COMPLETENESS_SHORTFALLS_COL, POA_SHORTFALLS_COL,
 ]
 
 class POAReview:
@@ -218,7 +227,7 @@ class POAReview:
 		proof_mask (pd.Series): Boolean mask identifying proof record rows
 	"""
 
-	def __init__(self, per_asset_report: pd.DataFrame):
+	def __init__(self, per_asset_report: pd.DataFrame, options: dict | None = None):
 		"""
 		Initialize the POAReview with transaction and proof data.
 		
@@ -232,6 +241,7 @@ class POAReview:
 		3. Converts high-cardinality object columns to category to reduce memory
 		"""
 		self.data = per_asset_report
+		self.options = options if isinstance(options, dict) else {}
 		
 		# Create masks to identify different record types
 		# Transactions: Have a non-empty Transaction ID (exclude header row label)
@@ -295,10 +305,11 @@ class POAReview:
 		# Calculate time difference between consecutive transactions
 		time_between_dispenses = self.data.loc[self.transaction_mask, "Date & Time"].diff()
 
-		# Mark as consecutive (0) if within 1 hour, otherwise new group (1); use int8 to save memory
+		window_h = float(self.options.get("batchWindowHours") or 1)
+		# Mark as consecutive (0) if within batch window, otherwise new group (1)
 		self.data.loc[self.transaction_mask, "is consec"] = np.where(
 			(time_between_dispenses > pd.Timedelta(hours=0)) &
-			(time_between_dispenses < pd.Timedelta(hours=1)),
+			(time_between_dispenses < pd.Timedelta(hours=window_h)),
 			0,
 			1,
 		).astype(np.int8)
@@ -469,21 +480,50 @@ class POAReview:
 		if "label" not in self.data.columns:
 			self.label_rows()
 
-		label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
+		settings = self.options.get("settings")
+		batch_wh = float(self.options.get("batchWindowHours") or 1)
+		self.options["batchWindowHours"] = batch_wh
+		label_results = evaluate_all_labels(
+			self.data,
+			self.proof_mask,
+			self.transaction_mask,
+			settings=settings,
+		)
 
 		strength_map = {label: res["strength"] for label, res in label_results.items()}
-		shortfall_map = {label: format_shortfalls(res.get("shortfalls") or []) for label, res in label_results.items()}
+		elig_map = {
+			label: format_shortfalls(res.get("activityShortfalls") or [])
+			for label, res in label_results.items()
+		}
+		complete_map = {
+			label: format_shortfalls(res.get("completenessShortfalls") or [])
+			for label, res in label_results.items()
+		}
+		legacy_short_map = {
+			label: format_shortfalls(res.get("shortfalls") or [])
+			for label, res in label_results.items()
+		}
 		compliance_map = {label: compliance_points_from_result(res) for label, res in label_results.items()}
+		shift_map = {
+			label: ("Yes" if res.get("shiftProofApplied") else None)
+			for label, res in label_results.items()
+		}
 
 		self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 		self.data[POA_COMPLIANCE_POINTS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
-		self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data[POA_SHIFT_FALLBACK_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data[POA_ELIGIBILITY_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data[POA_COMPLETENESS_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+		self.data[POA_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
 
 		labels_str = self.data["label"].astype(str)
 		txn_idx = self.data.index[self.transaction_mask]
 		self.data.loc[txn_idx, "POA Strength"] = labels_str.loc[txn_idx].map(strength_map)
 		self.data.loc[txn_idx, POA_COMPLIANCE_POINTS_COL] = labels_str.loc[txn_idx].map(compliance_map)
-		self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.loc[txn_idx].map(shortfall_map)
+		self.data.loc[txn_idx, POA_SHIFT_FALLBACK_COL] = labels_str.loc[txn_idx].map(shift_map)
+		self.data.loc[txn_idx, POA_ELIGIBILITY_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(elig_map)
+		self.data.loc[txn_idx, POA_COMPLETENESS_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(complete_map)
+		self.data.loc[txn_idx, POA_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(legacy_short_map)
 
 		if "Count of proof before transaction" in self.data.columns:
 			zero_proof = self.transaction_mask & (
@@ -495,7 +535,11 @@ class POAReview:
 			override_mask = zero_proof & labels_str.isin(no_shift_labels)
 			self.data.loc[override_mask, "POA Strength"] = STRENGTH_INSUFFICIENT
 			self.data.loc[override_mask, POA_COMPLIANCE_POINTS_COL] = None
-			self.data.loc[override_mask, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+			self.data.loc[override_mask, POA_SHIFT_FALLBACK_COL] = None
+			self.data.loc[override_mask, POA_ELIGIBILITY_SHORTFALLS_COL] = None
+			msg = "No proof-of-activity rows for this batch"
+			self.data.loc[override_mask, POA_COMPLETENESS_SHORTFALLS_COL] = msg
+			self.data.loc[override_mask, POA_SHORTFALLS_COL] = msg
 
 		self.strength_summary = summarize_strength_results(label_results)
 		return self.data

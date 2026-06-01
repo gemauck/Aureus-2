@@ -1,4 +1,9 @@
 {
+  "rulesMeta": {
+    "version": "2026-06-01",
+    "lastUpdated": "2026-06-01",
+    "description": "Schedule 6 Part 3 strength rules (mining, forestry, farming) with SMR pairing and split eligibility/completeness shortfalls"
+  },
   "defaultSector": "mining",
   "sectorDetection": {
     "mining": {

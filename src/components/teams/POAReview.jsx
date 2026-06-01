@@ -30,15 +30,34 @@ const SOURCE_DETECT_MAX_ROWS = 250000;
 const MAX_ROWS_BROWSER = 50000;
 const BROWSER_ROWS_RECOMMENDED = 15000;
 
-function runPoaAnalysis(rows, sources, extraOptions = {}) {
-    const analyze = typeof window !== 'undefined' && window.analyzePoaRows;
-    if (!analyze || !rows?.length) return null;
-    return analyze(rows, {
+async function runPoaAnalysis(rows, sources, extraOptions = {}) {
+    if (!rows?.length) return null;
+    const full = typeof window !== 'undefined' && window.analyzePoaRowsFull;
+    const basic = typeof window !== 'undefined' && window.analyzePoaRows;
+    const base = {
         sources: sources || [],
         analyzedRowCount: rows.length,
         fileRowHint: rows.length,
         ...extraOptions,
+    };
+    if (full) return full(rows, base);
+    if (basic) return basic(rows, base);
+    return null;
+}
+
+function suggestColumnMapping(headers, resolution) {
+    const mapping = {};
+    const specs = window.COLUMN_SPECS || [];
+    (resolution?.missingRequired || []).forEach((req) => {
+        const spec = specs.find((s) => s.key === req.key);
+        if (!spec) return;
+        const hit = (headers || []).find((h) => {
+            const n = String(h || '').trim().toLowerCase();
+            return spec.aliases.some((a) => a === n);
+        });
+        if (hit) mapping[hit] = req.label;
     });
+    return mapping;
 }
 
 function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
@@ -141,9 +160,16 @@ function PreflightPanel({ preflight, loading, isDark, sourcesSelected }) {
                 </p>
             )}
 
+            {preflight.preflightNote && (
+                <p className={`text-xs rounded p-2 ${isDark ? 'bg-blue-900/30 text-blue-200' : 'bg-blue-50 text-blue-900'}`}>
+                    {preflight.preflightNote}
+                    {preflight.preflightEngine === 'client-estimate' ? ' (estimate only)' : ''}
+                </p>
+            )}
+
             {preflight.strengthSummary && preflight.strengthSummary.totalBatches > 0 && (
                 <div className={`rounded p-2 text-xs ${isDark ? 'bg-slate-700/60 text-slate-300' : 'bg-gray-50 text-gray-700'}`}>
-                    <p className="font-medium mb-1">POA strength preview (rules)</p>
+                    <p className="font-medium mb-1">POA strength preview (server rules)</p>
                     <p>
                         Strong {preflight.strengthSummary.tierCounts?.Strong || 0} · Moderate {preflight.strengthSummary.tierCounts?.Moderate || 0} · Weak {preflight.strengthSummary.tierCounts?.Weak || 0} · Insufficient {preflight.strengthSummary.tierCounts?.Insufficient || 0}
                     </p>
@@ -311,9 +337,51 @@ const POAReview = () => {
     const [preflightLoading, setPreflightLoading] = useState(false);
     const [reportSummary, setReportSummary] = useState(null);
     const parsedRowsRef = useRef(null);
+    const [poaSettings, setPoaSettings] = useState({
+        smrUsageMaxPerActivity: 1000,
+        batchWindowHours: 1,
+        shiftProofWindowHours: 24,
+    });
+    const [rulesMeta, setRulesMeta] = useState(null);
+    const [columnMapping, setColumnMapping] = useState({});
+    const [showColumnMap, setShowColumnMap] = useState(false);
+    const [columnMapDraft, setColumnMapDraft] = useState({});
+    const [columnMapHeaders, setColumnMapHeaders] = useState([]);
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsMessage, setSettingsMessage] = useState('');
 
-    const applyPreflightForSources = useCallback((rows, selectedSources, browserRun = runLocally) => {
-        const result = runPoaAnalysis(rows, selectedSources);
+    React.useEffect(() => {
+        (async () => {
+            try {
+                if (window.fetchPoaRulesMeta) {
+                    const data = await window.fetchPoaRulesMeta();
+                    setRulesMeta(data?.rulesMeta || data);
+                }
+            } catch (e) {
+                console.warn('POA rules meta load failed', e);
+            }
+            try {
+                if (window.fetchPoaSettings) {
+                    const s = await window.fetchPoaSettings();
+                    if (s) setPoaSettings((prev) => ({ ...prev, ...s }));
+                }
+            } catch (e) {
+                console.warn('POA settings load failed', e);
+            }
+        })();
+    }, []);
+
+    React.useEffect(() => {
+        if (sources.length > 0 && window.saveSmrSources) {
+            window.saveSmrSources(sources);
+        }
+    }, [sources]);
+
+    const applyPreflightForSources = useCallback(async (rows, selectedSources, browserRun = runLocally) => {
+        const result = await runPoaAnalysis(rows, selectedSources, {
+            settings: poaSettings,
+            columnMapping,
+        });
         if (result) {
             const rowCount = rows.length;
             if (browserRun && rowCount > MAX_ROWS_BROWSER) {
@@ -336,14 +404,17 @@ const POAReview = () => {
             setPreflight(result);
         }
         return result;
-    }, [runLocally]);
+    }, [runLocally, poaSettings, columnMapping]);
 
-    const finalizeReportSummary = useCallback((selectedSources) => {
+    const finalizeReportSummary = useCallback(async (selectedSources) => {
         const rows = parsedRowsRef.current;
         if (!rows?.length) return;
-        const summary = runPoaAnalysis(rows, selectedSources);
+        const summary = await runPoaAnalysis(rows, selectedSources, {
+            settings: poaSettings,
+            columnMapping,
+        });
         if (summary) setReportSummary(summary);
-    }, []);
+    }, [poaSettings, columnMapping]);
 
     // Parse Excel/CSV file client-side and convert to JSON rows (optional maxRows to limit for source detection)
     const parseFileToRows = useCallback(async (file, maxRows = null) => {
@@ -600,9 +671,23 @@ const POAReview = () => {
             try {
                 const rows = await parseFileToRows(file, SOURCE_DETECT_MAX_ROWS);
                 parsedRowsRef.current = rows;
+                const headers = rows.length ? Object.keys(rows[0]) : [];
+                const getResolution = window.getColumnResolution;
+                if (getResolution) {
+                    const resolution = getResolution(headers);
+                    if (resolution.missingRequired?.length) {
+                        const suggested = suggestColumnMapping(headers, resolution);
+                        setColumnMapHeaders(headers);
+                        setColumnMapDraft(suggested);
+                        setShowColumnMap(true);
+                    }
+                }
                 const unique = getUniqueSourceValuesFromRows(rows);
                 setDocumentSources(unique);
-                applyPreflightForSources(rows, [], runLocally);
+                const saved = window.loadSavedSmrSources ? window.loadSavedSmrSources() : [];
+                const restored = saved.filter((s) => unique.includes(s));
+                if (restored.length) setSources(restored);
+                await applyPreflightForSources(rows, restored.length ? restored : [], runLocally);
             } catch (err) {
                 console.warn('POA Review - Pre-flight analysis failed:', err);
                 setDocumentSources([]);
@@ -751,6 +836,8 @@ const POAReview = () => {
                                 totalBatches,
                                 rows: batch,
                                 sources: sources && sources.length > 0 ? sources : [],
+                                settings: poaSettings,
+                                columnMapping,
                                 fileName,
                                 isFinal,
                             })
@@ -775,6 +862,8 @@ const POAReview = () => {
                                         totalBatches,
                                         rows: batch,
                                         sources: sources && sources.length > 0 ? sources : [],
+                                settings: poaSettings,
+                                columnMapping,
                                         fileName,
                                         isFinal,
                                     })
@@ -870,7 +959,7 @@ const POAReview = () => {
             console.error('POA Review - Chunked processing error:', error);
             throw error;
         }
-    }, [sources, finalizeReportSummary]);
+    }, [sources, finalizeReportSummary, poaSettings, columnMapping]);
 
     const toggleDocumentSource = useCallback((sourceName) => {
         setSources(prev => prev.includes(sourceName) ? prev.filter(s => s !== sourceName) : [...prev, sourceName]);
@@ -944,6 +1033,8 @@ const POAReview = () => {
                 const csvString = csvLines.join('\n');
                 const optionsJson = JSON.stringify({
                     sources: sources || ['Inmine: Daily Diesel Issues'],
+                    settings: poaSettings,
+                    columnMapping,
                 });
                 setProcessingProgress(`Starting Python (tab will stay responsive)…`);
                 setProcessingProgressPercent(15);
@@ -1035,6 +1126,8 @@ self.onmessage = async (e) => {
                 let formData = new FormData();
                 formData.append('file', uploadedFile);
                 formData.append('sources', JSON.stringify(sources));
+                formData.append('settings', JSON.stringify(poaSettings));
+                formData.append('columnMapping', JSON.stringify(columnMapping || {}));
                 const token = window.storage?.getToken?.() || '';
                 const maxRetries = 2;
                 const retryDelay = 2000;
@@ -1049,6 +1142,8 @@ self.onmessage = async (e) => {
                             const retryFormData = new FormData();
                             retryFormData.append('file', uploadedFile);
                             retryFormData.append('sources', JSON.stringify(sources));
+                            retryFormData.append('settings', JSON.stringify(poaSettings));
+                            retryFormData.append('columnMapping', JSON.stringify(columnMapping || {}));
                             formData = retryFormData;
                         }
                         response = await fetch('/api/poa-review/process-excel', {
@@ -1132,7 +1227,7 @@ self.onmessage = async (e) => {
         } finally {
             setIsProcessing(false);
         }
-    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary]);
+    }, [uploadedFile, sources, runLocally, parseFileToRows, handleChunkedUpload, preflight, finalizeReportSummary, poaSettings, columnMapping]);
 
     const handleDownload = useCallback(() => {
         if (downloadUrl) {
@@ -1239,6 +1334,131 @@ self.onmessage = async (e) => {
                     sourcesSelected={sources.length}
                 />
             )}
+
+            {showColumnMap && (
+                <div className={`rounded-lg border p-4 space-y-3 ${isDark ? 'bg-amber-900/20 border-amber-700' : 'bg-amber-50 border-amber-200'}`}>
+                    <h4 className={`text-sm font-semibold ${isDark ? 'text-amber-100' : 'text-amber-900'}`}>
+                        Map columns
+                    </h4>
+                    <p className={`text-xs ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>
+                        Match your file headers to the fields POA Review expects. Required fields must be mapped before processing.
+                    </p>
+                    {['Transaction ID', 'Asset Number', 'Date & Time', 'Opening SMR', 'Closing SMR', 'Total SMR Usage', 'Source', 'Activity'].map((target) => (
+                        <label key={target} className="block text-xs">
+                            <span className={isDark ? 'text-slate-300' : 'text-gray-700'}>{target}</span>
+                            <select
+                                value={Object.entries(columnMapDraft).find(([, t]) => t === target)?.[0] || ''}
+                                onChange={(e) => {
+                                    const header = e.target.value;
+                                    setColumnMapDraft((prev) => {
+                                        const next = { ...prev };
+                                        Object.keys(next).forEach((k) => {
+                                            if (next[k] === target) delete next[k];
+                                        });
+                                        if (header) next[header] = target;
+                                        return next;
+                                    });
+                                }}
+                                className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
+                                    isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
+                                }`}
+                            >
+                                <option value="">— not mapped —</option>
+                                {columnMapHeaders.map((h) => (
+                                    <option key={h} value={h}>{h}</option>
+                                ))}
+                            </select>
+                        </label>
+                    ))}
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                setColumnMapping(columnMapDraft);
+                                setShowColumnMap(false);
+                                const rows = parsedRowsRef.current;
+                                if (rows?.length) {
+                                    setPreflightLoading(true);
+                                    await applyPreflightForSources(rows, sources, runLocally);
+                                    setPreflightLoading(false);
+                                }
+                            }}
+                            className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                            Apply mapping
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowColumnMap(false)}
+                            className={`px-3 py-2 rounded-lg text-sm ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-200 text-gray-800'}`}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                    Processing thresholds
+                </h4>
+                <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                    Org-wide defaults (saved for all users with access). Used for batch grouping, shift POA fallback window, and large SMR checks.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                        { key: 'batchWindowHours', label: 'Batch window (hours)', step: '0.5' },
+                        { key: 'shiftProofWindowHours', label: 'Shift fallback window (hours)', step: '1' },
+                        { key: 'smrUsageMaxPerActivity', label: 'Max SMR delta per activity row', step: '1' },
+                    ].map((field) => (
+                        <label key={field.key} className="block text-xs">
+                            <span className={isDark ? 'text-slate-400' : 'text-gray-600'}>{field.label}</span>
+                            <input
+                                type="number"
+                                min="0"
+                                step={field.step}
+                                value={poaSettings[field.key] ?? ''}
+                                onChange={(e) =>
+                                    setPoaSettings((s) => ({
+                                        ...s,
+                                        [field.key]: parseFloat(e.target.value) || 0,
+                                    }))
+                                }
+                                className={`mt-1 w-full px-2 py-1.5 rounded border text-sm ${
+                                    isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'
+                                }`}
+                            />
+                        </label>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                    <button
+                        type="button"
+                        disabled={settingsSaving}
+                        onClick={async () => {
+                            if (!window.savePoaSettings) return;
+                            setSettingsSaving(true);
+                            setSettingsMessage('');
+                            try {
+                                await window.savePoaSettings(poaSettings);
+                                setSettingsMessage('Saved.');
+                                const rows = parsedRowsRef.current;
+                                if (rows?.length) await applyPreflightForSources(rows, sources, runLocally);
+                            } catch (e) {
+                                setSettingsMessage(e.message || 'Save failed');
+                            } finally {
+                                setSettingsSaving(false);
+                            }
+                        }}
+                        className="px-3 py-2 rounded-lg text-sm font-medium bg-slate-600 text-white hover:bg-slate-500 disabled:opacity-50"
+                    >
+                        {settingsSaving ? 'Saving…' : 'Save thresholds'}
+                    </button>
+                    {settingsMessage && (
+                        <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{settingsMessage}</span>
+                    )}
+                </div>
+            </div>
 
             {/* Sources Configuration */}
             <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
@@ -1499,7 +1719,16 @@ self.onmessage = async (e) => {
                     <li>• Scores POA strength per dispense batch (Strong / Moderate / Weak / Insufficient) using Schedule 6 rules — sector-aware for mining, forestry, and farming</li>
                     <li>• Reads all proof-row fields (not only Activity) — e.g. coal in Material + transport in Activity counts as eligible in-pit haul where rules apply</li>
                     <li>• Eligible operations list aligned to your SARS spreadsheet (mining, forestry, farming)</li>
-                    <li>• Adds POA Compliance Points and Shortfalls columns from the rules engine (fast, no external API calls)</li>
+                    <li>• Adds POA Compliance Points, Eligibility vs Completeness shortfalls, and Shift POA Fallback flag</li>
+                    <li>• Pre-flight strength uses the same server rules as the Excel report</li>
+                    {rulesMeta && (
+                        <li>
+                            • Rules version: {rulesMeta.version || '—'}
+                            {rulesMeta.lastUpdated && rulesMeta.lastUpdated !== rulesMeta.version
+                                ? ` (updated ${rulesMeta.lastUpdated})`
+                                : ''}
+                        </li>
+                    )}
                 </ul>
             </div>
         </div>

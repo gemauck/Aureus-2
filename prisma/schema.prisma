@@ -2387,6 +2387,8 @@ model SystemSettings {
   safetyCultureApiKey   String?
   /// Next sequence for Client Allocation QuickBooks journal export (Stock-01, Stock-02, …).
   clientAllocationJournalSeq Int @default(0)
+  /// JSON: POA Review thresholds (smrUsageMaxPerActivity, batchWindowHours, shiftProofWindowHours)
+  poaReviewSettingsJson String @default("{}")
   updatedBy             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

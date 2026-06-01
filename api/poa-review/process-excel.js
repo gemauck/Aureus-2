@@ -14,6 +14,8 @@ import { withHttp } from '../_lib/withHttp.js';
 import { withLogging } from '../_lib/logger.js';
 import { authRequired } from '../_lib/authRequired.js';
 import { badRequest, serverError, ok } from '../_lib/response.js';
+import { prisma } from '../_lib/prisma.js';
+import { loadPoaReviewSettings, normalizePoaReviewSettings } from './_lib/poaReviewSettings.js';
 import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
@@ -54,6 +56,8 @@ async function handler(req, res) {
         let safeFileName = '';
         let timestamp = 0;
         let sources = ['Inmine: Daily Diesel Issues'];
+        let clientSettings = {};
+        let columnMapping = {};
         let fileReceived = false;
         let writeStream = null;
 
@@ -111,6 +115,16 @@ async function handler(req, res) {
                     try {
                         sources = JSON.parse(value);
                     } catch (e) { /* keep default */ }
+                }
+                if (name === 'settings') {
+                    try {
+                        clientSettings = JSON.parse(value);
+                    } catch (e) { /* ignore */ }
+                }
+                if (name === 'columnMapping') {
+                    try {
+                        columnMapping = JSON.parse(value);
+                    } catch (e) { /* ignore */ }
                 }
             });
 
@@ -198,6 +212,9 @@ async function handler(req, res) {
         const convertOutput = throwIfPythonFailed(convertRun, 'Excel conversion');
         console.log('POA Review Excel API - Conversion output:', convertOutput.substring(0, 500));
 
+        const orgSettings = await loadPoaReviewSettings(prisma);
+        const settings = normalizePoaReviewSettings({ ...orgSettings, ...clientSettings });
+
         // Step 2: Process CSV with shared POA pipeline script
         console.log('POA Review Excel API - Processing CSV with Python...');
         const processRun = await runPythonScript(
@@ -207,6 +224,8 @@ async function handler(req, res) {
                 outputFilePath,
                 JSON.stringify(sources),
                 String(MAX_ROWS),
+                JSON.stringify(settings),
+                JSON.stringify(columnMapping || {}),
             ],
             { timeout: 600000, label: 'process' }
         );

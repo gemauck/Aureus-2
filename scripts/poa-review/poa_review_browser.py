@@ -15,10 +15,15 @@ try:
         COMPLIANCE_POINTS_FILL,
         SHORTFALLS_COLUMN_FILL,
         POA_COMPLIANCE_POINTS_COL,
+        POA_SHIFT_FALLBACK_COL,
+        POA_ELIGIBILITY_SHORTFALLS_COL,
+        POA_COMPLETENESS_SHORTFALLS_COL,
+        POA_SHORTFALLS_COL,
         evaluate_all_labels,
         format_shortfalls,
         compliance_points_from_result,
         summarize_strength_results,
+        normalize_poa_settings,
     )
 except ModuleNotFoundError:
     # Pyodide bundle: evaluator code is exec'd in the same namespace above this import.
@@ -34,7 +39,9 @@ REVIEW_COLS = [
     "Total Fuel Used (L)", "Operation Description / Comment", "Refund Eligibility", "Opening SMR",
     "Closing SMR", "Total SMR Usage", "Material", "Location.1", "Loads / Tonnes", "Activity",
     "Comments", "Source", "Custom Attribute", "No POA Asset", "Count of proof before transaction",
-    "Time since last activity", "total smr", "POA Strength", POA_COMPLIANCE_POINTS_COL, "POA Shortfalls"
+    "Time since last activity", "total smr", "POA Strength", POA_COMPLIANCE_POINTS_COL,
+    POA_SHIFT_FALLBACK_COL, POA_ELIGIBILITY_SHORTFALLS_COL, POA_COMPLETENESS_SHORTFALLS_COL,
+    POA_SHORTFALLS_COL,
 ]
 
 
@@ -150,8 +157,9 @@ def _write_only_excel(
 
 
 class POAReview:
-    def __init__(self, per_asset_report):
+    def __init__(self, per_asset_report, options=None):
         self.data = per_asset_report
+        self.options = options if isinstance(options, dict) else {}
         txn_id_str = self.data["Transaction ID"].astype(str).str.strip()
         self.transaction_mask = (
             self.data["Transaction ID"].notna()
@@ -167,10 +175,11 @@ class POAReview:
                 self.data[col] = self.data[col].astype("category")
 
     def mark_consecutive_transactions(self):
+        window_h = float(self.options.get("batchWindowHours") or 1)
         time_between = self.data.loc[self.transaction_mask, "Date & Time"].diff()
         self.data.loc[self.transaction_mask, "is consec"] = np.where(
             (time_between > pd.Timedelta(hours=0))
-            & (time_between < pd.Timedelta(hours=1)),
+            & (time_between < pd.Timedelta(hours=window_h)),
             0,
             1,
         ).astype(np.int8)
@@ -257,14 +266,28 @@ class POAReview:
     def evaluate_poa_strength(self):
         if "label" not in self.data.columns:
             self.label_rows()
-        label_results = evaluate_all_labels(self.data, self.proof_mask, self.transaction_mask)
+        settings = self.options.get("settings")
+        label_results = evaluate_all_labels(
+            self.data,
+            self.proof_mask,
+            self.transaction_mask,
+            settings=settings,
+        )
         self._label_results = label_results
         self._apply_label_results(label_results)
         return self.data
 
     def _apply_label_results(self, label_results):
         strength_map = {label: res["strength"] for label, res in label_results.items()}
-        shortfall_map = {
+        elig_map = {
+            label: format_shortfalls(res.get("activityShortfalls") or [])
+            for label, res in label_results.items()
+        }
+        complete_map = {
+            label: format_shortfalls(res.get("completenessShortfalls") or [])
+            for label, res in label_results.items()
+        }
+        legacy_map = {
             label: format_shortfalls(res.get("shortfalls") or [])
             for label, res in label_results.items()
         }
@@ -272,14 +295,24 @@ class POAReview:
             label: compliance_points_from_result(res)
             for label, res in label_results.items()
         }
+        shift_map = {
+            label: ("Yes" if res.get("shiftProofApplied") else None)
+            for label, res in label_results.items()
+        }
         self.data["POA Strength"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
         self.data[POA_COMPLIANCE_POINTS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
-        self.data["POA Shortfalls"] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        self.data[POA_SHIFT_FALLBACK_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        self.data[POA_ELIGIBILITY_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        self.data[POA_COMPLETENESS_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
+        self.data[POA_SHORTFALLS_COL] = pd.Series([None] * len(self.data), index=self.data.index, dtype=object)
         labels_str = self.data["label"].astype(str)
         txn_idx = self.data.index[self.transaction_mask]
         self.data.loc[txn_idx, "POA Strength"] = labels_str.loc[txn_idx].map(strength_map)
         self.data.loc[txn_idx, POA_COMPLIANCE_POINTS_COL] = labels_str.loc[txn_idx].map(compliance_map)
-        self.data.loc[txn_idx, "POA Shortfalls"] = labels_str.loc[txn_idx].map(shortfall_map)
+        self.data.loc[txn_idx, POA_SHIFT_FALLBACK_COL] = labels_str.loc[txn_idx].map(shift_map)
+        self.data.loc[txn_idx, POA_ELIGIBILITY_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(elig_map)
+        self.data.loc[txn_idx, POA_COMPLETENESS_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(complete_map)
+        self.data.loc[txn_idx, POA_SHORTFALLS_COL] = labels_str.loc[txn_idx].map(legacy_map)
         if "Count of proof before transaction" in self.data.columns:
             zero_proof = self.transaction_mask & (
                 pd.to_numeric(self.data["Count of proof before transaction"], errors="coerce").fillna(0) == 0
@@ -290,7 +323,11 @@ class POAReview:
             override_mask = zero_proof & labels_str.isin(no_shift_labels)
             self.data.loc[override_mask, "POA Strength"] = STRENGTH_INSUFFICIENT
             self.data.loc[override_mask, POA_COMPLIANCE_POINTS_COL] = None
-            self.data.loc[override_mask, "POA Shortfalls"] = "No proof-of-activity rows for this batch"
+            self.data.loc[override_mask, POA_SHIFT_FALLBACK_COL] = None
+            self.data.loc[override_mask, POA_ELIGIBILITY_SHORTFALLS_COL] = None
+            msg = "No proof-of-activity rows for this batch"
+            self.data.loc[override_mask, POA_COMPLETENESS_SHORTFALLS_COL] = msg
+            self.data.loc[override_mask, POA_SHORTFALLS_COL] = msg
         self.strength_summary = summarize_strength_results(label_results)
         return self.data
 
@@ -307,7 +344,7 @@ def _strength_fill_series(review, output_cols):
     return pd.Series(fills, index=review.index)
 
 
-def _build_review_from_csv(sources):
+def _build_review_from_csv(sources, options=None):
     data = pd.read_csv(INPUT_CSV, low_memory=True, dtype=str, na_values=[""])
     required = {
         "Transaction ID": ["transaction id", "transactionid", "txn id", "txnid"],
@@ -335,7 +372,11 @@ def _build_review_from_csv(sources):
     for c in REVIEW_COLS:
         if c not in data.columns:
             data[c] = np.nan
-    review = POAReview(data)
+    opts = dict(options or {})
+    cfg = normalize_poa_settings(opts.get("settings"))
+    opts["batchWindowHours"] = cfg.get("batchWindowHours", 1)
+    opts["settings"] = cfg
+    review = POAReview(data, opts)
     review.mark_consecutive_transactions()
     review.label_rows()
     review.mark_no_poa_assets()
@@ -353,7 +394,10 @@ def _write_output_excel(review, original_columns):
         "total smr",
         "POA Strength",
         POA_COMPLIANCE_POINTS_COL,
-        "POA Shortfalls",
+        POA_SHIFT_FALLBACK_COL,
+        POA_ELIGIBILITY_SHORTFALLS_COL,
+        POA_COMPLETENESS_SHORTFALLS_COL,
+        POA_SHORTFALLS_COL,
     ]
     output_cols = [c for c in original_columns if c in review.data.columns and c not in COMPUTED_COLS] + [
         c for c in COMPUTED_COLS if c in review.data.columns
@@ -373,7 +417,11 @@ def _write_output_excel(review, original_columns):
     yellow_col_index = output_cols.index("Total SMR Usage") if "Total SMR Usage" in output_cols else -1
     strength_col_index = output_cols.index("POA Strength") if "POA Strength" in output_cols else -1
     compliance_col_index = output_cols.index(POA_COMPLIANCE_POINTS_COL) if POA_COMPLIANCE_POINTS_COL in output_cols else -1
-    shortfalls_col_index = output_cols.index("POA Shortfalls") if "POA Shortfalls" in output_cols else -1
+    shortfalls_col_index = (
+        output_cols.index(POA_COMPLETENESS_SHORTFALLS_COL)
+        if POA_COMPLETENESS_SHORTFALLS_COL in output_cols
+        else -1
+    )
     strength_row_fills = _strength_fill_series(review.data, output_cols)
 
     _write_only_excel(
@@ -395,7 +443,7 @@ def run():
     with open(OPTIONS_JSON, "r") as f:
         options = json.load(f)
     sources = options.get("sources", ["Inmine: Daily Diesel Issues"])
-    review, original_columns = _build_review_from_csv(sources)
+    review, original_columns = _build_review_from_csv(sources, options)
     review.evaluate_poa_strength()
     _write_output_excel(review, original_columns)
 

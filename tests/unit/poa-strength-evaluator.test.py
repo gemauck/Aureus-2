@@ -479,6 +479,29 @@ def test_open_close_per_row_delta_not_summed():
     assert any("2 opening/closing" in n for n in batch["smrNotes"])
 
 
+def test_split_shortfalls_activity_vs_completeness():
+    rules = load_rules()
+    batch = aggregate_proof_batch(
+        pd.DataFrame(
+            [
+                {
+                    "Transaction ID": "",
+                    "Asset Number": "SB-1",
+                    "Activity": "Standby / Idle",
+                    "Location.1": "north pit",
+                    "Material": "coal",
+                    "Total SMR Usage": 1,
+                }
+            ]
+        ),
+        rules,
+    )
+    result = evaluate_batch_rules(batch, rules)
+    assert result["criteria"]["activity"] is False
+    assert len(result.get("activityShortfalls") or []) >= 1
+    assert any("intensity" in s.lower() for s in (result.get("completenessShortfalls") or [])) or result["criteria"]["location"]
+
+
 def test_load_and_haul_activity_does_not_imply_intensity():
     rules = load_rules()
     batch = {
