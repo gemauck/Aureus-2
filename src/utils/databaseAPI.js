@@ -2183,6 +2183,12 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getInventoryWacCostHistory(sku) {
+        const params = new URLSearchParams();
+        params.set('sku', String(sku).trim());
+        return this.makeRequest(`/manufacturing/inventory/wac-cost-history?${params.toString()}`);
+    },
+
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
     async getStockMovements(options = {}) {
         const page = parseInt(options?.page, 10);

@@ -38,6 +38,7 @@ import {
   applyCatalogWeightedAverageCostTx,
   syncCatalogTotalValueForSkuTx
 } from './_lib/weightedAverageUnitCost.js'
+import { buildInventoryWacCostHistory } from './_lib/inventoryWacCostHistory.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
   buildCombinedMovementNetBySkuFromMovementRows,
@@ -2990,6 +2991,25 @@ async function handler(req, res) {
       } catch (error) {
         console.error('❌ Failed to list inventory:', error)
         return serverError(res, 'Failed to list inventory', error.message)
+      }
+    }
+
+    // GET WAC cost history for export (GET /api/manufacturing/inventory/wac-cost-history?sku=)
+    if (req.method === 'GET' && id === 'wac-cost-history') {
+      try {
+        let sku = req.query?.sku
+        if (!sku && req.url) {
+          const qs = req.url.split('?')[1]
+          if (qs) sku = new URLSearchParams(qs).get('sku')
+        }
+        if (!sku || !String(sku).trim()) {
+          return badRequest(res, 'sku query parameter is required')
+        }
+        const history = await buildInventoryWacCostHistory(prisma, String(sku).trim())
+        return ok(res, { history })
+      } catch (error) {
+        console.error('❌ Failed to build WAC cost history:', error)
+        return serverError(res, 'Failed to build WAC cost history', error.message)
       }
     }
 

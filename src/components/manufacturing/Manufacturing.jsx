@@ -13942,6 +13942,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     /** Loaded per SKU via GET .../stock-movements?sku= — not the global 120-row preload (see loadData). */
     const [skuLedgerMovements, setSkuLedgerMovements] = useState(null);
     const [skuLedgerLoading, setSkuLedgerLoading] = useState(false);
+    const [wacExporting, setWacExporting] = useState(false);
 
     useEffect(() => {
       if (!item?.sku) {
@@ -14193,6 +14194,125 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const availableQty = detailMetrics.available;
     const computedDetailStatus = detailMetrics.status;
     const catalogLineTotalValue = inventoryRowTotalValueForQuantity(item, displayQuantity);
+
+    const handleDownloadWacDetail = async () => {
+      if (!item?.sku) return;
+      if (!window.DatabaseAPI?.getInventoryWacCostHistory) {
+        window.alert('WAC export is not available. Please refresh the page.');
+        return;
+      }
+      setWacExporting(true);
+      try {
+        const res = await window.DatabaseAPI.getInventoryWacCostHistory(item.sku);
+        const history = res?.data?.history || res?.history;
+        if (!history) throw new Error('No WAC history returned from server');
+
+        const fmtDateTime = (d) => {
+          if (!d) return '';
+          const dt = new Date(d);
+          return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+        };
+
+        const summaryAoa = [
+          ['Field', 'Value'],
+          ['SKU', history.sku],
+          ['Name', history.name],
+          ['Generated', fmtDateTime(history.generatedAt)],
+          ['On hand (current)', history.currentCatalog?.quantityOnHand ?? ''],
+          ['Average unit cost (catalog)', history.currentCatalog?.averageUnitCost ?? ''],
+          ['Latest unit price', history.currentCatalog?.latestUnitPrice ?? ''],
+          ['Last priced receipt', fmtDateTime(history.currentCatalog?.lastInboundAt)],
+          ['Replay end — on hand', history.replayEndState?.quantityOnHand ?? ''],
+          ['Replay end — average cost', history.replayEndState?.averageUnitCost ?? ''],
+          ['', ''],
+          ['Disclaimer', history.disclaimer || '']
+        ];
+
+        const stepHeaders = [
+          'Seq',
+          'Date',
+          'Event type',
+          'Source / reference',
+          'Inbound qty',
+          'Unit price',
+          'On-hand before',
+          'Avg cost before',
+          'On-hand after',
+          'Avg cost after',
+          'User',
+          'Why / reason',
+          'Notes',
+          'WAC calculation'
+        ];
+        const stepAoa = [
+          stepHeaders,
+          ...(history.steps || []).map((s) => [
+            s.seq,
+            fmtDateTime(s.date),
+            s.eventType,
+            s.source,
+            s.inboundQty,
+            s.unitPrice,
+            s.onHandBefore,
+            s.averageCostBefore,
+            s.onHandAfter,
+            s.averageCostAfter,
+            s.performedBy,
+            s.userReason,
+            s.notes,
+            s.wacFormula
+          ])
+        ];
+
+        const safeSku = String(history.sku || 'item').replace(/[^\w.-]+/g, '_');
+        const today = new Date().toISOString().split('T')[0];
+        const baseName = `wac_detail_${safeSku}_${today}`;
+
+        let XLSXLib = window.XLSX;
+        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          XLSXLib = window.XLSX;
+        }
+
+        if (XLSXLib?.utils) {
+          const wb = XLSXLib.utils.book_new();
+          XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(summaryAoa), 'Summary');
+          XLSXLib.utils.book_append_sheet(wb, XLSXLib.utils.aoa_to_sheet(stepAoa), 'WAC calculation');
+          const out = XLSXLib.write(wb, { bookType: 'xlsx', type: 'array' });
+          const blob = new Blob([out], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${baseName}.xlsx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        } else {
+          const csvEscape = (v) => {
+            const s = String(v ?? '');
+            return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          };
+          const lines = stepAoa.map((row) => row.map(csvEscape).join(','));
+          const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${baseName}.csv`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
+      } catch (err) {
+        console.error('WAC detail export failed:', err);
+        window.alert(err?.message || 'Failed to download WAC detail');
+      } finally {
+        setWacExporting(false);
+      }
+    };
 
     const handleSaveEdit = async () => {
       try {
@@ -14837,7 +14957,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       <p className="text-sm font-semibold text-gray-900">{item.reorderQty || '-'} {item.unit}</p>
                     </div>
                     <div className="col-span-2 border-t border-gray-100 pt-3 mt-1">
-                      <p className="text-xs font-medium text-gray-600 mb-2">Costing (company-wide)</p>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <p className="text-xs font-medium text-gray-600">Costing (company-wide)</p>
+                        <button
+                          type="button"
+                          onClick={() => void handleDownloadWacDetail()}
+                          disabled={wacExporting || !item.sku}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50"
+                          title="Download how average cost was built from receipts and overrides"
+                        >
+                          <i className={`fas ${wacExporting ? 'fa-spinner fa-spin' : 'fa-file-excel'}`} />
+                          {wacExporting ? 'Preparing…' : 'Download WAC detail'}
+                        </button>
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Average unit cost</p>
