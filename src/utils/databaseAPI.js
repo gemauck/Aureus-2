@@ -1711,15 +1711,49 @@ const DatabaseAPI = {
         return response;
     },
 
+    _inventoryStockViewStorageKey() {
+        return 'erp_inventory_stock_view';
+    },
+
+    _readInventoryStockViewFromStorage() {
+        try {
+            const raw = localStorage.getItem(this._inventoryStockViewStorageKey());
+            const mode = String(raw || '').trim().toLowerCase();
+            return ['all', 'in_stock', 'out_of_stock'].includes(mode) ? mode : null;
+        } catch {
+            return null;
+        }
+    },
+
+    _writeInventoryStockViewToStorage(mode) {
+        try {
+            localStorage.setItem(this._inventoryStockViewStorageKey(), mode);
+        } catch {
+            /* ignore quota / private mode */
+        }
+    },
+
     async getInventoryStockViewPreference() {
-        const response = await this.getSettings();
-        const settings = response?.data?.settings || response?.settings || {};
-        return settings.inventoryStockView || 'all';
+        try {
+            const response = await this.getSettings();
+            const settings = response?.data?.settings || response?.settings || {};
+            const mode = settings.inventoryStockView || 'all';
+            this._writeInventoryStockViewToStorage(mode);
+            return mode;
+        } catch {
+            return this._readInventoryStockViewFromStorage() || 'all';
+        }
     },
 
     async updateInventoryStockViewPreference(mode) {
         const normalized = ['all', 'in_stock', 'out_of_stock'].includes(mode) ? mode : 'all';
-        return this.updateSettings({ inventoryStockView: normalized });
+        this._writeInventoryStockViewToStorage(normalized);
+        try {
+            return await this.updateSettings({ inventoryStockView: normalized });
+        } catch (error) {
+            console.warn('Inventory stock view preference saved locally only (settings API failed)', error);
+            return { data: { settings: { inventoryStockView: normalized } } };
+        }
     },
 
     async getCrmClientsStatusFilterPreference() {

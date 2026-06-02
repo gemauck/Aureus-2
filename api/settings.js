@@ -26,6 +26,87 @@ const USER_SETTINGS_DEFAULTS = {
 const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
 const CRM_CLIENTS_STATUS_FILTER_OPTIONS = ['all', 'active', 'inactive'];
 
+/** Columns added after initial UserSettings deploy — absent on some production DBs until migrated. */
+const DRIFT_OPTIONAL_COLUMNS = ['inventoryStockView', 'crmClientsStatusFilter'];
+
+function isUserSettingsSchemaDriftError(error) {
+    const msg = String(error?.message || '');
+    return (
+        error?.code === 'P2022' ||
+        DRIFT_OPTIONAL_COLUMNS.some((col) => msg.includes(col))
+    );
+}
+
+function stripDriftColumns(fields) {
+    const out = { ...fields };
+    for (const col of DRIFT_OPTIONAL_COLUMNS) {
+        delete out[col];
+    }
+    return out;
+}
+
+function pickDriftOverrides(updateFields) {
+    const overrides = {};
+    for (const col of DRIFT_OPTIONAL_COLUMNS) {
+        if (updateFields[col] !== undefined) {
+            overrides[col] = updateFields[col];
+        }
+    }
+    return overrides;
+}
+
+function mergeSettingsResponse(row, driftOverrides = {}) {
+    const base = row
+        ? {
+            ...USER_SETTINGS_DEFAULTS,
+            ...row,
+            inventoryStockView:
+                normalizeInventoryStockView(row.inventoryStockView) ??
+                USER_SETTINGS_DEFAULTS.inventoryStockView,
+            crmClientsStatusFilter:
+                normalizeCrmClientsStatusFilter(row.crmClientsStatusFilter) ??
+                USER_SETTINGS_DEFAULTS.crmClientsStatusFilter
+        }
+        : { ...USER_SETTINGS_DEFAULTS };
+    return { ...base, ...driftOverrides };
+}
+
+function buildSettingsUpdate(body) {
+    return {
+        timezone: body.timezone !== undefined ? body.timezone : undefined,
+        currency: body.currency !== undefined ? body.currency : undefined,
+        dateFormat: body.dateFormat !== undefined ? body.dateFormat : undefined,
+        language: body.language !== undefined ? body.language : undefined,
+        sessionTimeout: body.sessionTimeout !== undefined ? body.sessionTimeout : undefined,
+        requirePasswordChange: body.requirePasswordChange !== undefined ? body.requirePasswordChange : undefined,
+        twoFactorAuth: body.twoFactorAuth !== undefined ? body.twoFactorAuth : undefined,
+        auditLogging: body.auditLogging !== undefined ? body.auditLogging : undefined,
+        emailProvider: body.emailProvider !== undefined ? body.emailProvider : undefined,
+        googleCalendar: body.googleCalendar !== undefined ? body.googleCalendar : undefined,
+        quickbooks: body.quickbooks !== undefined ? body.quickbooks : undefined,
+        slack: body.slack !== undefined ? body.slack : undefined,
+        inventoryStockView: body.inventoryStockView !== undefined
+            ? (normalizeInventoryStockView(body.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView)
+            : undefined,
+        crmClientsStatusFilter: body.crmClientsStatusFilter !== undefined
+            ? (normalizeCrmClientsStatusFilter(body.crmClientsStatusFilter) ?? USER_SETTINGS_DEFAULTS.crmClientsStatusFilter)
+            : undefined
+    };
+}
+
+async function upsertUserSettings(userId, updateFields) {
+    const filtered = Object.fromEntries(Object.entries(updateFields).filter(([, v]) => v !== undefined));
+    return prisma.userSettings.upsert({
+        where: { userId },
+        update: filtered,
+        create: {
+            userId,
+            ...USER_SETTINGS_DEFAULTS,
+            ...filtered
+        }
+    });
+}
+
 function normalizeInventoryStockView(value) {
     const normalized = String(value || '').trim().toLowerCase();
     return INVENTORY_STOCK_VIEW_OPTIONS.includes(normalized) ? normalized : null;
@@ -104,39 +185,48 @@ async function handler(req, res) {
     if (req.method === 'PUT') {
         try {
             const body = req.body || await parseJsonBody(req);
-            const update = {
-                timezone: body.timezone !== undefined ? body.timezone : undefined,
-                currency: body.currency !== undefined ? body.currency : undefined,
-                dateFormat: body.dateFormat !== undefined ? body.dateFormat : undefined,
-                language: body.language !== undefined ? body.language : undefined,
-                sessionTimeout: body.sessionTimeout !== undefined ? body.sessionTimeout : undefined,
-                requirePasswordChange: body.requirePasswordChange !== undefined ? body.requirePasswordChange : undefined,
-                twoFactorAuth: body.twoFactorAuth !== undefined ? body.twoFactorAuth : undefined,
-                auditLogging: body.auditLogging !== undefined ? body.auditLogging : undefined,
-                emailProvider: body.emailProvider !== undefined ? body.emailProvider : undefined,
-                googleCalendar: body.googleCalendar !== undefined ? body.googleCalendar : undefined,
-                quickbooks: body.quickbooks !== undefined ? body.quickbooks : undefined,
-                slack: body.slack !== undefined ? body.slack : undefined,
-                inventoryStockView: body.inventoryStockView !== undefined
-                    ? (normalizeInventoryStockView(body.inventoryStockView) ?? USER_SETTINGS_DEFAULTS.inventoryStockView)
-                    : undefined,
-                crmClientsStatusFilter: body.crmClientsStatusFilter !== undefined
-                    ? (normalizeCrmClientsStatusFilter(body.crmClientsStatusFilter) ?? USER_SETTINGS_DEFAULTS.crmClientsStatusFilter)
-                    : undefined
-            };
-            const filtered = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined));
-            const settings = await prisma.userSettings.upsert({
-                where: { userId },
-                update: filtered,
-                create: {
-                    userId,
-                    ...USER_SETTINGS_DEFAULTS,
-                    ...filtered
-                }
-            });
+            const updateFields = buildSettingsUpdate(body);
+            const driftOverrides = pickDriftOverrides(updateFields);
             const companyName = await getCompanyName();
-            return ok(res, { settings, companyName });
+
+            try {
+                const settings = await upsertUserSettings(userId, updateFields);
+                return ok(res, { settings: mergeSettingsResponse(settings, driftOverrides), companyName });
+            } catch (error) {
+                if (!isUserSettingsSchemaDriftError(error)) {
+                    throw error;
+                }
+                console.warn(
+                    'Update user settings: schema drift, retrying without optional columns:',
+                    error.message
+                );
+                const persistable = stripDriftColumns(updateFields);
+                const hasPersistable = Object.keys(
+                    Object.fromEntries(Object.entries(persistable).filter(([, v]) => v !== undefined))
+                ).length > 0;
+                let row = null;
+                if (hasPersistable) {
+                    row = await upsertUserSettings(userId, persistable);
+                } else {
+                    row = await prisma.userSettings.findUnique({ where: { userId } });
+                }
+                return ok(res, {
+                    settings: mergeSettingsResponse(row, driftOverrides),
+                    companyName
+                });
+            }
         } catch (error) {
+            if (isUserSettingsSchemaDriftError(error)) {
+                console.warn('Update user settings: schema drift on fallback:', error.message);
+                const body = req.body || {};
+                const updateFields = buildSettingsUpdate(body);
+                const driftOverrides = pickDriftOverrides(updateFields);
+                const companyName = await getCompanyName().catch(() => 'Abcotronics');
+                return ok(res, {
+                    settings: mergeSettingsResponse(null, driftOverrides),
+                    companyName
+                });
+            }
             console.error('Update user settings error:', error);
             return serverError(res, 'Failed to update settings', error.message);
         }
