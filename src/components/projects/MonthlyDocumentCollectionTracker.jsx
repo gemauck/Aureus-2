@@ -3330,6 +3330,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
         const ordered = getOrderedDocumentRows(section);
         const parentRowIndex = ordered.findIndex(r => r.doc.id === parentDoc.id);
         if (parentRowIndex === -1) return;
+        const { end: blockEnd } = getDragBlockRange(section, parentRowIndex);
         const newDoc = {
             id: Date.now(),
             name: 'New sub-document',
@@ -3342,7 +3343,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
             parentId: parentDoc.id
         };
         const newOrdered = [...ordered];
-        newOrdered.splice(parentRowIndex + 1, 0, { doc: newDoc, isSubRow: true });
+        newOrdered.splice(blockEnd + 1, 0, { doc: newDoc, isSubRow: true });
         const newDocuments = newOrdered.map(r => r.doc);
         setSections(prev => prev.map(sec => String(sec.id) === String(sectionId) ? { ...sec, documents: newDocuments } : sec));
         setEditingSectionId(sectionId);
@@ -10424,7 +10425,7 @@ Abcotronics`;
                             <i className="fas fa-edit text-gray-500 dark:text-gray-400 w-4"></i>
                             <span>Edit document</span>
                         </button>
-                        {!doc.parentId && !isMasterGreyedOut && (
+                        {!doc.parentId && (
                             <button
                                 type="button"
                                 role="menuitem"
