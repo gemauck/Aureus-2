@@ -7667,7 +7667,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       setFormData({
         type: moveType,
         sku: prefill.sku || '',
-        itemName: prefill.itemName || '',
+        itemName: prefill.itemName || prefill.name || '',
         quantity: prefill.quantity !== undefined ? prefill.quantity : '',
         unitCost: prefill.unitCost !== undefined ? prefill.unitCost : '',
         fromLocationId: fromIdResolved,
@@ -7700,30 +7700,26 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         );
         return;
       }
-      // Robust validation
-      const isValidQuantity = formData.quantity !== '' && formData.quantity !== null && formData.quantity !== undefined;
       const isAdjustment = formData.type === 'adjustment';
-      
-      // Validate required fields
-      if (!formData.sku || !formData.itemName || !isValidQuantity) {
-        alert('Please provide SKU, Item Name, and Quantity');
-        return;
-      }
-      
-      // Validate SKU format (basic check)
-      if (formData.sku.trim().length === 0) {
-        alert('SKU cannot be empty');
-        return;
-      }
-      
-      // Validate item name
-      if (formData.itemName.trim().length === 0) {
-        alert('Item Name cannot be empty');
+      const sku = String(formData.sku || '').trim();
+      const itemName = String(formData.itemName || formData.name || '').trim();
+      const qtyRaw = formData.quantity;
+      const hasQuantity =
+        qtyRaw !== '' && qtyRaw !== null && qtyRaw !== undefined;
+
+      const missingFields = [];
+      if (!sku) missingFields.push('SKU');
+      if (!itemName) missingFields.push('Item Name');
+      if (!hasQuantity) missingFields.push('Quantity');
+      if (missingFields.length > 0) {
+        alert(
+          `Please provide: ${missingFields.join(', ')}. If fields look filled, re-select the SKU and re-enter quantity (browser autofill does not update this form).`
+        );
         return;
       }
       
       // Parse and validate quantity
-      const quantity = parseFloat(formData.quantity);
+      const quantity = parseFloat(qtyRaw);
       if (isNaN(quantity)) {
         alert('Quantity must be a valid number');
         return;
@@ -7781,8 +7777,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
       const movementData = {
         type,
-        sku: formData.sku.trim(),
-        itemName: formData.itemName.trim(),
+        sku,
+        itemName,
         quantity: quantity,
         unitCost: unitCost,
         reference: (formData.reference || '').trim(),
@@ -10349,6 +10345,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     if (modalType === 'add_movement') {
+      const movementSku = String(formData.sku || '').trim();
+      const movementSkuInInventoryList = inventory.some((item) => item.sku === movementSku);
+      const movementQuantityInputValue =
+        formData.quantity === undefined || formData.quantity === null || formData.quantity === ''
+          ? ''
+          : formData.quantity;
+
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div
@@ -10365,13 +10368,20 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </button>
             </div>
             <div className="p-4">
-              <div className="space-y-4">
+              <form
+                autoComplete="off"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveMovement();
+                }}
+                className="space-y-4"
+              >
                 {/* Movement Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type *</label>
                   <select
                     value={formData.type || (isAdmin ? 'receipt' : 'transfer')}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     {isAdmin && (
@@ -10394,18 +10404,27 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
                   <select
-                    value={formData.sku || ''}
+                    value={movementSku}
                     onChange={(e) => {
-                      const selectedItem = inventory.find(item => item.sku === e.target.value);
-                      setFormData({ 
-                        ...formData, 
-                        sku: e.target.value,
-                        itemName: selectedItem ? selectedItem.name : formData.itemName
+                      const nextSku = e.target.value;
+                      setFormData((prev) => {
+                        const selectedItem = inventory.find((item) => item.sku === nextSku);
+                        return {
+                          ...prev,
+                          sku: nextSku,
+                          itemName: selectedItem ? (selectedItem.name || '') : prev.itemName
+                        };
                       });
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Select SKU...</option>
+                    {movementSku && !movementSkuInInventoryList && (
+                      <option value={movementSku}>
+                        {movementSku}
+                        {formData.itemName ? ` - ${formData.itemName}` : ''}
+                      </option>
+                    )}
                     {inventory.map(item => (
                       <option key={item.sku} value={item.sku}>{item.sku} - {item.name}</option>
                     ))}
@@ -10417,8 +10436,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
                   <input
                     type="text"
-                    value={formData.itemName || ''}
-                    onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
+                    name="stock-movement-item-name"
+                    autoComplete="off"
+                    value={formData.itemName || formData.name || ''}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, itemName: e.target.value, name: undefined }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="e.g., GPS Module GT-U7"
                   />
@@ -10434,13 +10455,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </label>
                   <input
                     id="record-stock-movement-quantity"
+                    name="stock-movement-quantity"
                     type="number"
                     step="0.01"
-                    value={formData.quantity || ''}
+                    autoComplete="off"
+                    value={movementQuantityInputValue}
                     onChange={(e) => {
                       const value = e.target.value;
                       // Allow empty string, negative values, and positive values
-                      setFormData({ ...formData, quantity: value });
+                      setFormData((prev) => ({ ...prev, quantity: value }));
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder={formData.type === 'adjustment' ? "±10 (use negative for reductions)" : "10"}
@@ -10583,16 +10606,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     placeholder="Additional notes about this movement..."
                   />
                 </div>
-              </div>
+              </form>
             </div>
             <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-3 sticky bottom-0 bg-white">
               <button
+                type="button"
                 onClick={() => { setShowModal(false); setFormData({}); }}
                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSaveMovement}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
