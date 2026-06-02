@@ -19,8 +19,7 @@ PROD_SERVER="root@165.22.127.196"
 PROD_APP_DIR="/var/www/abcotronics-erp"
 DB_NAME="abcotronics_erp_local"
 DB_USER="${USER}"
-LOCAL_DB_PORT="5437"
-LOCAL_DB_URL="postgresql://${DB_USER}@localhost:${LOCAL_DB_PORT}/${DB_NAME}"
+LOCAL_DB_URL="postgresql://${DB_USER}@/${DB_NAME}?host=/tmp"
 
 # Check if .env.local exists
 if [ ! -f .env.local ]; then

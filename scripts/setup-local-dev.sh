@@ -52,14 +52,14 @@ echo -e "${GREEN}✅ PostgreSQL is running${NC}"
 DB_NAME="abcotronics_erp_local"
 DB_USER="${USER}"
 DB_PASSWORD=""
-LOCAL_DB_PORT="5437"
-LOCAL_DB_URL="postgresql://${DB_USER}@localhost:${LOCAL_DB_PORT}/${DB_NAME}"
+# Unix socket avoids TCP password prompts (EDB/Homebrew Postgres on macOS)
+LOCAL_DB_URL="postgresql://${DB_USER}@/${DB_NAME}?host=/tmp"
 
 echo ""
 echo "📊 Database Configuration:"
 echo "   Database: ${DB_NAME}"
 echo "   User: ${DB_USER}"
-echo "   Host: localhost:5432"
+echo "   Host: unix socket (/tmp)"
 echo ""
 
 # Create database if it doesn't exist

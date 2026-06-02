@@ -119,6 +119,7 @@
     "setup:local-live": "bash setup-local-live-environment.sh",
     "launch:local": "bash launch-local.sh",
     "copy:prod-data": "bash scripts/copy-production-data.sh",
+    "sync:local-from-prod": "bash scripts/sync-local-db-from-production.sh",
     "seed:dummy": "node scripts/create-dummy-data.js",
     "db:studio": "npx prisma studio",
     "db:test": "node test-db-connection-script.js",
