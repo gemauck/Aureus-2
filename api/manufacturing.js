@@ -49,6 +49,7 @@ import {
 import XLSX from 'xlsx'
 import QRCode from 'qrcode'
 import { suggestInventoryThumbnail } from './_lib/inventoryThumbnailSuggest.js'
+import { allocateClientAllocationJournalNumberTx } from './_lib/clientAllocationJournalNumber.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -6424,23 +6425,20 @@ async function handler(req, res) {
       return badRequest(res, 'POST required to allocate a client allocation journal number')
     }
     try {
-      const journalNo = await prisma.$transaction(async (tx) => {
-        const system = await tx.systemSettings.findUnique({ where: { id: 'system' } })
-        const nextSeq = (system?.clientAllocationJournalSeq ?? 0) + 1
-        await tx.systemSettings.upsert({
-          where: { id: 'system' },
-          update: { clientAllocationJournalSeq: nextSeq },
-          create: { id: 'system', clientAllocationJournalSeq: nextSeq }
-        })
-        return `Stock-${String(nextSeq).padStart(2, '0')}`
-      })
+      const journalNo = await prisma.$transaction((tx) =>
+        allocateClientAllocationJournalNumberTx(tx)
+      )
       auditManufacturing('create', 'client-allocation-journal', journalNo, {
         summary: `Allocated client allocation journal number ${journalNo}`
       })
       return ok(res, { journalNo })
     } catch (error) {
       console.error('❌ Failed to allocate client allocation journal number:', error)
-      return serverError(res, 'Failed to allocate journal number', error.message)
+      const detail = error?.message || String(error)
+      const userMessage = /add-client-allocation-journal-seq-migration/i.test(detail)
+        ? detail
+        : 'Failed to allocate journal number'
+      return serverError(res, userMessage, detail)
     }
   }
 
