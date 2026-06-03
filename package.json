@@ -108,6 +108,8 @@
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "android:build": "npm run build && npm run android:sync",
+    "android:apk": "bash scripts/build-jobcard-apk.sh",
+    "android:apk:release": "bash scripts/build-jobcard-apk.sh release",
     "android:run": "npm run android:build && npx cap run android",
     "mobile:install": "cd mobile-rn && npm install",
     "mobile:start": "cd mobile-rn && npm run start",
