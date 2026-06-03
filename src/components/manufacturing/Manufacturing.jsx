@@ -247,6 +247,17 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
 };
 
+/** Read warehouse deep link before first inventory API call (avoids full-catalog + includeLedger burst). */
+const getInitialLocationFromURL = () => {
+  try {
+    const search = new URLSearchParams(window.location.search || '');
+    const urlLoc = search.get('location') || search.get('locationId');
+    return urlLoc && urlLoc !== 'all' ? urlLoc : 'all';
+  } catch {
+    return 'all';
+  }
+};
+
 /** Desktop inventory grid: optional columns (SKU, Item Name, Actions always visible). */
 const INVENTORY_DESKTOP_OPTIONAL_COLUMN_META = [
   { key: 'image', label: 'Image' },
@@ -725,7 +736,7 @@ try {
   /** When true, inventory list shows only rows where movement-implied qty ≠ recorded (combined view or current warehouse). */
   const [showLedgerMismatchOnly, setShowLedgerMismatchOnly] = useState(false);
   const [inventoryStockView, setInventoryStockView] = useState('all');
-  const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
+  const [selectedLocationId, setSelectedLocationId] = useState(getInitialLocationFromURL); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: 'sku', direction: 'asc' }); // Sorting state (default: SKU ascending)
   const [inventoryListPage, setInventoryListPage] = useState(1);
@@ -1284,8 +1295,11 @@ try {
           }
         }
 
-        if (typeof window.DatabaseAPI.getManufacturingInventoryLocationValueSummary === 'function') {
-          primaryApiCalls.push(
+        const pushInventoryLocationValueSummary = (targetCalls) => {
+          if (typeof window.DatabaseAPI.getManufacturingInventoryLocationValueSummary !== 'function') {
+            return;
+          }
+          targetCalls.push(
             window.DatabaseAPI
               .getManufacturingInventoryLocationValueSummary()
               .then((res) => {
@@ -1302,6 +1316,24 @@ try {
                 return { type: 'inventoryLocationValue', error };
               })
           );
+        };
+        // Defer expensive summary when inventory tab paints first (reduces parallel huge responses).
+        if (initialTab === 'inventory') {
+          deferredApiCalls.push(
+            new Promise((resolve) => {
+              setTimeout(() => {
+                const calls = [];
+                pushInventoryLocationValueSummary(calls);
+                if (calls.length === 0) {
+                  resolve({ type: 'inventoryLocationValue', skipped: true });
+                  return;
+                }
+                Promise.all(calls).then((results) => resolve(results[0])).catch((error) => resolve({ type: 'inventoryLocationValue', error }));
+              }, 400);
+            })
+          );
+        } else {
+          pushInventoryLocationValueSummary(primaryApiCalls);
         }
 
         // BOMs
@@ -1424,37 +1456,51 @@ try {
           }
         }
 
-        // Stock Movements
+        // Stock movements: full table only for Movements tab; dashboard needs a small recent slice only.
         if (typeof window.DatabaseAPI.getStockMovements === 'function') {
-          deferredApiCalls.push(
-            window.DatabaseAPI.getStockMovements()
-              .then(movementsResponse => {
-                const movementsData = movementsResponse?.data?.movements || [];
-                const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
-                
-                // Log type breakdown to verify all types are included
-                const typeBreakdown = processed.reduce((acc, m) => {
-                  acc[m.type] = (acc[m.type] || 0) + 1;
-                  return acc;
-                }, {});
-                
-                setMovements(processed);
-                setMovementsLoadedFromAPI(true);
-                safeSetItem('manufacturing_movements', JSON.stringify(processed));
-                return { type: 'movements', data: processed };
-              })
-              .catch(error => {
-                console.error('Error loading stock movements:', error);
-                setMovementsLoadedFromAPI(true);
-                return { type: 'movements', error };
-              })
-          );
-        } else {
+          if (initialTab === 'movements') {
+            deferredApiCalls.push(
+              window.DatabaseAPI.getStockMovements()
+                .then(movementsResponse => {
+                  const movementsData = movementsResponse?.data?.movements || [];
+                  const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+                  setMovements(processed);
+                  setMovementsLoadedFromAPI(true);
+                  safeSetItem('manufacturing_movements', JSON.stringify(processed));
+                  return { type: 'movements', data: processed };
+                })
+                .catch(error => {
+                  console.error('Error loading stock movements:', error);
+                  setMovementsLoadedFromAPI(true);
+                  return { type: 'movements', error };
+                })
+            );
+          } else if (initialTab === 'dashboard') {
+            deferredApiCalls.push(
+              window.DatabaseAPI.getStockMovements({ page: 1, pageSize: 50 })
+                .then(movementsResponse => {
+                  const movementsData = movementsResponse?.data?.movements || [];
+                  const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+                  setMovements(processed);
+                  setMovementsLoadedFromAPI(true);
+                  return { type: 'movements', data: processed };
+                })
+                .catch(error => {
+                  console.error('Error loading recent stock movements:', error);
+                  setMovementsLoadedFromAPI(true);
+                  return { type: 'movements', error };
+                })
+            );
+          }
+        } else if (initialTab === 'movements' || initialTab === 'dashboard') {
           setMovementsLoadedFromAPI(true);
         }
 
-        // Suppliers
-        if (typeof window.DatabaseAPI.getSuppliers === 'function') {
+        // Suppliers — only when that tab (or purchase orders) is opened; avoids extra large parallel GET on inventory deep links.
+        if (
+          (initialTab === 'suppliers' || initialTab === 'purchase') &&
+          typeof window.DatabaseAPI.getSuppliers === 'function'
+        ) {
           deferredApiCalls.push(
             window.DatabaseAPI.getSuppliers()
               .then(suppliersResponse => {
@@ -1471,7 +1517,6 @@ try {
               })
               .catch(error => {
                 console.error('Error loading suppliers:', error);
-                // Fallback to localStorage if database fails
                 const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
                 if (loadedSuppliers.length > 0) {
                   setSuppliers(loadedSuppliers);
@@ -1479,12 +1524,6 @@ try {
                 return { type: 'suppliers', error };
               })
           );
-        } else {
-          // Fallback to localStorage if DatabaseAPI not available
-          const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
-          if (loadedSuppliers.length > 0) {
-            setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
-          }
         }
 
         // Execute high-priority calls first so inventory view renders fast.
@@ -1521,28 +1560,77 @@ try {
     loadData();
   }, []);
 
-  // Inventory tab needs the full SKU list; dashboard only loads a lightweight summary first.
+  // Full stock-movement table is large; load only when the Movements tab is opened.
   useEffect(() => {
-    if (activeTab !== 'inventory' || inventoryLoadedFromAPI) {
-      return;
+    if (activeTab !== 'movements' || movementsLoadedFromAPI) {
+      return undefined;
     }
-    if (!window.DatabaseAPI?.getInventory) {
-      return;
+    if (!window.DatabaseAPI?.getStockMovements) {
+      setMovementsLoadedFromAPI(true);
+      return undefined;
     }
-    const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
-    void window.DatabaseAPI.getInventory(locationIdToLoad, { includeLedger: true, forceRefresh: true })
-      .then((invResponse) => {
-        const invData = invResponse?.data?.inventory || [];
-        const processed = normalizeInventoryRows(invData.map((item) => ({ ...item, id: item.id })));
-        setInventory(processed);
-        setInventoryLoadedFromAPI(true);
-        safeSetItem('manufacturing_inventory', JSON.stringify(processed));
-        void loadInventoryValueByLocationSummary({ forceRefresh: true });
+    let cancelled = false;
+    window.DatabaseAPI.getStockMovements()
+      .then((movementsResponse) => {
+        if (cancelled) return;
+        const movementsData = movementsResponse?.data?.movements || [];
+        const processed = movementsData.map((movement) => ({ ...movement, id: movement.id }));
+        setMovements(processed);
+        setMovementsLoadedFromAPI(true);
+        safeSetItem('manufacturing_movements', JSON.stringify(processed));
       })
       .catch((error) => {
-        console.error('Manufacturing: failed to load full inventory for tab', error);
+        if (!cancelled) {
+          console.error('Error loading stock movements for tab:', error);
+          setMovementsLoadedFromAPI(true);
+        }
       });
-  }, [activeTab, inventoryLoadedFromAPI, selectedLocationId, loadInventoryValueByLocationSummary]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, movementsLoadedFromAPI]);
+
+  // Suppliers list — load when Suppliers or Purchase tab needs it (not on inventory-first paint).
+  useEffect(() => {
+    if (activeTab !== 'suppliers' && activeTab !== 'purchase') {
+      return undefined;
+    }
+    if (!window.DatabaseAPI?.getSuppliers) {
+      return undefined;
+    }
+    const cached = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
+    if (suppliers.length > 0 || cached.length > 0) {
+      if (suppliers.length === 0 && cached.length > 0) {
+        setSuppliers(cached);
+      }
+      return undefined;
+    }
+    let cancelled = false;
+    window.DatabaseAPI.getSuppliers()
+      .then((suppliersResponse) => {
+        if (cancelled) return;
+        const suppliersData = suppliersResponse?.data?.suppliers || [];
+        const processed = suppliersData.map((supplier) => ({
+          ...supplier,
+          id: supplier.id,
+          createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
+        }));
+        setSuppliers(processed);
+        safeSetItem('manufacturing_suppliers', JSON.stringify(processed));
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Error loading suppliers for tab:', error);
+          if (cached.length > 0) {
+            setSuppliers(cached);
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, suppliers.length]);
 
   useEffect(() => {
     // Clients are needed by both production flows and sales-order creation.
