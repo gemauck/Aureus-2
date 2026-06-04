@@ -547,7 +547,7 @@ const TaskDetailModal = ({
         refreshTaskData();
 
         // Set up periodic refresh - more frequent when on comments tab
-        const refreshInterval = activeTab === 'comments' ? 2000 : 5000; // 2 seconds on comments tab, 5 seconds otherwise
+        const refreshInterval = activeTab === 'comments' ? 5000 : 10000; // 5s comments, 10s other tabs
         refreshIntervalRef.current = setInterval(refreshTaskData, refreshInterval);
 
         return () => {

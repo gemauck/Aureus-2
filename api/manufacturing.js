@@ -41,7 +41,8 @@ import {
 import { buildInventoryWacCostHistory } from './_lib/inventoryWacCostHistory.js'
 import { resolveAdjustmentLocationIdTx } from './_lib/adjustmentLocation.js'
 import {
-  buildCombinedMovementNetBySkuFromMovementRows,
+  loadMovementNetCombinedBySku,
+  loadMovementsForPerSiteLedgerMismatch,
   annotateInventoryRowsWithCompanyWideLedger,
   annotateInventoryRowsWithWarehouseSiteLedger,
   annotateInventoryRowsWithPerWarehouseLedgerMismatch
@@ -729,7 +730,7 @@ async function buildLocationInventoryResponse(locationId) {
  */
 async function buildAllLocationsInventoryResponse(options = {}) {
   const includeLedger = options.includeLedger === true
-  const [locationInventoryRecords, allTemplates, stockLocations, movements] = await Promise.all([
+  const [locationInventoryRecords, allTemplates, stockLocations] = await Promise.all([
     prisma.locationInventory.findMany({
       include: { location: true },
       orderBy: { itemName: 'asc' }
@@ -739,12 +740,7 @@ async function buildAllLocationsInventoryResponse(options = {}) {
     }),
     prisma.stockLocation.findMany({
       select: { id: true, code: true }
-    }),
-    includeLedger
-      ? prisma.stockMovement.findMany({
-          select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
-        })
-      : Promise.resolve(null)
+    })
   ])
 
   // One template per SKU (prefer row with null locationId, else first by order)
@@ -834,15 +830,25 @@ async function buildAllLocationsInventoryResponse(options = {}) {
     else row.location = 'Multiple locations'
   }
 
-  if (includeLedger && Array.isArray(movements)) {
-    const movementNetBySku = buildCombinedMovementNetBySkuFromMovementRows(movements)
+  if (includeLedger) {
+    const movementNetBySku = await loadMovementNetCombinedBySku(prisma)
     annotateInventoryRowsWithCompanyWideLedger(result, movementNetBySku)
     const liMinimal = locationInventoryRecords.map((r) => ({
       sku: r.sku,
       locationId: r.locationId,
       quantity: r.quantity
     }))
-    annotateInventoryRowsWithPerWarehouseLedgerMismatch(result, movements, stockLocations, liMinimal)
+    const movementsForPerSite = await loadMovementsForPerSiteLedgerMismatch(
+      prisma,
+      liMinimal.map((r) => r.sku),
+      stockLocations
+    )
+    annotateInventoryRowsWithPerWarehouseLedgerMismatch(
+      result,
+      movementsForPerSite,
+      stockLocations,
+      liMinimal
+    )
   }
 
   return result

@@ -2,7 +2,7 @@
 class LiveDataSync {
     constructor() {
         this.subscribers = new Map();
-        this.refreshInterval = 30000; // 30 seconds - increased to reduce API load and prevent rate limiting
+        this.refreshInterval = 60000; // 60 seconds - balance freshness vs API/DB load
         this.isRunning = false;
         this.lastSync = null;
         this.syncInProgress = false;
@@ -312,7 +312,7 @@ class LiveDataSync {
         // Additional check to prevent rapid sync calls (skip if force sync)
         if (!this._forceSyncInProgress) {
             const now = Date.now();
-            const minInterval = 30000 + this.rateLimitBackoff; // 30 seconds minimum + backoff (increased to reduce server load)
+            const minInterval = 60000 + this.rateLimitBackoff; // 60 seconds minimum + backoff
             if (this.lastSync && (now - this.lastSync.getTime()) < minInterval) {
                 log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
                 return;
@@ -602,7 +602,7 @@ class LiveDataSync {
             // Check if we recently synced this data type (unless bypassing cache)
             if (!bypassCache) {
                 const cacheEntry = this.dataCache.get(dataType);
-                const CACHE_DURATION = 30000; // 30 seconds per data type - longer cache to reduce API calls
+                const CACHE_DURATION = 60000; // 60 seconds per data type - align with refresh interval
                 
                 if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
                     const getLog = () => window.debug?.log || (() => {});

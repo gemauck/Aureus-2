@@ -379,7 +379,8 @@ const normalizeMonthKeyInput = (value) => {
 };
 
 /** Poll interval when SSE is unavailable (ms). */
-const MEETING_NOTES_LIVE_POLL_MS = 1000;
+/** Live refresh while editing; SSE when available — avoid 1s polling (server + browser load). */
+const MEETING_NOTES_LIVE_POLL_MS = 10000;
 
 const MEETING_NOTES_DEPT_TEXT_FIELDS = ['successes', 'weekToFollow', 'frustrations'];
 
@@ -4734,7 +4735,7 @@ const ManagementMeetingNotes = () => {
             if (!document.hidden) {
                 void load();
             }
-        }, 3000);
+        }, 15000);
         return () => clearInterval(iv);
     }, [isAdminUser, meetingNotesRoomKey]);
     

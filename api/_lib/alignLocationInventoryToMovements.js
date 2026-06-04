@@ -116,14 +116,72 @@ export function buildCombinedMovementNetBySkuFromMovementRows(movements) {
 
 /**
  * Company-wide movement-implied on-hand per SKU (internal transfers net to 0).
+ * Uses SQL aggregation so inventory list does not load every StockMovement row.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @returns {Promise<Map<string, number>>}
  */
 export async function loadMovementNetCombinedBySku(prisma) {
-  const movements = await prisma.stockMovement.findMany({
-    select: { sku: true, quantity: true, type: true }
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT TRIM(sku) AS sku,
+        SUM(
+          CASE
+            WHEN LOWER(COALESCE(type, '')) = 'transfer' THEN 0::double precision
+            WHEN LOWER(COALESCE(type, '')) = 'receipt' THEN ABS(COALESCE(quantity, 0)::double precision)
+            WHEN LOWER(COALESCE(type, '')) = 'production' THEN -ABS(COALESCE(quantity, 0)::double precision)
+            WHEN LOWER(COALESCE(type, '')) IN ('consumption', 'sale') THEN -ABS(COALESCE(quantity, 0)::double precision)
+            WHEN LOWER(COALESCE(type, '')) = 'issue' THEN -ABS(COALESCE(quantity, 0)::double precision)
+            ELSE COALESCE(quantity, 0)::double precision
+          END
+        )::double precision AS net
+      FROM "StockMovement"
+      WHERE sku IS NOT NULL AND TRIM(sku) <> ''
+      GROUP BY TRIM(sku)
+    `
+    const netBySku = new Map()
+    for (const row of rows || []) {
+      const sku = String(row.sku || '').trim()
+      if (!sku) continue
+      netBySku.set(sku, parseFloat(row.net) || 0)
+    }
+    return netBySku
+  } catch (err) {
+    console.warn('⚠️ loadMovementNetCombinedBySku SQL aggregate failed, falling back to row scan:', err?.message)
+    const movements = await prisma.stockMovement.findMany({
+      select: { sku: true, quantity: true, type: true }
+    })
+    return buildCombinedMovementNetBySkuFromMovementRows(movements)
+  }
+}
+
+/**
+ * Movements needed for per-warehouse ledger badges (SKU + site touch only).
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string[]} skus
+ * @param {Array<{ id: string, code?: string|null }>} stockLocations
+ */
+export async function loadMovementsForPerSiteLedgerMismatch(prisma, skus, stockLocations) {
+  const skuList = [...new Set((skus || []).map((s) => String(s).trim()).filter(Boolean))]
+  if (!skuList.length) return []
+  const locRefs = [
+    ...new Set(
+      (stockLocations || []).flatMap((l) => {
+        const refs = []
+        if (l?.id) refs.push(String(l.id))
+        const code = String(l?.code || '').trim()
+        if (code) refs.push(code)
+        return refs
+      })
+    )
+  ]
+  if (!locRefs.length) return []
+  return prisma.stockMovement.findMany({
+    where: {
+      sku: { in: skuList },
+      OR: [{ fromLocation: { in: locRefs } }, { toLocation: { in: locRefs } }]
+    },
+    select: { sku: true, quantity: true, type: true, fromLocation: true, toLocation: true }
   })
-  return buildCombinedMovementNetBySkuFromMovementRows(movements)
 }
 
 /**

@@ -84,7 +84,7 @@ const DatabaseAPI = {
         '/time-entries': 30000, // 30 seconds
         '/inventory': 120000,   // 2 minutes - inventory changes less frequently
         '/locations': 300000,   // 5 minutes - locations rarely change
-        '/notifications': 15000, // 15 seconds - reduces focus/polling 429s
+        '/notifications': 30000, // 30 seconds - reduces focus/polling 429s
     },
     // Per-endpoint request timeout (ms) - fail fast for light endpoints when server is slow
     _endpointTimeout: {
@@ -127,6 +127,9 @@ const DatabaseAPI = {
             let ttl = this._endpointCacheTTL[endpoint];
             if (ttl == null && /^\/projects\?/.test(endpoint)) ttl = 60000;
             if (ttl == null && /^\/projects\/[^/]+$/.test(endpoint)) ttl = 45000;
+            if (ttl == null && /^\/manufacturing\/inventory/.test(endpoint)) {
+                ttl = endpoint.includes('includeLedger') ? 120000 : 90000;
+            }
             if (ttl == null) ttl = this._cacheTTL;
             if (now - timestamp > ttl) {
                 this._responseCache.delete(key);
@@ -334,6 +337,9 @@ const DatabaseAPI = {
                 let ttl = this._endpointCacheTTL[endpoint];
                 if (ttl == null && /^\/projects\?/.test(endpoint)) ttl = 60000;
                 if (ttl == null && /^\/projects\/[^/]+$/.test(endpoint)) ttl = 45000;
+                if (ttl == null && /^\/manufacturing\/inventory/.test(endpoint)) {
+                    ttl = endpoint.includes('includeLedger') ? 120000 : 90000;
+                }
                 if (ttl == null) ttl = this._cacheTTL;
                 const age = Date.now() - cached.timestamp;
                 if (age < ttl) {
