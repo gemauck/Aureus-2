@@ -20,16 +20,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--input", "-i", required=True, help="Fuel Dispense Report .xlsx")
     parser.add_argument(
-        "--reference",
-        "-r",
-        required=True,
-        help="Reference Transactions & Fuel Breakdown workbook (fleet/pump lookup)",
+        "--output",
+        "-o",
+        help="Output .xlsx path (default: derive name from dispense date range in --output-dir)",
     )
-    parser.add_argument("--output", "-o", required=True, help="Output .xlsx path")
+    parser.add_argument(
+        "--output-dir",
+        help="Directory for auto-named output (used when --output omitted)",
+    )
     parser.add_argument(
         "--template",
         "-t",
-        help="Workbook template to preserve extra sheets (default: --reference file)",
+        help="Gilbarco template workbook (default: bundled gilbarco-template.xlsx)",
     )
     parser.add_argument(
         "--pump-config",
@@ -45,8 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     summary = convert_workbook(
         args.input,
-        args.reference,
         args.output,
+        output_dir=args.output_dir,
         template_path=args.template,
         pump_config_path=args.pump_config,
         include_override_fills=args.include_override_fills,
@@ -58,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         f"({summary['bowser_rows']} bowser)"
     )
     print(f"Output: {summary['output']}")
+    if summary.get("period_start") and summary.get("period_end"):
+        print(f"Period: {summary['period_start']} - {summary['period_end']}")
     if summary["warnings"]:
         print(f"Warnings ({len(summary['warnings'])}):")
         for w in summary["warnings"][:20]:

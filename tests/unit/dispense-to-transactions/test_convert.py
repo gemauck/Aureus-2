@@ -12,8 +12,14 @@ SCRIPT_DIR = REPO_ROOT / "scripts" / "dispense-to-transactions"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from convert import convert_vehicle_row, format_transaction_datetime, load_pump_config
-from parse_dispense import is_footer_row, normalize_asset_group, parse_consumption
+from convert import DEFAULT_GILBARCO_TEMPLATE, convert_vehicle_row, format_transaction_datetime, load_pump_config
+from parse_dispense import (
+    build_output_filename,
+    dispense_period_range,
+    is_footer_row,
+    normalize_asset_group,
+    parse_consumption,
+)
 
 
 def test_footer_row_detection():
@@ -38,6 +44,23 @@ def test_parse_consumption_hours():
 def test_normalize_asset_group():
     assert normalize_asset_group("Non-Eligible") == "Not Eligible"
     assert normalize_asset_group("Eligible") == "Eligible"
+
+
+def test_build_output_filename():
+    assert build_output_filename(("20260529", "20260602")) == "Fuel Dispense Report 20260529 - 20260602.xlsx"
+    assert build_output_filename(None) == "Fuel Dispense Report.xlsx"
+
+
+def test_dispense_period_range():
+    rows = [
+        {"Date & Time": "2026-05-29 11:49:09"},
+        {"Date & Time": "2026-06-02 14:00:00"},
+    ]
+    assert dispense_period_range(rows) == ("20260529", "20260602")
+
+
+def test_bundled_gilbarco_template_exists():
+    assert DEFAULT_GILBARCO_TEMPLATE.exists(), "gilbarco-template.xlsx must be committed in scripts/dispense-to-transactions/"
 
 
 def test_convert_vehicle_row_uses_fleet_template():

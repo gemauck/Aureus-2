@@ -1,5 +1,5 @@
 /**
- * Sparrow to Gilbarco — multipart upload: Fuel Dispense Report + reference Transactions workbook.
+ * Sparrow to Gilbarco — upload Fuel Dispense Report; outputs Gilbarco Transactions workbook.
  */
 
 import fs from 'fs';
@@ -42,9 +42,8 @@ async function handler(req, res) {
         const bb = Busboy({ headers: req.headers });
         const timestamp = Date.now();
         let dispensePath = null;
-        let referencePath = null;
         let includeOverrideFills = false;
-        let filesReceived = 0;
+        let fileReceived = false;
 
         await new Promise((resolve, reject) => {
             let bbFinished = false;
@@ -63,21 +62,16 @@ async function handler(req, res) {
                     return;
                 }
 
-                let targetPath = null;
-                if (name === 'dispense' || name === 'dispenseFile') {
-                    const { base } = safeBaseName(filename);
-                    targetPath = path.join(inputDir, `dispense_${base}_${timestamp}${ext}`);
-                    dispensePath = targetPath;
-                } else if (name === 'reference' || name === 'referenceFile') {
-                    const { base } = safeBaseName(filename);
-                    targetPath = path.join(inputDir, `reference_${base}_${timestamp}${ext}`);
-                    referencePath = targetPath;
-                } else {
+                if (name !== 'dispense' && name !== 'dispenseFile') {
                     file.resume();
                     return;
                 }
 
-                filesReceived += 1;
+                const { base } = safeBaseName(filename);
+                const targetPath = path.join(inputDir, `dispense_${base}_${timestamp}${ext}`);
+                dispensePath = targetPath;
+                fileReceived = true;
+
                 const writeStream = fs.createWriteStream(targetPath);
                 pendingStreams.add(writeStream);
                 let totalBytes = 0;
@@ -128,15 +122,10 @@ async function handler(req, res) {
             req.pipe(bb);
         });
 
-        if (!dispensePath || !referencePath || !fs.existsSync(dispensePath) || !fs.existsSync(referencePath)) {
-            return badRequest(
-                res,
-                'Upload both files: dispense (Fuel Dispense Report) and reference (Transactions & Fuel Breakdown).'
-            );
+        if (!fileReceived || !dispensePath || !fs.existsSync(dispensePath)) {
+            return badRequest(res, 'Upload a Fuel Dispense Report (.xlsx).');
         }
 
-        const outputFileName = `transactions-fuel-breakdown_${timestamp}.xlsx`;
-        const outputFilePath = path.join(outputDir, outputFileName);
         const jsonPath = path.join(outputDir, `sparrow-to-gilbarco_${timestamp}.json`);
 
         const pythonExec = venvPython === 'python3' ? 'python3' : `"${venvPython}"`;
@@ -144,12 +133,8 @@ async function handler(req, res) {
             runScript,
             '--input',
             dispensePath,
-            '--reference',
-            referencePath,
-            '--output',
-            outputFilePath,
-            '--template',
-            referencePath,
+            '--output-dir',
+            outputDir,
             '--json',
             jsonPath,
         ];
@@ -172,11 +157,6 @@ async function handler(req, res) {
             exitCode = execError.code || 1;
         }
 
-        if (!fs.existsSync(outputFilePath)) {
-            const tail = stdout.length > 3000 ? stdout.slice(-3000) : stdout;
-            throw new Error(`Conversion output was not created (exit ${exitCode}):\n${tail}`);
-        }
-
         let summary = {};
         if (fs.existsSync(jsonPath)) {
             try {
@@ -186,15 +166,20 @@ async function handler(req, res) {
             }
         }
 
-        for (const p of [dispensePath, referencePath]) {
-            try {
-                if (p && fs.existsSync(p)) fs.unlinkSync(p);
-            } catch (cleanupError) {
-                console.warn('Sparrow to Gilbarco API - cleanup error:', cleanupError);
-            }
+        const outputFilePath = summary.output;
+        if (!outputFilePath || !fs.existsSync(outputFilePath)) {
+            const tail = stdout.length > 3000 ? stdout.slice(-3000) : stdout;
+            throw new Error(`Conversion output was not created (exit ${exitCode}):\n${tail}`);
         }
 
-        const downloadUrl = `/uploads/sparrow-to-gilbarco-outputs/${outputFileName}`;
+        try {
+            if (dispensePath && fs.existsSync(dispensePath)) fs.unlinkSync(dispensePath);
+        } catch (cleanupError) {
+            console.warn('Sparrow to Gilbarco API - cleanup error:', cleanupError);
+        }
+
+        const outputFileName = summary.output_file_name || path.basename(outputFilePath);
+        const downloadUrl = `/uploads/sparrow-to-gilbarco-outputs/${encodeURIComponent(outputFileName)}`;
 
         return ok(res, {
             success: true,
@@ -202,7 +187,6 @@ async function handler(req, res) {
             fileName: outputFileName,
             summary,
             includeOverrideFills,
-            filesReceived,
             exitCode,
             stdout: stdout.slice(-2000),
             warnings: summary.warnings || [],

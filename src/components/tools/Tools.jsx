@@ -275,7 +275,7 @@ const Tools = () => {
             {
                 id: 'sparrow-to-gilbarco',
                 name: 'Sparrow to Gilbarco',
-                description: 'Convert FuelTrack / Sparrow Fuel Dispense Reports to Transactions & Fuel Breakdown workbooks',
+                description: 'Convert Sparrow Fuel Dispense Reports to Gilbarco Transactions & Fuel Breakdown format (single upload)',
                 icon: 'fa-right-left',
                 color: 'indigo',
                 component: toolComponents.SparrowToGilbarco

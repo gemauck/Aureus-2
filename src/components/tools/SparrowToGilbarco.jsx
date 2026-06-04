@@ -13,7 +13,6 @@ function formatElapsed(ms) {
 const SparrowToGilbarco = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const [dispenseFile, setDispenseFile] = useState(null);
-    const [referenceFile, setReferenceFile] = useState(null);
     const [includeOverrideFills, setIncludeOverrideFills] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -22,7 +21,6 @@ const SparrowToGilbarco = () => {
     const [error, setError] = useState(null);
     const [result, setResult] = useState(null);
     const dispenseInputRef = useRef(null);
-    const referenceInputRef = useRef(null);
     const startRef = useRef(null);
     const timerRef = useRef(null);
 
@@ -57,48 +55,31 @@ const SparrowToGilbarco = () => {
 
     React.useEffect(() => () => stopTimer(), []);
 
-    const pickExcel = (file) => {
-        if (!file) return false;
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (!['xlsx', 'xls'].includes(ext)) {
-            setError('Please upload Excel workbooks (.xlsx or .xls).');
-            return false;
-        }
-        return true;
-    };
-
     const handleDispenseSelect = (e) => {
         const f = e.target.files?.[0];
         if (!f) return;
-        if (!pickExcel(f)) return;
+        const ext = f.name.split('.').pop()?.toLowerCase();
+        if (!['xlsx', 'xls'].includes(ext)) {
+            setError('Please upload an Excel workbook (.xlsx or .xls).');
+            return;
+        }
         setError(null);
         setResult(null);
         setDispenseFile(f);
     };
 
-    const handleReferenceSelect = (e) => {
-        const f = e.target.files?.[0];
-        if (!f) return;
-        if (!pickExcel(f)) return;
-        setError(null);
-        setResult(null);
-        setReferenceFile(f);
-    };
-
     const resetAll = () => {
         setDispenseFile(null);
-        setReferenceFile(null);
         setResult(null);
         setError(null);
         setUploadProgress(0);
         setPhase('');
         if (dispenseInputRef.current) dispenseInputRef.current.value = '';
-        if (referenceInputRef.current) referenceInputRef.current.value = '';
     };
 
     const runConvert = () => {
-        if (!dispenseFile || !referenceFile) {
-            setError('Upload both the Fuel Dispense Report and a reference Transactions workbook.');
+        if (!dispenseFile) {
+            setError('Upload a Fuel Dispense Report (.xlsx).');
             return;
         }
 
@@ -106,12 +87,11 @@ const SparrowToGilbarco = () => {
         setError(null);
         setResult(null);
         setUploadProgress(0);
-        setPhase('Uploading files…');
+        setPhase('Uploading…');
         startTimer();
 
         const form = new FormData();
         form.append('dispense', dispenseFile);
-        form.append('reference', referenceFile);
         if (includeOverrideFills) form.append('includeOverrideFills', 'true');
 
         const xhr = new XMLHttpRequest();
@@ -159,7 +139,7 @@ const SparrowToGilbarco = () => {
             stopTimer();
             setProcessing(false);
             setPhase('');
-            setError('Network error while uploading files');
+            setError('Network error while uploading file');
         };
 
         xhr.send(form);
@@ -167,48 +147,35 @@ const SparrowToGilbarco = () => {
 
     const summary = result?.summary || {};
     const warnings = result?.warnings || summary.warnings || [];
+    const periodLabel =
+        summary.period_start && summary.period_end
+            ? `${summary.period_start} – ${summary.period_end}`
+            : null;
 
     return (
         <div className="space-y-3">
             <div className={`rounded-lg border p-4 ${card}`}>
                 <h3 className={`text-sm font-semibold mb-1 ${text}`}>Sparrow to Gilbarco</h3>
                 <p className={`text-xs mb-4 ${muted}`}>
-                    Convert a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong> into the{' '}
-                    <strong>Transactions &amp; Fuel Breakdown</strong> Excel format. Fleet and pump
-                    details are taken from your reference workbook (e.g. a prior month export).
+                    Upload a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong>. The tool
+                    converts it to the standard <strong>Transactions &amp; Fuel Breakdown</strong>{' '}
+                    Gilbarco layout and includes your original dispense data on a reference tab.
                 </p>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <label className={`block text-xs font-medium mb-1 ${text}`}>
-                            1. Fuel Dispense Report (.xlsx)
-                        </label>
-                        <input
-                            ref={dispenseInputRef}
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={handleDispenseSelect}
-                            className={`block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-primary-50 file:text-primary-700 ${inputBg} border rounded-lg`}
-                        />
-                        {dispenseFile ? (
-                            <p className={`text-[10px] mt-1 truncate ${muted}`}>{dispenseFile.name}</p>
-                        ) : null}
-                    </div>
-                    <div>
-                        <label className={`block text-xs font-medium mb-1 ${text}`}>
-                            2. Reference Transactions workbook (.xlsx)
-                        </label>
-                        <input
-                            ref={referenceInputRef}
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={handleReferenceSelect}
-                            className={`block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-primary-50 file:text-primary-700 ${inputBg} border rounded-lg`}
-                        />
-                        {referenceFile ? (
-                            <p className={`text-[10px] mt-1 truncate ${muted}`}>{referenceFile.name}</p>
-                        ) : null}
-                    </div>
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${text}`}>
+                        Fuel Dispense Report (.xlsx)
+                    </label>
+                    <input
+                        ref={dispenseInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleDispenseSelect}
+                        className={`block w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-primary-50 file:text-primary-700 ${inputBg} border rounded-lg`}
+                    />
+                    {dispenseFile ? (
+                        <p className={`text-[10px] mt-1 truncate ${muted}`}>{dispenseFile.name}</p>
+                    ) : null}
                 </div>
 
                 <label className={`flex items-center gap-2 mt-3 text-xs ${muted}`}>
@@ -225,7 +192,7 @@ const SparrowToGilbarco = () => {
                     <button
                         type="button"
                         onClick={runConvert}
-                        disabled={processing || !dispenseFile || !referenceFile}
+                        disabled={processing || !dispenseFile}
                         className="px-4 py-2 text-xs font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {processing ? 'Converting…' : 'Convert'}
@@ -260,6 +227,11 @@ const SparrowToGilbarco = () => {
             {result ? (
                 <div className={`rounded-lg border p-4 ${card}`}>
                     <h4 className={`text-sm font-semibold mb-2 ${text}`}>Conversion complete</h4>
+                    {periodLabel ? (
+                        <p className={`text-xs mb-2 ${muted}`}>
+                            Period covered: <strong className={text}>{periodLabel}</strong>
+                        </p>
+                    ) : null}
                     <ul className={`text-xs space-y-1 mb-3 ${muted}`}>
                         <li>
                             Dispense rows parsed:{' '}
@@ -297,7 +269,7 @@ const SparrowToGilbarco = () => {
                     {result.downloadUrl ? (
                         <a
                             href={result.downloadUrl}
-                            download={result.fileName || 'transactions-fuel-breakdown.xlsx'}
+                            download={result.fileName || 'Fuel Dispense Report.xlsx'}
                             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
                         >
                             <i className="fas fa-download" aria-hidden="true" />
@@ -308,15 +280,23 @@ const SparrowToGilbarco = () => {
             ) : null}
 
             <div className={`rounded-lg border p-4 text-[10px] ${card} ${muted}`}>
-                <p className={`font-medium mb-1 ${text}`}>What you need</p>
+                <p className={`font-medium mb-1 ${text}`}>Output workbook</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                     <li>
-                        <strong className={text}>Dispense file</strong> — export from Sparrow /
-                        FuelTrack (single sheet with Date &amp; Time, Asset Number, Litres, etc.)
+                        <strong className={text}>Fuel Dispense Source</strong> — copy of your
+                        uploaded dispense list
                     </li>
                     <li>
-                        <strong className={text}>Reference file</strong> — an existing Transactions
-                        &amp; Fuel Breakdown workbook so fleet IDs match Make/Model and pump codes
+                        <strong className={text}>Transactions Exl. Bowsers</strong> and{' '}
+                        <strong className={text}>All Transactions</strong> — Gilbarco format
+                    </li>
+                    <li>
+                        <strong className={text}>Fuel Breakdown</strong> — standard template sheet
+                    </li>
+                    <li>
+                        Download name: <strong className={text}>Fuel Dispense Report</strong> plus
+                        the date range from your data (e.g.{' '}
+                        <span className="font-mono">20260529 - 20260602</span>)
                     </li>
                 </ul>
             </div>

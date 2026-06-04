@@ -12,6 +12,10 @@ from openpyxl import Workbook
 
 from fleet_lookup import TRANSACTION_HEADERS, load_reference_indexes
 from parse_dispense import (
+    DISPENSE_HEADERS,
+    DISPENSE_SOURCE_SHEET,
+    build_output_filename,
+    dispense_period_range,
     extract_pump_code,
     is_bowser_fill,
     normalize_asset_group,
@@ -21,7 +25,9 @@ from parse_dispense import (
     split_asset_description,
 )
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "pump_config.json"
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pump_config.json"
+DEFAULT_GILBARCO_TEMPLATE = SCRIPT_DIR / "gilbarco-template.xlsx"
 
 
 def _cell_str(value: Any) -> str:
@@ -332,15 +338,42 @@ def _write_rows(ws, rows: list[dict[str, Any]]) -> None:
             ws.cell(row=ri, column=ci, value=row.get(header))
 
 
+def _write_dispense_source(ws, dispense_rows: list[dict[str, Any]]) -> None:
+    headers = list(DISPENSE_HEADERS)
+    for ci, header in enumerate(headers, start=1):
+        ws.cell(row=1, column=ci, value=header)
+    for ri, row in enumerate(dispense_rows, start=2):
+        for ci, header in enumerate(headers, start=1):
+            ws.cell(row=ri, column=ci, value=row.get(header))
+
+
+def _resolve_output_path(output_dir: Path, filename: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidate = output_dir / filename
+    if not candidate.exists():
+        return candidate
+    stem = candidate.stem
+    suffix = 1
+    while True:
+        alt = output_dir / f"{stem} ({suffix}).xlsx"
+        if not alt.exists():
+            return alt
+        suffix += 1
+
+
 def write_output_workbook(
     template_path: Path,
     all_rows: list[dict[str, Any]],
     excl_rows: list[dict[str, Any]],
+    dispense_rows: list[dict[str, Any]],
     output_path: Path,
 ) -> None:
     template_wb = openpyxl.load_workbook(template_path)
     out_wb = Workbook()
     out_wb.remove(out_wb.active)
+
+    source_ws = out_wb.create_sheet(DISPENSE_SOURCE_SHEET, 0)
+    _write_dispense_source(source_ws, dispense_rows)
 
     for sheet_name in template_wb.sheetnames:
         src_ws = template_wb[sheet_name]
@@ -364,21 +397,33 @@ def write_output_workbook(
 
 def convert_workbook(
     dispense_path: str | Path,
-    reference_path: str | Path,
-    output_path: str | Path,
+    output_path: str | Path | None = None,
     *,
+    output_dir: str | Path | None = None,
     template_path: str | Path | None = None,
     pump_config_path: str | Path | None = None,
     include_override_fills: bool = False,
 ) -> dict[str, Any]:
     dispense_path = Path(dispense_path)
-    reference_path = Path(reference_path)
-    output_path = Path(output_path)
-    template_path = Path(template_path) if template_path else reference_path
+    template_path = Path(template_path) if template_path else DEFAULT_GILBARCO_TEMPLATE
+    if not template_path.exists():
+        raise FileNotFoundError(
+            f"Gilbarco template not found: {template_path}. "
+            "Expected bundled scripts/dispense-to-transactions/gilbarco-template.xlsx"
+        )
 
     config = load_pump_config(pump_config_path)
     dispense_rows = parse_dispense_workbook(dispense_path)
-    fleet_by_id, owner_routes, bowser_by_fleet = load_reference_indexes(reference_path)
+    period = dispense_period_range(dispense_rows)
+    output_file_name = build_output_filename(period)
+
+    if output_path is None:
+        base_dir = Path(output_dir) if output_dir else dispense_path.parent
+        output_path = _resolve_output_path(base_dir, output_file_name)
+    else:
+        output_path = Path(output_path)
+
+    fleet_by_id, owner_routes, bowser_by_fleet = load_reference_indexes(template_path)
     all_rows, excl_rows, warnings = convert_dispense_rows(
         dispense_rows,
         fleet_by_id,
@@ -387,12 +432,16 @@ def convert_workbook(
         config,
         include_override_fills=include_override_fills,
     )
-    write_output_workbook(template_path, all_rows, excl_rows, output_path)
+    write_output_workbook(template_path, all_rows, excl_rows, dispense_rows, output_path)
 
+    period_start, period_end = period if period else (None, None)
     return {
         "source": str(dispense_path.resolve()),
-        "reference": str(reference_path.resolve()),
+        "template": str(template_path.resolve()),
         "output": str(output_path.resolve()),
+        "output_file_name": output_path.name,
+        "period_start": period_start,
+        "period_end": period_end,
         "dispense_rows": len(dispense_rows),
         "all_transactions": len(all_rows),
         "transactions_excl_bowsers": len(excl_rows),

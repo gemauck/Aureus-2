@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import openpyxl
+
+DISPENSE_SOURCE_SHEET = "Fuel Dispense Source"
 
 DISPENSE_HEADERS = (
     "Date & Time",
@@ -176,3 +179,45 @@ def extract_pump_code(fuel_pump: Any, aliases: dict[str, str]) -> str:
         return aliases[raw]
     m = re.match(r"([A-Z0-9]+)", raw.upper())
     return m.group(1) if m else raw
+
+
+def _parse_dispense_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    s = _cell_str(value)
+    if not s:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+    ):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def dispense_period_range(rows: list[dict[str, Any]]) -> tuple[str, str] | None:
+    """Return (YYYYMMDD start, YYYYMMDD end) from dispense rows, or None."""
+    dates: list[datetime] = []
+    for row in rows:
+        dt = _parse_dispense_datetime(row.get("Date & Time"))
+        if dt:
+            dates.append(dt)
+    if not dates:
+        return None
+    start = min(dates).strftime("%Y%m%d")
+    end = max(dates).strftime("%Y%m%d")
+    return start, end
+
+
+def build_output_filename(period: tuple[str, str] | None) -> str:
+    if period:
+        start, end = period
+        return f"Fuel Dispense Report {start} - {end}.xlsx"
+    return "Fuel Dispense Report.xlsx"
