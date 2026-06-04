@@ -1,4 +1,38 @@
-import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
+// Lazy-loaded scripts use a stub `require()` — do not ES-import utils; use window global + fallback.
+function sanitizeJobCardStockUsedForSave(stockUsed) {
+    if (typeof window !== 'undefined' && typeof window.sanitizeJobCardStockUsedForSave === 'function') {
+        return window.sanitizeJobCardStockUsedForSave(stockUsed);
+    }
+    const rows = Array.isArray(stockUsed) ? stockUsed : [];
+    return rows
+        .filter((row) => {
+            if (!row || typeof row !== 'object') return false;
+            const sku = String(row.sku || '').trim();
+            const locationId = String(row.locationId || row.location || '').trim();
+            const qty = parseFloat(row.quantity);
+            return sku && locationId && Number.isFinite(qty) && qty > 0;
+        })
+        .map((row) => {
+            const sku = String(row.sku).trim();
+            const locationId = String(row.locationId || row.location).trim();
+            const out = {
+                sku,
+                quantity: parseFloat(row.quantity),
+                locationId,
+                locationName: String(row.locationName || '').trim(),
+                itemName: String(row.itemName || row.name || '').trim(),
+                id:
+                    row.id != null && String(row.id).trim()
+                        ? String(row.id).trim()
+                        : `stock-line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+            };
+            if (row.unitCost !== undefined && row.unitCost !== null && row.unitCost !== '') {
+                const uc = parseFloat(row.unitCost);
+                if (Number.isFinite(uc)) out.unitCost = uc;
+            }
+            return out;
+        });
+}
 
 // Get dependencies from window
 const { useState, useEffect, useRef, useCallback, useLayoutEffect } = React;
@@ -213,6 +247,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [availableSites, setAvailableSites] = useState([]);
     const [saving, setSaving] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const submitErrorRef = useRef(null);
     const [formTemplates, setFormTemplates] = useState([]);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -922,6 +957,15 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         }));
     };
 
+    const showSubmitError = useCallback((message) => {
+        const msg = String(message || '').trim();
+        if (!msg) return;
+        setSubmitError(msg);
+        requestAnimationFrame(() => {
+            submitErrorRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        });
+    }, []);
+
     const handleSubmit = async (e, options = {}) => {
         if (e?.preventDefault) e.preventDefault();
         setSubmitError('');
@@ -929,11 +973,11 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         const priorStatus = jobCard?.status || 'draft';
 
         if (!String(formData.agentName || '').trim()) {
-            setSubmitError('Agent name is required.');
+            showSubmitError('Agent name is required.');
             return;
         }
         if (!String(formData.clientId || '').trim()) {
-            setSubmitError('Please select a client.');
+            showSubmitError('Please select a client.');
             return;
         }
 
@@ -944,9 +988,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 formData.reasonForVisit
             )
         ) {
-            const msg =
-                'Enter a reason for the visit before changing status to Submitted or Completed.';
-            setSubmitError(msg);
+            showSubmitError(
+                'Enter a reason for the visit before changing status to Submitted or Completed.'
+            );
             return;
         }
 
@@ -969,8 +1013,8 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             (f) => (f.status || '').toString().toLowerCase() !== 'completed'
                         );
                         if (forms.length > 0 && incomplete.length > 0) {
-                            alert(
-                                'This job card still has service forms/checklists that are not completed. Please complete all attached forms before marking the job as completed.'
+                            showSubmitError(
+                                'Complete all attached service forms/checklists before marking this job card as Completed.'
                             );
                             return;
                         }
@@ -1068,7 +1112,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
             const saveResult = await onSave(jobCardData);
             if (saveResult && saveResult.ok === false) {
-                setSubmitError(saveResult.error || 'Failed to save job card.');
+                showSubmitError(saveResult.error || 'Failed to save job card.');
                 return;
             }
             const resolvedId =
@@ -1120,7 +1164,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             onClose();
         } catch (error) {
             console.error('JobCardModal: save failed', error);
-            setSubmitError(error?.message || 'Failed to save job card.');
+            showSubmitError(error?.message || 'Failed to save job card.');
         } finally {
             setSaving(false);
         }
@@ -1156,6 +1200,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                     <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
                     {submitError ? (
                         <div
+                            ref={submitErrorRef}
                             role="alert"
                             className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
                         >
@@ -2098,7 +2143,16 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex shrink-0 gap-2 border-t border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/80 sm:px-6">
+                    <div className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/80 sm:px-6">
+                    {submitError ? (
+                        <div
+                            role="alert"
+                            className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+                        >
+                            {submitError}
+                        </div>
+                    ) : null}
+                    <div className="flex gap-2">
                         <button
                             type="button"
                             onClick={onClose}
@@ -2115,12 +2169,14 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                             {saving ? 'Saving…' : 'Save Draft'}
                         </button>
                         <button
-                            type="submit"
+                            type="button"
                             disabled={saving}
+                            onClick={(ev) => handleSubmit(ev)}
                             className="flex-1 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {saving ? 'Saving…' : jobCard ? 'Update Job Card' : 'Create Job Card'}
                         </button>
+                    </div>
                     </div>
                 </form>
 

@@ -65,6 +65,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/teams/POAReview.jsx',
         './src/components/teams/DFRRCheck.jsx',
         './src/components/manufacturing/JobCardVoiceNoteTextarea.jsx',
+        './src/utils/jobCardStockUsed.js',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
         './src/components/teams/Teams.jsx',
