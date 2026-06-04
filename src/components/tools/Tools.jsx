@@ -50,7 +50,8 @@ const Tools = () => {
         SafetyCultureInspections: null,
         DocumentSorter: null,
         ExpenseCaptureTool: null,
-        TravelBookingRequests: null
+        TravelBookingRequests: null,
+        SparrowToGilbarco: null
     });
     const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
     const prevUrlToolIdRef = useRef(undefined);
@@ -91,7 +92,8 @@ const Tools = () => {
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
                 ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
-                TravelBookingRequests: window.TravelBookingRequests
+                TravelBookingRequests: window.TravelBookingRequests,
+                SparrowToGilbarco: window.SparrowToGilbarco
             };
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
@@ -156,7 +158,8 @@ const Tools = () => {
                 SafetyCultureInspections: window.SafetyCultureInspections,
                 DocumentSorter: window.DocumentSorter,
                 ExpenseCaptureTool: window.ExpenseCaptureTool || window.ReceiptCaptureTool,
-                TravelBookingRequests: window.TravelBookingRequests
+                TravelBookingRequests: window.TravelBookingRequests,
+                SparrowToGilbarco: window.SparrowToGilbarco
             };
             setToolComponents(prev => {
                 const hasChanged = Object.keys(components).some(key => 
@@ -268,6 +271,14 @@ const Tools = () => {
                 icon: 'fa-plane',
                 color: 'sky',
                 component: toolComponents.TravelBookingRequests
+            },
+            {
+                id: 'sparrow-to-gilbarco',
+                name: 'Sparrow to Gilbarco',
+                description: 'Convert FuelTrack / Sparrow Fuel Dispense Reports to Transactions & Fuel Breakdown workbooks',
+                icon: 'fa-right-left',
+                color: 'indigo',
+                component: toolComponents.SparrowToGilbarco
             }
         ];
         // Debug: Log when tools array is recalculated

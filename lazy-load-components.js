@@ -157,6 +157,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/tools/SafetyCultureInspections.jsx',
         './src/components/tools/DocumentSorter.jsx',
         './src/components/tools/TravelBookingRequests.jsx',
+        './src/components/tools/SparrowToGilbarco.jsx',
         './src/components/tools/Tools.jsx',
         
         // ERP Calendar (greenfield)

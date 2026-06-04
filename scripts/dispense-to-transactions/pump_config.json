@@ -1,0 +1,61 @@
+{
+  "fuel_pump_aliases": {
+    "OTK105M (FuelTrack)": "OTK105M"
+  },
+  "vehicle_routes": [
+    {
+      "match": { "group1_contains": "Andru Mining HDV", "asset_owner": "ANDRU MINING" },
+      "location": "ANDRU MINING",
+      "device_id": "A MINING - CONTR",
+      "pump": "A MINING  - CONTR P1",
+      "pump_controller": "490",
+      "group1": null
+    },
+    {
+      "match": { "group1_contains": "Gundo HDV", "asset_owner": "GUNDO" },
+      "location": "ANDRU MINING",
+      "device_id": "A MINING - CONTR",
+      "pump": "A MINING  - CONTR P1",
+      "pump_controller": "490",
+      "group1": "NON-STATIONARY"
+    },
+    {
+      "match": { "group1_contains": "MAFUBE - HDV", "asset_owner": "MAFUBE" },
+      "location": "Nooitgedact",
+      "device_id": "Mafube - Nooitgedact",
+      "pump": "Mafube - Nooitgedact - HDV P2",
+      "pump_controller": "21068",
+      "group1": "NON-STATIONARY"
+    },
+    {
+      "match": { "group1_contains": "Janelaw HDV" },
+      "location": "ANDRU MINING",
+      "device_id": "A MINING - CONTR",
+      "pump": "A MINING  - CONTR P1",
+      "pump_controller": "490",
+      "group1": null
+    }
+  ],
+  "bowser_template": {
+    "fleet_id_from_pump": true,
+    "make": "BULK DIESEL TANK",
+    "model": "BULK TANK BULK TANK",
+    "location": "Service Bay",
+    "device_id": "Mafube HDV Bay",
+    "pump": "SB P1",
+    "pump_controller": "308",
+    "vehicle_category": "BOWSER",
+    "product_name": "DIESEL",
+    "consumption_meter": "None",
+    "consumption_type": "None",
+    "group1": "NON-STATIONARY",
+    "group2": "Not Eligible",
+    "group3": "ANDRU MINING",
+    "group4": "162699",
+    "group5": "4003338577",
+    "responsibility_code": "2",
+    "business_revenue_code": "5",
+    "cost_centre": "1",
+    "tax_rebate_code": "4"
+  }
+}

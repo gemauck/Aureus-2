@@ -2887,6 +2887,13 @@ app.post('/api/fuel-refund-audit/process', (req, res) =>
     routeLabel: 'Fuel Refund Report Audit',
   })
 )
+const SPARROW_TO_GILBARCO_TIMEOUT_MS = 300000 // 5m
+app.post('/api/tools/sparrow-to-gilbarco', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'tools', 'sparrow-to-gilbarco.js'), {
+    timeoutMs: SPARROW_TO_GILBARCO_TIMEOUT_MS,
+    routeLabel: 'Sparrow to Gilbarco',
+  })
+)
 // Serve standalone Python script for browser (Pyodide) run
 app.get('/api/poa-review/browser-script', (req, res) => {
   try {
@@ -2978,10 +2985,11 @@ app.use('/api', async (req, res) => {
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel');
     const isFuelRefundAudit = req.url.includes('/fuel-refund-audit/process');
+    const isSparrowToGilbarco = req.url.includes('/tools/sparrow-to-gilbarco');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
     const isPoaExcel = req.url.includes('/poa-review/process-excel')
-    const timeoutDuration = isPoaExcel ? POA_REVIEW_TIMEOUT_MS : isPOAReview ? POA_BATCH_TIMEOUT_MS : isFuelRefundAudit ? FUEL_REFUND_AUDIT_TIMEOUT_MS : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA Excel: 15m; POA batch: 6m; fuel refund audit: 10m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
+    const timeoutDuration = isPoaExcel ? POA_REVIEW_TIMEOUT_MS : isPOAReview ? POA_BATCH_TIMEOUT_MS : isFuelRefundAudit ? FUEL_REFUND_AUDIT_TIMEOUT_MS : isSparrowToGilbarco ? SPARROW_TO_GILBARCO_TIMEOUT_MS : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA Excel: 15m; POA batch: 6m; fuel refund audit: 10m; sparrow→gilbarco: 5m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
     
     timeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -3229,7 +3237,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'discussion-replies', 'notes']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }
