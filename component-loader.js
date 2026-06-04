@@ -339,7 +339,7 @@
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {
-                applyDynamicCacheBust('jobcards-list-perf-v20260604');
+                applyDynamicCacheBust('jobcards-list-perf-v20260604b');
             }
 
             // Force cache-bust for DashboardLive widget drag-drop and resize features

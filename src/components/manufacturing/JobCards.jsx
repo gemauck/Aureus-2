@@ -139,6 +139,7 @@ function getHeadingFromJobCard(jobCard) {
   if (jobCard.heading != null && String(jobCard.heading).trim() !== '') {
     return String(jobCard.heading).trim();
   }
+  // List API (listFields=table) supplies heading without otherComments.
   const rawComments = jobCard.otherComments;
   if (typeof rawComments !== 'string' || !rawComments.trim()) return '';
   const headingLine = rawComments
@@ -709,6 +710,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
 
   const JOB_CARDS_INLINE_LIST_SCROLL_KEY = 'jobcards.inlineListScroll';
   const JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY = 'jobcards.inlineListScrollRestorePending';
+  const JOB_CARDS_LIST_CACHE_KEY = 'jobcards.listCache.v1';
+  const JOB_CARDS_LIST_CACHE_MS = 90_000;
 
   const getListScrollContainer = useCallback(() => {
     const mainContainer = document.getElementById('main-page-scroll');
@@ -987,6 +990,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
       params.set('sortField', apiSortField);
       params.set('sortDirection', sortDirection);
       params.set('omitFormCounts', '1');
+      params.set('listFields', 'table');
       return `/api/jobcards?${params.toString()}`;
     },
     [
@@ -1008,6 +1012,46 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
     ]
   );
 
+  const listCacheFingerprint = useCallback(() => {
+    try {
+      const url = buildJobCardsListUrl(1);
+      return url.replace(/([?&])page=\d+/, '$1page=1');
+    } catch {
+      return '';
+    }
+  }, [buildJobCardsListUrl]);
+
+  const readListCache = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(JOB_CARDS_LIST_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const key = listCacheFingerprint();
+      if (!key || parsed?.key !== key) return null;
+      if (Date.now() - Number(parsed?.at || 0) > JOB_CARDS_LIST_CACHE_MS) return null;
+      if (!Array.isArray(parsed?.data)) return null;
+      return { data: parsed.data, pagination: parsed.pagination || null };
+    } catch {
+      return null;
+    }
+  }, [listCacheFingerprint]);
+
+  const writeListCache = useCallback(
+    (data, pagination) => {
+      try {
+        const key = listCacheFingerprint();
+        if (!key || !Array.isArray(data) || data.length === 0) return;
+        sessionStorage.setItem(
+          JOB_CARDS_LIST_CACHE_KEY,
+          JSON.stringify({ at: Date.now(), key, data, pagination: pagination || null })
+        );
+      } catch {
+        /* quota / private mode */
+      }
+    },
+    [listCacheFingerprint]
+  );
+
   const fetchJobCardsPage = useCallback(
     async (pageToLoad, { silent = false } = {}) => {
       const token = window.storage?.getToken?.();
@@ -1025,7 +1069,16 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
       const controller = new AbortController();
       listFetchAbortRef.current = controller;
 
-      const useSilent = silent;
+      let useSilent = silent;
+      if (!useSilent && pageToLoad === 1) {
+        const cached = readListCache();
+        if (cached) {
+          setJobCards(cached.data);
+          setPagination(cached.pagination);
+          hasLoadedListRef.current = true;
+          useSilent = true;
+        }
+      }
 
       try {
         if (useSilent) {
@@ -1071,11 +1124,17 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
         const data =
           (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
 
-        setJobCards(Array.isArray(data) ? data : []);
+        const rows = Array.isArray(data) ? data : [];
+        setJobCards(rows);
         hasLoadedListRef.current = true;
-        setPagination(raw.pagination || raw.data?.pagination || null);
+        const nextPagination = raw.pagination || raw.data?.pagination || null;
+        setPagination(nextPagination);
+        if (pageToLoad === 1) {
+          writeListCache(rows, nextPagination);
+        }
 
-        const scheduleTotalFetch = () => {
+        // Full-table count is expensive; only load totals after page 1 or when idle on later pages.
+        if (pageToLoad > 1) {
           const totalFetchId = ++listTotalFetchRef.current;
           const totalUrl = buildJobCardsListUrl(pageToLoad, { includeTotal: true });
           void fetch(totalUrl, {
@@ -1098,15 +1157,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
                 hasMore: tp.hasMore ?? prev?.hasMore,
               }));
             })
-            .catch(() => {
-              /* non-fatal — list is already shown */
-            });
-        };
-
-        if (typeof window.requestIdleCallback === 'function') {
-          window.requestIdleCallback(scheduleTotalFetch, { timeout: 2500 });
-        } else {
-          window.setTimeout(scheduleTotalFetch, 400);
+            .catch(() => {});
         }
       } catch (e) {
         if (e?.name === 'AbortError') return;
@@ -1136,7 +1187,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
         }
       }
     },
-    [buildJobCardsListUrl]
+    [buildJobCardsListUrl, readListCache, writeListCache]
   );
 
   useEffect(() => {

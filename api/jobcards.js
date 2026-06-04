@@ -20,6 +20,10 @@ import {
   jobCardJsonFieldHasEntries
 } from './_lib/jobCardListSearch.js'
 import {
+  fetchJobCardListHeadingsByIds,
+  JOB_CARD_LIST_TABLE_SELECT
+} from './_lib/jobCardListHeading.js'
+import {
   enrichJobCardRowsSiteNames,
   resolveClientSiteName
 } from './_lib/jobCardSiteResolve.js'
@@ -986,6 +990,10 @@ async function handler(req, res) {
         const needUsageJsonFields =
           includeStockUsed ||
           !!usageFilterRaw
+        const listFieldsParam = (url.searchParams.get('listFields') || '').trim().toLowerCase()
+        const useTableListFields =
+          listFieldsParam === 'table' ||
+          (listFieldsParam !== 'full' && (omitFormCounts || !includeStockUsed))
 
         function looksLikeJobCardOwnerId(value) {
           if (!value || typeof value !== 'string') return false
@@ -1074,7 +1082,7 @@ async function handler(req, res) {
 
         // Limit the number of job cards returned and support simple pagination
         // to keep the dashboard fast even as history grows.
-        const listSelectBase = {
+        const listSelectFull = {
           id: true,
           jobCardNumber: true,
           agentName: true,
@@ -1109,6 +1117,8 @@ async function handler(req, res) {
           safetyCultureAuditId: true,
           ...(needUsageJsonFields ? { stockUsed: true, materialsBought: true } : {})
         }
+
+        const listSelectBase = useTableListFields ? JOB_CARD_LIST_TABLE_SELECT : listSelectFull
 
         const totalItemsPromise = includeTotal
           ? prisma.jobCard.count({ where: whereClause })
@@ -1168,6 +1178,13 @@ async function handler(req, res) {
 
         const totalItems = totalItemsPromise ? await totalItemsPromise : null
 
+        const headingById = useTableListFields
+          ? await fetchJobCardListHeadingsByIds(
+              prisma,
+              jobCards.map((row) => row.id)
+            )
+          : null
+
         // Format dates for response; flatten checklist count for clients
         const formatted = jobCards.map((jobCard) => {
           const {
@@ -1177,8 +1194,9 @@ async function handler(req, res) {
             materialsBought: materialsBoughtRaw,
             ...rest
           } = jobCard
-          const heading =
-            rest.heading != null && String(rest.heading).trim() !== ''
+          const heading = useTableListFields
+            ? (headingById?.get(String(jobCard.id)) || '')
+            : rest.heading != null && String(rest.heading).trim() !== ''
               ? String(rest.heading).trim()
               : extractHeadingFromOtherComments(otherComments)
           const row = {
@@ -1194,14 +1212,18 @@ async function handler(req, res) {
             reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
             location: truncateJobCardListText(rest.location),
             createdAt: formatDate(rest.createdAt),
-            updatedAt: formatDate(rest.updatedAt),
-            submittedAt: formatDate(rest.submittedAt),
-            completedAt: formatDate(rest.completedAt),
             startedAt: formatDate(rest.startedAt),
-            timeOfDeparture: formatDate(rest.timeOfDeparture),
-            timeOfArrival: formatDate(rest.timeOfArrival),
-            departureFromSite: formatDate(rest.departureFromSite),
-            arrivalBackAtOffice: formatDate(rest.arrivalBackAtOffice)
+            ...(useTableListFields
+              ? {}
+              : {
+                  updatedAt: formatDate(rest.updatedAt),
+                  submittedAt: formatDate(rest.submittedAt),
+                  completedAt: formatDate(rest.completedAt),
+                  timeOfDeparture: formatDate(rest.timeOfDeparture),
+                  timeOfArrival: formatDate(rest.timeOfArrival),
+                  departureFromSite: formatDate(rest.departureFromSite),
+                  arrivalBackAtOffice: formatDate(rest.arrivalBackAtOffice)
+                })
           }
           if (includeStockUsed) {
             row.stockUsed = parseJson(stockUsedRaw, [])
