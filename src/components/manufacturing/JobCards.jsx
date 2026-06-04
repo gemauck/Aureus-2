@@ -1435,13 +1435,13 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const handleSaveJobCard = async (formData) => {
     if (!window.DatabaseAPI) {
       console.error('❌ DatabaseAPI is not available on window');
-      return;
+      return { ok: false, error: 'Database API is not available. Refresh the page and try again.' };
     }
 
     // Prevent duplicate submissions
     if (saving) {
       console.warn('⚠️ Job card save already in progress, ignoring duplicate submission');
-      return;
+      return { ok: false, error: 'Save already in progress. Please wait.' };
     }
 
     try {
@@ -1465,32 +1465,34 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       if (savedId && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('jobcards:saved', { detail: { id: savedId } }));
       }
-      return { id: savedId };
+      return { ok: true, id: savedId };
     } catch (e) {
       console.error('❌ Failed to save job card from classic manager:', e);
-      
-      // Provide user-friendly error messages based on error type
+
       let errorMessage = 'Failed to save job card. Please try again.';
       const errorMsg = e.message || String(e);
-      
-      // Check for specific error types
+
       if (errorMsg.includes('502') || errorMsg.includes('Bad Gateway')) {
-        errorMessage = 'The server is temporarily unavailable (Bad Gateway). The system will automatically retry. Please wait a moment and try again if the issue persists.';
+        errorMessage =
+          'The server is temporarily unavailable (Bad Gateway). Please wait a moment and try again.';
       } else if (errorMsg.includes('503') || errorMsg.includes('Service Unavailable')) {
         errorMessage = 'The service is temporarily unavailable. Please try again in a few moments.';
       } else if (errorMsg.includes('504') || errorMsg.includes('Gateway Timeout')) {
         errorMessage = 'The request timed out. Please try again.';
       } else if (errorMsg.includes('500') || errorMsg.includes('Server error')) {
-        errorMessage = 'A server error occurred. Please try again. If the problem persists, contact support.';
+        errorMessage =
+          'A server error occurred. Please try again. If the problem persists, contact support.';
       } else if (errorMsg.includes('Network error') || errorMsg.includes('Failed to fetch')) {
-        errorMessage = 'Network connection error. Please check your internet connection and try again.';
+        errorMessage =
+          'Network connection error. Please check your internet connection and try again.';
       } else if (errorMsg.includes('Database connection failed')) {
-        errorMessage = 'Database connection failed. The system is temporarily unavailable. Please try again in a few moments.';
+        errorMessage =
+          'Database connection failed. The system is temporarily unavailable. Please try again in a few moments.';
       } else if (errorMsg) {
         errorMessage = errorMsg;
       }
-      
-      alert(errorMessage);
+
+      return { ok: false, error: errorMessage };
     } finally {
       setSaving(false);
     }

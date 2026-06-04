@@ -139,6 +139,22 @@ function answersObjectFromRows(answers) {
 const isLikelyServerFormInstanceId = (id) =>
     typeof id === 'string' && /^c[a-z0-9]{24}$/i.test(id);
 
+const TERMINAL_JOB_CARD_STATUSES = new Set(['submitted', 'completed', 'ready_for_invoice']);
+
+function normalizeJobCardStatusForModal(status) {
+    if (status === undefined || status === null || String(status).trim() === '') return 'draft';
+    return String(status).trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+/** Require visit reason only when moving into a terminal status from a non-terminal one. */
+function jobCardRequiresVisitReasonForSave(priorStatus, targetStatus, reasonForVisit) {
+    const prior = normalizeJobCardStatusForModal(priorStatus);
+    const target = normalizeJobCardStatusForModal(targetStatus);
+    if (!TERMINAL_JOB_CARD_STATUSES.has(target)) return false;
+    if (TERMINAL_JOB_CARD_STATUSES.has(prior)) return false;
+    return !String(reasonForVisit || '').trim();
+}
+
 const VoiceNoteTextarea =
     typeof window !== 'undefined' && window.JobCardVoiceNoteTextarea
         ? window.JobCardVoiceNoteTextarea
@@ -196,6 +212,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [voiceAttachments, setVoiceAttachments] = useState([]);
     const [availableSites, setAvailableSites] = useState([]);
     const [saving, setSaving] = useState(false);
+    const [submitError, setSubmitError] = useState('');
     const [formTemplates, setFormTemplates] = useState([]);
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -238,6 +255,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
     useEffect(() => {
         if (jobCard) {
+            setSubmitError('');
             const photosRaw = parseJsonArrayField(jobCard.photos);
             const voiceEntries = photosRaw.filter(
                 (p) => p && typeof p === 'object' && p.kind === 'voice'
@@ -906,11 +924,29 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
     const handleSubmit = async (e, options = {}) => {
         if (e?.preventDefault) e.preventDefault();
+        setSubmitError('');
         const targetStatus = options.forceStatus || formData.status || 'draft';
-        const requiresVisitReason = targetStatus !== 'draft';
+        const priorStatus = jobCard?.status || 'draft';
 
-        if (requiresVisitReason && !String(formData.reasonForVisit || '').trim()) {
-            alert('Please enter a reason for the visit before submitting.');
+        if (!String(formData.agentName || '').trim()) {
+            setSubmitError('Agent name is required.');
+            return;
+        }
+        if (!String(formData.clientId || '').trim()) {
+            setSubmitError('Please select a client.');
+            return;
+        }
+
+        if (
+            jobCardRequiresVisitReasonForSave(
+                priorStatus,
+                targetStatus,
+                formData.reasonForVisit
+            )
+        ) {
+            const msg =
+                'Enter a reason for the visit before changing status to Submitted or Completed.';
+            setSubmitError(msg);
             return;
         }
 
@@ -1031,6 +1067,10 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             };
 
             const saveResult = await onSave(jobCardData);
+            if (saveResult && saveResult.ok === false) {
+                setSubmitError(saveResult.error || 'Failed to save job card.');
+                return;
+            }
             const resolvedId =
                 (saveResult && typeof saveResult === 'object' && saveResult.id) || jobCard?.id || null;
 
@@ -1078,6 +1118,9 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
             }
 
             onClose();
+        } catch (error) {
+            console.error('JobCardModal: save failed', error);
+            setSubmitError(error?.message || 'Failed to save job card.');
         } finally {
             setSaving(false);
         }
@@ -1106,10 +1149,20 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                 </div>
 
                 <form
+                    noValidate
                     onSubmit={handleSubmit}
                     className="flex min-h-0 flex-1 flex-col overflow-hidden"
                 >
                     <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+                    {submitError ? (
+                        <div
+                            role="alert"
+                            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
+                        >
+                            <i className="fas fa-exclamation-circle mr-2" aria-hidden />
+                            {submitError}
+                        </div>
+                    ) : null}
                     {/* Agent Name - Auto-populated */}
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
