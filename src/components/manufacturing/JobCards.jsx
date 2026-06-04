@@ -644,7 +644,7 @@ function JobCardListMetricChips({ jc, isDark, chipTextClass = 'text-[10px]' }) {
   );
 }
 
-const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
+const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) => {
   const isDark = (typeof window !== 'undefined' && window.useTheme) ? (window.useTheme().isDark) : false;
   if (!useState || !useEffect || !useMemo || !useCallback || !useRef) {
     return (
@@ -700,7 +700,12 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [createdTo, setCreatedTo] = useState('');
   /** all | has | none — stock used and/or materials bought on the job card */
   const [usageFilter, setUsageFilter] = useState('all');
+  const [filtersExpanded, setFiltersExpanded] = useState(!embedded);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const listScrollRestoreFrameRef = useRef(null);
+  const listFetchAbortRef = useRef(null);
+  const listFetchSeqRef = useRef(0);
+  const hasLoadedListRef = useRef(false);
 
   const JOB_CARDS_INLINE_LIST_SCROLL_KEY = 'jobcards.inlineListScroll';
   const JOB_CARDS_INLINE_LIST_SCROLL_RESTORE_KEY = 'jobcards.inlineListScrollRestorePending';
@@ -981,6 +986,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 : 'createdAt';
       params.set('sortField', apiSortField);
       params.set('sortDirection', sortDirection);
+      params.set('omitFormCounts', '1');
       return `/api/jobcards?${params.toString()}`;
     },
     [
@@ -1003,7 +1009,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   );
 
   const fetchJobCardsPage = useCallback(
-    async (pageToLoad) => {
+    async (pageToLoad, { silent = false } = {}) => {
       const token = window.storage?.getToken?.();
       if (!token) {
         setError('You must be logged in to view job cards.');
@@ -1012,8 +1018,21 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         return;
       }
 
+      const fetchSeq = ++listFetchSeqRef.current;
+      if (listFetchAbortRef.current) {
+        listFetchAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      listFetchAbortRef.current = controller;
+
+      const useSilent = silent;
+
       try {
-        setLoading(true);
+        if (useSilent) {
+          setListRefreshing(true);
+        } else {
+          setLoading(true);
+        }
         setError(null);
 
         const response = await fetch(buildJobCardsListUrl(pageToLoad), {
@@ -1021,6 +1040,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -1046,38 +1066,52 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         }
 
         const raw = await response.json();
+        if (fetchSeq !== listFetchSeqRef.current) return;
+
         const data =
           (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
 
         setJobCards(Array.isArray(data) ? data : []);
+        hasLoadedListRef.current = true;
         setPagination(raw.pagination || raw.data?.pagination || null);
 
-        const fetchId = ++listTotalFetchRef.current;
-        const totalUrl = buildJobCardsListUrl(pageToLoad, { includeTotal: true });
-        void fetch(totalUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((totalRaw) => {
-            if (fetchId !== listTotalFetchRef.current || !totalRaw) return;
-            const tp = totalRaw.pagination || totalRaw.data?.pagination;
-            if (!tp || typeof tp.totalItems !== 'number') return;
-            setPagination((prev) => ({
-              ...(prev || {}),
-              page: tp.page ?? prev?.page ?? pageToLoad,
-              pageSize: tp.pageSize ?? prev?.pageSize ?? pageSize,
-              totalItems: tp.totalItems,
-              totalPages: tp.totalPages,
-              hasMore: tp.hasMore ?? prev?.hasMore,
-            }));
+        const scheduleTotalFetch = () => {
+          const totalFetchId = ++listTotalFetchRef.current;
+          const totalUrl = buildJobCardsListUrl(pageToLoad, { includeTotal: true });
+          void fetch(totalUrl, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
           })
-          .catch(() => {
-            /* non-fatal — list is already shown */
-          });
+            .then((r) => (r.ok ? r.json() : null))
+            .then((totalRaw) => {
+              if (totalFetchId !== listTotalFetchRef.current || !totalRaw) return;
+              const tp = totalRaw.pagination || totalRaw.data?.pagination;
+              if (!tp || typeof tp.totalItems !== 'number') return;
+              setPagination((prev) => ({
+                ...(prev || {}),
+                page: tp.page ?? prev?.page ?? pageToLoad,
+                pageSize: tp.pageSize ?? prev?.pageSize ?? pageSize,
+                totalItems: tp.totalItems,
+                totalPages: tp.totalPages,
+                hasMore: tp.hasMore ?? prev?.hasMore,
+              }));
+            })
+            .catch(() => {
+              /* non-fatal — list is already shown */
+            });
+        };
+
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(scheduleTotalFetch, { timeout: 2500 });
+        } else {
+          window.setTimeout(scheduleTotalFetch, 400);
+        }
       } catch (e) {
+        if (e?.name === 'AbortError') return;
+        if (fetchSeq !== listFetchSeqRef.current) return;
+
         console.error('❌ JobCards: Error loading job cards', e);
 
         let errorMessage = e.message || 'Unable to load job cards.';
@@ -1088,18 +1122,35 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         }
 
         setError(errorMessage);
-        setJobCards([]);
-        setPagination(null);
+        if (!useSilent) {
+          setJobCards([]);
+          setPagination(null);
+        }
       } finally {
-        setLoading(false);
+        if (fetchSeq === listFetchSeqRef.current) {
+          setLoading(false);
+          setListRefreshing(false);
+          if (listFetchAbortRef.current === controller) {
+            listFetchAbortRef.current = null;
+          }
+        }
       }
     },
     [buildJobCardsListUrl]
   );
 
   useEffect(() => {
-    fetchJobCardsPage(page);
+    fetchJobCardsPage(page, { silent: hasLoadedListRef.current });
   }, [page, fetchJobCardsPage]);
+
+  useEffect(
+    () => () => {
+      if (listFetchAbortRef.current) {
+        listFetchAbortRef.current.abort();
+      }
+    },
+    []
+  );
 
   const reloadJobCards = useCallback(async () => {
     await fetchJobCardsPage(page);
@@ -1613,16 +1664,39 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   }, [showDetail, onOpenDetail, restoreListScrollPosition]);
 
   return (
-    <div className={`relative mt-6 rounded-2xl shadow-sm overflow-hidden border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-      <div className={`px-4 py-4 sm:px-6 sm:py-5 border-b space-y-4 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-              Job Cards
-            </h2>
-            <p className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Search and filter field captures; open a row for the full report.
-            </p>
+    <div
+      className={`relative rounded-2xl shadow-sm overflow-hidden border ${
+        embedded ? 'mt-0' : 'mt-6'
+      } ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}
+    >
+      <div className={`px-4 py-3 sm:px-6 sm:py-4 border-b space-y-3 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {!embedded ? (
+              <div className="min-w-0">
+                <h2 className={`text-base font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                  Job Cards
+                </h2>
+                <p className={`mt-0.5 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Search and filter; open a row for the full report.
+                </p>
+              </div>
+            ) : (
+              <h2 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                Job cards
+              </h2>
+            )}
+            {listRefreshing ? (
+              <span
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+                aria-live="polite"
+              >
+                <i className="fa-solid fa-circle-notch fa-spin text-[9px]" aria-hidden />
+                Updating
+              </span>
+            ) : null}
           </div>
           {canAdjustListTextSize ? (
             <div
@@ -1657,6 +1731,24 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                 A+
               </button>
             </div>
+          ) : null}
+          {embedded ? (
+            <button
+              type="button"
+              onClick={() => setFiltersExpanded((v) => !v)}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                isDark
+                  ? 'border-slate-600 text-slate-200 hover:bg-slate-800'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+              aria-expanded={filtersExpanded}
+            >
+              <i className={`fa-solid fa-sliders text-[10px] ${filtersExpanded ? '' : 'opacity-70'}`} />
+              Filters
+              <i
+                className={`fa-solid fa-chevron-down text-[9px] transition-transform ${filtersExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
           ) : null}
         </div>
 
@@ -1700,6 +1792,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           ) : null}
         </div>
 
+        {filtersExpanded ? (
+        <>
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 ${isDark ? 'border-slate-600 bg-slate-800/80' : 'border-slate-200 bg-slate-50'}`}>
             <input
@@ -1911,16 +2005,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             </button>
           </div>
         </div>
+        </>
+        ) : null}
       </div>
 
-      {loading ? (
+      {loading && jobCards.length === 0 ? (
         <div className="flex items-center justify-center py-8">
           <div className="text-center text-sm text-gray-500">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-3" />
             <p>Loading job cards&hellip;</p>
           </div>
         </div>
-      ) : error ? (
+      ) : error && jobCards.length === 0 ? (
         <div className="px-4 py-4 sm:px-6 sm:py-5">
           <div className={`rounded-md border px-3 py-2 text-xs ${isDark ? 'border-amber-600 bg-amber-900/20 text-amber-200' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
             <div className="flex items-center justify-between gap-3">
@@ -1943,7 +2039,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
             </div>
           </div>
         </div>
-      ) : displayJobCards.length === 0 ? (
+      ) : displayJobCards.length === 0 && !loading ? (
         <div className={`px-4 py-6 sm:px-6 sm:py-8 text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           No job cards found for the selected filters.
         </div>

@@ -248,7 +248,7 @@
     const componentCacheVersions = {
         // Bump both Service & Maintenance entry and form builder so browsers
         // are forced to fetch the latest logic.
-        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251127b',
+        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20260604',
         'components/service-maintenance/ServiceFormsManager.jsx': 'service-forms-manager-v20251127d'
     };
     
@@ -339,7 +339,7 @@
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {
-                applyDynamicCacheBust('jobcards-activity-trail-v20260417');
+                applyDynamicCacheBust('jobcards-list-perf-v20260604');
             }
 
             // Force cache-bust for DashboardLive widget drag-drop and resize features

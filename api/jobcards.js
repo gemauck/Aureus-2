@@ -980,6 +980,12 @@ async function handler(req, res) {
         const includeTotal =
           url.searchParams.get('includeTotal') === '1' ||
           String(url.searchParams.get('includeTotal') || '').toLowerCase() === 'true'
+        const omitFormCounts =
+          url.searchParams.get('omitFormCounts') === '1' ||
+          String(url.searchParams.get('omitFormCounts') || '').toLowerCase() === 'true'
+        const needUsageJsonFields =
+          includeStockUsed ||
+          !!usageFilterRaw
 
         function looksLikeJobCardOwnerId(value) {
           if (!value || typeof value !== 'string') return false
@@ -1101,8 +1107,7 @@ async function handler(req, res) {
           startedAt: true,
           safetyCultureIssueId: true,
           safetyCultureAuditId: true,
-          stockUsed: true,
-          materialsBought: true
+          ...(needUsageJsonFields ? { stockUsed: true, materialsBought: true } : {})
         }
 
         const totalItemsPromise = includeTotal
@@ -1117,15 +1122,18 @@ async function handler(req, res) {
         const findTake = includeTotal ? pageSize : pageSize + 1
 
         let jobCards
-        try {
-          jobCards = await prisma.jobCard.findMany({
-            where: whereClause,
-            select: {
+        const listSelectWithCounts = omitFormCounts
+          ? listSelect
+          : {
               ...listSelect,
               _count: {
                 select: { serviceForms: true }
               }
-            },
+            }
+        try {
+          jobCards = await prisma.jobCard.findMany({
+            where: whereClause,
+            select: listSelectWithCounts,
             orderBy,
             skip: (page - 1) * pageSize,
             take: findTake
@@ -1139,6 +1147,13 @@ async function handler(req, res) {
             skip: (page - 1) * pageSize,
             take: findTake
           })
+        }
+        if (!omitFormCounts) {
+          jobCards = jobCards.map((row) => ({
+            ...row,
+            _count: row._count || { serviceForms: 0 }
+          }))
+        } else {
           jobCards = jobCards.map((row) => ({
             ...row,
             _count: { serviceForms: 0 }
@@ -1169,8 +1184,12 @@ async function handler(req, res) {
           const row = {
             ...rest,
             heading,
-            hasStockUsage: jobCardJsonFieldHasEntries(stockUsedRaw),
-            hasMaterialsBought: jobCardJsonFieldHasEntries(materialsBoughtRaw),
+            hasStockUsage: needUsageJsonFields
+              ? jobCardJsonFieldHasEntries(stockUsedRaw)
+              : false,
+            hasMaterialsBought: needUsageJsonFields
+              ? jobCardJsonFieldHasEntries(materialsBoughtRaw)
+              : typeof rest.totalMaterialsCost === 'number' && rest.totalMaterialsCost > 0,
             serviceFormsCount: typeof _count?.serviceForms === 'number' ? _count.serviceForms : 0,
             reasonForVisit: truncateJobCardListText(rest.reasonForVisit),
             location: truncateJobCardListText(rest.location),

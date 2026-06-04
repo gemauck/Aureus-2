@@ -449,7 +449,7 @@ const ServiceAndMaintenance = () => {
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
   );
-  const [adminExtrasOpen, setAdminExtrasOpen] = useState(false);
+  const [headerTab, setHeaderTab] = useState('list');
   const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
   const createJobCardMenuRef = useRef(null);
   const jobCardsListScrollRestoreFrameRef = useRef(null);
@@ -565,6 +565,34 @@ const ServiceAndMaintenance = () => {
     };
 
     loadData();
+  }, []);
+
+  // Preload JobCards bundle early so the list is not blocked on a second lazy script round-trip
+  useEffect(() => {
+    if (window.JobCards) return undefined;
+
+    const isProduction =
+      typeof window.USE_PRODUCTION_BUILD !== 'undefined'
+        ? window.USE_PRODUCTION_BUILD === true
+        : true;
+    const baseDir = isProduction ? '/dist/src/' : '/src/';
+
+    const injectScript = (componentPath, { isJsx = false } = {}) => {
+      if (document.querySelector(`script[data-component-path="${componentPath}"]`)) return;
+      const script = document.createElement('script');
+      const finalPath = isProduction && isJsx
+        ? `${baseDir}${componentPath}`.replace('.jsx', '.js')
+        : `${baseDir}${componentPath}`;
+      script.src = finalPath;
+      if (!isProduction && isJsx) script.type = 'text/babel';
+      script.defer = true;
+      script.dataset.componentPath = componentPath;
+      document.body.appendChild(script);
+    };
+
+    injectScript('components/manufacturing/jobCardActivityDisplay.js');
+    injectScript('components/manufacturing/JobCards.jsx', { isJsx: true });
+    return undefined;
   }, []);
 
   // JobCards.jsx registers on load and dispatches `jobcardsComponentReady` — prefer that over slow polling
@@ -2376,308 +2404,323 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
     setCreateJobCardMenuOpen(false);
   }, []);
 
-  return (
-    <div className="erp-module-root relative min-w-0 max-w-full px-3 py-4 sm:p-6">
-      <div className="flex flex-col gap-6 mb-6">
-        <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 sm:p-5 shadow-sm`}>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex shrink-0 items-center justify-center ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                <i className={`fa-solid fa-screwdriver-wrench ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />
-              </div>
-              <div className="min-w-0">
-                <h1 className={`text-lg sm:text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                  Service &amp; Maintenance
-                </h1>
-                <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Capture on your phone, then review and search job cards below. Mobile form saves offline and syncs when you are back online.
-                </p>
-              </div>
-            </div>
-            <span
-              className={`inline-flex shrink-0 items-center gap-2 self-start px-3 py-1 rounded-full text-xs font-semibold ${
-                isOnline
-                  ? isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-100 text-emerald-700'
-                  : isDark ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-100 text-amber-700'
-              }`}
-            >
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
-                }`}
-              />
-              {isOnline ? 'Online' : 'Offline mode'}
-            </span>
-          </div>
+  const headerTabs = useMemo(() => {
+    const tabs = [
+      { id: 'list', label: 'Job cards', icon: 'fa-clipboard-list' },
+      { id: 'tools', label: 'Tools & links', icon: 'fa-link' },
+    ];
+    if (isAdminUser) {
+      tabs.push({ id: 'admin', label: 'Admin', icon: 'fa-gear' });
+    }
+    return tabs;
+  }, [isAdminUser]);
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
-            <a
-              href="/job-card"
-              className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 sm:w-auto sm:max-w-xs ${isDark ? 'bg-primary-500 text-white hover:bg-primary-600 focus-visible:ring-offset-gray-900' : 'bg-primary-600 text-white hover:bg-primary-700 focus-visible:ring-offset-white'}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <i className="fa-solid fa-mobile-screen-button text-sm" />
-              Open mobile job card
-            </a>
-            <div className="relative inline-flex" ref={createJobCardMenuRef}>
+  const openFormBuilder = useCallback(() => {
+    try {
+      const hasManager = !!window.ServiceFormsManager;
+
+      if (!hasManager) {
+        const isProduction =
+          typeof window.USE_PRODUCTION_BUILD !== 'undefined'
+            ? window.USE_PRODUCTION_BUILD === true
+            : true;
+        const baseDir = isProduction ? '/dist/src/' : '/src/';
+        const path = 'components/service-maintenance/ServiceFormsManager.jsx';
+        const finalPath = isProduction
+          ? `${baseDir}${path}`.replace('.jsx', '.js')
+          : `${baseDir}${path}`;
+
+        const existingScript = document.querySelector(
+          'script[data-component-path="components/service-maintenance/ServiceFormsManager.jsx"]'
+        );
+        if (!existingScript) {
+          const script = document.createElement('script');
+          if (isProduction) {
+            script.src = finalPath;
+            script.defer = true;
+          } else {
+            script.type = 'text/babel';
+            script.src = finalPath;
+          }
+          script.dataset.componentPath =
+            'components/service-maintenance/ServiceFormsManager.jsx';
+          script.onerror = () => {
+            console.error(
+              '❌ ServiceAndMaintenance: Failed to load ServiceFormsManager script',
+              finalPath
+            );
+          };
+          document.body.appendChild(script);
+        }
+
+        setTimeout(() => {
+          if (window.ServiceFormsManager) {
+            setFormsManagerReady(true);
+          } else {
+            console.warn(
+              '⚠️ ServiceAndMaintenance: ServiceFormsManager still not available after script injection'
+            );
+          }
+        }, 500);
+      } else {
+        setFormsManagerReady(true);
+      }
+
+      setShowFormsManager(true);
+    } catch (error) {
+      console.error(
+        '❌ ServiceAndMaintenance: Error handling Open form builder click',
+        error
+      );
+      alert(
+        'Unable to open the form builder right now. Please check the console for details or try again.'
+      );
+    }
+  }, []);
+
+  return (
+    <div className="erp-module-root relative min-w-0 max-w-full px-3 py-3 sm:px-5 sm:py-4">
+      <div
+        className={`mb-3 rounded-xl border shadow-sm ${
+          isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <i className={`fa-solid fa-screwdriver-wrench text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className={`truncate text-base font-semibold sm:text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+              Service &amp; Maintenance
+            </h1>
+            <p className={`truncate text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              Mobile capture · offline sync · search below
+            </p>
+          </div>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+              isOnline
+                ? isDark ? 'bg-emerald-500/10 text-emerald-200' : 'bg-emerald-100 text-emerald-700'
+                : isDark ? 'bg-amber-500/10 text-amber-200' : 'bg-amber-100 text-amber-700'
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+              }`}
+            />
+            {isOnline ? 'Online' : 'Offline'}
+          </span>
+          <a
+            href="/job-card"
+            className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold shadow-sm transition-colors sm:text-sm ${
+              isDark
+                ? 'bg-primary-500 text-white hover:bg-primary-600'
+                : 'bg-primary-600 text-white hover:bg-primary-700'
+            }`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <i className="fa-solid fa-mobile-screen-button" />
+            <span className="hidden sm:inline">Mobile</span>
+            <span className="sm:hidden">App</span>
+          </a>
+        </div>
+
+        <div
+          className={`flex gap-0.5 overflow-x-auto border-t px-2 sm:px-3 ${
+            isDark ? 'border-gray-800' : 'border-gray-100'
+          }`}
+          role="tablist"
+          aria-label="Service and maintenance sections"
+        >
+          {headerTabs.map((tab) => {
+            const active = headerTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setHeaderTab(tab.id)}
+                className={`inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
+                  active
+                    ? isDark
+                      ? 'border-primary-400 text-primary-200'
+                      : 'border-primary-600 text-primary-700'
+                    : isDark
+                      ? 'border-transparent text-gray-400 hover:text-gray-200'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                <i className={`fa-solid ${tab.icon} text-[10px]`} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {headerTab === 'tools' ? (
+          <div className={`space-y-3 border-t px-3 py-3 sm:px-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className="flex flex-wrap gap-2">
+              <div className="relative inline-flex" ref={createJobCardMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setCreateJobCardMenuOpen((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${
+                    isDark
+                      ? 'border-gray-700 bg-gray-800/80 text-gray-100 hover:bg-gray-800'
+                      : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
+                  }`}
+                  aria-expanded={createJobCardMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  <i className="fa-solid fa-plus text-[10px]" />
+                  Create job card
+                  <i className="fa-solid fa-chevron-down text-[9px]" />
+                </button>
+                {createJobCardMenuOpen ? (
+                  <div
+                    className={`absolute left-0 top-[calc(100%+6px)] z-20 w-56 rounded-xl border p-1 shadow-xl ${
+                      isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
+                    }`}
+                    role="menu"
+                  >
+                    <button
+                      type="button"
+                      onClick={openClassicJobCardEditor}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs ${
+                        isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
+                      }`}
+                      role="menuitem"
+                    >
+                      <i className="fa-solid fa-table-columns text-[10px]" />
+                      Classic editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openJobCardWizard}
+                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs ${
+                        isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
+                      }`}
+                      role="menuitem"
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles text-[10px]" />
+                      Job card wizard
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
-                onClick={() => setCreateJobCardMenuOpen((prev) => !prev)}
-                className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 bg-gray-800/80 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'}`}
-                aria-expanded={createJobCardMenuOpen}
-                aria-haspopup="menu"
+                onClick={handleOpenClassic}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${
+                  isDark
+                    ? 'border-gray-700 text-gray-200 hover:bg-gray-800'
+                    : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
               >
-                <i className="fa-solid fa-plus text-xs" />
-                Create job card
-                <i className="fa-solid fa-chevron-down text-[10px]" />
+                <i className="fa-solid fa-table-columns text-[10px]" />
+                Classic manager
               </button>
-              {createJobCardMenuOpen ? (
-                <div
-                  className={`absolute left-0 top-[calc(100%+8px)] z-20 w-60 max-w-[calc(100vw-2rem)] rounded-xl border p-1.5 shadow-xl ${
-                    isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
-                  }`}
-                  role="menu"
-                >
-                  <button
-                    type="button"
-                    onClick={openClassicJobCardEditor}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
-                    }`}
-                    role="menuitem"
-                  >
-                    <i className="fa-solid fa-table-columns mt-0.5 text-xs" />
-                    <span>
-                      <span className="block font-medium">Classic Job Card Editor</span>
-                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Existing full editor in the Job Cards manager.
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openClassicJobCardEditor}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
-                    }`}
-                    role="menuitem"
-                  >
-                    <i className="fa-solid fa-list-check mt-0.5 text-xs" />
-                    <span>
-                      <span className="block font-medium">Mobile-Field Editor</span>
-                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Same field set as the mobile job card app, including Heading.
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openJobCardWizard}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      isDark ? 'text-gray-100 hover:bg-gray-800' : 'text-gray-800 hover:bg-gray-50'
-                    }`}
-                    role="menuitem"
-                  >
-                    <i className="fa-solid fa-wand-magic-sparkles mt-0.5 text-xs" />
-                    <span>
-                      <span className="block font-medium">Job Card Wizard</span>
-                      <span className={`block text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Open the mobile wizard flow in a new tab.
-                      </span>
-                    </span>
-                  </button>
-                </div>
-              ) : null}
             </div>
-            <button
-              type="button"
-              onClick={handleOpenClassic}
-              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-            >
-              <i className="fa-solid fa-table-columns text-xs" />
-              Classic manager
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${
+                  isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <i className="fa-regular fa-copy" />
+                {copyStatus}
+              </button>
+              <button
+                type="button"
+                onClick={handleSubscribeCalendar}
+                disabled={!window.storage?.getToken?.()}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50 ${
+                  isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <i className="fa-regular fa-calendar-plus" />
+                Calendar
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyCalendarLink}
+                disabled={!window.storage?.getToken?.()}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-50 ${
+                  isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <i className="fa-regular fa-copy" />
+                {calendarCopyStatus}
+              </button>
+            </div>
+            {!window.storage?.getToken?.() ? (
+              <p className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                Sign in for calendar subscription and feed links.
+              </p>
+            ) : null}
           </div>
+        ) : null}
 
-          {!jobCardsReady || !window.JobCards ? (
-            <p className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              Loading job cards list&hellip;
-            </p>
-          ) : null}
-
-          <div className={`mt-4 flex flex-wrap items-center gap-2 border-t pt-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-            <span className={`text-[11px] font-medium uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              Links
-            </span>
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              title="Copy share link"
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-            >
-              <i className="fa-regular fa-copy" />
-              {copyStatus}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubscribeCalendar}
-              disabled={!window.storage?.getToken?.()}
-              title="Subscribe to calendar"
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-            >
-              <i className="fa-regular fa-calendar-plus" />
-              Calendar
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyCalendarLink}
-              disabled={!window.storage?.getToken?.()}
-              title="Copy calendar link"
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-            >
-              <i className="fa-regular fa-copy" />
-              {calendarCopyStatus}
-            </button>
-          </div>
-          {!window.storage?.getToken?.() ? (
-            <p className={`mt-2 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-              Sign in to use calendar subscription and copy your personal feed link.
-            </p>
-          ) : null}
-
-          <PermissionGate
-            permission={window.PERMISSIONS?.ACCESS_SERVICE_MAINTENANCE}
-          >
-            {(() => {
-              const user = window.storage?.getUser?.();
-              const isAdmin = typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
-              if (!isAdmin) return null;
-              return (
-                <div className={`mt-4 border-t pt-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-                  <button
-                    type="button"
-                    onClick={() => setAdminExtrasOpen((o) => !o)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${isDark ? 'text-gray-300 hover:bg-gray-800/80' : 'text-gray-700 hover:bg-gray-50'}`}
-                    aria-expanded={adminExtrasOpen}
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <i className="fa-solid fa-gear text-[11px]" />
-                      Admin: forms &amp; checklists
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] transition-transform ${adminExtrasOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {adminExtrasOpen ? (
-                    <div className={`mt-2 rounded-xl border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isDark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
-                            <i className="fa-solid fa-list-check text-[11px]" />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide">
-                              Form builder
-                            </div>
-                            <div className={`text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              Design reusable service forms for job cards.
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            try {
-                              const hasManager = !!window.ServiceFormsManager;
-
-                              if (!hasManager) {
-                                const isProduction =
-                                  typeof window.USE_PRODUCTION_BUILD !== 'undefined'
-                                    ? window.USE_PRODUCTION_BUILD === true
-                                    : true;
-                                const baseDir = isProduction ? '/dist/src/' : '/src/';
-                                const path = 'components/service-maintenance/ServiceFormsManager.jsx';
-                                const finalPath = isProduction
-                                  ? `${baseDir}${path}`.replace('.jsx', '.js')
-                                  : `${baseDir}${path}`;
-
-                                const existingScript = document.querySelector(
-                                  'script[data-component-path="components/service-maintenance/ServiceFormsManager.jsx"]'
-                                );
-                                if (!existingScript) {
-                                  const script = document.createElement('script');
-                                  if (isProduction) {
-                                    script.src = finalPath;
-                                    script.defer = true;
-                                  } else {
-                                    script.type = 'text/babel';
-                                    script.src = finalPath;
-                                  }
-                                  script.dataset.componentPath =
-                                    'components/service-maintenance/ServiceFormsManager.jsx';
-                                  script.onerror = () => {
-                                    console.error(
-                                      '❌ ServiceAndMaintenance: Failed to load ServiceFormsManager script',
-                                      finalPath
-                                    );
-                                  };
-                                  document.body.appendChild(script);
-                                }
-
-                                setTimeout(() => {
-                                  if (window.ServiceFormsManager) {
-                                    setFormsManagerReady(true);
-                                  } else {
-                                    console.warn(
-                                      '⚠️ ServiceAndMaintenance: ServiceFormsManager still not available after script injection'
-                                    );
-                                  }
-                                }, 500);
-                              } else {
-                                setFormsManagerReady(true);
-                              }
-
-                              setShowFormsManager(true);
-                            } catch (error) {
-                              console.error(
-                                '❌ ServiceAndMaintenance: Error handling Open form builder click',
-                                error
-                              );
-                              alert(
-                                'Unable to open the form builder right now. Please check the console for details or try again.'
-                              );
-                            }
-                          }}
-                          className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold shadow-sm ring-1 transition-all ${isDark ? 'bg-blue-500/10 text-blue-200 ring-blue-900/60 hover:bg-blue-500/20' : 'bg-white text-blue-700 ring-blue-100 hover:bg-blue-50'}`}
-                        >
-                          <i className="fa-solid fa-pen-to-square text-[10px]" />
-                          Open form builder
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
+        {headerTab === 'admin' && isAdminUser ? (
+          <div className={`border-t px-3 py-3 sm:px-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="min-w-0">
+                <div className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                  Forms &amp; checklists
                 </div>
-              );
-            })()}
-          </PermissionGate>
+                <p className={`mt-0.5 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                  Design reusable service forms for job cards.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openFormBuilder}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold ring-1 ${
+                  isDark
+                    ? 'bg-blue-500/10 text-blue-200 ring-blue-900/60 hover:bg-blue-500/20'
+                    : 'bg-white text-blue-700 ring-blue-100 hover:bg-blue-50'
+                }`}
+              >
+                <i className="fa-solid fa-pen-to-square text-[10px]" />
+                Open form builder
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {headerTab === 'list' ? (
+        <div data-section="jobcards-classic-manager">
+          {jobCardsReady && window.JobCards ? (
+            <window.JobCards
+              embedded
+              clients={clients}
+              users={users}
+              onOpenDetail={handleOpenJobCardDetail}
+            />
+          ) : (
+            <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+              <div className={`mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-b-2 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
+              <p>Loading job cards&hellip;</p>
+              <p className="mt-1 text-xs opacity-80">
+                <a href="/job-card" className="underline" target="_blank" rel="noopener noreferrer">
+                  Open mobile job card
+                </a>{' '}
+                while you wait.
+              </p>
+            </div>
+          )}
         </div>
-      </div>
-
-      <div className="mt-6" data-section="jobcards-classic-manager">
-        {jobCardsReady && window.JobCards ? (
-          <window.JobCards
-            clients={clients}
-            users={users}
-            onOpenDetail={handleOpenJobCardDetail}
-          />
-        ) : (
-          <div className="flex items-center justify-center">
-            <div className={`text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              <div className={`animate-spin rounded-full h-6 w-6 border-b-2 mx-auto mb-3 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
-              <p>Job cards module is still loading. You can continue to use the mobile form in the meantime.</p>
-            </div>
-          </div>
-        )}
-      </div>
+      ) : (
+        <p className={`px-1 text-center text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+          Switch to the <button type="button" className="font-medium underline" onClick={() => setHeaderTab('list')}>Job cards</button> tab to browse and search captures.
+        </p>
+      )}
 
       {/* Full-area job card detail overlay (within main content, not over sidebar) */}
       {loadingJobCard && !selectedJobCard && (
