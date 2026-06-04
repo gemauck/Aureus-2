@@ -1,4 +1,4 @@
-// Sparrow to Gilbarco — convert Fuel Dispense Report to Transactions & Fuel Breakdown
+// Sparrow to Gilbarco — convert Fuel Dispense Report to Transactions format (side-by-side)
 const { useState, useRef } = React;
 
 function formatElapsed(ms) {
@@ -13,7 +13,6 @@ function formatElapsed(ms) {
 const SparrowToGilbarco = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const [dispenseFile, setDispenseFile] = useState(null);
-    const [includeOverrideFills, setIncludeOverrideFills] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [phase, setPhase] = useState('');
@@ -92,7 +91,6 @@ const SparrowToGilbarco = () => {
 
         const form = new FormData();
         form.append('dispense', dispenseFile);
-        if (includeOverrideFills) form.append('includeOverrideFills', 'true');
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/tools/sparrow-to-gilbarco');
@@ -157,9 +155,9 @@ const SparrowToGilbarco = () => {
             <div className={`rounded-lg border p-4 ${card}`}>
                 <h3 className={`text-sm font-semibold mb-1 ${text}`}>Sparrow to Gilbarco</h3>
                 <p className={`text-xs mb-4 ${muted}`}>
-                    Upload a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong>. The tool
-                    converts it to the standard <strong>Transactions &amp; Fuel Breakdown</strong>{' '}
-                    Gilbarco layout and includes your original dispense data on a reference tab.
+                    Upload a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong>. Each row is
+                    output on one line: <strong>Gilbarco format on the left</strong>, original
+                    Sparrow columns on the right. Rows without an asset are still included.
                 </p>
 
                 <div>
@@ -177,16 +175,6 @@ const SparrowToGilbarco = () => {
                         <p className={`text-[10px] mt-1 truncate ${muted}`}>{dispenseFile.name}</p>
                     ) : null}
                 </div>
-
-                <label className={`flex items-center gap-2 mt-3 text-xs ${muted}`}>
-                    <input
-                        type="checkbox"
-                        checked={includeOverrideFills}
-                        onChange={(e) => setIncludeOverrideFills(e.target.checked)}
-                        className="rounded border-gray-300"
-                    />
-                    Include small manual override fills (no asset number)
-                </label>
 
                 <div className="flex flex-wrap items-center gap-2 mt-4">
                     <button
@@ -234,19 +222,15 @@ const SparrowToGilbarco = () => {
                     ) : null}
                     <ul className={`text-xs space-y-1 mb-3 ${muted}`}>
                         <li>
-                            Dispense rows parsed:{' '}
-                            <strong className={text}>{summary.dispense_rows ?? '—'}</strong>
-                        </li>
-                        <li>
-                            All transactions:{' '}
-                            <strong className={text}>{summary.all_transactions ?? '—'}</strong>
-                            {' · '}
-                            Excl. bowsers:{' '}
-                            <strong className={text}>
-                                {summary.transactions_excl_bowsers ?? '—'}
-                            </strong>
-                            {' · '}
-                            Bowser: <strong className={text}>{summary.bowser_rows ?? '—'}</strong>
+                            Rows: <strong className={text}>{summary.dispense_rows ?? '—'}</strong>
+                            {summary.unallocated_rows != null ? (
+                                <>
+                                    {' '}
+                                    (
+                                    <strong className={text}>{summary.unallocated_rows}</strong>{' '}
+                                    without asset)
+                                </>
+                            ) : null}
                         </li>
                     </ul>
 
@@ -280,23 +264,14 @@ const SparrowToGilbarco = () => {
             ) : null}
 
             <div className={`rounded-lg border p-4 text-[10px] ${card} ${muted}`}>
-                <p className={`font-medium mb-1 ${text}`}>Output workbook</p>
+                <p className={`font-medium mb-1 ${text}`}>Output layout</p>
                 <ul className="list-disc pl-4 space-y-0.5">
+                    <li>Single sheet — no Fuel Breakdown or separate bowser tab</li>
+                    <li>Left: Gilbarco transaction columns (converted)</li>
+                    <li>Right: original Sparrow dispense columns (unchanged)</li>
                     <li>
-                        <strong className={text}>Fuel Dispense Source</strong> — copy of your
-                        uploaded dispense list
-                    </li>
-                    <li>
-                        <strong className={text}>Transactions Exl. Bowsers</strong> and{' '}
-                        <strong className={text}>All Transactions</strong> — Gilbarco format
-                    </li>
-                    <li>
-                        <strong className={text}>Fuel Breakdown</strong> — standard template sheet
-                    </li>
-                    <li>
-                        Download name: <strong className={text}>Fuel Dispense Report</strong> plus
-                        the date range from your data (e.g.{' '}
-                        <span className="font-mono">20260529 - 20260602</span>)
+                        File name: <strong className={text}>Fuel Dispense Report</strong> + date
+                        range (e.g. <span className="font-mono">20260529 - 20260602</span>)
                     </li>
                 </ul>
             </div>

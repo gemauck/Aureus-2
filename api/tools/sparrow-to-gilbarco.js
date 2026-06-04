@@ -42,7 +42,6 @@ async function handler(req, res) {
         const bb = Busboy({ headers: req.headers });
         const timestamp = Date.now();
         let dispensePath = null;
-        let includeOverrideFills = false;
         let fileReceived = false;
 
         await new Promise((resolve, reject) => {
@@ -108,12 +107,6 @@ async function handler(req, res) {
                 });
             });
 
-            bb.on('field', (name, value) => {
-                if (name === 'includeOverrideFills' && (value === 'true' || value === '1')) {
-                    includeOverrideFills = true;
-                }
-            });
-
             bb.on('finish', () => {
                 bbFinished = true;
                 maybeResolve();
@@ -138,8 +131,6 @@ async function handler(req, res) {
             '--json',
             jsonPath,
         ];
-        if (includeOverrideFills) args.push('--include-override-fills');
-
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
         const cmd = `${pythonExec} ${quoted} 2>&1`;
 
@@ -186,7 +177,6 @@ async function handler(req, res) {
             downloadUrl,
             fileName: outputFileName,
             summary,
-            includeOverrideFills,
             exitCode,
             stdout: stdout.slice(-2000),
             warnings: summary.warnings || [],

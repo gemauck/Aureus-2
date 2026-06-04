@@ -12,8 +12,19 @@ SCRIPT_DIR = REPO_ROOT / "scripts" / "dispense-to-transactions"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from convert import DEFAULT_GILBARCO_TEMPLATE, convert_vehicle_row, format_transaction_datetime, load_pump_config
+from convert import (
+    DEFAULT_GILBARCO_TEMPLATE,
+    convert_row_to_gilbarco,
+    convert_vehicle_row,
+    format_transaction_datetime,
+    load_pump_config,
+)
+from fleet_lookup import TRANSACTION_HEADERS
 from parse_dispense import (
+    DISPENSE_HEADERS,
+    GILBARCO_SECTION_TITLE,
+    ORIGINAL_SECTION_TITLE,
+    OUTPUT_SHEET_NAME,
     build_output_filename,
     dispense_period_range,
     is_footer_row,
@@ -110,14 +121,56 @@ def test_convert_vehicle_row_uses_fleet_template():
     assert out["Liters"] == pytest.approx(404.739)
 
 
-def test_transaction_headers_match_reference(tmp_path):
-    ref = REPO_ROOT / "tests" / "fixtures" / "dispense-to-transactions-reference.xlsx"
-    if not ref.exists():
-        pytest.skip("fixture workbook not bundled")
+def test_unallocated_row_always_converts():
+    config = load_pump_config()
+    row = {
+        "Date & Time": "2026-05-29 12:13:29",
+        "API ID": 1736671,
+        "Fuel Pump": "OTK105M (FuelTrack)",
+        "Litres": 12.044,
+        "Override": "Code: 192867; Test 2nd fill; User: Greg Keague",
+    }
+    warnings: list[str] = []
+    out = convert_row_to_gilbarco(row, {}, {}, {}, config, warnings)
+    assert out["Liters"] == pytest.approx(12.044)
+    assert out["Voucher Number"] == "1736671"
 
-    wb = openpyxl.load_workbook(ref, read_only=True, data_only=True)
-    headers = [c.value for c in wb["All Transactions"][1]]
+
+def test_side_by_side_workbook_layout(tmp_path):
+    from convert import write_side_by_side_workbook
+
+    dispense = [
+        {
+            "Date & Time": "2026-05-29 13:51:43",
+            "API ID": 1,
+            "Fuel Pump": "OTK105M",
+            "Asset Number": "CAM1513",
+            "Litres": 100.0,
+        },
+        {
+            "Date & Time": "2026-05-29 12:13:29",
+            "API ID": 2,
+            "Fuel Pump": "OTK105M",
+            "Litres": 12.0,
+        },
+    ]
+    gilbarco = [
+        {"Fleet ID": "CAM1513", "Liters": 100.0, "Voucher Number": "1"},
+        {"Fleet ID": "OTK105M", "Liters": 12.0, "Voucher Number": "2"},
+    ]
+    out = tmp_path / "out.xlsx"
+    write_side_by_side_workbook(dispense, gilbarco, out)
+
+    wb = openpyxl.load_workbook(out, read_only=True, data_only=True)
+    assert wb.sheetnames == [OUTPUT_SHEET_NAME]
+    ws = wb[OUTPUT_SHEET_NAME]
+    assert ws.cell(1, 1).value == GILBARCO_SECTION_TITLE
+    dispense_start = len(TRANSACTION_HEADERS) + 2
+    assert ws.cell(1, dispense_start).value == ORIGINAL_SECTION_TITLE
+    assert ws.cell(2, 1).value == TRANSACTION_HEADERS[0]
+    assert ws.cell(2, dispense_start).value == DISPENSE_HEADERS[0]
+    assert ws.cell(3, 1).value == "CAM1513"
+    assert ws.cell(3, dispense_start).value == "2026-05-29 13:51:43"
+    api_col = dispense_start + DISPENSE_HEADERS.index("API ID")
+    assert ws.cell(4, api_col).value == 2
     wb.close()
-    from fleet_lookup import TRANSACTION_HEADERS
-
-    assert list(TRANSACTION_HEADERS) == headers

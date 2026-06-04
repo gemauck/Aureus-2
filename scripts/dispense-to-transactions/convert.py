@@ -13,11 +13,12 @@ from openpyxl import Workbook
 from fleet_lookup import TRANSACTION_HEADERS, load_reference_indexes
 from parse_dispense import (
     DISPENSE_HEADERS,
-    DISPENSE_SOURCE_SHEET,
+    GILBARCO_SECTION_TITLE,
+    ORIGINAL_SECTION_TITLE,
+    OUTPUT_SHEET_NAME,
     build_output_filename,
     dispense_period_range,
     extract_pump_code,
-    is_bowser_fill,
     normalize_asset_group,
     normalize_asset_owner,
     parse_consumption,
@@ -145,8 +146,7 @@ def convert_vehicle_row(
 
     litres = _parse_number(row.get("Litres"))
     if litres is None:
-        warnings.append(f"Skipping row without litres (API {_cell_str(row.get('API ID'))})")
-        return None
+        warnings.append(f"No litres on asset row (API {_cell_str(row.get('API ID'))})")
 
     fleet_template = fleet_by_id.get(fleet_id)
     route = resolve_vehicle_route(row, fleet_template, owner_routes, config)
@@ -217,7 +217,6 @@ def convert_vehicle_row(
         "Transaction Plate": fleet_id,
         "Operator ID": _cell_str(row.get("User Tag")) or None,
         "Operator Name": _cell_str(row.get("Operator")) or None,
-        "_is_bowser": False,
     }
 
 
@@ -275,8 +274,80 @@ def convert_bowser_row(
         "Transaction Plate": pump_code,
         "Operator ID": None,
         "Operator Name": _cell_str(row.get("Operator")) or None,
-        "_is_bowser": True,
     }
+
+
+def convert_unallocated_row(
+    row: dict[str, Any],
+    bowser_by_fleet: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+    warnings: list[str],
+) -> dict[str, Any]:
+    """Gilbarco row for dispense lines without an asset (overrides, bowser fills, tests)."""
+    bowser = convert_bowser_row(row, bowser_by_fleet, config)
+    if bowser:
+        return bowser
+
+    litres = _parse_number(row.get("Litres"))
+    aliases = config.get("fuel_pump_aliases", {})
+    pump_code = extract_pump_code(row.get("Fuel Pump"), aliases) or "UNALLOCATED"
+    template_cfg = config.get("bowser_template", {})
+
+    try:
+        tx_dt, tx_date, tx_time = format_transaction_datetime(row.get("Date & Time"))
+    except ValueError:
+        warnings.append(f"Unrecognized date on row API {_cell_str(row.get('API ID'))}")
+        tx_dt = tx_date = tx_time = None
+
+    return {
+        "Fleet ID": pump_code,
+        "Registration Number": pump_code,
+        "Make": template_cfg.get("make"),
+        "Model": template_cfg.get("model"),
+        "TransactionDateTime": tx_dt,
+        "Date": tx_date,
+        "Time": tx_time,
+        "Liters": litres,
+        "Location": template_cfg.get("location"),
+        "Device ID": template_cfg.get("device_id"),
+        "Pump": template_cfg.get("pump"),
+        "Fleet Type": None,
+        "VehicleCategory Description": "UNALLOCATED",
+        "Responsibility Code": template_cfg.get("responsibility_code"),
+        "BusinessRevenue Code": template_cfg.get("business_revenue_code"),
+        "Product Name": template_cfg.get("product_name") or "DIESEL",
+        "Cost Centre": template_cfg.get("cost_centre"),
+        "TaxRebate Code": template_cfg.get("tax_rebate_code"),
+        "Consumption Meter": template_cfg.get("consumption_meter") or "None",
+        "Consumption Type": template_cfg.get("consumption_type") or "None",
+        "Hours/OD reading": 0.0,
+        "Group1": template_cfg.get("group1"),
+        "Group2": template_cfg.get("group2"),
+        "Group3": template_cfg.get("group3"),
+        "Group4": template_cfg.get("group4"),
+        "Group5": template_cfg.get("group5"),
+        "Voucher Number": str(row.get("API ID")) if row.get("API ID") is not None else None,
+        "Pump Controller": template_cfg.get("pump_controller"),
+        "Transaction Plate": pump_code,
+        "Operator ID": None,
+        "Operator Name": _cell_str(row.get("Operator")) or None,
+    }
+
+
+def convert_row_to_gilbarco(
+    row: dict[str, Any],
+    fleet_by_id: dict[str, dict[str, Any]],
+    owner_routes: dict[str, dict[str, Any]],
+    bowser_by_fleet: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+    warnings: list[str],
+) -> dict[str, Any]:
+    fleet_id = _cell_str(row.get("Asset Number")) or _cell_str(row.get("Asset Registration"))
+    if fleet_id:
+        converted = convert_vehicle_row(row, fleet_by_id, owner_routes, config, warnings)
+        if converted:
+            return converted
+    return convert_unallocated_row(row, bowser_by_fleet, config, warnings)
 
 
 def convert_dispense_rows(
@@ -285,66 +356,52 @@ def convert_dispense_rows(
     owner_routes: dict[str, dict[str, Any]],
     bowser_by_fleet: dict[str, dict[str, Any]],
     config: dict[str, Any],
-    *,
-    include_override_fills: bool = False,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """Return (all_transactions, excl_bowsers, warnings)."""
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return (gilbarco_rows aligned 1:1 with dispense_rows, warnings)."""
     warnings: list[str] = []
-    all_rows: list[dict[str, Any]] = []
-
+    gilbarco_rows: list[dict[str, Any]] = []
     for row in dispense_rows:
-        if row.get("Asset Number") or row.get("Asset Registration"):
-            converted = convert_vehicle_row(row, fleet_by_id, owner_routes, config, warnings)
-            if converted:
-                all_rows.append(converted)
-            continue
-
-        if not include_override_fills and not is_bowser_fill(row):
-            api = _cell_str(row.get("API ID"))
-            if api:
-                warnings.append(f"Skipped non-asset override row API {api}")
-            continue
-
-        if is_bowser_fill(row):
-            converted = convert_bowser_row(row, bowser_by_fleet, config)
-            if converted:
-                all_rows.append(converted)
-            continue
-
-        if include_override_fills:
-            converted = convert_bowser_row(row, bowser_by_fleet, config)
-            if converted:
-                all_rows.append(converted)
-
-    excl = [r for r in all_rows if not r.get("_is_bowser")]
-    for r in all_rows:
-        r.pop("_is_bowser", None)
-    for r in excl:
-        r.pop("_is_bowser", None)
-    return all_rows, excl, warnings
+        gilbarco_rows.append(
+            convert_row_to_gilbarco(
+                row, fleet_by_id, owner_routes, bowser_by_fleet, config, warnings
+            )
+        )
+    return gilbarco_rows, warnings
 
 
-def _copy_sheet_structure(template_ws, target_ws) -> None:
-    if template_ws.max_row >= 1:
-        for col, cell in enumerate(template_ws[1], start=1):
-            target_ws.cell(row=1, column=col, value=cell.value)
+def write_side_by_side_workbook(
+    dispense_rows: list[dict[str, Any]],
+    gilbarco_rows: list[dict[str, Any]],
+    output_path: Path,
+) -> None:
+    """One sheet: Gilbarco columns left, original dispense columns right (same row)."""
+    if len(dispense_rows) != len(gilbarco_rows):
+        raise ValueError("dispense_rows and gilbarco_rows must be the same length")
 
+    wb = Workbook()
+    ws = wb.active
+    ws.title = OUTPUT_SHEET_NAME
 
-def _write_rows(ws, rows: list[dict[str, Any]]) -> None:
-    if ws.max_row > 1:
-        ws.delete_rows(2, ws.max_row - 1)
-    for ri, row in enumerate(rows, start=2):
+    n_gilbarco = len(TRANSACTION_HEADERS)
+    dispense_start_col = n_gilbarco + 2  # one blank separator column
+
+    ws.cell(row=1, column=1, value=GILBARCO_SECTION_TITLE)
+    ws.cell(row=1, column=dispense_start_col, value=ORIGINAL_SECTION_TITLE)
+
+    for ci, header in enumerate(TRANSACTION_HEADERS, start=1):
+        ws.cell(row=2, column=ci, value=header)
+    for ci, header in enumerate(DISPENSE_HEADERS, start=dispense_start_col):
+        ws.cell(row=2, column=ci, value=header)
+
+    for ri, (dispense, gilbarco) in enumerate(zip(dispense_rows, gilbarco_rows), start=3):
         for ci, header in enumerate(TRANSACTION_HEADERS, start=1):
-            ws.cell(row=ri, column=ci, value=row.get(header))
+            ws.cell(row=ri, column=ci, value=gilbarco.get(header))
+        for ci, header in enumerate(DISPENSE_HEADERS, start=dispense_start_col):
+            ws.cell(row=ri, column=ci, value=dispense.get(header))
 
-
-def _write_dispense_source(ws, dispense_rows: list[dict[str, Any]]) -> None:
-    headers = list(DISPENSE_HEADERS)
-    for ci, header in enumerate(headers, start=1):
-        ws.cell(row=1, column=ci, value=header)
-    for ri, row in enumerate(dispense_rows, start=2):
-        for ci, header in enumerate(headers, start=1):
-            ws.cell(row=ri, column=ci, value=row.get(header))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(output_path)
+    wb.close()
 
 
 def _resolve_output_path(output_dir: Path, filename: str) -> Path:
@@ -361,40 +418,6 @@ def _resolve_output_path(output_dir: Path, filename: str) -> Path:
         suffix += 1
 
 
-def write_output_workbook(
-    template_path: Path,
-    all_rows: list[dict[str, Any]],
-    excl_rows: list[dict[str, Any]],
-    dispense_rows: list[dict[str, Any]],
-    output_path: Path,
-) -> None:
-    template_wb = openpyxl.load_workbook(template_path)
-    out_wb = Workbook()
-    out_wb.remove(out_wb.active)
-
-    source_ws = out_wb.create_sheet(DISPENSE_SOURCE_SHEET, 0)
-    _write_dispense_source(source_ws, dispense_rows)
-
-    for sheet_name in template_wb.sheetnames:
-        src_ws = template_wb[sheet_name]
-        dst_ws = out_wb.create_sheet(sheet_name)
-        if sheet_name == "All Transactions":
-            _copy_sheet_structure(src_ws, dst_ws)
-            _write_rows(dst_ws, all_rows)
-        elif sheet_name == "Transactions Exl. Bowsers":
-            _copy_sheet_structure(src_ws, dst_ws)
-            _write_rows(dst_ws, excl_rows)
-        else:
-            for row in src_ws.iter_rows(values_only=False):
-                for cell in row:
-                    dst_ws[cell.coordinate].value = cell.value
-
-    template_wb.close()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    out_wb.save(output_path)
-    out_wb.close()
-
-
 def convert_workbook(
     dispense_path: str | Path,
     output_path: str | Path | None = None,
@@ -402,7 +425,6 @@ def convert_workbook(
     output_dir: str | Path | None = None,
     template_path: str | Path | None = None,
     pump_config_path: str | Path | None = None,
-    include_override_fills: bool = False,
 ) -> dict[str, Any]:
     dispense_path = Path(dispense_path)
     template_path = Path(template_path) if template_path else DEFAULT_GILBARCO_TEMPLATE
@@ -424,17 +446,21 @@ def convert_workbook(
         output_path = Path(output_path)
 
     fleet_by_id, owner_routes, bowser_by_fleet = load_reference_indexes(template_path)
-    all_rows, excl_rows, warnings = convert_dispense_rows(
+    gilbarco_rows, warnings = convert_dispense_rows(
         dispense_rows,
         fleet_by_id,
         owner_routes,
         bowser_by_fleet,
         config,
-        include_override_fills=include_override_fills,
     )
-    write_output_workbook(template_path, all_rows, excl_rows, dispense_rows, output_path)
+    write_side_by_side_workbook(dispense_rows, gilbarco_rows, output_path)
 
     period_start, period_end = period if period else (None, None)
+    unallocated = sum(
+        1
+        for r in dispense_rows
+        if not _cell_str(r.get("Asset Number")) and not _cell_str(r.get("Asset Registration"))
+    )
     return {
         "source": str(dispense_path.resolve()),
         "template": str(template_path.resolve()),
@@ -443,8 +469,7 @@ def convert_workbook(
         "period_start": period_start,
         "period_end": period_end,
         "dispense_rows": len(dispense_rows),
-        "all_transactions": len(all_rows),
-        "transactions_excl_bowsers": len(excl_rows),
-        "bowser_rows": len(all_rows) - len(excl_rows),
+        "gilbarco_rows": len(gilbarco_rows),
+        "unallocated_rows": unallocated,
         "warnings": warnings,
     }

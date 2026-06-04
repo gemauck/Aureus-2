@@ -1,6 +1,6 @@
-# Dispense → Transactions & Fuel Breakdown
+# Dispense → Gilbarco (side-by-side)
 
-Converts **Fuel Dispense Report** exports (FuelTrack / InsightWare single-sheet `Sheet1`) into the **Transactions & Fuel Breakdown** workbook layout used for refund / POA workflows.
+Converts **Fuel Dispense Report** exports (FuelTrack / Sparrow `Sheet1`) into a single workbook row per dispense line: **Gilbarco columns on the left**, **original Sparrow columns on the right**.
 
 ## Requirements
 
@@ -10,13 +10,11 @@ Uses the project `venv-poareview` environment (`openpyxl`). From repo root:
 ./scripts/poa-review/setup-venv.sh
 ```
 
-## Gilbarco template
+## Gilbarco template (fleet lookup only)
 
-Fleet/pump lookup and sheet layout come from the bundled template:
+Fleet/pump metadata is loaded from:
 
 `scripts/dispense-to-transactions/gilbarco-template.xlsx`
-
-(No reference upload required in the ERP tool.)
 
 ## ERP UI
 
@@ -24,9 +22,9 @@ Fleet/pump lookup and sheet layout come from the bundled template:
 
 Deep link: `/tools/sparrow-to-gilbarco`
 
-Download filename: **`Fuel Dispense Report YYYYMMDD - YYYYMMDD.xlsx`** (from min/max transaction dates in the dispense file).
-
-Output includes a **Fuel Dispense Source** tab with the original dispense rows.
+- Every dispense row is included (including lines without an asset).
+- Download: **`Fuel Dispense Report YYYYMMDD - YYYYMMDD.xlsx`**
+- One sheet: **Fuel Dispense Report** (side-by-side layout).
 
 ## CLI
 
@@ -36,22 +34,15 @@ npm run convert:dispense-to-transactions -- \
   --output-dir "/path/to/output-folder"
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--output` | Explicit output path (overrides auto naming) |
-| `--output-dir` | Folder for auto-named output (default: same folder as input) |
-| `--template` | Override Gilbarco template path |
-| `--include-override-fills` | Include small manual override rows without asset numbers |
-| `--json` | Write row counts and warnings to a JSON summary |
+## Output sheet
 
-## Output sheets
+| Row | Content |
+|-----|---------|
+| 1 | Section titles: “Gilbarco (converted)” \| “Original dispense (Sparrow)” |
+| 2 | Column headers (Gilbarco then Sparrow) |
+| 3+ | One data row per dispense line |
 
-| Sheet | Contents |
-|-------|----------|
-| **Fuel Dispense Source** | Original Sparrow/FuelTrack dispense export (all columns) |
-| `All Transactions` | Every converted row (vehicles + bowser bulk fills) |
-| `Transactions Exl. Bowsers` | Vehicle dispenses only (bowser rows excluded) |
-| `Fuel Breakdown` | Copied from Gilbarco template |
+No **Fuel Breakdown** or **Transactions Exl. Bowsers** tabs.
 
 ## Tests
 

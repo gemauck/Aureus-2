@@ -8,7 +8,9 @@ from typing import Any
 
 import openpyxl
 
-DISPENSE_SOURCE_SHEET = "Fuel Dispense Source"
+OUTPUT_SHEET_NAME = "Fuel Dispense Report"
+GILBARCO_SECTION_TITLE = "Gilbarco (converted)"
+ORIGINAL_SECTION_TITLE = "Original dispense (Sparrow)"
 
 DISPENSE_HEADERS = (
     "Date & Time",
