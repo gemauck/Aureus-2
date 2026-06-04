@@ -2,6 +2,38 @@
   "fuel_pump_aliases": {
     "OTK105M (FuelTrack)": "OTK105M"
   },
+  "fleet_id_aliases": {
+    "OTK105M - BULK": { "bowser_fleet_id": "OTK105M" },
+    "OTK105M-BULK": { "bowser_fleet_id": "OTK105M" },
+    "ODT001M": "370ODT001",
+    "OLB001M": "307OLB001",
+    "0TK0055M": "OTK0055M",
+    "CAM9127": "CAM9127M",
+    "OTC002": "OTC002M",
+    "LDV056M": "LDV056"
+  },
+  "sparrow_pump_to_route": {
+    "OTK010 DB": {
+      "location": "OTK010 DB",
+      "device_id": "OTK010 DB",
+      "pump": "OTK010 DB - DSL P1"
+    },
+    "Nooitgedact P2": {
+      "location": "Nooitgedact",
+      "device_id": "Mafube - Nooitgedact",
+      "pump": "Mafube - Nooitgedact - HDV P2"
+    },
+    "Nooitgedact P1": {
+      "location": "Nooitgedact",
+      "device_id": "Mafube - Nooitgedact",
+      "pump": "Mafube - Nooitgedact - HDV P1"
+    },
+    "Service Bay - 1 Tank": {
+      "location": "Service Bay",
+      "device_id": "Mafube HDV Bay",
+      "pump": "SB P1"
+    }
+  },
   "vehicle_routes": [
     {
       "match": { "group1_contains": "Andru Mining HDV", "asset_owner": "ANDRU MINING" },

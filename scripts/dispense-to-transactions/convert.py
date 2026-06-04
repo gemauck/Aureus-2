@@ -10,7 +10,11 @@ from typing import Any
 import openpyxl
 from openpyxl import Workbook
 
-from fleet_lookup import TRANSACTION_HEADERS, load_reference_indexes
+from fleet_lookup import (
+    TRANSACTION_HEADERS,
+    build_fuel_pump_routes,
+    load_reference_indexes,
+)
 from parse_dispense import (
     DISPENSE_HEADERS,
     GILBARCO_SECTION_TITLE,
@@ -57,6 +61,106 @@ def load_pump_config(path: str | Path | None = None) -> dict[str, Any]:
         return json.load(fh)
 
 
+def merge_fuel_pump_routes(
+    reference_routes: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Reference routes first; config sparrow_pump_to_route overrides."""
+    merged = dict(reference_routes)
+    for raw_key, route in config.get("sparrow_pump_to_route", {}).items():
+        merged[_normalize_lookup_key(raw_key)] = route
+    return merged
+
+
+def _normalize_lookup_key(value: Any) -> str:
+    return re.sub(r"\s+", " ", _cell_str(value)).lower()
+
+
+def resolve_fleet_identity(
+    asset_id: str,
+    config: dict[str, Any],
+    bowser_by_fleet: dict[str, dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    """Return (vehicle_fleet_id for template lookup, bowser_fleet_id if bowser path)."""
+    if not asset_id:
+        return None, None
+
+    entry = config.get("fleet_id_aliases", {}).get(asset_id)
+    if isinstance(entry, dict):
+        bowser_id = _cell_str(entry.get("bowser_fleet_id"))
+        if bowser_id:
+            return None, bowser_id
+    elif isinstance(entry, str) and entry:
+        asset_id = entry
+
+    if asset_id in bowser_by_fleet:
+        return None, asset_id
+    return asset_id, None
+
+
+def resolve_bowser_fleet_id(
+    row: dict[str, Any],
+    config: dict[str, Any],
+    bowser_by_fleet: dict[str, dict[str, Any]],
+) -> str | None:
+    """Bowser path before vehicle conversion when asset or heuristics match a site bowser."""
+    asset_id = _cell_str(row.get("Asset Number")) or _cell_str(row.get("Asset Registration"))
+    _vehicle_id, bowser_id = resolve_fleet_identity(asset_id, config, bowser_by_fleet)
+    if bowser_id:
+        return bowser_id
+
+    if asset_id and asset_id in bowser_by_fleet:
+        return asset_id
+
+    desc = _cell_str(row.get("Asset Description")).upper()
+    if any(
+        token in desc
+        for token in ("BOWSER", "BULK TANK", "MOBILE DIESEL BOWSER", "BULK DIESEL TANK")
+    ):
+        base = re.sub(r"\s*-\s*BULK.*", "", asset_id, flags=re.IGNORECASE).strip()
+        if base in bowser_by_fleet:
+            return base
+
+    if asset_id and re.search(r"\s*-\s*BULK", asset_id, re.IGNORECASE):
+        base = re.sub(r"\s*-\s*BULK.*", "", asset_id, flags=re.IGNORECASE).strip()
+        if base in bowser_by_fleet:
+            return base
+
+    fuel = _cell_str(row.get("Fuel Pump")).lower()
+    if "service bay" in fuel:
+        for candidate in ("OTK105M", "OTK8BULK", "OTK8"):
+            if candidate in bowser_by_fleet:
+                return candidate
+
+    return None
+
+
+def lookup_fuel_pump_route(
+    fuel_pump: Any,
+    config: dict[str, Any],
+    fuel_pump_routes: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    raw = _cell_str(fuel_pump)
+    if not raw:
+        return {}
+
+    aliases = config.get("fuel_pump_aliases", {})
+    candidates = [raw, extract_pump_code(raw, aliases)]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        key = _normalize_lookup_key(candidate)
+        if key in fuel_pump_routes:
+            route = fuel_pump_routes[key]
+            return {
+                "location": route.get("location"),
+                "device_id": route.get("device_id"),
+                "pump": route.get("pump"),
+                "pump_controller": route.get("pump_controller"),
+            }
+    return {}
+
+
 def format_transaction_datetime(value: Any) -> tuple[str, str, str]:
     if isinstance(value, datetime):
         dt = value
@@ -99,9 +203,11 @@ def resolve_vehicle_route(
     fleet_template: dict[str, Any] | None,
     owner_routes: dict[str, dict[str, Any]],
     config: dict[str, Any],
+    fuel_pump_routes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     owner = normalize_asset_owner(row.get("Asset Owner"))
-    if fleet_template:
+
+    if fleet_template and _cell_str(fleet_template.get("Pump")):
         return {
             "location": fleet_template.get("Location"),
             "device_id": fleet_template.get("Device ID"),
@@ -109,6 +215,10 @@ def resolve_vehicle_route(
             "pump_controller": fleet_template.get("Pump Controller"),
             "group1": fleet_template.get("Group1"),
         }
+
+    fuel_route = lookup_fuel_pump_route(row.get("Fuel Pump"), config, fuel_pump_routes)
+    if fuel_route.get("pump"):
+        return {**fuel_route, "group1": row.get("Group1")}
 
     for route in config.get("vehicle_routes", []):
         if _route_matches(route.get("match", {}), row):
@@ -130,6 +240,15 @@ def resolve_vehicle_route(
             "group1": row.get("Group1"),
         }
 
+    if fleet_template:
+        return {
+            "location": fleet_template.get("Location"),
+            "device_id": fleet_template.get("Device ID"),
+            "pump": fleet_template.get("Pump"),
+            "pump_controller": fleet_template.get("Pump Controller"),
+            "group1": fleet_template.get("Group1"),
+        }
+
     return {}
 
 
@@ -139,17 +258,27 @@ def convert_vehicle_row(
     owner_routes: dict[str, dict[str, Any]],
     config: dict[str, Any],
     warnings: list[str],
+    fuel_pump_routes: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
-    fleet_id = _cell_str(row.get("Asset Number")) or _cell_str(row.get("Asset Registration"))
-    if not fleet_id:
+    asset_id = _cell_str(row.get("Asset Number")) or _cell_str(row.get("Asset Registration"))
+    if not asset_id:
         return None
+
+    vehicle_fleet_id, _bowser_id = resolve_fleet_identity(asset_id, config, {})
+    fleet_id = vehicle_fleet_id if vehicle_fleet_id else asset_id
 
     litres = _parse_number(row.get("Litres"))
     if litres is None:
         warnings.append(f"No litres on asset row (API {_cell_str(row.get('API ID'))})")
 
     fleet_template = fleet_by_id.get(fleet_id)
-    route = resolve_vehicle_route(row, fleet_template, owner_routes, config)
+    route = resolve_vehicle_route(
+        row,
+        fleet_template,
+        owner_routes,
+        config,
+        fuel_pump_routes or {},
+    )
 
     if fleet_template:
         make = fleet_template.get("Make")
@@ -175,6 +304,8 @@ def convert_vehicle_row(
         group1 = route.get("group1") if route.get("group1") is not None else row.get("Group1")
         warnings.append(f"No fleet template for {fleet_id}; using dispense-derived fields")
 
+    output_fleet_id = fleet_id
+
     meter, ctype, reading = parse_consumption(row.get("Odometer"), row.get("Economy"))
     if fleet_template and fleet_template.get("Consumption Meter"):
         meter = fleet_template.get("Consumption Meter") or meter
@@ -183,11 +314,13 @@ def convert_vehicle_row(
     tx_dt, tx_date, tx_time = format_transaction_datetime(row.get("Date & Time"))
     location = route.get("location") or (fleet_template or {}).get("Location") or group3
     if not route.get("pump"):
-        warnings.append(f"Missing pump route for {fleet_id} ({group3})")
+        warnings.append(f"Missing pump route for {output_fleet_id} ({group3})")
+
+    reg = _cell_str(row.get("Asset Registration")) or output_fleet_id
 
     return {
-        "Fleet ID": fleet_id,
-        "Registration Number": _cell_str(row.get("Asset Registration")) or fleet_id,
+        "Fleet ID": output_fleet_id,
+        "Registration Number": reg,
         "Make": make,
         "Model": model,
         "TransactionDateTime": tx_dt,
@@ -214,7 +347,60 @@ def convert_vehicle_row(
         "Group5": group5 if group5 is not None else (fleet_template or {}).get("Group5"),
         "Voucher Number": str(row.get("API ID")) if row.get("API ID") is not None else None,
         "Pump Controller": route.get("pump_controller"),
-        "Transaction Plate": fleet_id,
+        "Transaction Plate": output_fleet_id,
+        "Operator ID": _cell_str(row.get("User Tag")) or None,
+        "Operator Name": _cell_str(row.get("Operator")) or None,
+    }
+
+
+def convert_bowser_row_for_asset(
+    row: dict[str, Any],
+    bowser_fleet_id: str,
+    bowser_by_fleet: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Gilbarco bowser row when Sparrow still supplies an asset number on a bowser fill."""
+    litres = _parse_number(row.get("Litres"))
+    if litres is None:
+        return None
+
+    template_cfg = config.get("bowser_template", {})
+    ref = bowser_by_fleet.get(bowser_fleet_id, {})
+    tx_dt, tx_date, tx_time = format_transaction_datetime(row.get("Date & Time"))
+
+    return {
+        "Fleet ID": bowser_fleet_id,
+        "Registration Number": bowser_fleet_id,
+        "Make": ref.get("Make") or template_cfg.get("make"),
+        "Model": ref.get("Model") or template_cfg.get("model"),
+        "TransactionDateTime": tx_dt,
+        "Date": tx_date,
+        "Time": tx_time,
+        "Liters": litres,
+        "Location": ref.get("Location") or template_cfg.get("location"),
+        "Device ID": ref.get("Device ID") or template_cfg.get("device_id"),
+        "Pump": ref.get("Pump") or template_cfg.get("pump"),
+        "Fleet Type": ref.get("Fleet Type"),
+        "VehicleCategory Description": ref.get("VehicleCategory Description")
+        or template_cfg.get("vehicle_category"),
+        "Responsibility Code": ref.get("Responsibility Code")
+        or template_cfg.get("responsibility_code"),
+        "BusinessRevenue Code": ref.get("BusinessRevenue Code")
+        or template_cfg.get("business_revenue_code"),
+        "Product Name": ref.get("Product Name") or template_cfg.get("product_name"),
+        "Cost Centre": ref.get("Cost Centre") or template_cfg.get("cost_centre"),
+        "TaxRebate Code": ref.get("TaxRebate Code") or template_cfg.get("tax_rebate_code"),
+        "Consumption Meter": ref.get("Consumption Meter") or template_cfg.get("consumption_meter"),
+        "Consumption Type": ref.get("Consumption Type") or template_cfg.get("consumption_type"),
+        "Hours/OD reading": 0.0,
+        "Group1": ref.get("Group1") or template_cfg.get("group1"),
+        "Group2": ref.get("Group2") or template_cfg.get("group2"),
+        "Group3": ref.get("Group3") or template_cfg.get("group3"),
+        "Group4": ref.get("Group4") or template_cfg.get("group4"),
+        "Group5": ref.get("Group5") or template_cfg.get("group5"),
+        "Voucher Number": str(row.get("API ID")) if row.get("API ID") is not None else None,
+        "Pump Controller": ref.get("Pump Controller") or template_cfg.get("pump_controller"),
+        "Transaction Plate": bowser_fleet_id,
         "Operator ID": _cell_str(row.get("User Tag")) or None,
         "Operator Name": _cell_str(row.get("Operator")) or None,
     }
@@ -341,10 +527,26 @@ def convert_row_to_gilbarco(
     bowser_by_fleet: dict[str, dict[str, Any]],
     config: dict[str, Any],
     warnings: list[str],
+    fuel_pump_routes: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    bowser_fleet_id = resolve_bowser_fleet_id(row, config, bowser_by_fleet)
+    if bowser_fleet_id:
+        converted = convert_bowser_row_for_asset(
+            row, bowser_fleet_id, bowser_by_fleet, config
+        )
+        if converted:
+            return converted
+
     fleet_id = _cell_str(row.get("Asset Number")) or _cell_str(row.get("Asset Registration"))
     if fleet_id:
-        converted = convert_vehicle_row(row, fleet_by_id, owner_routes, config, warnings)
+        converted = convert_vehicle_row(
+            row,
+            fleet_by_id,
+            owner_routes,
+            config,
+            warnings,
+            fuel_pump_routes,
+        )
         if converted:
             return converted
     return convert_unallocated_row(row, bowser_by_fleet, config, warnings)
@@ -356,14 +558,22 @@ def convert_dispense_rows(
     owner_routes: dict[str, dict[str, Any]],
     bowser_by_fleet: dict[str, dict[str, Any]],
     config: dict[str, Any],
+    fuel_pump_routes: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Return (gilbarco_rows aligned 1:1 with dispense_rows, warnings)."""
     warnings: list[str] = []
     gilbarco_rows: list[dict[str, Any]] = []
+    routes = fuel_pump_routes or {}
     for row in dispense_rows:
         gilbarco_rows.append(
             convert_row_to_gilbarco(
-                row, fleet_by_id, owner_routes, bowser_by_fleet, config, warnings
+                row,
+                fleet_by_id,
+                owner_routes,
+                bowser_by_fleet,
+                config,
+                warnings,
+                routes,
             )
         )
     return gilbarco_rows, warnings
@@ -446,12 +656,16 @@ def convert_workbook(
         output_path = Path(output_path)
 
     fleet_by_id, owner_routes, bowser_by_fleet = load_reference_indexes(template_path)
+    fuel_pump_routes = merge_fuel_pump_routes(
+        build_fuel_pump_routes(template_path), config
+    )
     gilbarco_rows, warnings = convert_dispense_rows(
         dispense_rows,
         fleet_by_id,
         owner_routes,
         bowser_by_fleet,
         config,
+        fuel_pump_routes,
     )
     write_side_by_side_workbook(dispense_rows, gilbarco_rows, output_path)
 

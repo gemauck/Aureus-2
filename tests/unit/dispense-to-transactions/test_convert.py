@@ -18,8 +18,11 @@ from convert import (
     convert_vehicle_row,
     format_transaction_datetime,
     load_pump_config,
+    lookup_fuel_pump_route,
+    merge_fuel_pump_routes,
+    resolve_bowser_fleet_id,
 )
-from fleet_lookup import TRANSACTION_HEADERS
+from fleet_lookup import TRANSACTION_HEADERS, build_fuel_pump_routes, load_reference_indexes
 from parse_dispense import (
     DISPENSE_HEADERS,
     GILBARCO_SECTION_TITLE,
@@ -174,3 +177,146 @@ def test_side_by_side_workbook_layout(tmp_path):
     api_col = dispense_start + DISPENSE_HEADERS.index("API ID")
     assert ws.cell(4, api_col).value == 2
     wb.close()
+
+
+def test_otk105m_bulk_alias_uses_bowser_template():
+    config = load_pump_config()
+    bowser = {
+        "OTK105M": {
+            "Make": "BULK DIESEL TANK",
+            "Model": "BULK TANK BULK TANK",
+            "Location": "Service Bay",
+            "Device ID": "Mafube HDV Bay",
+            "Pump": "SB P1",
+            "VehicleCategory Description": "BOWSER",
+        }
+    }
+    row = {
+        "Date & Time": "2026-04-01 08:55:04",
+        "API ID": 99,
+        "Fuel Pump": "Service Bay - 1 Tank",
+        "Asset Number": "OTK105M - BULK",
+        "Asset Registration": "OTK105M-BULK",
+        "Asset Description": "HINO-MOBILE-DIESEL BOWSER",
+        "Group1": "Andru Mining HDV",
+        "Asset Owner": "ANDRU MINING",
+        "Litres": 5212.0,
+    }
+    warnings: list[str] = []
+    out = convert_row_to_gilbarco(row, {}, {}, bowser, config, warnings)
+    assert out["Fleet ID"] == "OTK105M"
+    assert out["Pump"] == "SB P1"
+    assert out["Location"] == "Service Bay"
+
+
+def test_dbotk010_bowser_asset_uses_nooitgedacht_pump():
+    config = load_pump_config()
+    bowser = {
+        "DBOTK010": {
+            "Make": "BULK DIESEL TANK",
+            "Model": "BULK TANK BULK TANK",
+            "Location": "Nooitgedact",
+            "Device ID": "Mafube - Nooitgedact",
+            "Pump": "Mafube - Nooitgedact - HDV P2",
+            "VehicleCategory Description": "BOWSER",
+        }
+    }
+    row = {
+        "Date & Time": "2026-04-01 10:50:25",
+        "API ID": 100,
+        "Fuel Pump": "Nooitgedact P2",
+        "Asset Number": "DBOTK010",
+        "Asset Registration": "DBOTK010",
+        "Asset Owner": "MAFUBE",
+        "Litres": 8358.3,
+    }
+    warnings: list[str] = []
+    out = convert_row_to_gilbarco(row, {}, {"MAFUBE": {"pump": "OTK010 DB - DSL P1"}}, bowser, config, warnings)
+    assert out["Fleet ID"] == "DBOTK010"
+    assert out["Pump"] == "Mafube - Nooitgedact - HDV P2"
+
+
+def test_odt001m_alias_resolves_vehicle_template():
+    config = load_pump_config()
+    fleet = {
+        "370ODT001": {
+            "Make": "HITACHI",
+            "Model": "REAR DUMP TRUCK EH3500",
+            "Location": "Nooitgedact",
+            "Device ID": "Mafube - Nooitgedact",
+            "Pump": "Mafube - Nooitgedact - HDV P2",
+            "VehicleCategory Description": "REAR DUMP TRUCK",
+            "Group3": "MAFUBE",
+            "Product Name": "DIESEL",
+            "Consumption Meter": "Hours",
+            "Consumption Type": "L/HR",
+        }
+    }
+    row = {
+        "Date & Time": "2026-04-01 12:53:59",
+        "API ID": 101,
+        "Fuel Pump": "OTK010 DB",
+        "Asset Number": "ODT001M",
+        "Asset Registration": "ODT001M",
+        "Group1": "MAFUBE - HDV",
+        "Asset Owner": "MAFUBE",
+        "Litres": 2523.7,
+    }
+    routes = merge_fuel_pump_routes({}, config)
+    warnings: list[str] = []
+    out = convert_row_to_gilbarco(row, fleet, {}, {}, config, warnings, routes)
+    assert out["Fleet ID"] == "370ODT001"
+    assert out["Pump"] == "Mafube - Nooitgedact - HDV P2"
+
+
+def test_fuel_pump_route_before_owner_route():
+    config = load_pump_config()
+    row = {
+        "Date & Time": "2026-04-01 09:15:56",
+        "API ID": 102,
+        "Fuel Pump": "OTK010 DB",
+        "Asset Number": "OLB001M",
+        "Asset Registration": "OLB001M",
+        "Group1": "MAFUBE - HDV",
+        "Asset Owner": "MAFUBE",
+        "Litres": 933.2,
+    }
+    fleet = {
+        "307OLB001": {
+            "Make": "CATERPILLAR",
+            "Model": "TLB 426",
+            "Location": "OTK010 DB",
+            "Device ID": "OTK010 DB",
+            "Pump": "OTK010 DB - DSL P1",
+            "Product Name": "DIESEL",
+            "Consumption Meter": "Hours",
+            "Consumption Type": "L/HR",
+        }
+    }
+    owner = {
+        "MAFUBE": {
+            "location": "Nooitgedact",
+            "device_id": "Mafube - Nooitgedact",
+            "pump": "Mafube - Nooitgedact - HDV P2",
+        }
+    }
+    routes = merge_fuel_pump_routes({}, config)
+    warnings: list[str] = []
+    out = convert_vehicle_row(row, fleet, owner, config, warnings, routes)
+    assert out["Fleet ID"] == "307OLB001"
+    assert out["Pump"] == "OTK010 DB - DSL P1"
+
+
+def test_lookup_fuel_pump_route_from_bundled_reference():
+    routes = build_fuel_pump_routes(DEFAULT_GILBARCO_TEMPLATE)
+    config = load_pump_config()
+    merged = merge_fuel_pump_routes(routes, config)
+    route = lookup_fuel_pump_route("Nooitgedact P2", config, merged)
+    assert route.get("pump") == "Mafube - Nooitgedact - HDV P2"
+
+
+def test_resolve_bowser_fleet_id_for_bulk_suffix():
+    config = load_pump_config()
+    bowser = {"OTK105M": {"Pump": "SB P1"}}
+    row = {"Asset Number": "OTK105M - BULK", "Asset Description": "HINO-MOBILE-DIESEL BOWSER"}
+    assert resolve_bowser_fleet_id(row, config, bowser) == "OTK105M"
