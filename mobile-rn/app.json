@@ -15,7 +15,14 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Abcotronics ERP to track job travel while you are on a trip.",
+          "locationWhenInUsePermission": "Allow Abcotronics ERP to record your location for job cards and travel distance."
+        }
+      ]
     ]
   }
 }

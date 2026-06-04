@@ -1,6 +1,6 @@
 import { trackError } from './telemetry'
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || ''
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || ''
 
 type RequestOptions = {
   method?: string
@@ -8,7 +8,7 @@ type RequestOptions = {
   token?: string
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, token } = options
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
@@ -53,7 +53,9 @@ export const apiClient = {
     }
   },
   getClients(token: string) {
-    return request<Array<{ id: string; name: string; status?: string }>>('/api/clients', { token })
+    return request<{ clients: import('../types/jobCard').ClientOption[] }>('/api/clients', {
+      token
+    }).then((data) => data.clients || [])
   },
   getProjects(token: string) {
     return request<Array<{ id: string; name: string; status?: string }>>('/api/projects', { token })
