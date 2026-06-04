@@ -1,4 +1,4 @@
-const SW_VERSION = 'abcotronics-pwa-v2-20260525';
+const SW_VERSION = 'abcotronics-pwa-v2-20260604';
 const APP_CACHE = `${SW_VERSION}-app`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
@@ -96,7 +96,18 @@ self.addEventListener('fetch', event => {
   // Lazy-loaded UI modules under /dist/src/ must not be served stale from the SW cache
   // (e.g. POA Review after removing AI checkbox).
   if (url.pathname.startsWith('/dist/src/')) {
-    event.respondWith(fetch(request, { cache: 'no-store' }));
+    event.respondWith(
+      (async () => {
+        try {
+          return await fetch(request, { cache: 'no-store' });
+        } catch {
+          // Avoid unhandled promise rejections when offline or the origin is unreachable.
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          return Response.error();
+        }
+      })()
+    );
     return;
   }
 

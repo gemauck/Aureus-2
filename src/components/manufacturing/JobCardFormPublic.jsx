@@ -2233,8 +2233,6 @@ const JobCardFormPublic = () => {
     );
     const visualEntries = extractVisualPhotoEntries(photosRaw);
 
-    photosHydrationCompleteRef.current = true;
-
     if (!editMediaDirtyRef.current) {
       const restoredSectionMedia = emptySectionWorkMedia();
       sectionMediaEntries.forEach(item => {
@@ -2291,9 +2289,15 @@ const JobCardFormPublic = () => {
   const signatureWrapperRef = useRef(null);
   const isDrawingRef = useRef(false);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [mapDraft, setMapDraft] = useState({ location: '', latitude: '', longitude: '' });
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [mapLocating, setMapLocating] = useState(false);
+  const [mapSearching, setMapSearching] = useState(false);
+  const [mapHint, setMapHint] = useState('');
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const mapMarkerRef = useRef(null);
+  const mapInitRef = useRef({ lat: -25.7479, lng: 28.2293, hasMarker: false });
 
   useEffect(() => {
     const body = typeof document !== 'undefined' ? document.body : null;
@@ -2889,19 +2893,16 @@ const JobCardFormPublic = () => {
   }, [calendarUrl]);
 
   // Map selection functions
+  const nominatimHeaders = { 'User-Agent': 'Abcotronics-ERP/1.0' };
+
   const reverseGeocode = useCallback(async (lat, lng) => {
     try {
-      // Use Nominatim (OpenStreetMap geocoding service)
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'Abcotronics-ERP/1.0'
-          }
-        }
+        { headers: nominatimHeaders }
       );
       const data = await response.json();
-      
+
       let address = '';
       if (data.address) {
         const parts = [];
@@ -2911,138 +2912,232 @@ const JobCardFormPublic = () => {
         if (data.address.state) parts.push(data.address.state);
         address = parts.join(', ');
       }
-      
+
       if (!address) {
         address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       }
 
-      setFormData(prev => ({
-        ...prev,
+      setMapDraft({
         location: address,
         latitude: lat.toString(),
         longitude: lng.toString()
-      }));
+      });
+      setMapSearchQuery(address);
+      setMapHint('');
     } catch (error) {
       console.warn('Reverse geocoding failed:', error);
-      setFormData(prev => ({
-        ...prev,
-        location: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+      const fallback = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      setMapDraft({
+        location: fallback,
         latitude: lat.toString(),
         longitude: lng.toString()
-      }));
+      });
+      setMapSearchQuery(fallback);
+      setMapHint('Could not look up address — coordinates saved instead.');
     }
   }, []);
+
+  const placeMapMarker = useCallback((lat, lng, { pan = true } = {}) => {
+    const L = typeof window !== 'undefined' ? window.L : null;
+    const map = mapInstanceRef.current;
+    if (!L || !map) return;
+
+    if (mapMarkerRef.current) {
+      map.removeLayer(mapMarkerRef.current);
+    }
+
+    const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    mapMarkerRef.current = marker;
+
+    marker.on('dragend', (e) => {
+      const newLat = e.target.getLatLng().lat;
+      const newLng = e.target.getLatLng().lng;
+      reverseGeocode(newLat, newLng);
+    });
+
+    if (pan) {
+      map.setView([lat, lng], Math.max(map.getZoom(), 15));
+    }
+  }, [reverseGeocode]);
 
   const initializeMap = useCallback(() => {
     if (!mapContainerRef.current || typeof window === 'undefined' || !window.L) {
       console.warn('⚠️ JobCardFormPublic: Cannot initialize map - missing container or Leaflet');
-      if (!mapContainerRef.current) console.warn('  - Map container ref is null');
-      if (!window.L) console.warn('  - Leaflet (window.L) is not loaded');
       return;
     }
 
-    // Clean up existing map
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
     }
 
     const L = window.L;
-    const defaultLat = formData.latitude ? parseFloat(formData.latitude) : -25.7479; // South Africa default
-    const defaultLng = formData.longitude ? parseFloat(formData.longitude) : 28.2293;
+    const { lat: defaultLat, lng: defaultLng, hasMarker } = mapInitRef.current;
 
-
-    // Ensure container is visible
-    if (mapContainerRef.current) {
-      mapContainerRef.current.style.display = 'block';
-      mapContainerRef.current.style.visibility = 'visible';
-      mapContainerRef.current.style.opacity = '1';
-      mapContainerRef.current.style.width = '100%';
-      mapContainerRef.current.style.height = '100%';
-      mapContainerRef.current.style.minHeight = '400px';
-    }
-
-    // Create map
     const map = L.map(mapContainerRef.current, {
       center: [defaultLat, defaultLng],
-      zoom: formData.latitude && formData.longitude ? 15 : 6,
+      zoom: hasMarker ? 15 : 6,
       zoomControl: true
     });
 
-
-    // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution: '© OpenStreetMap',
       maxZoom: 19
     }).addTo(map);
 
     mapInstanceRef.current = map;
 
-    // Add marker if coordinates exist
-    if (formData.latitude && formData.longitude) {
-      const marker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
-      mapMarkerRef.current = marker;
-      
-      marker.on('dragend', (e) => {
-        const lat = e.target.getLatLng().lat;
-        const lng = e.target.getLatLng().lng;
-        reverseGeocode(lat, lng);
-      });
+    if (hasMarker) {
+      placeMapMarker(defaultLat, defaultLng, { pan: false });
     }
 
-    // Handle map clicks
     map.on('click', (e) => {
-      const lat = e.latlng.lat;
-      const lng = e.latlng.lng;
-      
-      // Remove existing marker
-      if (mapMarkerRef.current) {
-        map.removeLayer(mapMarkerRef.current);
-      }
-
-      // Add new marker
-      const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-      mapMarkerRef.current = marker;
-      
-      marker.on('dragend', (e) => {
-        const newLat = e.target.getLatLng().lat;
-        const newLng = e.target.getLatLng().lng;
-        reverseGeocode(newLat, newLng);
-      });
-
-      reverseGeocode(lat, lng);
+      placeMapMarker(e.latlng.lat, e.latlng.lng);
+      reverseGeocode(e.latlng.lat, e.latlng.lng);
     });
 
-    // Try to get user's current location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          map.setView([lat, lng], 15);
-        },
-        () => {
-          // Geolocation failed, use default
-        }
-      );
-    }
-  }, [formData.latitude, formData.longitude, reverseGeocode]);
+    requestAnimationFrame(() => {
+      map.invalidateSize(true);
+      if (hasMarker) {
+        map.setView([defaultLat, defaultLng], 15);
+      }
+    });
+  }, [placeMapMarker, reverseGeocode]);
+
+  useEffect(() => {
+    if (!showMapModal) return undefined;
+
+    const initTimer = setTimeout(() => initializeMap(), 80);
+    const resizeTimer = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize(true);
+      }
+    }, 320);
+
+    const onResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize(true);
+      }
+    };
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      clearTimeout(initTimer);
+      clearTimeout(resizeTimer);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [showMapModal, initializeMap]);
 
   const handleOpenMap = useCallback(() => {
+    const hasCoords = !!(formData.latitude && formData.longitude);
+    mapInitRef.current = {
+      lat: hasCoords ? parseFloat(formData.latitude) : -25.7479,
+      lng: hasCoords ? parseFloat(formData.longitude) : 28.2293,
+      hasMarker: hasCoords
+    };
+    setMapDraft({
+      location: formData.location || '',
+      latitude: formData.latitude || '',
+      longitude: formData.longitude || ''
+    });
+    setMapSearchQuery(formData.location || '');
+    setMapHint('');
     setShowMapModal(true);
-    setTimeout(() => {
-      initializeMap();
-    }, 100);
-  }, [initializeMap]);
+  }, [formData.location, formData.latitude, formData.longitude]);
 
   const handleCloseMap = useCallback(() => {
     setShowMapModal(false);
+    setMapLocating(false);
+    setMapSearching(false);
+    setMapHint('');
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
     }
     mapMarkerRef.current = null;
   }, []);
+
+  const handleConfirmMap = useCallback(() => {
+    if (mapDraft.latitude && mapDraft.longitude) {
+      setFormData(prev => ({
+        ...prev,
+        location: mapDraft.location,
+        latitude: mapDraft.latitude,
+        longitude: mapDraft.longitude
+      }));
+    }
+    handleCloseMap();
+  }, [mapDraft, handleCloseMap]);
+
+  const handleUseMyLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setMapHint('Location is not available on this device.');
+      return;
+    }
+
+    setMapLocating(true);
+    setMapHint('Finding your location…');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        placeMapMarker(lat, lng);
+        reverseGeocode(lat, lng);
+        setMapLocating(false);
+      },
+      (error) => {
+        setMapLocating(false);
+        setMapHint(
+          error.code === error.PERMISSION_DENIED
+            ? 'Allow location access in your device settings, then try again.'
+            : 'Could not get your location. Tap the map or search for an address.'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  }, [placeMapMarker, reverseGeocode]);
+
+  const handleMapSearch = useCallback(async () => {
+    const query = mapSearchQuery.trim();
+    if (!query) {
+      setMapHint('Enter an address, suburb, or place name to search.');
+      return;
+    }
+
+    setMapSearching(true);
+    setMapHint('Searching…');
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=za`,
+        { headers: nominatimHeaders }
+      );
+      const results = await response.json();
+
+      if (!Array.isArray(results) || results.length === 0) {
+        setMapHint('No results found. Try a nearby town or tap the map.');
+        return;
+      }
+
+      const hit = results[0];
+      const lat = parseFloat(hit.lat);
+      const lng = parseFloat(hit.lon);
+      placeMapMarker(lat, lng);
+      setMapDraft({
+        location: hit.display_name || query,
+        latitude: lat.toString(),
+        longitude: lng.toString()
+      });
+      setMapSearchQuery(hit.display_name || query);
+      setMapHint('');
+    } catch (error) {
+      console.warn('Forward geocoding failed:', error);
+      setMapHint('Search failed. Check your connection or tap the map.');
+    } finally {
+      setMapSearching(false);
+    }
+  }, [mapSearchQuery, placeMapMarker]);
 
   const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
@@ -5119,11 +5214,19 @@ const JobCardFormPublic = () => {
     pendingSubmitOptionsRef.current = null;
     activeEditCardIdRef.current = localId;
 
-    applyPhotosToEditState(localId, full.photos);
     if (deferredPhotosPromise) {
-      void deferredPhotosPromise.then((photos) => {
-        applyPhotosToEditState(localId, photos);
-      });
+      void deferredPhotosPromise
+        .then((photos) => {
+          applyPhotosToEditState(localId, photos);
+          photosHydrationCompleteRef.current = true;
+        })
+        .catch((e) => {
+          console.warn('JobCardFormPublic: deferred photos load failed', e);
+          // Keep hydration incomplete so PATCH omits photos (avoids wiping attachments).
+        });
+    } else {
+      applyPhotosToEditState(localId, full.photos);
+      photosHydrationCompleteRef.current = true;
     }
 
     const formsJobCardId =
@@ -5858,6 +5961,12 @@ const JobCardFormPublic = () => {
         resolvedServerId = serverJobCardId;
         const payloadObj = { ...jobCardData };
         delete payloadObj.activityQueue;
+        delete payloadObj.id;
+        delete payloadObj.synced;
+        delete payloadObj.serverJobCardId;
+        delete payloadObj.source;
+        delete payloadObj.useNewJobTimeFlow;
+        delete payloadObj.projectName;
         const estimatedPatchPayloadBytes = estimateJsonBytes(payloadObj);
         if (estimatedPatchPayloadBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
           lastSyncError = 'Upload payload is too large for reliable sync on mobile. Remove some media and retry.';
@@ -9388,42 +9497,94 @@ const JobCardFormPublic = () => {
 
       {/* Map Selection Modal */}
       {showMapModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Select Location on Map</h3>
+        <div className="job-card-map-modal fixed inset-0 z-50 flex flex-col bg-black/60 sm:items-center sm:justify-center sm:p-4">
+          <div className="job-card-map-modal__panel bg-white flex flex-col flex-1 w-full sm:flex-none sm:max-w-4xl sm:h-[90vh] sm:rounded-xl sm:shadow-xl overflow-hidden">
+            <div className="job-card-map-modal__header flex flex-row items-start justify-between gap-3 px-4 py-3 border-b border-gray-200 shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Pick visit location</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Search, use GPS, or tap the map to drop a pin.</p>
+              </div>
               <button
                 type="button"
                 onClick={handleCloseMap}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                className="shrink-0 p-2.5 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 touch-manipulation"
+                aria-label="Close map"
               >
-                <i className="fas fa-times text-xl"></i>
+                <i className="fas fa-times text-lg"></i>
               </button>
             </div>
-            <div className="flex-1 relative overflow-hidden">
-              <div
-                ref={mapContainerRef}
-                className="w-full h-full map-container"
-                style={{ minHeight: '400px', height: '100%' }}
-              ></div>
+
+            <div className="job-card-map-modal__toolbar px-4 py-3 border-b border-gray-100 bg-gray-50 shrink-0 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="search"
+                  value={mapSearchQuery}
+                  onChange={(e) => setMapSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleMapSearch();
+                    }
+                  }}
+                  className="flex-1 px-3 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Search address or place…"
+                  style={{ fontSize: '16px' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleMapSearch}
+                  disabled={mapSearching}
+                  className="px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-60 touch-manipulation"
+                  aria-label="Search location"
+                >
+                  <i className={`fas ${mapSearching ? 'fa-spinner fa-spin' : 'fa-search'}`}></i>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleUseMyLocation}
+                disabled={mapLocating}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-60 font-medium touch-manipulation"
+              >
+                <i className={`fas ${mapLocating ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
+                {mapLocating ? 'Finding your location…' : 'Use my current location'}
+              </button>
+              {mapHint ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{mapHint}</p>
+              ) : null}
             </div>
-            <div className="p-4 border-t border-gray-200 bg-gray-50">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <p className="text-sm text-gray-600 mb-1">Selected Location:</p>
-                  <p className="text-sm font-medium text-gray-900">{formData.location || 'Click on the map to select a location'}</p>
-                  {formData.latitude && formData.longitude && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Coordinates: {formData.latitude}, {formData.longitude}
-                    </p>
-                  )}
-                </div>
+
+            <div className="job-card-map-modal__map flex-1 min-h-0 relative bg-slate-100">
+              <div ref={mapContainerRef} className="job-card-map-modal__map-canvas absolute inset-0"></div>
+            </div>
+
+            <div className="job-card-map-modal__footer p-4 border-t border-gray-200 bg-white shrink-0 safe-area-bottom">
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5 mb-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Selected</p>
+                <p className="text-sm font-medium text-gray-900 mt-1 break-words">
+                  {mapDraft.location || 'No location selected yet'}
+                </p>
+                {mapDraft.latitude && mapDraft.longitude ? (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {Number(mapDraft.latitude).toFixed(5)}, {Number(mapDraft.longitude).toFixed(5)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={handleCloseMap}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation"
+                  className="w-full sm:w-auto px-5 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium touch-manipulation"
                 >
-                  Use This Location
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmMap}
+                  disabled={!mapDraft.latitude || !mapDraft.longitude}
+                  className="w-full sm:w-auto px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                >
+                  Use this location
                 </button>
               </div>
             </div>

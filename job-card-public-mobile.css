@@ -917,3 +917,68 @@ html[data-theme='light']
   color: #1f2937 !important;
   -webkit-text-fill-color: #1f2937 !important;
 }
+
+/* Map picker modal — full-screen on phones; overrides global 200px map height rules */
+body.job-card-public .job-card-map-modal {
+  z-index: 99999 !important;
+}
+
+body.job-card-public .job-card-map-modal__panel {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+body.job-card-public .job-card-map-modal__header {
+  flex-direction: row !important;
+  align-items: flex-start !important;
+}
+
+body.job-card-public .job-card-map-modal__header > button {
+  width: auto !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+body.job-card-public .job-card-map-modal__toolbar .flex.gap-2 {
+  flex-direction: row !important;
+}
+
+body.job-card-public .job-card-map-modal__toolbar .flex.gap-2 > button {
+  width: auto !important;
+  min-width: 48px !important;
+}
+
+body.job-card-public .job-card-map-modal__map {
+  flex: 1 1 auto !important;
+  min-height: 240px !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+body.job-card-public .job-card-map-modal__map-canvas,
+body.job-card-public .job-card-map-modal__map .leaflet-container {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 240px !important;
+  max-height: none !important;
+}
+
+body.job-card-public .job-card-map-modal__footer .flex.flex-col-reverse {
+  flex-direction: column-reverse !important;
+}
+
+@media (min-width: 640px) {
+  body.job-card-public .job-card-map-modal__footer .flex.flex-col-reverse {
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+  }
+
+  body.job-card-public .job-card-map-modal__footer .flex.flex-col-reverse > button {
+    width: auto !important;
+  }
+}
