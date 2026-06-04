@@ -15,7 +15,6 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-notifications",
       [
         "expo-location",
         {
