@@ -27,6 +27,7 @@ from parse_dispense import (
     normalize_asset_owner,
     parse_consumption,
     parse_dispense_workbook,
+    resolve_make_model,
     split_asset_description,
 )
 
@@ -281,8 +282,7 @@ def convert_vehicle_row(
     )
 
     if fleet_template:
-        make = fleet_template.get("Make")
-        model = fleet_template.get("Model")
+        make, model = resolve_make_model(row.get("Asset Description"), fleet_template)
         vcat = fleet_template.get("VehicleCategory Description")
         group2 = fleet_template.get("Group2")
         group3 = fleet_template.get("Group3")
@@ -366,13 +366,18 @@ def convert_bowser_row_for_asset(
 
     template_cfg = config.get("bowser_template", {})
     ref = bowser_by_fleet.get(bowser_fleet_id, {})
+    ref_fields = {
+        "Make": ref.get("Make") or template_cfg.get("make"),
+        "Model": ref.get("Model") or template_cfg.get("model"),
+    }
+    make, model = resolve_make_model(row.get("Asset Description"), ref_fields)
     tx_dt, tx_date, tx_time = format_transaction_datetime(row.get("Date & Time"))
 
     return {
         "Fleet ID": bowser_fleet_id,
         "Registration Number": bowser_fleet_id,
-        "Make": ref.get("Make") or template_cfg.get("make"),
-        "Model": ref.get("Model") or template_cfg.get("model"),
+        "Make": make or ref_fields.get("Make"),
+        "Model": model or ref_fields.get("Model"),
         "TransactionDateTime": tx_dt,
         "Date": tx_date,
         "Time": tx_time,

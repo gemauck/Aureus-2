@@ -151,6 +151,62 @@ def split_asset_description(value: Any) -> tuple[str, str]:
     return s, ""
 
 
+def model_has_redundant_duplicate(model: Any) -> bool:
+    """True when Model is like 'DOZER DOZER' or 'HILUX  HILUX' (repeated category token)."""
+    parts = _cell_str(model).split()
+    if len(parts) < 2:
+        return False
+    return parts[0].upper() == parts[1].upper()
+
+
+def collapse_redundant_model(model: Any) -> str:
+    """Collapse 'WORD WORD' to 'WORD'; normalize extra spaces."""
+    s = re.sub(r"\s+", " ", _cell_str(model)).strip()
+    if not s:
+        return s
+    parts = s.split()
+    if len(parts) >= 2 and parts[0].upper() == parts[1].upper():
+        if all(p.upper() == parts[0].upper() for p in parts):
+            return parts[0]
+        deduped: list[str] = []
+        for part in parts:
+            if not deduped or part.upper() != deduped[-1].upper():
+                deduped.append(part)
+        return " ".join(deduped)
+    return s
+
+
+def resolve_make_model(
+    asset_description: Any,
+    fleet_template: dict[str, Any] | None,
+) -> tuple[str | None, str | None]:
+    """
+    Prefer Sparrow Asset Description when the reference template Model repeats one token
+    (e.g. 'DOZER DOZER'); otherwise use template Make/Model.
+    """
+    if not fleet_template:
+        make, model = split_asset_description(asset_description)
+        return make or None, model or None
+
+    make = _cell_str(fleet_template.get("Make"))
+    model = _cell_str(fleet_template.get("Model"))
+
+    if not model_has_redundant_duplicate(model):
+        return make or None, model or None
+
+    parsed_make, parsed_model = split_asset_description(asset_description)
+    parsed_make = _cell_str(parsed_make)
+    parsed_model = _cell_str(parsed_model)
+
+    if parsed_model and not model_has_redundant_duplicate(parsed_model):
+        return make or parsed_make or None, parsed_model
+
+    collapsed = collapse_redundant_model(model)
+    if parsed_make:
+        return parsed_make, collapsed or parsed_make
+    return make or None, collapsed or None
+
+
 def parse_consumption(odometer: Any, economy: Any) -> tuple[str, str, float]:
     odo_s = _cell_str(odometer)
     econ_s = _cell_str(economy)

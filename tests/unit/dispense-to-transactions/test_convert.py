@@ -29,10 +29,13 @@ from parse_dispense import (
     ORIGINAL_SECTION_TITLE,
     OUTPUT_SHEET_NAME,
     build_output_filename,
+    collapse_redundant_model,
     dispense_period_range,
     is_footer_row,
+    model_has_redundant_duplicate,
     normalize_asset_group,
     parse_consumption,
+    resolve_make_model,
 )
 
 
@@ -320,3 +323,57 @@ def test_resolve_bowser_fleet_id_for_bulk_suffix():
     bowser = {"OTK105M": {"Pump": "SB P1"}}
     row = {"Asset Number": "OTK105M - BULK", "Asset Description": "HINO-MOBILE-DIESEL BOWSER"}
     assert resolve_bowser_fleet_id(row, config, bowser) == "OTK105M"
+
+
+def test_model_has_redundant_duplicate():
+    assert model_has_redundant_duplicate("DOZER DOZER")
+    assert model_has_redundant_duplicate("HILUX  HILUX")
+    assert not model_has_redundant_duplicate("DOZER D11T")
+    assert not model_has_redundant_duplicate("EX3600 6 EXCAVATOR")
+
+
+def test_collapse_redundant_model():
+    assert collapse_redundant_model("DOZER DOZER") == "DOZER"
+    assert collapse_redundant_model("HILUX  HILUX") == "HILUX"
+
+
+def test_resolve_make_model_prefers_sparrow_description():
+    template = {"Make": "CATERPILLAR", "Model": "DOZER DOZER"}
+    make, model = resolve_make_model("CATERPILLAR-D11R-DOZER", template)
+    assert make == "CATERPILLAR"
+    assert model == "D11R DOZER"
+
+
+def test_resolve_make_model_keeps_good_template():
+    template = {"Make": "CATERPILLAR", "Model": "DOZER D11T"}
+    make, model = resolve_make_model("CATERPILLAR-D11R-DOZER", template)
+    assert make == "CATERPILLAR"
+    assert model == "DOZER D11T"
+
+
+def test_convert_vehicle_row_fixes_duplicate_template_model():
+    config = load_pump_config()
+    fleet = {
+        "DZ100030": {
+            "Make": "CATERPILLAR",
+            "Model": "DOZER DOZER",
+            "Location": "OTK010 DB",
+            "Device ID": "OTK010 DB",
+            "Pump": "OTK010 DB - DSL P1",
+            "Product Name": "DIESEL",
+            "Consumption Meter": "Hours",
+            "Consumption Type": "L/HR",
+        }
+    }
+    row = {
+        "Date & Time": "2026-05-29 05:04:31",
+        "Asset Number": "DZ100030",
+        "Asset Description": "CATERPILLAR-D11R-DOZER",
+        "Fuel Pump": "OTK010 DB",
+        "Litres": 100.0,
+    }
+    routes = merge_fuel_pump_routes({}, config)
+    warnings: list[str] = []
+    out = convert_vehicle_row(row, fleet, {}, config, warnings, routes)
+    assert out["Model"] == "D11R DOZER"
+    assert out["Make"] == "CATERPILLAR"
