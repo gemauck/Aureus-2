@@ -1,4 +1,16 @@
-import type { CrmClient, CrmEntityBase, CrmFilterKey, CrmLead, CrmTab } from './types'
+import type {
+  CrmActivityItem,
+  CrmClient,
+  CrmContract,
+  CrmEntityBase,
+  CrmFilterKey,
+  CrmFollowUp,
+  CrmLead,
+  CrmProject,
+  CrmProposal,
+  CrmService,
+  CrmTab
+} from './types'
 
 export function entitySites(entity: CrmEntityBase) {
   const sites = entity.sites || entity.clientSites || []
@@ -11,6 +23,40 @@ export function entityContacts(entity: CrmEntityBase) {
 
 export function entityComments(entity: CrmEntityBase) {
   return Array.isArray(entity.comments) ? entity.comments : []
+}
+
+export function entityFollowUps(entity: CrmEntityBase): CrmFollowUp[] {
+  return Array.isArray(entity.followUps) ? entity.followUps : []
+}
+
+export function entityContracts(entity: CrmEntityBase): CrmContract[] {
+  return Array.isArray(entity.contracts) ? entity.contracts : []
+}
+
+export function entityProposals(entity: CrmEntityBase): CrmProposal[] {
+  return Array.isArray(entity.proposals) ? entity.proposals : []
+}
+
+export function entityServices(entity: CrmEntityBase): CrmService[] {
+  return Array.isArray(entity.services) ? entity.services : []
+}
+
+export function entityProjects(entity: CrmEntityBase): CrmProject[] {
+  if (Array.isArray(entity.projects) && entity.projects.length) return entity.projects
+  return []
+}
+
+export function entityActivityLog(entity: CrmEntityBase): CrmActivityItem[] {
+  return Array.isArray(entity.activityLog) ? entity.activityLog : []
+}
+
+export function formatCommentAuthor(c: {
+  author?: string | { name?: string; email?: string }
+  userName?: string
+}) {
+  if (typeof c.author === 'string') return c.author
+  if (c.author && typeof c.author === 'object') return c.author.name || c.author.email || ''
+  return c.userName || ''
 }
 
 export function displayStage(entity: CrmEntityBase) {

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { erp } from '../../theme/appTheme'
 import type { CrmEntityBase, CrmTab } from '../types'
-import { displayStage, entityContacts, entitySites, formatDate, formatMoney } from '../utils'
+import { displayStage, entityContacts, entityFollowUps, entitySites, formatDate, formatMoney } from '../utils'
 import { CrmStatusBadge } from './CrmStatusBadge'
 
 type Props = {
@@ -16,6 +16,7 @@ export function CrmEntityRow({ entity, tab, onPress }: Props) {
   const stage = displayStage(entity)
   const contacts = entityContacts(entity)
   const sites = entitySites(entity)
+  const followUps = entityFollowUps(entity)
   const value = tab === 'leads' ? (entity as { value?: number }).value : undefined
 
   return (
@@ -54,6 +55,11 @@ export function CrmEntityRow({ entity, tab, onPress }: Props) {
         {sites.length ? (
           <Text style={styles.metaChip}>
             <FontAwesome5 name="map-marker-alt" size={10} color={erp.textMuted} /> {sites.length}
+          </Text>
+        ) : null}
+        {followUps.length ? (
+          <Text style={styles.metaChip}>
+            <FontAwesome5 name="calendar-alt" size={10} color={erp.textMuted} /> {followUps.length}
           </Text>
         ) : null}
       </View>

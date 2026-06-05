@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
@@ -14,36 +12,22 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
 import { erp } from '../../theme/appTheme'
 import { crmApi } from '../api'
+import { CrmDetailPanelContent } from '../components/CrmDetailPanels'
+import { CrmDetailTabBar } from '../components/CrmDetailTabBar'
 import { CrmStatusBadge } from '../components/CrmStatusBadge'
-import type { CrmClient, CrmDetailTab, CrmEntityBase, CrmLead } from '../types'
-import {
-  displayStage,
-  entityComments,
-  entityContacts,
-  entitySites,
-  formatDate,
-  formatMoney
-} from '../utils'
+import { detailTabsFor } from '../detailTabs'
 import type { CrmStackParamList } from '../navigation'
+import type {
+  CrmClientNote,
+  CrmDetailTab,
+  CrmEntityBase,
+  CrmJobCard,
+  CrmOpportunity,
+  CrmTag
+} from '../types'
+import { displayStage } from '../utils'
 
 type Props = NativeStackScreenProps<CrmStackParamList, 'CrmDetail'>
-
-const DETAIL_TABS: { key: CrmDetailTab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Overview', icon: 'info-circle' },
-  { key: 'contacts', label: 'Contacts', icon: 'address-book' },
-  { key: 'sites', label: 'Sites', icon: 'map-marker-alt' },
-  { key: 'notes', label: 'Notes', icon: 'sticky-note' }
-]
-
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  )
-}
 
 export function CrmDetailScreen({ route, navigation }: Props) {
   const { entityType, entityId } = route.params
@@ -53,12 +37,27 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const [error, setError] = useState('')
   const [tab, setTab] = useState<CrmDetailTab>('overview')
   const [notesDraft, setNotesDraft] = useState('')
+  const [newNoteDraft, setNewNoteDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
+  const [savingNewNote, setSavingNewNote] = useState(false)
+  const [tags, setTags] = useState<CrmTag[]>([])
+  const [opportunities, setOpportunities] = useState<CrmOpportunity[]>([])
+  const [jobCards, setJobCards] = useState<CrmJobCard[]>([])
+  const [clientNotes, setClientNotes] = useState<CrmClientNote[]>([])
+  const [loadingExtras, setLoadingExtras] = useState(false)
+  const [loadedExtras, setLoadedExtras] = useState<Set<string>>(new Set())
+
+  const tabs = useMemo(() => detailTabsFor(entityType), [entityType])
 
   const load = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
     setError('')
+    setLoadedExtras(new Set())
+    setTags([])
+    setOpportunities([])
+    setJobCards([])
+    setClientNotes([])
     try {
       const data =
         entityType === 'client'
@@ -66,6 +65,11 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           : await crmApi.getLead(accessToken, entityId)
       setEntity(data)
       setNotesDraft(String(data.notes || ''))
+      if (entityType === 'client') {
+        const clientTags = await crmApi.getClientTags(accessToken, entityId).catch(() => [])
+        setTags(clientTags)
+        setLoadedExtras(new Set(['tags']))
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load record')
     } finally {
@@ -77,7 +81,41 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     void load()
   }, [load])
 
-  const saveNotes = async () => {
+  const loadExtrasForTab = useCallback(
+    async (activeTab: CrmDetailTab) => {
+      if (!accessToken || !entity) return
+      const key = `${activeTab}`
+      if (loadedExtras.has(key)) return
+
+      setLoadingExtras(true)
+      try {
+        if (activeTab === 'opportunities' && entityType === 'client') {
+          const opps = await crmApi.getOpportunitiesForClient(accessToken, entityId)
+          setOpportunities(opps)
+        }
+        if (activeTab === 'jobcards' && entityType === 'client') {
+          const cards = await crmApi.getJobCardsForClient(accessToken, entityId)
+          setJobCards(cards)
+        }
+        if (activeTab === 'notes' && entityType === 'client') {
+          const notes = await crmApi.getClientNotes(accessToken, entityId)
+          setClientNotes(notes)
+        }
+        setLoadedExtras((prev) => new Set(prev).add(key))
+      } catch {
+        /* non-fatal */
+      } finally {
+        setLoadingExtras(false)
+      }
+    },
+    [accessToken, entity, entityId, entityType, loadedExtras]
+  )
+
+  useEffect(() => {
+    void loadExtrasForTab(tab)
+  }, [tab, loadExtrasForTab])
+
+  const saveSummaryNotes = async () => {
     if (!accessToken || !entity) return
     setSavingNotes(true)
     try {
@@ -90,6 +128,23 @@ export function CrmDetailScreen({ route, navigation }: Props) {
       setError(e instanceof Error ? e.message : 'Could not save notes')
     } finally {
       setSavingNotes(false)
+    }
+  }
+
+  const saveNewNote = async () => {
+    if (!accessToken || entityType !== 'client' || !newNoteDraft.trim()) return
+    setSavingNewNote(true)
+    try {
+      const note = await crmApi.createClientNote(accessToken, entityId, {
+        content: newNoteDraft.trim(),
+        title: newNoteDraft.trim().slice(0, 60)
+      })
+      setClientNotes((prev) => [note, ...prev])
+      setNewNoteDraft('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add note')
+    } finally {
+      setSavingNewNote(false)
     }
   }
 
@@ -115,11 +170,6 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   if (!entity) return null
 
   const stage = displayStage(entity)
-  const contacts = entityContacts(entity)
-  const sites = entitySites(entity)
-  const comments = entityComments(entity)
-  const leadValue = entityType === 'lead' ? (entity as CrmLead).value : undefined
-  const clientRevenue = entityType === 'client' ? (entity as CrmClient).revenue : undefined
 
   return (
     <View style={styles.root}>
@@ -129,158 +179,59 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           <Text style={styles.backText}>CRM</Text>
         </Pressable>
         <View style={styles.headerBody}>
-          <Text style={styles.title} numberOfLines={3}>
-            {entity.name || 'Unnamed'}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={3}>
+              {entity.name || 'Unnamed'}
+            </Text>
+            {entity.isStarred ? (
+              <FontAwesome5 name="star" solid size={16} color="#f59e0b" style={{ marginTop: 4 }} />
+            ) : null}
+          </View>
           <View style={styles.headerMeta}>
             {stage ? <CrmStatusBadge label={stage} /> : null}
             {entity.industry ? <Text style={styles.industry}>{entity.industry}</Text> : null}
+            <Text style={styles.entityKind}>{entityType === 'client' ? 'Client' : 'Lead'}</Text>
           </View>
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
-        {DETAIL_TABS.map((t) => {
-          const active = tab === t.key
-          return (
-            <Pressable key={t.key} style={[styles.detailTab, active && styles.detailTabActive]} onPress={() => setTab(t.key)}>
-              <FontAwesome5 name={t.icon} size={12} color={active ? erp.primary : erp.textMuted} />
-              <Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>{t.label}</Text>
-            </Pressable>
-          )
-        })}
-      </ScrollView>
+      <CrmDetailTabBar
+        tabs={tabs}
+        active={tab}
+        entity={entity}
+        onSelect={setTab}
+        extras={{
+          opportunities: opportunities.length,
+          jobCards: jobCards.length,
+          clientNotes: clientNotes.length
+        }}
+      />
 
-      <ScrollView contentContainerStyle={styles.body}>
-        {tab === 'overview' ? (
-          <View style={styles.section}>
-            {leadValue != null && leadValue > 0 ? (
-              <View style={styles.highlightCard}>
-                <Text style={styles.highlightLabel}>Lead value</Text>
-                <Text style={styles.highlightValue}>{formatMoney(leadValue)}</Text>
-              </View>
-            ) : null}
-            {clientRevenue != null && clientRevenue > 0 ? (
-              <View style={styles.highlightCard}>
-                <Text style={styles.highlightLabel}>Revenue</Text>
-                <Text style={styles.highlightValue}>{formatMoney(clientRevenue)}</Text>
-              </View>
-            ) : null}
-            <InfoRow label="Status" value={entity.status} />
-            <InfoRow label="Stage" value={stage} />
-            <InfoRow label="AIDA" value={entity.aidaStatus || undefined} />
-            <InfoRow label="Last contact" value={formatDate(entity.lastContact)} />
-            <InfoRow label="Address" value={entity.address} />
-            {entity.website ? (
-              <Pressable onPress={() => void Linking.openURL(entity.website!.startsWith('http') ? entity.website! : `https://${entity.website}`)}>
-                <InfoRow label="Website" value={entity.website} />
-              </Pressable>
-            ) : null}
-            {entity.externalAgent?.name ? (
-              <InfoRow label="External agent" value={entity.externalAgent.name} />
-            ) : null}
-            {Array.isArray(entity.opportunities) && entity.opportunities.length > 0 ? (
-              <View style={styles.subSection}>
-                <Text style={styles.subTitle}>Opportunities ({entity.opportunities.length})</Text>
-                {entity.opportunities.slice(0, 6).map((opp, idx) => (
-                  <View key={opp.id || idx} style={styles.miniCard}>
-                    <Text style={styles.miniTitle}>{opp.name || 'Opportunity'}</Text>
-                    {opp.status ? <CrmStatusBadge label={opp.status} compact /> : null}
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{error}</Text>
+        </View>
+      ) : null}
 
-        {tab === 'contacts' ? (
-          <View style={styles.section}>
-            {contacts.length === 0 ? (
-              <Text style={styles.empty}>No contacts on file.</Text>
-            ) : (
-              contacts.map((c, idx) => (
-                <View key={c.id || idx} style={styles.miniCard}>
-                  <View style={styles.contactTop}>
-                    <Text style={styles.miniTitle}>{c.name || 'Contact'}</Text>
-                    {c.isPrimary ? <Text style={styles.primaryBadge}>Primary</Text> : null}
-                  </View>
-                  {c.role || c.title ? (
-                    <Text style={styles.miniSub}>{c.role || c.title}</Text>
-                  ) : null}
-                  {c.email ? (
-                    <Pressable onPress={() => void Linking.openURL(`mailto:${c.email}`)}>
-                      <Text style={styles.link}>{c.email}</Text>
-                    </Pressable>
-                  ) : null}
-                  {c.phone || c.mobile ? (
-                    <Pressable onPress={() => void Linking.openURL(`tel:${c.phone || c.mobile}`)}>
-                      <Text style={styles.link}>{c.phone || c.mobile}</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ))
-            )}
-          </View>
-        ) : null}
-
-        {tab === 'sites' ? (
-          <View style={styles.section}>
-            {sites.length === 0 ? (
-              <Text style={styles.empty}>No sites linked.</Text>
-            ) : (
-              sites.map((s, idx) => (
-                <View key={s.id || idx} style={styles.miniCard}>
-                  <Text style={styles.miniTitle}>{s.name || s.siteName || 'Site'}</Text>
-                  {s.address ? <Text style={styles.miniSub}>{s.address}</Text> : null}
-                  {s.engagementStage || s.aidaStatus ? (
-                    <View style={{ marginTop: 8 }}>
-                      <CrmStatusBadge label={String(s.engagementStage || s.aidaStatus || '')} compact />
-                    </View>
-                  ) : null}
-                </View>
-              ))
-            )}
-          </View>
-        ) : null}
-
-        {tab === 'notes' ? (
-          <View style={styles.section}>
-            <Text style={styles.subTitle}>Notes</Text>
-            <TextInput
-              style={styles.notesInput}
-              multiline
-              value={notesDraft}
-              onChangeText={setNotesDraft}
-              placeholder="Add notes…"
-              placeholderTextColor={erp.textSubtle}
-              textAlignVertical="top"
-            />
-            <Pressable
-              style={[styles.saveBtn, savingNotes && styles.saveBtnDisabled]}
-              disabled={savingNotes}
-              onPress={() => void saveNotes()}
-            >
-              {savingNotes ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.saveBtnText}>Save notes</Text>
-              )}
-            </Pressable>
-            {comments.length > 0 ? (
-              <View style={styles.subSection}>
-                <Text style={styles.subTitle}>Activity</Text>
-                {comments.map((c, idx) => (
-                  <View key={c.id || idx} style={styles.commentCard}>
-                    <Text style={styles.commentText}>{c.text || c.content || '—'}</Text>
-                    <Text style={styles.commentMeta}>
-                      {[c.author, formatDate(c.createdAt || c.timestamp)].filter(Boolean).join(' · ')}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <CrmDetailPanelContent
+          tab={tab}
+          entity={entity}
+          entityType={entityType}
+          tags={tags}
+          opportunities={opportunities}
+          jobCards={jobCards}
+          clientNotes={clientNotes}
+          notesDraft={notesDraft}
+          newNoteDraft={newNoteDraft}
+          savingNotes={savingNotes}
+          savingNewNote={savingNewNote}
+          loadingExtras={loadingExtras}
+          onNotesDraftChange={setNotesDraft}
+          onNewNoteDraftChange={setNewNoteDraft}
+          onSaveSummaryNotes={() => void saveSummaryNotes()}
+          onSaveNewNote={() => void saveNewNote()}
+        />
       </ScrollView>
     </View>
   )
@@ -302,78 +253,22 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   backText: { color: erp.primary, fontWeight: '700', fontSize: 15 },
   headerBody: { gap: 8 },
-  title: { fontSize: 24, fontWeight: '800', color: erp.text, lineHeight: 30 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  title: { flex: 1, fontSize: 22, fontWeight: '800', color: erp.text, lineHeight: 28 },
   headerMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   industry: { fontSize: 13, color: erp.textMuted, fontWeight: '600' },
-  tabBar: {
-    backgroundColor: erp.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: erp.border,
-    maxHeight: 48
+  entityKind: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: erp.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
   },
-  detailTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12
+  errorBanner: {
+    backgroundColor: erp.dangerSoft,
+    paddingHorizontal: erp.space.lg,
+    paddingVertical: 8
   },
-  detailTabActive: { borderBottomWidth: 2, borderBottomColor: erp.primary },
-  detailTabText: { fontSize: 13, fontWeight: '700', color: erp.textMuted },
-  detailTabTextActive: { color: erp.primary },
-  body: { padding: erp.space.lg, paddingBottom: 40 },
-  section: { gap: 12 },
-  highlightCard: {
-    backgroundColor: erp.primarySoft,
-    borderRadius: erp.radius.lg,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#bae6fd'
-  },
-  highlightLabel: { fontSize: 12, fontWeight: '700', color: erp.primary, textTransform: 'uppercase' },
-  highlightValue: { fontSize: 24, fontWeight: '800', color: erp.text, marginTop: 4 },
-  infoRow: { backgroundColor: erp.surface, borderRadius: erp.radius.md, padding: 14, borderWidth: 1, borderColor: erp.border },
-  infoLabel: { fontSize: 11, fontWeight: '700', color: erp.textSubtle, textTransform: 'uppercase', marginBottom: 4 },
-  infoValue: { fontSize: 15, color: erp.text, lineHeight: 21 },
-  subSection: { marginTop: 8, gap: 8 },
-  subTitle: { fontSize: 14, fontWeight: '800', color: erp.text, marginBottom: 4 },
-  miniCard: {
-    backgroundColor: erp.surface,
-    borderRadius: erp.radius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: erp.border,
-    marginBottom: 8
-  },
-  miniTitle: { fontSize: 15, fontWeight: '800', color: erp.text },
-  miniSub: { fontSize: 13, color: erp.textMuted, marginTop: 4 },
-  contactTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  primaryBadge: { fontSize: 11, fontWeight: '800', color: erp.success },
-  link: { color: erp.primary, fontWeight: '600', marginTop: 6, fontSize: 14 },
-  empty: { color: erp.textMuted, textAlign: 'center', padding: 24 },
-  notesInput: {
-    minHeight: 120,
-    borderWidth: 1,
-    borderColor: erp.border,
-    borderRadius: erp.radius.md,
-    padding: 12,
-    backgroundColor: erp.surface,
-    color: erp.text,
-    fontSize: 15
-  },
-  saveBtn: {
-    backgroundColor: erp.primary,
-    borderRadius: erp.radius.md,
-    paddingVertical: 12,
-    alignItems: 'center'
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: '#fff', fontWeight: '800' },
-  commentCard: {
-    backgroundColor: erp.surfaceMuted,
-    borderRadius: erp.radius.md,
-    padding: 12
-  },
-  commentText: { color: erp.text, fontSize: 14, lineHeight: 20 },
-  commentMeta: { fontSize: 11, color: erp.textSubtle, marginTop: 6 }
+  errorBannerText: { color: erp.danger, fontWeight: '600', fontSize: 13 },
+  body: { padding: erp.space.lg, paddingBottom: 48 }
 })
