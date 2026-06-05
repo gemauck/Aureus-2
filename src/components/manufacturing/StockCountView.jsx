@@ -895,14 +895,17 @@
       let stream = null;
 
       const parseQr =
-        typeof window.parseInventoryQrPayload === 'function' ? window.parseInventoryQrPayload : null;
+        typeof window.parseInventoryQrPayload === 'function'
+          ? window.parseInventoryQrPayload
+          : (raw) => {
+              const s = String(raw || '').trim();
+              if (!s.startsWith('ABCO:INV:')) return null;
+              const inventoryItemId = s.slice('ABCO:INV:'.length).trim();
+              return inventoryItemId ? { inventoryItemId } : null;
+            };
 
       const tryDecode = (text) => {
         if (!stScanActiveRef.current) return;
-        if (!parseQr) {
-          setError('QR helpers not loaded. Refresh the page.');
-          return;
-        }
         const now = Date.now();
         const s = String(text || '').trim();
         if (!s) return;
