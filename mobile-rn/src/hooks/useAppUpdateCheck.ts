@@ -36,7 +36,7 @@ export function useAppUpdateCheck(enabled = true) {
     if (!remote?.versionCode || remote.versionCode <= APP_VERSION_CODE) return
     if (silent && checkedRef.current) return
     checkedRef.current = true
-    const url = remote.apkUrl || `${API_BASE_URL}/downloads/Abcotronics-ERP-Mobile.apk`
+    const url = remote.apkUrl || `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
     Alert.alert(
       'Update available',
       remote.releaseNotes ||

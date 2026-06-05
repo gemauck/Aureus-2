@@ -7,7 +7,7 @@ import { ok, badRequest, serverError } from '../_lib/response.js'
 const ANDROID_VERSION = {
   versionCode: 8,
   versionName: '0.3.4',
-  apkUrl: 'https://abcoafrica.co.za/downloads/Abcotronics-ERP-Mobile.apk',
+  apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes: 'Self-hosted OTA on abcoafrica.co.za — no Expo account needed.'
 }
 
