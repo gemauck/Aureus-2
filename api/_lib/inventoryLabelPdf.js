@@ -1,127 +1,31 @@
 import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
 import { encodeInventoryQrPayload } from './inventoryQrPayload.js'
+import {
+  INVENTORY_LABEL_PRESETS,
+  buildInventoryLabelHtmlDocument,
+  getInventoryLabelPreset,
+  inventoryLabelPdfFilename,
+  chunkInventoryLabelItems,
+  qrLabelsPerPage
+} from '../../src/utils/inventoryLabelLayout.js'
+
+export { INVENTORY_LABEL_PRESETS, inventoryLabelPdfFilename, getInventoryLabelPreset }
 
 const MAX_ITEMS_PER_REQUEST = 400
+const MAX_QR_DATA_URL_BYTES = 900000
 
-/** Keep in sync with QR_SHEET_PRESETS in StockCountView.jsx */
-export const INVENTORY_LABEL_PRESETS = {
-  w113: {
-    mode: 'sheet',
-    label: 'Tower W113 / Avery L7163',
-    cols: 2,
-    rows: 7,
-    labelWidthMm: 99.1,
-    labelHeightMm: 38.1,
-    marginTopMm: 15.14,
-    marginLeftMm: 4.65,
-    gapXmm: 2.5,
-    gapYmm: 0,
-    apiSize: 'md',
-    qrMaxMm: 30,
-    namePt: 7,
-    metaPt: 6
-  },
-  l7160: {
-    mode: 'sheet',
-    label: 'Avery L7160',
-    cols: 3,
-    rows: 7,
-    labelWidthMm: 63.5,
-    labelHeightMm: 38.1,
-    marginTopMm: 15.14,
-    marginLeftMm: 7.25,
-    gapXmm: 6.5,
-    gapYmm: 0,
-    apiSize: 'sm',
-    qrMaxMm: 26,
-    namePt: 6.5,
-    metaPt: 5.5
-  },
-  w107: {
-    mode: 'sheet',
-    label: 'Tower W107 / Avery L6011',
-    cols: 3,
-    rows: 8,
-    labelWidthMm: 38.1,
-    labelHeightMm: 21.2,
-    marginTopMm: 10.7,
-    marginLeftMm: 8.5,
-    gapXmm: 31.9,
-    gapYmm: 0,
-    apiSize: 'xs',
-    qrMaxMm: 16,
-    namePt: 5.5,
-    metaPt: 5
-  },
-  rf2470x37: {
-    mode: 'sheet',
-    label: 'Red Fern 24-up / 70×37 mm',
-    cols: 3,
-    rows: 8,
-    labelWidthMm: 70,
-    labelHeightMm: 37.125,
-    marginTopMm: 0,
-    marginLeftMm: 0,
-    gapXmm: 0,
-    gapYmm: 0,
-    apiSize: 'sm',
-    qrMaxMm: 26,
-    namePt: 7,
-    metaPt: 6
-  },
-  small: {
-    mode: 'flex',
-    label: 'Plain A4 — small',
-    cols: 4,
-    marginMm: 10,
-    gapMm: 3,
-    cellHeightMm: 45,
-    qrMaxMm: 18,
-    apiSize: 'sm',
-    namePt: 7,
-    metaPt: 6
-  },
-  medium: {
-    mode: 'flex',
-    label: 'Plain A4 — medium',
-    cols: 3,
-    marginMm: 10,
-    gapMm: 3,
-    cellHeightMm: 55,
-    qrMaxMm: 24,
-    apiSize: 'md',
-    namePt: 7,
-    metaPt: 6
-  },
-  large: {
-    mode: 'flex',
-    label: 'Plain A4 — large',
-    cols: 2,
-    marginMm: 10,
-    gapMm: 3,
-    cellHeightMm: 70,
-    qrMaxMm: 32,
-    apiSize: 'lg',
-    namePt: 8,
-    metaPt: 6.5
-  },
-  xlarge: {
-    mode: 'flex',
-    label: 'Plain A4 — extra large',
-    cols: 1,
-    marginMm: 10,
-    gapMm: 3,
-    cellHeightMm: 90,
-    qrMaxMm: 45,
-    apiSize: 'xl',
-    namePt: 9,
-    metaPt: 7
+function parseDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null
+  const m = dataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/i)
+  if (!m) return null
+  try {
+    const buf = Buffer.from(m[2], 'base64')
+    if (buf.length > MAX_QR_DATA_URL_BYTES) return null
+    return { format: m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase(), buffer: buf }
+  } catch {
+    return null
   }
-}
-
-export function getInventoryLabelPreset(key) {
-  return INVENTORY_LABEL_PRESETS[key] || INVENTORY_LABEL_PRESETS.w113
 }
 
 function mmToPt(mm) {
@@ -149,38 +53,52 @@ async function qrPngBuffer(inventoryItemId, apiSize, targetMm) {
   })
 }
 
-function chunkItems(items, perPage) {
-  if (!perPage || perPage < 1) return [items]
-  const pages = []
-  for (let i = 0; i < items.length; i += perPage) {
-    pages.push(items.slice(i, i + perPage))
+async function resolveQrBuffer(item, preset) {
+  const parsed = parseDataUrl(item.qrDataUrl)
+  if (parsed) return parsed.buffer
+  const targetMm =
+    preset.mode === 'sheet' ? preset.labelHeightMm - 2 : (preset.cellHeightMm || 55) - 2
+  return qrPngBuffer(item.inventoryItemId, preset.apiSize, targetMm)
+}
+
+async function renderHtmlToPdf(html) {
+  try {
+    const { chromium } = await import('playwright')
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(html, { waitUntil: 'load', timeout: 30000 })
+      await page.emulateMedia({ media: 'print' })
+      const pdf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
+      })
+      return Buffer.from(pdf)
+    } finally {
+      await browser.close()
+    }
+  } catch (error) {
+    console.warn('Inventory label HTML PDF via Playwright unavailable:', error.message)
+    return null
   }
-  return pages.length ? pages : [[]]
-}
-
-function sanitizeFilenamePart(value) {
-  return String(value || 'labels')
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'labels'
-}
-
-export function inventoryLabelPdfFilename({ locationLabel, presetKey }) {
-  const preset = getInventoryLabelPreset(presetKey)
-  return `inventory-labels-${sanitizeFilenamePart(locationLabel)}-${presetKey || 'sheet'}.pdf`
 }
 
 function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellHeightPt) {
-  const pad = mmToPt(1)
-  const innerH = Math.max(0, cellHeightPt - pad * 2)
-  const qrColW = cellWidthPt * 0.44
-  const textColW = Math.max(0, cellWidthPt - qrColW - pad * 2)
-  const qrSize = Math.min(innerH, qrColW - mmToPt(0.4))
-  const qrX = xPt + pad
-  const qrY = yPt + (cellHeightPt - qrSize) / 2
-  const textX = xPt + qrColW + pad
-  const textY = yPt + pad
+  const padX = mmToPt(1)
+  const padY = mmToPt(0.8)
+  const innerW = Math.max(0, cellWidthPt - padX * 2)
+  const innerH = Math.max(0, cellHeightPt - padY * 2)
+  const qrColW = innerW * 0.44
+  const textColW = Math.max(0, innerW - qrColW - mmToPt(0.6))
+  const qrSize = Math.min(innerH, qrColW - mmToPt(0.2))
+  const qrX = xPt + padX + (qrColW - qrSize) / 2
+  const qrY = yPt + padY + (innerH - qrSize) / 2
+  const textX = xPt + padX + qrColW + mmToPt(0.6)
   const name = String(item?.name || '').trim() || '—'
   const sku = String(item?.sku || '').trim() || '—'
 
@@ -192,32 +110,30 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
     }
   }
 
+  doc.font('Helvetica-Bold').fontSize(preset.namePt || 7)
+  const nameH = Math.min(doc.heightOfString(name, { width: textColW }), innerH * 0.72)
+  doc.font('Helvetica').fontSize(preset.metaPt || 6)
+  const skuH = doc.heightOfString(sku, { width: textColW })
+  const gap = mmToPt(0.3)
+  const blockH = Math.min(innerH, nameH + gap + skuH)
+  const textY = yPt + padY + (innerH - blockH) / 2
+
   doc
     .font('Helvetica-Bold')
     .fontSize(preset.namePt || 7)
     .fillColor('#000000')
-    .text(name, textX, textY, {
-      width: textColW,
-      height: innerH * 0.68,
-      align: 'left',
-      ellipsis: true
-    })
+    .text(name, textX, textY, { width: textColW, align: 'left', ellipsis: true })
 
   doc
     .font('Helvetica')
     .fontSize(preset.metaPt || 6)
     .fillColor('#000000')
-    .text(sku, textX, textY + innerH * 0.68, {
-      width: textColW,
-      height: innerH * 0.32,
-      align: 'left',
-      ellipsis: true
-    })
+    .text(sku, textX, textY + nameH + gap, { width: textColW, align: 'left', ellipsis: true })
 }
 
-async function renderSheetPdf(doc, preset, items) {
-  const perPage = preset.cols * preset.rows
-  const pages = chunkItems(items, perPage)
+async function renderSheetPdfKit(doc, preset, items) {
+  const perPage = qrLabelsPerPage(preset)
+  const pages = chunkInventoryLabelItems(items, perPage)
   const labelW = mmToPt(preset.labelWidthMm)
   const labelH = mmToPt(preset.labelHeightMm)
   const gapX = mmToPt(preset.gapXmm || 0)
@@ -236,13 +152,13 @@ async function renderSheetPdf(doc, preset, items) {
       const row = Math.floor(i / preset.cols)
       const x = originX + col * pitchX
       const y = originY + row * pitchY
-      const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize, preset.labelHeightMm - 2)
+      const qrBuffer = await resolveQrBuffer(item, preset)
       drawLabelCell(doc, preset, item, qrBuffer, x, y, labelW, labelH)
     }
   }
 }
 
-async function renderFlexPdf(doc, preset, items) {
+async function renderFlexPdfKit(doc, preset, items) {
   const margin = mmToPt(preset.marginMm || 10)
   const gap = mmToPt(preset.gapMm || 3)
   const pageW = mmToPt(210)
@@ -252,36 +168,60 @@ async function renderFlexPdf(doc, preset, items) {
   const cellH = mmToPt(preset.cellHeightMm || 55)
   const pitchX = cellW + gap
   const pitchY = cellH + gap
-  const colsPerRow = preset.cols
-  const rowsPerPage = Math.max(
-    1,
-    Math.floor((pageH - margin * 2 + gap) / pitchY)
-  )
-  const perPage = colsPerRow * rowsPerPage
+  const rowsPerPage = Math.max(1, Math.floor((pageH - margin * 2 + gap) / pitchY))
+  const perPage = preset.cols * rowsPerPage
 
   for (let i = 0; i < items.length; i++) {
-    const pageIndex = Math.floor(i / perPage)
     const indexOnPage = i % perPage
-    if (i === 0) {
-      /* first page already created */
-    } else if (indexOnPage === 0) {
-      doc.addPage({ size: 'A4', margin: 0 })
-    }
-    const col = indexOnPage % colsPerRow
-    const row = Math.floor(indexOnPage / colsPerRow)
+    if (i > 0 && indexOnPage === 0) doc.addPage({ size: 'A4', margin: 0 })
+    const col = indexOnPage % preset.cols
+    const row = Math.floor(indexOnPage / preset.cols)
     const x = margin + col * pitchX
     const y = margin + row * pitchY
     const item = items[i]
-    const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize, (preset.cellHeightMm || 55) - 2)
+    const qrBuffer = await resolveQrBuffer(item, preset)
     drawLabelCell(doc, preset, item, qrBuffer, x, y, cellW, cellH)
   }
+}
+
+async function buildInventoryLabelPdfKitBuffer({ preset, items, locationLabel, presetKey }) {
+  return new Promise((resolve, reject) => {
+    const title = locationLabel
+      ? `Inventory labels — ${locationLabel}`
+      : `Inventory labels — ${preset.label || presetKey}`
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 0,
+      autoFirstPage: true,
+      info: { Title: title, Author: 'Abcotronics ERP' }
+    })
+    const chunks = []
+    doc.on('data', (c) => chunks.push(c))
+    doc.on('end', () => resolve(Buffer.concat(chunks)))
+    doc.on('error', reject)
+
+    const run = async () => {
+      try {
+        if (preset.mode === 'sheet') {
+          await renderSheetPdfKit(doc, preset, items)
+        } else {
+          await renderFlexPdfKit(doc, preset, items)
+        }
+        doc.end()
+      } catch (err) {
+        reject(err)
+      }
+    }
+
+    void run()
+  })
 }
 
 /**
  * @param {object} opts
  * @param {string} opts.presetKey
  * @param {string} [opts.locationLabel]
- * @param {Array<{ inventoryItemId: string, sku?: string, name?: string }>} opts.items
+ * @param {Array<{ inventoryItemId: string, sku?: string, name?: string, qrDataUrl?: string }>} opts.items
  */
 export async function buildInventoryLabelPdfBuffer(opts) {
   const presetKey = String(opts?.presetKey || '').trim()
@@ -304,38 +244,25 @@ export async function buildInventoryLabelPdfBuffer(opts) {
     return {
       inventoryItemId,
       sku: String(item?.sku || '').trim() || '—',
-      name: String(item?.name || '').trim() || '—'
+      name: String(item?.name || '').trim() || '—',
+      qrDataUrl: String(item?.qrDataUrl || item?.qrSrc || '').trim()
     }
   })
 
-  return new Promise((resolve, reject) => {
-    const title = locationLabel
-      ? `Inventory labels — ${locationLabel}`
-      : `Inventory labels — ${preset.label || presetKey}`
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 0,
-      autoFirstPage: true,
-      info: { Title: title, Author: 'Abcotronics ERP' }
-    })
-    const chunks = []
-    doc.on('data', (c) => chunks.push(c))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
+  const html = buildInventoryLabelHtmlDocument({
+    presetKey,
+    items: normalized,
+    locationLabel
+  })
+  const htmlPdf = await renderHtmlToPdf(html)
+  if (htmlPdf && htmlPdf.length > 0) {
+    return htmlPdf
+  }
 
-    const run = async () => {
-      try {
-        if (preset.mode === 'sheet') {
-          await renderSheetPdf(doc, preset, normalized)
-        } else {
-          await renderFlexPdf(doc, preset, normalized)
-        }
-        doc.end()
-      } catch (err) {
-        reject(err)
-      }
-    }
-
-    void run()
+  return buildInventoryLabelPdfKitBuffer({
+    preset,
+    items: normalized,
+    locationLabel,
+    presetKey
   })
 }

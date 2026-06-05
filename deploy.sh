@@ -134,6 +134,14 @@ echo "-> Installing dependencies (including dev, needed for build)..."
 npm install --include=dev
 
 echo
+echo "-> Ensuring Playwright Chromium for inventory label PDF export (optional)..."
+if npx playwright install chromium >/dev/null 2>&1; then
+  echo "  ✓ Playwright Chromium ready"
+else
+  echo "  ⚠ Playwright Chromium unavailable; label PDFs use pdfkit fallback"
+fi
+
+echo
 echo "-> Building application..."
 # Embed deploy summary for /version + dist/build-version.json (override with RELEASE_SUMMARY=... deploy.sh)
 if [ -z "${RELEASE_SUMMARY:-}" ] && [ -z "${DEPLOY_SUMMARY:-}" ]; then

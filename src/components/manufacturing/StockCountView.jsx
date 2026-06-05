@@ -201,15 +201,24 @@
   ];
 
   function getQrSheetPreset(key) {
+    if (typeof window.getInventoryLabelPreset === 'function') {
+      return window.getInventoryLabelPreset(key);
+    }
     return QR_SHEET_PRESETS[key] || QR_SHEET_PRESETS.w113;
   }
 
   function qrLabelsPerPage(preset) {
+    if (typeof window.qrLabelsPerPage === 'function') {
+      return window.qrLabelsPerPage(preset);
+    }
     if (preset.mode === 'sheet') return preset.cols * preset.rows;
     return null;
   }
 
   function chunkQrSheetItems(items, perPage) {
+    if (typeof window.chunkInventoryLabelItems === 'function') {
+      return window.chunkInventoryLabelItems(items, perPage);
+    }
     if (!perPage || perPage < 1) return [items];
     const pages = [];
     for (let i = 0; i < items.length; i += perPage) {
@@ -270,67 +279,18 @@
     });
   }
 
+  function buildQrLabelScreenCss(preset) {
+    if (typeof window.buildInventoryLabelCss === 'function') {
+      return window.buildInventoryLabelCss(preset);
+    }
+    return '';
+  }
+
   function buildQrLabelPrintCss(preset) {
-    const sheet = preset.mode === 'sheet';
-    const cellRule = sheet
-      ? [
-          '#erp-stock-qr-print-root .erp-qr-label-cell {',
-          '  width:' + preset.labelWidthMm + 'mm;',
-          '  height:' + preset.labelHeightMm + 'mm;',
-          '  box-sizing:border-box; overflow:hidden;',
-          '  padding:0.8mm 1mm; margin:0;',
-          '  display:flex; flex-direction:row; align-items:center;',
-          '  border:none !important; border-radius:0 !important;',
-          '  box-shadow:none !important; background:#fff !important; color:#000 !important;',
-          '  break-inside:avoid; page-break-inside:avoid;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-label-qr {',
-          '  flex:0 0 44%; height:100%; display:flex; align-items:center; justify-content:center;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-label-cell img {',
-          '  max-width:100%; max-height:calc(100% - 0.8mm); width:auto; height:auto;',
-          '  border:none !important; padding:0 !important;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-label-text {',
-          '  flex:1 1 auto; min-width:0; display:flex; flex-direction:column; justify-content:center;',
-          '  text-align:left; padding-left:0.6mm; overflow:hidden;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-label-name, #erp-stock-qr-print-root .erp-qr-label-meta {',
-          '  text-align:left !important; width:100%;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-sheet-page {',
-          '  width:210mm; min-height:297mm; box-sizing:border-box;',
-          '  padding:' + preset.marginTopMm + 'mm 0 0 ' + preset.marginLeftMm + 'mm;',
-          '  margin:0 !important; page-break-after:always;',
-          '  display:grid;',
-          '  grid-template-columns:repeat(' + preset.cols + ',' + preset.labelWidthMm + 'mm);',
-          '  grid-template-rows:repeat(' + preset.rows + ',' + preset.labelHeightMm + 'mm);',
-          '  grid-auto-rows:' + preset.labelHeightMm + 'mm;',
-          '  column-gap:' + preset.gapXmm + 'mm;',
-          '  row-gap:' + (preset.gapYmm || 0) + 'mm;',
-          '  border:none !important; background:#fff !important;',
-          '}',
-          '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; }',
-          '#erp-stock-qr-print-root .overflow-x-auto,',
-          '#erp-stock-qr-print-root .overflow-x-auto > div {',
-          '  margin:0 !important; padding:0 !important; overflow:visible !important;',
-          '}'
-        ].join('\n')
-      : '';
-    return (
-      '@media print {' +
-      (sheet ? '@page { size:210mm 297mm; margin:0; }' : '@page { size:A4; margin:10mm; }') +
-      'html, body { margin:0 !important; padding:0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }' +
-      'body * { visibility:hidden !important; }' +
-      '#erp-stock-qr-print-root, #erp-stock-qr-print-root * { visibility:visible !important; }' +
-      '#erp-stock-qr-print-root { position:absolute; left:0; top:0; box-sizing:border-box; padding:0 !important; margin:0 !important; background:#fff !important; ' +
-      (sheet ? 'width:210mm;' : 'width:100%;') +
-      '}' +
-      '#erp-stock-qr-print-root .erp-qr-preview-banner { display:none !important; }' +
-      '#erp-stock-qr-print-root .erp-qr-label-name, #erp-stock-qr-print-root .erp-qr-label-meta { color:#000 !important; }' +
-      cellRule +
-      '}'
-    );
+    if (typeof window.buildInventoryLabelPrintCss === 'function') {
+      return window.buildInventoryLabelPrintCss(preset);
+    }
+    return buildQrLabelScreenCss(preset);
   }
 
   function renderStockQrLabelCell(React, item, preset, opts) {
@@ -351,17 +311,8 @@
       'p',
       {
         className:
-          'erp-qr-label-name font-semibold leading-tight ' +
-          (isSheet ? 'line-clamp-3 w-full text-left' : 'line-clamp-2 mt-2 text-xs text-center ' + text),
-        style: isSheet
-          ? {
-              fontSize: preset.namePt + 'pt',
-              margin: 0,
-              lineHeight: 1.1,
-              overflow: 'hidden',
-              width: '100%'
-            }
-          : undefined
+          'erp-qr-label-name ' +
+          (isSheet ? 'line-clamp-3 w-full text-left' : 'font-semibold line-clamp-2 mt-2 text-xs text-center ' + text)
       },
       item.name
     );
@@ -369,11 +320,8 @@
       'p',
       {
         className:
-          'erp-qr-label-meta font-mono ' +
-          (isSheet ? 'text-left w-full' : 'mt-0.5 text-[11px] text-center ' + muted),
-        style: isSheet
-          ? { fontSize: preset.metaPt + 'pt', margin: '0.3mm 0 0', lineHeight: 1.1, width: '100%' }
-          : undefined
+          'erp-qr-label-meta ' +
+          (isSheet ? 'text-left w-full' : 'font-mono mt-0.5 text-[11px] text-center ' + muted)
       },
       item.sku
     );
@@ -1218,7 +1166,8 @@
               return {
                 inventoryItemId: item.inventoryItemId,
                 sku: item.sku,
-                name: item.name
+                name: item.name,
+                qrDataUrl: item.qrSrc
               };
             })
           })
@@ -1596,6 +1545,7 @@
       const perPage = qrLabelsPerPage(qrPreset);
       return chunkQrSheetItems(qrSheetItems, perPage);
     }, [qrSheetItems, qrPreset]);
+    const qrLabelScreenCss = React.useMemo(() => buildQrLabelScreenCss(qrPreset), [qrPreset]);
     const qrPrintCss = React.useMemo(() => buildQrLabelPrintCss(qrPreset), [qrPreset]);
     const qrLocationLabel = React.useMemo(() => {
       const loc = stLocationOptions.find((l) => l.id === qrLocationId);
@@ -3012,6 +2962,7 @@
           { className: 'mt-1 text-sm ' + muted },
           'Each stock line is tied to a catalog item. The QR encodes that item id (ABCO:INV:…) for Job Cards stock-take scanning. Choose a precut sticker sheet (Tower / Avery) or a plain A4 grid, build labels for a location, then print. Only the label area is sent to the printer.'
         ),
+        React.createElement('style', { dangerouslySetInnerHTML: { __html: qrLabelScreenCss } }),
         React.createElement('style', { dangerouslySetInnerHTML: { __html: qrPrintCss } }),
         React.createElement(
           'div',
@@ -3232,34 +3183,13 @@
                           {
                             className:
                               'erp-qr-sheet-page inline-block border border-dashed ' +
-                              (isDark ? 'border-slate-600' : 'border-slate-300'),
-                            style: {
-                              width: '210mm',
-                              minHeight: '297mm',
-                              boxSizing: 'border-box',
-                              paddingTop: qrPreset.marginTopMm + 'mm',
-                              paddingLeft: qrPreset.marginLeftMm + 'mm',
-                              display: 'grid',
-                              gridTemplateColumns:
-                                'repeat(' + qrPreset.cols + ', ' + qrPreset.labelWidthMm + 'mm)',
-                              gridTemplateRows:
-                                'repeat(' + qrPreset.rows + ', ' + qrPreset.labelHeightMm + 'mm)',
-                              gridAutoRows: qrPreset.labelHeightMm + 'mm',
-                              columnGap: qrPreset.gapXmm + 'mm',
-                              rowGap: (qrPreset.gapYmm || 0) + 'mm',
-                              background: '#fff',
-                              color: '#000'
-                            }
+                              (isDark ? 'border-slate-600' : 'border-slate-300')
                           },
                           pageItems.map((item) =>
                             renderStockQrLabelCell(React, item, qrPreset, {
                               text: text,
                               muted: muted,
-                              cellClass: 'border border-slate-200',
-                              cellStyle: {
-                                width: qrPreset.labelWidthMm + 'mm',
-                                height: qrPreset.labelHeightMm + 'mm'
-                              }
+                              cellClass: 'border border-slate-200'
                             })
                           )
                         )

@@ -85,6 +85,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/manufacturing/locations/StockLocations.jsx',
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/ManufacturingReportsView.jsx',
+        './src/utils/inventoryLabelLayout.js',
         './src/components/manufacturing/StockCountView.jsx',
         './src/components/manufacturing/jobCardActivityDisplay.js',
         './src/components/manufacturing/JobCards.jsx',
