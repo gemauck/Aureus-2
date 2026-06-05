@@ -152,8 +152,9 @@
       rows: 8,
       labelWidthMm: 70,
       labelHeightMm: 37,
-      rowPitchMm: 37,
-      marginTopMm: 0.5,
+      fillA4Height: true,
+      marginTopMm: 0,
+      marginBottomMm: 0,
       marginLeftMm: 0,
       gapXmm: 0,
       gapYmm: 0,
@@ -299,6 +300,41 @@
     return buildQrLabelScreenCss(preset);
   }
 
+  function labelPositionObjectForPreset(preset, index) {
+    if (typeof window.labelCellPosition === 'function') {
+      const p = window.labelCellPosition(preset, index)
+      return {
+        position: 'absolute',
+        left: p.left + 'mm',
+        top: p.top + 'mm',
+        width: p.width + 'mm',
+        height: p.height + 'mm'
+      }
+    }
+    const marginTop = Number(preset.marginTopMm ?? 0)
+    const marginBottom = Number(preset.marginBottomMm ?? 0)
+    const marginLeft = Number(preset.marginLeftMm ?? 0)
+    const cols = Number(preset.cols) || 1
+    const labelW = Number(preset.labelWidthMm)
+    const labelH = Number(preset.labelHeightMm)
+    const gapX = Number(preset.gapXmm ?? 0)
+    let rowPitch = Number(preset.rowPitchMm)
+    if (!Number.isFinite(rowPitch) || rowPitch <= 0) {
+      rowPitch = preset.fillA4Height
+        ? (297 - marginTop - marginBottom) / (Number(preset.rows) || 1)
+        : labelH + Number(preset.gapYmm ?? 0)
+    }
+    const col = index % cols
+    const row = Math.floor(index / cols)
+    return {
+      position: 'absolute',
+      left: marginLeft + col * (labelW + gapX) + 'mm',
+      top: marginTop + row * rowPitch + 'mm',
+      width: labelW + 'mm',
+      height: labelH + 'mm'
+    }
+  }
+
   function renderStockQrLabelCell(React, item, preset, opts) {
     const text = opts.text || '';
     const muted = opts.muted || '';
@@ -332,12 +368,16 @@
       item.sku
     );
     if (isSheet) {
+      const posStyle =
+        typeof opts.labelIndex === 'number'
+          ? labelPositionObjectForPreset(preset, opts.labelIndex)
+          : null
       return React.createElement(
         'div',
         {
           key: item.inventoryItemId,
           className: 'erp-qr-label-cell overflow-hidden ' + (opts.cellClass || ''),
-          style: opts.cellStyle
+          style: Object.assign({}, opts.cellStyle || {}, posStyle || {})
         },
         React.createElement('div', { className: 'erp-qr-label-qr' }, imgEl),
         React.createElement('div', { className: 'erp-qr-label-text' }, nameEl, skuEl)
@@ -3178,13 +3218,14 @@
                               'erp-qr-sheet-page inline-block border border-dashed ' +
                               (isDark ? 'border-slate-600' : 'border-slate-300')
                           },
-                          pageItems.map((item) =>
-                            renderStockQrLabelCell(React, item, qrPreset, {
+                          pageItems.map(function (item, labelIndex) {
+                            return renderStockQrLabelCell(React, item, qrPreset, {
                               text: text,
                               muted: muted,
-                              cellClass: 'border border-slate-200'
+                              cellClass: 'border border-slate-200',
+                              labelIndex: labelIndex
                             })
-                          )
+                          })
                         )
                       )
                     )

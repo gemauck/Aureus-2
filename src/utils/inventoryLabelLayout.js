@@ -3,6 +3,9 @@
  * Keep api/_lib/inventoryLabelPdf.js in sync when changing presets or CSS.
  */
 
+export const A4_SHEET_WIDTH_MM = 210
+export const A4_SHEET_HEIGHT_MM = 297
+
 export const INVENTORY_LABEL_PRESETS = {
   w113: {
     mode: 'sheet',
@@ -63,9 +66,10 @@ export const INVENTORY_LABEL_PRESETS = {
     rows: 8,
     labelWidthMm: 70,
     labelHeightMm: 37,
-    /** Row pitch on sheet (8×37 mm + 0.5 mm top/bottom = A4 height). */
-    rowPitchMm: 37,
-    marginTopMm: 0.5,
+    /** Divide A4 height evenly (297 ÷ 8 = 37.125 mm row slots; label face is 37 mm). */
+    fillA4Height: true,
+    marginTopMm: 0,
+    marginBottomMm: 0,
     marginLeftMm: 0,
     gapXmm: 0,
     gapYmm: 0,
@@ -168,28 +172,95 @@ function escapeHtml(value) {
 }
 
 function sheetRowPitchMm(preset) {
-  const pitch = Number(preset.rowPitchMm)
-  if (Number.isFinite(pitch) && pitch > 0) return pitch
+  const explicit = Number(preset.rowPitchMm)
+  if (Number.isFinite(explicit) && explicit > 0) return explicit
+  if (preset.fillA4Height) {
+    const marginTop = Number(preset.marginTopMm ?? 0)
+    const marginBottom = Number(preset.marginBottomMm ?? 0)
+    const rows = Number(preset.rows) || 1
+    return (A4_SHEET_HEIGHT_MM - marginTop - marginBottom) / rows
+  }
   return Number(preset.labelHeightMm || 0) + Number(preset.gapYmm || 0)
 }
 
-function sheetCellCss(preset) {
+/** Computed sheet geometry for absolute label placement (print/PDF/preview). */
+export function sheetLayoutMetrics(preset) {
+  const marginTop = Number(preset.marginTopMm ?? 0)
+  const marginBottom = Number(preset.marginBottomMm ?? 0)
+  const marginLeft = Number(preset.marginLeftMm ?? 0)
+  const rows = Number(preset.rows) || 1
+  const cols = Number(preset.cols) || 1
+  const labelW = Number(preset.labelWidthMm)
+  const labelH = Number(preset.labelHeightMm)
+  const gapX = Number(preset.gapXmm ?? 0)
   const rowPitch = sheetRowPitchMm(preset)
+  const colPitch = labelW + gapX
+  const pageHeight = preset.fillA4Height
+    ? A4_SHEET_HEIGHT_MM
+    : marginTop + marginBottom + rows * rowPitch
+  return {
+    marginTop,
+    marginBottom,
+    marginLeft,
+    rowPitch,
+    colPitch,
+    labelW,
+    labelH,
+    rows,
+    cols,
+    pageWidth: A4_SHEET_WIDTH_MM,
+    pageHeight
+  }
+}
+
+export function labelCellPosition(preset, index) {
+  const m = sheetLayoutMetrics(preset)
+  const col = index % m.cols
+  const row = Math.floor(index / m.cols)
+  return {
+    left: m.marginLeft + col * m.colPitch,
+    top: m.marginTop + row * m.rowPitch,
+    width: m.labelW,
+    height: m.labelH
+  }
+}
+
+export function labelCellPositionStyle(preset, index) {
+  const p = labelCellPosition(preset, index)
+  return (
+    'left:' +
+    p.left +
+    'mm;top:' +
+    p.top +
+    'mm;width:' +
+    p.width +
+    'mm;height:' +
+    p.height +
+    'mm;'
+  )
+}
+
+function sheetCellCss(preset) {
+  const m = sheetLayoutMetrics(preset)
   const insetTop = Number(preset.contentInsetTopMm ?? 1.5)
   const insetBottom = Number(preset.contentInsetBottomMm ?? 1.5)
   const insetLeft = Number(preset.contentInsetLeftMm ?? 1.5)
   const insetRight = Number(preset.contentInsetRightMm ?? 1)
   const qrColW = Number(preset.qrColWidthMm ?? preset.labelWidthMm * 0.44)
   const textLeft = insetLeft + qrColW + 0.6
-  const pageHeightMm = preset.marginTopMm + preset.rows * rowPitch
   return [
+    '#erp-stock-qr-print-root .erp-qr-sheet-page {',
+    '  position:relative;width:' + m.pageWidth + 'mm;height:' + m.pageHeight + 'mm;',
+    '  max-width:' + m.pageWidth + 'mm;max-height:' + m.pageHeight + 'mm;',
+    '  box-sizing:border-box;margin:0;padding:0;overflow:hidden;',
+    '  page-break-after:always;break-after:page;',
+    '  border:none;background:#fff;color:#000;',
+    '}',
     '#erp-stock-qr-print-root .erp-qr-label-cell {',
-    '  width:' + preset.labelWidthMm + 'mm;',
-    '  height:' + preset.labelHeightMm + 'mm;',
-    '  box-sizing:border-box; overflow:hidden;',
-    '  padding:0; margin:0; position:relative;',
-    '  border:none; border-radius:0; background:#fff; color:#000;',
-    '  break-inside:avoid; page-break-inside:avoid;',
+    '  box-sizing:border-box;overflow:hidden;',
+    '  padding:0;margin:0;position:absolute;',
+    '  border:none;border-radius:0;background:#fff;color:#000;',
+    '  break-inside:avoid;page-break-inside:avoid;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-label-qr {',
     '  position:absolute; left:' + insetLeft + 'mm; top:' + insetTop + 'mm;',
@@ -216,20 +287,7 @@ function sheetCellCss(preset) {
     '  line-height:1.1; margin:0.3mm 0 0; overflow:hidden;',
     '  font-size:' + preset.metaPt + 'pt; text-align:left; width:100%; color:#000;',
     '}',
-    '#erp-stock-qr-print-root .erp-qr-sheet-page {',
-    '  width:210mm; height:' + pageHeightMm + 'mm; max-height:' + pageHeightMm + 'mm;',
-    '  box-sizing:border-box;',
-    '  padding:' + preset.marginTopMm + 'mm 0 0 ' + preset.marginLeftMm + 'mm;',
-    '  margin:0; page-break-after:always;',
-    '  display:grid; align-content:start; justify-content:start;',
-    '  grid-template-columns:repeat(' + preset.cols + ',' + preset.labelWidthMm + 'mm);',
-    '  grid-template-rows:repeat(' + preset.rows + ',' + rowPitch + 'mm);',
-    '  grid-auto-rows:' + rowPitch + 'mm;',
-    '  column-gap:' + preset.gapXmm + 'mm;',
-    '  row-gap:' + (preset.gapYmm || 0) + 'mm;',
-    '  border:none; background:#fff; color:#000;',
-    '}',
-    '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; }'
+    '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; break-after:auto; }'
   ].join('\n')
 }
 
@@ -304,12 +362,13 @@ export function buildInventoryLabelPrintCss(preset) {
   )
 }
 
-function renderLabelCellHtml(item) {
+function renderLabelCellHtml(preset, item, index) {
   const qr = String(item.qrDataUrl || item.qrSrc || '').trim()
   const name = escapeHtml(item.name || '—')
   const sku = escapeHtml(item.sku || '—')
+  const posStyle = typeof index === 'number' ? labelCellPositionStyle(preset, index) : ''
   return (
-    '<div class="erp-qr-label-cell">' +
+    '<div class="erp-qr-label-cell" style="' + posStyle + '">' +
     '<div class="erp-qr-label-qr">' +
     (qr ? '<img src="' + qr.replace(/"/g, '&quot;') + '" alt="" />' : '') +
     '</div>' +
@@ -337,14 +396,20 @@ export function buildInventoryLabelHtmlDocument({ presetKey, items, locationLabe
       .map(function (pageItems) {
         return (
           '<div class="erp-qr-sheet-page">' +
-          pageItems.map(renderLabelCellHtml).join('') +
+          pageItems.map(function (item, idx) {
+            return renderLabelCellHtml(preset, item, idx)
+          }).join('') +
           '</div>'
         )
       })
       .join('')
   } else {
     body =
-      '<div class="erp-qr-flex-grid">' + list.map(renderLabelCellHtml).join('') + '</div>'
+      '<div class="erp-qr-flex-grid">' +
+      list.map(function (item) {
+        return renderLabelCellHtml(preset, item)
+      }).join('') +
+      '</div>'
   }
 
   const title = locationLabel

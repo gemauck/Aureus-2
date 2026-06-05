@@ -8,7 +8,8 @@ import {
   getInventoryLabelPreset,
   inventoryLabelPdfFilename,
   chunkInventoryLabelItems,
-  qrLabelsPerPage
+  qrLabelsPerPage,
+  sheetLayoutMetrics
 } from '../../src/utils/inventoryLabelLayout.js'
 
 export {
@@ -79,7 +80,8 @@ async function renderHtmlToPdf(html) {
       await page.setContent(html, { waitUntil: 'load', timeout: 30000 })
       await page.emulateMedia({ media: 'print' })
       const pdf = await page.pdf({
-        format: 'A4',
+        width: '210mm',
+        height: '297mm',
         printBackground: true,
         preferCSSPageSize: true,
         margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
@@ -141,18 +143,13 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
 async function renderSheetPdfKit(doc, preset, items) {
   const perPage = qrLabelsPerPage(preset)
   const pages = chunkInventoryLabelItems(items, perPage)
-  const labelW = mmToPt(preset.labelWidthMm)
-  const labelH = mmToPt(preset.labelHeightMm)
-  const gapX = mmToPt(preset.gapXmm || 0)
-  const gapY = mmToPt(preset.gapYmm || 0)
-  const pitchX = labelW + gapX
-  const rowPitch = mmToPt(
-    Number(preset.rowPitchMm) > 0
-      ? preset.rowPitchMm
-      : Number(preset.labelHeightMm || 0) + Number(preset.gapYmm || 0)
-  )
-  const originX = mmToPt(preset.marginLeftMm || 0)
-  const originY = mmToPt(preset.marginTopMm || 0)
+  const metrics = sheetLayoutMetrics(preset)
+  const labelW = mmToPt(metrics.labelW)
+  const labelH = mmToPt(metrics.labelH)
+  const pitchX = mmToPt(metrics.colPitch)
+  const rowPitch = mmToPt(metrics.rowPitch)
+  const originX = mmToPt(metrics.marginLeft)
+  const originY = mmToPt(metrics.marginTop)
 
   for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
     if (pageIdx > 0) doc.addPage({ size: 'A4', margin: 0 })
