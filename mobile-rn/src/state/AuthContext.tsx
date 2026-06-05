@@ -12,6 +12,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshAuth: () => Promise<void>
+  updateTokens: (accessToken: string, refreshToken: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -55,6 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...session,
           accessToken: refreshed.accessToken,
           refreshToken: refreshed.refreshToken
+        }
+        setSession(nextSession)
+        await saveSession(nextSession)
+      },
+      async updateTokens(accessToken, refreshToken) {
+        if (!session?.user) return
+        const nextSession: AuthSession = {
+          ...session,
+          accessToken,
+          refreshToken
         }
         setSession(nextSession)
         await saveSession(nextSession)

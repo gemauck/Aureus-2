@@ -2726,6 +2726,39 @@ app.all('/api/public/service-forms', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/mobile-app-version', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-app-version.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public mobile-app-version API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/mobile-ota/manifest', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-ota-manifest.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public mobile-ota manifest API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/mobile-ota/assets', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-ota-assets.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public mobile-ota assets API error:', e)
+    return next(e)
+  }
+})
+
 app.all('/api/public/document-branding', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'public', 'document-branding.js'))

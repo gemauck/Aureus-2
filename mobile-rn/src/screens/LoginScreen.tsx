@@ -1,39 +1,145 @@
 import React, { useState } from 'react'
-import { Alert, Button, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { FontAwesome5 } from '@expo/vector-icons'
+import { API_BASE_URL } from '../services/apiClient'
 import { useAuth } from '../state/AuthContext'
+import { COMPANY_NAME, erp } from '../theme/appTheme'
 
 export function LoginScreen() {
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   async function onSubmit() {
+    setError('')
     try {
       setSubmitting(true)
       await signIn(email, password)
-    } catch (error) {
-      Alert.alert('Login failed', error instanceof Error ? error.message : 'Unknown error')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.box}>
-        <Text style={styles.title}>Abcotronics ERP</Text>
-        <TextInput style={styles.input} autoCapitalize="none" placeholder="Email" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
-        <Button title={submitting ? 'Signing in...' : 'Sign in'} disabled={submitting} onPress={onSubmit} />
-      </View>
+    <SafeAreaView style={styles.root}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.hero}>
+          <View style={styles.logo}>
+            <FontAwesome5 name="th-large" size={22} color="#fff" />
+          </View>
+          <Text style={styles.brand}>{COMPANY_NAME}</Text>
+          <Text style={styles.tagline}>Enterprise ERP — mobile</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.title}>Sign in</Text>
+          <Text style={styles.subtitle}>Use your Abcotronics ERP account</Text>
+
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            placeholder="you@company.com"
+            placeholderTextColor={erp.textSubtle}
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={erp.textSubtle}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            onSubmitEditing={() => void onSubmit()}
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <Pressable
+            style={[styles.btn, submitting && styles.btnDisabled]}
+            disabled={submitting}
+            onPress={() => void onSubmit()}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.btnText}>Sign in</Text>
+            )}
+          </Pressable>
+
+          <Text style={styles.serverHint}>Server: {API_BASE_URL}</Text>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', backgroundColor: '#f3f4f6' },
-  box: { margin: 20, padding: 16, borderRadius: 12, backgroundColor: '#ffffff', gap: 10 },
-  title: { fontSize: 22, fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 }
+  root: { flex: 1, backgroundColor: erp.sidebar },
+  flex: { flex: 1, justifyContent: 'center', padding: erp.space.xl },
+  hero: { alignItems: 'center', marginBottom: 28 },
+  logo: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: erp.sidebarActive,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12
+  },
+  brand: { fontSize: 26, fontWeight: '800', color: '#fff' },
+  tagline: { fontSize: 14, color: erp.sidebarTextMuted, marginTop: 4 },
+  card: {
+    backgroundColor: erp.surface,
+    borderRadius: erp.radius.xl,
+    padding: erp.space.xl,
+    ...erp.shadow
+  },
+  title: { fontSize: 22, fontWeight: '800', color: erp.text },
+  subtitle: { fontSize: 14, color: erp.textMuted, marginTop: 4, marginBottom: 20 },
+  label: { fontSize: 13, fontWeight: '600', color: erp.textMuted, marginBottom: 6 },
+  input: {
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: erp.text,
+    backgroundColor: erp.surfaceMuted,
+    marginBottom: 14
+  },
+  error: { color: erp.danger, fontWeight: '600', marginBottom: 10, fontSize: 14 },
+  btn: {
+    backgroundColor: erp.primary,
+    borderRadius: erp.radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4
+  },
+  btnDisabled: { opacity: 0.7 },
+  btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  serverHint: { fontSize: 11, color: erp.textSubtle, textAlign: 'center', marginTop: 16 }
 })

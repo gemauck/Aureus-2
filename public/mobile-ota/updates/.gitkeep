@@ -1,0 +1,2 @@
+# Self-hosted Expo OTA bundles — published by scripts/publish-mobile-ota-selfhosted.sh
+# Structure: updates/{runtimeVersion}/{timestamp}/metadata.json + bundle assets

@@ -139,7 +139,6 @@ function getHeadingFromJobCard(jobCard) {
   if (jobCard.heading != null && String(jobCard.heading).trim() !== '') {
     return String(jobCard.heading).trim();
   }
-  // List API (listFields=table) supplies heading without otherComments.
   const rawComments = jobCard.otherComments;
   if (typeof rawComments !== 'string' || !rawComments.trim()) return '';
   const headingLine = rawComments

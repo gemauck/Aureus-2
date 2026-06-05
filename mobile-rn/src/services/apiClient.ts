@@ -1,6 +1,7 @@
+import { apiUrl, API_BASE_URL } from '../config'
 import { trackError } from './telemetry'
 
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || ''
+export { API_BASE_URL }
 
 type RequestOptions = {
   method?: string
@@ -10,16 +11,31 @@ type RequestOptions = {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, token } = options
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
-  })
+  const url = apiUrl(path)
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined
+    })
+  } catch (error) {
+    const hint =
+      error instanceof Error ? error.message : 'Network error'
+    throw new Error(
+      `Cannot reach ${url}. Check Wi‑Fi or mobile data, open that URL in Chrome on this device, then try again. (${hint})`
+    )
+  }
 
-  const payload = await response.json()
+  let payload: { data?: T; error?: { message?: string } }
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error(`Server returned an invalid response (${response.status}) from ${url}`)
+  }
   if (!response.ok) {
     const message = payload?.error?.message || 'Request failed'
     throw new Error(message)
@@ -58,12 +74,21 @@ export const apiClient = {
     }).then((data) => data.clients || [])
   },
   getProjects(token: string) {
-    return request<Array<{ id: string; name: string; status?: string }>>('/api/projects', { token })
+    return request<{ projects?: Array<{ id: string; name: string; status?: string }> } | Array<{ id: string; name: string; status?: string }>>('/api/projects', { token }).then(
+      (data) => (Array.isArray(data) ? data : data.projects || [])
+    )
   },
   getTasks(token: string) {
-    return request<Array<{ id: string; title?: string; name?: string; status?: string }>>('/api/tasks', { token })
+    return request<{ tasks?: Array<{ id: string; title?: string; name?: string; status?: string }> } | Array<{ id: string; title?: string; name?: string; status?: string }>>('/api/tasks', { token }).then(
+      (data) => (Array.isArray(data) ? data : data.tasks || [])
+    )
   },
   getNotifications(token: string) {
-    return request<Array<{ id: string; title?: string; message?: string }>>('/api/notifications', { token })
+    return request<
+      | { notifications?: Array<{ id: string; title?: string; message?: string }> }
+      | Array<{ id: string; title?: string; message?: string }>
+    >('/api/notifications', { token }).then((data) =>
+      Array.isArray(data) ? data : data.notifications || []
+    )
   }
 }

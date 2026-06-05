@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Abcotronics ERP React Native debug APK (Path B job cards app).
+# Build standalone Abcotronics ERP React Native APK (JS bundle embedded; no Metro required).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,9 +15,23 @@ fi
 cd "$RN"
 npm install
 
+if [[ ! -f .env ]] && [[ -f .env.example ]]; then
+  cp .env.example .env
+fi
+
 if [[ ! -d android ]]; then
   npx expo prebuild --platform android --no-install
 fi
+
+find "$RN/node_modules" "$RN/android" -name $'Icon\r' -delete 2>/dev/null || true
+
+# Bake API URL into the release bundle (Expo inlines EXPO_PUBLIC_* at bundle time).
+export EXPO_PUBLIC_API_BASE_URL="${EXPO_PUBLIC_API_BASE_URL:-https://abcoafrica.co.za}"
+echo "API base for bundle: $EXPO_PUBLIC_API_BASE_URL"
+echo "OTA manifest: ${EXPO_PUBLIC_API_BASE_URL}/api/public/mobile-ota/manifest"
+
+cd "$RN"
+npx expo prebuild --platform android --no-install
 
 COLORS="$RN/android/app/src/main/res/values/colors.xml"
 if ! grep -q splashscreen_background "$COLORS" 2>/dev/null; then
@@ -25,14 +39,13 @@ if ! grep -q splashscreen_background "$COLORS" 2>/dev/null; then
     || sed -i 's|</resources>|  <color name="splashscreen_background">#0284c7</color>\n</resources>|' "$COLORS"
 fi
 
-find "$RN/node_modules" "$RN/android" -name $'Icon\r' -delete 2>/dev/null || true
-
 cd "$RN/android"
 chmod +x ./gradlew
-./gradlew assembleDebug
+# Release embeds the JS bundle; debug APK expects Metro on localhost:8081.
+./gradlew assembleRelease -PEXPO_PUBLIC_API_BASE_URL="$EXPO_PUBLIC_API_BASE_URL"
 
-APK="$RN/android/app/build/outputs/apk/debug/app-debug.apk"
-DEST="${1:-$HOME/Desktop/Abcotronics-ERP-Mobile-debug.apk}"
+APK="$RN/android/app/build/outputs/apk/release/app-release.apk"
+DEST="${1:-$HOME/Desktop/Abcotronics-ERP-Mobile.apk}"
 cp "$APK" "$DEST"
 echo ""
-echo "APK: $DEST"
+echo "Standalone APK (no Metro): $DEST"

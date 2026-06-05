@@ -2,7 +2,7 @@
   "expo": {
     "name": "Abcotronics ERP",
     "slug": "abcotronics-erp-mobile",
-    "version": "0.1.0",
+    "version": "0.3.4",
     "orientation": "portrait",
     "scheme": "abcotronics",
     "userInterfaceStyle": "light",
@@ -11,7 +11,14 @@
     ],
     "android": {
       "package": "com.abcotronics.erp.mobile",
-      "versionCode": 1
+      "versionCode": 8,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-secure-store",
@@ -21,7 +28,20 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Abcotronics ERP to track job travel while you are on a trip.",
           "locationWhenInUsePermission": "Allow Abcotronics ERP to record your location for job cards and travel distance."
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow camera access for job card photos and stock-take barcode scanning."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow photo library access for job card attachments."
+        }
+      ],
+      "expo-updates"
     ]
   }
 }

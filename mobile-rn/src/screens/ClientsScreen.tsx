@@ -1,35 +1,31 @@
-import React, { useCallback, useState } from 'react'
-import { FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native'
+import React, { useCallback } from 'react'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { ModuleListScreen } from '../components/shell/ModuleListScreen'
 import { apiClient } from '../services/apiClient'
 import { useAuth } from '../state/AuthContext'
+import type { RootStackParamList } from '../navigation/types'
 
-export function ClientsScreen() {
+type Props = NativeStackScreenProps<RootStackParamList, 'Clients'>
+
+export function ClientsScreen({ navigation }: Props) {
   const { accessToken } = useAuth()
-  const [items, setItems] = useState<Array<{ id: string; name: string; status?: string }>>([])
 
-  const load = useCallback(async () => {
-    if (!accessToken) return
-    const list = await apiClient.getClients(accessToken)
-    setItems(Array.isArray(list) ? list : [])
+  const loadItems = useCallback(async () => {
+    if (!accessToken) return []
+    return apiClient.getClients(accessToken)
   }, [accessToken])
 
   return (
-    <SafeAreaView style={styles.container}>
-      <TouchableOpacity style={styles.button} onPress={load}>
-        <Text style={styles.buttonText}>Load Clients</Text>
-      </TouchableOpacity>
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <Text style={styles.item}>{item.name || item.id}</Text>}
-      />
-    </SafeAreaView>
+    <ModuleListScreen
+      title="CRM"
+      subtitle="Clients and leads"
+      navigation={navigation}
+      loadItems={loadItems}
+      keyExtractor={(item) => item.id}
+      renderTitle={(item) => item.name || item.id}
+      renderSubtitle={(item) => item.status}
+      searchFilter={(item, q) => `${item.name || ''} ${item.status || ''}`.toLowerCase().includes(q)}
+      emptyLabel="No clients loaded."
+    />
   )
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff', padding: 16 },
-  button: { backgroundColor: '#2563eb', borderRadius: 8, padding: 10, marginBottom: 12 },
-  buttonText: { color: '#ffffff', fontWeight: '600', textAlign: 'center' },
-  item: { borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingVertical: 10 }
-})

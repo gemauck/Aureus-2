@@ -63,6 +63,45 @@ If the device is offline (or the server fails), saves are queued in AsyncStorage
 
 - Dashboard, Clients, Projects, Tasks, Notifications, Attachments — list/load stubs from Phase 1 pilot.
 
+## Installable APK (no dev server)
+
+Debug builds expect Metro on your PC (`localhost:8081`) and will red-screen on a phone. Build a **standalone** APK:
+
+```bash
+npm run mobile:apk
+```
+
+Output: `~/Desktop/Abcotronics-ERP-Mobile.apk` (release build with embedded JS bundle).
+
+## OTA updates (JS bundle — self-hosted on abcoafrica.co.za)
+
+No Expo account required. The server hosts JS bundles; the app checks on launch via `expo-updates`.
+
+### Publish a JS update
+
+After changing code under `mobile-rn/src/` (no native module changes):
+
+```bash
+npm run mobile:ota:publish
+```
+
+This exports the bundle to `public/mobile-ota/updates/erp-mobile-1/{timestamp}/`. **Deploy the server** (git pull + restart) so devices receive it.
+
+### When you need a new APK
+
+- New native modules or permissions (camera, etc.)
+- Expo SDK upgrade
+- Bump **`erp-mobile-1`** → **`erp-mobile-2`** in `app.config.js` and `src/constants/ota.ts`, then `npm run mobile:apk`
+
+### Two update layers
+
+| Layer | Command | User action |
+|-------|---------|-------------|
+| **OTA (JS)** | `npm run mobile:ota:publish` + deploy server | None — auto on launch |
+| **APK (native)** | `npm run mobile:apk` + upload to `/downloads/` | Install when prompted |
+
+Settings → **Check for JS update (OTA)** or **Check for new APK**.
+
 ## vs Capacitor APK (`android/`)
 
 | | Capacitor `Job Card` APK | This React Native app |

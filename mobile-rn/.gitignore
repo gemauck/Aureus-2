@@ -1,0 +1,6 @@
+.eas-project-id
+.env
+node_modules/
+android/
+.expo/
+*.apk

@@ -18,48 +18,64 @@ import {
   STOCK_TAKE_AVAILABILITY_OPTIONS
 } from '../../utils/stockTakeAvailability.js';
 import { StockTakeAvailabilityFilter } from './StockTakeAvailabilityFilter.jsx';
+import {
+  STEP_IDS,
+  STEP_META,
+  NO_CLIENT_ID,
+  JOB_CARD_IMAGE_MAX_BYTES,
+  JOB_CARD_VIDEO_MAX_BYTES,
+  JOB_CARD_IMAGE_TARGET_BYTES,
+  JOB_CARD_IMAGE_MAX_DIMENSION,
+  JOB_CARD_IMAGE_THUMB_MAX_DIMENSION,
+  JOB_CARD_SYNC_WARN_PAYLOAD_BYTES,
+  JOB_CARD_SYNC_HARD_PAYLOAD_BYTES,
+  JOB_CARD_SYNC_REQUEST_TIMEOUT_MS,
+  JOB_CARD_SYNC_RETRY_ATTEMPTS,
+  PRIOR_CARD_HEADING_MAX_CHARS,
+  SECTION_WORK_MEDIA_KEYS,
+  JOB_CARD_PUBLIC_PRIOR_IDS_KEY,
+  MAX_PUBLIC_PRIOR_IDS,
+  PROJECT_ASSOCIATION_PREFIX,
+  HEADING_PREFIX,
+  STOCK_TAKE_PAGE_SIZE,
+  STOCK_TAKE_DRAFT_KEY,
+  STOCK_TAKE_NOTES_SEP,
+  emptySectionWorkMedia,
+  createStockEntryRow,
+  buildNewJobCardEditingMeta,
+  generateClientDraftId,
+  isLikelyServerJobCardId,
+  estimateJsonBytes,
+  fetchWithRetry,
+  parseJobCardSyncFailureMessage,
+  parseStoredJsonArray,
+  toDatetimeLocalInput,
+  formatWizardDatetimeLabel,
+  dataUrlApproxBytes,
+  sleepMs,
+  jobCardQuantityAtLocation,
+  jobCardStockPickListFromCachedInventory,
+  jobCardStockTakePickListFromCachedInventory,
+  buildJobCardPhotosPayload,
+  photosArrayWithoutSignature,
+  extractSignatureUrlFromPhotosValue,
+  validateWizardStep,
+  priorListLocalSearchHay,
+  getPriorCardOpenId,
+  buildMergedWizardJobCardRows as mergeWizardJobCardRows
+} from '../../jobCardWizard/index.js';
+import { getWebOfflineStore, createWebSyncEngine } from '../../jobCardWizard/webAdapter.js';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
 
-const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
-
-/** Base64 payloads: keep image/video caps below gateway and server limits with room for the rest of the payload. */
-const JOB_CARD_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
-const JOB_CARD_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
-const JOB_CARD_IMAGE_TARGET_BYTES = 1600 * 1024;
-const JOB_CARD_IMAGE_MAX_DIMENSION = 1920;
-const JOB_CARD_IMAGE_THUMB_MAX_DIMENSION = 360;
-const JOB_CARD_SYNC_WARN_PAYLOAD_BYTES = 18 * 1024 * 1024;
-const JOB_CARD_SYNC_HARD_PAYLOAD_BYTES = 28 * 1024 * 1024;
-/** Per-attempt fetch budget; keeps wedged requests from blocking the UI for multiple minutes. */
-const JOB_CARD_SYNC_REQUEST_TIMEOUT_MS = 60000;
-const JOB_CARD_SYNC_RETRY_ATTEMPTS = 2;
-const PRIOR_CARD_HEADING_MAX_CHARS = 36;
-
-/** Work-step fields that can each carry photos/videos (stored on JobCard.photos as { kind: 'sectionMedia', section, url, name }). */
-const SECTION_WORK_MEDIA_KEYS = ['diagnosis', 'actionsTaken', 'futureWorkRequired'];
-
-function emptySectionWorkMedia() {
-  return { diagnosis: [], actionsTaken: [], futureWorkRequired: [] };
-}
-
-function createStockEntryRow(overrides = {}) {
-  return {
-    id: `stock-entry-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    locationId: '',
-    sku: '',
-    quantity: 0,
-    ...overrides
-  };
-}
-
-/** Ids of job cards created/updated via the public API on this browser — used for GET /api/public/jobcards?ids= */
-const JOB_CARD_PUBLIC_PRIOR_IDS_KEY = 'jobcard_public_prior_ids';
-const MAX_PUBLIC_PRIOR_IDS = 200;
-const PROJECT_ASSOCIATION_PREFIX = 'Project Association:';
-const HEADING_PREFIX = 'Heading:';
-/** Stock-take lists can be large; show a page of lines at a time (full list still loads for submit/scan). */
-const STOCK_TAKE_PAGE_SIZE = 50;
+const webOfflineStore = getWebOfflineStore();
+const readLocalPendingJobCards = () => webOfflineStore.readLocalPendingJobCards();
+const writeLocalPendingJobCards = (cards) => webOfflineStore.writeLocalPendingJobCards(cards);
+const upsertLocalPendingJobCard = (card) => webOfflineStore.upsertLocalPendingJobCard(card);
+const removeLocalPendingJobCard = (id) => webOfflineStore.removeLocalPendingJobCard(id);
+const listUnsyncedLocalPendingJobCards = () => webOfflineStore.listUnsyncedLocalPendingJobCards();
+const readPublicPriorJobCardIds = () => webOfflineStore.readPublicPriorJobCardIds();
+const rememberPublicPriorJobCardId = (id) => webOfflineStore.rememberPublicPriorJobCardId(id);
 
 function isUsableInventoryThumbnail(url) {
   const t = String(url || '').trim();
@@ -90,8 +106,6 @@ function StockTakeLineThumbnail({ src, alt }) {
     />
   );
 }
-const STOCK_TAKE_DRAFT_KEY = 'erpJobCard_stockTakeDraft_v1';
-const STOCK_TAKE_NOTES_SEP = '\n---\n';
 
 function defaultStockTakeDescription() {
   const now = new Date();
@@ -121,95 +135,6 @@ function splitStockTakeNotes(combined) {
 function sortJobCardStockLocations(list) {
   const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
   return fn ? fn(list) : (Array.isArray(list) ? [...list] : []);
-}
-
-/** Quantity at a warehouse when using cached aggregate inventory (locations[] or single locationId row). */
-function jobCardQuantityAtLocation(item, locationId) {
-  if (!item || !locationId) return 0;
-  const locs = Array.isArray(item.locations) ? item.locations : [];
-  if (locs.length > 0) {
-    const loc = locs.find((l) => l.locationId === locationId);
-    return loc ? Number(loc.quantity) || 0 : 0;
-  }
-  if (item.locationId === locationId) {
-    return Number(item.quantity) || 0;
-  }
-  return 0;
-}
-
-/**
- * Offline / fallback: build pick list from cached inventory for one location.
- * Default: qty > 0 only (job card "stock used" picker).
- * Stock-take: pass `{ includeZeroQty: true }` to include rows at this warehouse with zero on hand.
- */
-function jobCardStockPickListFromCachedInventory(items, locationId, options = {}) {
-  if (!locationId || !Array.isArray(items)) return [];
-  const includeZeroQty = options.includeZeroQty === true;
-  const out = [];
-  for (const item of items) {
-    const locs = Array.isArray(item.locations) ? item.locations : [];
-    const atWarehouse = locs.length
-      ? locs.some((l) => l.locationId === locationId)
-      : item.locationId === locationId;
-    const q = jobCardQuantityAtLocation(item, locationId);
-    if (includeZeroQty) {
-      if (!atWarehouse || q < 0) continue;
-    } else if (q <= 0) {
-      continue;
-    }
-    const sku = item.sku || item.id;
-    if (!sku) continue;
-    if (item.status === 'inactive') continue;
-    out.push({ ...item, quantity: q, sku });
-  }
-  out.sort((a, b) => String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' }));
-  return out;
-}
-
-/**
- * Offline stock take: one row per active catalog SKU (like /api/public/inventory allSkus=1), qty at location or 0.
- */
-function jobCardStockTakePickListFromCachedInventory(items, locationId) {
-  if (!locationId || !Array.isArray(items)) return [];
-  const bySku = new Map();
-  for (const item of items) {
-    if (!item || item.status === 'inactive') continue;
-    const sku = String(item.sku || item.id || '').trim();
-    if (!sku) continue;
-    if (!bySku.has(sku)) bySku.set(sku, item);
-  }
-  const out = [];
-  for (const item of bySku.values()) {
-    const q = jobCardQuantityAtLocation(item, locationId);
-    if (q < 0) continue;
-    const sku = String(item.sku || item.id || '').trim();
-    out.push({ ...item, quantity: q, sku });
-  }
-  out.sort((a, b) => String(a.name || a.sku || '').localeCompare(String(b.name || b.sku || ''), undefined, { sensitivity: 'base' }));
-  return out;
-}
-
-function readPublicPriorJobCardIds() {
-  try {
-    const raw = localStorage.getItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY);
-    const arr = JSON.parse(raw || '[]');
-    return Array.isArray(arr)
-      ? arr.filter(id => typeof id === 'string' && id.length > 0).slice(0, MAX_PUBLIC_PRIOR_IDS)
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function rememberPublicPriorJobCardId(id) {
-  if (!id || typeof id !== 'string') return;
-  try {
-    const existing = readPublicPriorJobCardIds();
-    const next = [id, ...existing.filter(x => x !== id)].slice(0, MAX_PUBLIC_PRIOR_IDS);
-    localStorage.setItem(JOB_CARD_PUBLIC_PRIOR_IDS_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
 }
 
 /** Set before navigating to `/` to log in; LoginPage reads and redirects back here. */
@@ -254,6 +179,33 @@ function goToSignInForJobCardHistory() {
   window.location.assign('/');
 }
 
+let _webSyncEngine;
+function getWebSyncEngineInstance() {
+  if (!_webSyncEngine) {
+    _webSyncEngine = createWebSyncEngine(
+      getJobCardAuthToken,
+      () => typeof navigator !== 'undefined' && navigator.onLine
+    );
+  }
+  return _webSyncEngine;
+}
+
+async function syncOneLocalPendingJobCardToServer(draftCard) {
+  return getWebSyncEngineInstance().syncOneLocalPendingJobCardToServer(draftCard);
+}
+
+async function flushJobCardActivityQueue(serverJobCardId, events) {
+  return getWebSyncEngineInstance().flushJobCardActivityQueue(serverJobCardId, events);
+}
+
+function buildMergedWizardJobCardRows(serverList) {
+  return mergeWizardJobCardRows(
+    serverList,
+    readLocalPendingJobCards(),
+    Boolean(getJobCardAuthToken())
+  );
+}
+
 function jobCardMediaIsVideoDataUrl(url) {
   return typeof url === 'string' && /^data:video\//i.test(url);
 }
@@ -275,16 +227,6 @@ function jobCardFileIsVideo(file) {
   return /\.(mp4|webm|mov|mkv)$/i.test(file.name || '');
 }
 
-function dataUrlApproxBytes(dataUrl) {
-  if (typeof dataUrl !== 'string') return 0;
-  const idx = dataUrl.indexOf(',');
-  if (idx < 0) return 0;
-  const b64 = dataUrl.slice(idx + 1).replace(/\s/g, '');
-  if (!b64) return 0;
-  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
-  return Math.max(0, Math.floor((b64.length * 3) / 4) - pad);
-}
-
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -292,69 +234,6 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error('Unable to read file.'));
     reader.readAsDataURL(file);
   });
-}
-
-function sleepMs(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function estimateJsonBytes(value) {
-  try {
-    const raw = JSON.stringify(value);
-    if (typeof TextEncoder !== 'undefined') {
-      return new TextEncoder().encode(raw).length;
-    }
-    return raw.length;
-  } catch {
-    return 0;
-  }
-}
-
-function shouldRetryHttpStatus(status) {
-  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-}
-
-function isRetryableFetchError(error) {
-  const msg = String(error?.message || '').toLowerCase();
-  return (
-    error?.name === 'AbortError' ||
-    msg.includes('failed to fetch') ||
-    msg.includes('networkerror') ||
-    msg.includes('network error') ||
-    msg.includes('load failed') ||
-    msg.includes('timeout')
-  );
-}
-
-async function fetchWithRetry(url, options = {}, config = {}) {
-  const attempts = Number(config.attempts || JOB_CARD_SYNC_RETRY_ATTEMPTS);
-  const timeoutMs = Number(config.timeoutMs || JOB_CARD_SYNC_REQUEST_TIMEOUT_MS);
-  const baseDelayMs = Number(config.baseDelayMs || 700);
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-      if (response.ok || !shouldRetryHttpStatus(response.status) || attempt >= attempts) {
-        return response;
-      }
-    } catch (error) {
-      clearTimeout(timeout);
-      lastError = error;
-      if (!isRetryableFetchError(error) || attempt >= attempts) {
-        throw error;
-      }
-    }
-    const delay = Math.min(baseDelayMs * (2 ** (attempt - 1)), 3000);
-    await sleepMs(delay);
-  }
-  throw lastError || new Error('Network request failed');
 }
 
 function canvasToBlobPromise(canvas, type, quality) {
@@ -460,39 +339,6 @@ async function buildJobCardImageThumbnailDataUrl(imageDataUrl) {
   } catch {
     return '';
   }
-}
-
-function extractSignatureUrlFromPhotosValue(photosValue) {
-  const photosRaw = parseStoredJsonArray(photosValue, []);
-  const hit = photosRaw.find(
-    (p) =>
-      p &&
-      typeof p === 'object' &&
-      p.kind === 'signature' &&
-      typeof p.url === 'string' &&
-      p.url.trim()
-  );
-  return hit ? hit.url.trim() : '';
-}
-
-function photosArrayWithoutSignature(photos) {
-  return (Array.isArray(photos) ? photos : []).filter((p) => {
-    if (!p || typeof p !== 'object') return true;
-    return p.kind !== 'signature';
-  });
-}
-
-function buildJobCardPhotosPayload({ formPhotos, signatureDataUrl, sectionPhotoEntries, voicePhotoEntries }) {
-  const sig =
-    typeof signatureDataUrl === 'string' && signatureDataUrl.trim().startsWith('data:image')
-      ? [{ kind: 'signature', url: signatureDataUrl.trim() }]
-      : [];
-  return [
-    ...photosArrayWithoutSignature(formPhotos),
-    ...sig,
-    ...(sectionPhotoEntries || []),
-    ...(voicePhotoEntries || [])
-  ];
 }
 
 function extractVisualPhotoEntries(photosValue) {
@@ -1050,34 +896,6 @@ const JobCardWizardAttachmentPreview = ({
   );
 };
 
-const STEP_META = {
-  assignment: {
-    title: 'Team & Client',
-    subtitle: 'Assign crew & site',
-    icon: 'fa-user-check'
-  },
-  visit: {
-    title: 'Site Visit',
-    subtitle: 'Location & Time',
-    icon: 'fa-route'
-  },
-  work: {
-    title: 'Work Notes',
-    subtitle: 'Diagnosis & work done',
-    icon: 'fa-clipboard-list'
-  },
-  stock: {
-    title: 'Stock & Costs',
-    subtitle: 'Usage & purchases',
-    icon: 'fa-boxes-stacked'
-  },
-  signoff: {
-    title: 'Customer Sign-off',
-    subtitle: 'Feedback & approval',
-    icon: 'fa-signature'
-  }
-};
-
 /** Full-width title above step body so steps 4–5 match wizard labels (Stock & Costs, Customer Sign-off). */
 const WizardStepPageHeader = ({ stepIndex, stepId }) => {
   const meta = STEP_META[stepId] || {};
@@ -1499,394 +1317,6 @@ const VoiceNoteTextarea =
           />
         );
       };
-
-const NO_CLIENT_ID = 'NO_CLIENT';
-
-const parseStoredJsonArray = (val, fallback = []) => {
-  if (val == null) return fallback;
-  if (Array.isArray(val)) return val;
-  if (typeof val === 'string') {
-    try {
-      const parsed = JSON.parse(val);
-      return Array.isArray(parsed) ? parsed : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-  return fallback;
-};
-
-const toDatetimeLocalInput = val => {
-  if (!val) return '';
-  const d = new Date(val);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-
-function formatWizardDatetimeLabel(val) {
-  if (!val) return '';
-  const d = new Date(val);
-  if (Number.isNaN(d.getTime())) return '';
-  try {
-    // dateStyle/timeStyle cannot be mixed with weekday (throws in strict Intl engines).
-    return d.toLocaleString(undefined, {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  } catch {
-    return d.toLocaleString();
-  }
-}
-
-/** Stable local id for one wizard session (offline queue + POST idempotency). */
-function generateClientDraftId() {
-  return `jc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function buildNewJobCardEditingMeta(nowIso = new Date().toISOString()) {
-  const localId = generateClientDraftId();
-  return {
-    localId,
-    serverJobCardId: null,
-    startedAt: nowIso,
-    createdAt: nowIso,
-    synced: false,
-    jobCardNumber: '',
-    /** New wizard time flow (arrival on open, departure on sign-off). Not applied to reopened legacy cards. */
-    useNewJobTimeFlow: true
-  };
-}
-
-/** Prisma cuid or UUID — id stored on the server after submit */
-const isLikelyServerJobCardId = id => {
-  if (id == null || id === '') return false;
-  const s = String(id);
-  if (/^c[a-z0-9]{24}$/i.test(s)) return true;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-};
-
-/** Pending / failed-sync job cards for the public wizard (offline or server unreachable) */
-const JOB_CARD_LOCAL_PENDING_KEY = 'manufacturing_jobcards';
-const MAX_LOCAL_PENDING_JOB_CARDS = 100;
-
-function readLocalPendingJobCards() {
-  try {
-    const raw = localStorage.getItem(JOB_CARD_LOCAL_PENDING_KEY);
-    const arr = JSON.parse(raw || '[]');
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalPendingJobCards(cards) {
-  try {
-    localStorage.setItem(
-      JOB_CARD_LOCAL_PENDING_KEY,
-      JSON.stringify(cards.slice(0, MAX_LOCAL_PENDING_JOB_CARDS))
-    );
-  } catch (e) {
-    console.warn('JobCardFormPublic: could not persist local job cards', e);
-  }
-}
-
-function upsertLocalPendingJobCard(card) {
-  if (!card || card.id == null) return;
-  const list = readLocalPendingJobCards();
-  const id = String(card.id);
-  const next = [{ ...card, synced: false }, ...list.filter(c => c && String(c.id) !== id)].slice(
-    0,
-    MAX_LOCAL_PENDING_JOB_CARDS
-  );
-  writeLocalPendingJobCards(next);
-}
-
-function removeLocalPendingJobCard(id) {
-  if (id == null) return;
-  const sid = String(id);
-  writeLocalPendingJobCards(readLocalPendingJobCards().filter(c => c && String(c.id) !== sid));
-}
-
-async function flushJobCardActivityQueue(serverJobCardId, events) {
-  if (!serverJobCardId || !Array.isArray(events) || events.length === 0) return;
-  const token = getJobCardAuthToken();
-  if (!token) return;
-  try {
-    const res = await fetch(
-      `/api/jobcards/${encodeURIComponent(serverJobCardId)}/activity/sync`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          events: events.map(e => ({
-            action: e.action,
-            metadata: e.metadata,
-            source: e.source || 'mobile'
-          }))
-        })
-      }
-    );
-    if (!res.ok) {
-      console.warn('JobCardFormPublic: activity sync HTTP', res.status);
-    }
-  } catch (e) {
-    console.warn('JobCardFormPublic: activity sync failed', e);
-  }
-}
-
-function parseJobCardSyncFailureMessage(status, text) {
-  if (status === 413) return 'Payload too large. Remove some media and retry.';
-  if (status === 429) return 'Too many requests. Please retry in a moment.';
-  if (status === 502 || status === 503 || status === 504) {
-    return 'Server temporarily unreachable. Please retry in a few moments.';
-  }
-  if (!text) return `HTTP ${status}`;
-  try {
-    const parsed = JSON.parse(text);
-    return (
-      parsed?.error?.message ||
-      parsed?.message ||
-      parsed?.data?.message ||
-      String(text).slice(0, 280)
-    );
-  } catch {
-    return String(text).slice(0, 280);
-  }
-}
-
-/** Push one local pending job card to /api/jobcards (stock movements post server-side on save). */
-async function syncOneLocalPendingJobCardToServer(draftCard) {
-  if (!draftCard || draftCard.id == null) {
-    return { ok: false, serverId: null, errorText: 'Invalid draft' };
-  }
-  const token = getJobCardAuthToken();
-  if (!token) {
-    return { ok: false, serverId: null, errorText: 'Sign in is required to sync this job card.' };
-  }
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return { ok: false, serverId: null, errorText: 'Offline' };
-  }
-
-  const localId = String(draftCard.id);
-  const serverJobCardId =
-    draftCard.serverJobCardId || (isLikelyServerJobCardId(localId) ? localId : null);
-  const payloadObj = { ...draftCard };
-  delete payloadObj.activityQueue;
-  delete payloadObj.synced;
-  delete payloadObj.source;
-  delete payloadObj.serverJobCardId;
-
-  const payloadJson = JSON.stringify(payloadObj);
-  const patchBytes = estimateJsonBytes(payloadObj);
-  if (patchBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
-    return {
-      ok: false,
-      serverId: null,
-      errorText: 'Upload payload is too large for reliable sync. Remove some media and retry.'
-    };
-  }
-
-  let synced = false;
-  let resolvedServerId = serverJobCardId ? String(serverJobCardId) : null;
-  let errorText = '';
-
-  if (serverJobCardId) {
-    try {
-      const patchRes = await fetchWithRetry(`/api/jobcards/${encodeURIComponent(serverJobCardId)}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: payloadJson
-      });
-      if (patchRes.ok) {
-        synced = true;
-        const patchData = await patchRes.json().catch(() => ({}));
-        const patchedJobCard = patchData?.data?.jobCard || patchData?.jobCard;
-        if (patchedJobCard?.id) resolvedServerId = String(patchedJobCard.id);
-      } else if (patchRes.status !== 404) {
-        const text = await patchRes.text().catch(() => '');
-        errorText = parseJobCardSyncFailureMessage(patchRes.status, text);
-      }
-    } catch (e) {
-      errorText = e?.message || 'Network error';
-    }
-  }
-
-  if (!synced && !errorText) {
-    const createPayload = { ...payloadObj };
-    delete createPayload.id;
-    createPayload.clientDraftId = localId;
-    const createBytes = estimateJsonBytes(createPayload);
-    if (createBytes > JOB_CARD_SYNC_HARD_PAYLOAD_BYTES) {
-      return {
-        ok: false,
-        serverId: null,
-        errorText: 'Upload payload is too large for reliable sync. Remove some media and retry.'
-      };
-    }
-    try {
-      const createRes = await fetchWithRetry('/api/jobcards', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(createPayload)
-      });
-      if (createRes.ok) {
-        synced = true;
-        const createText = await createRes.text().catch(() => '');
-        let createData = {};
-        try {
-          createData = createText ? JSON.parse(createText) : {};
-        } catch {
-          createData = {};
-        }
-        const createdJobCard = createData?.data?.jobCard || createData?.jobCard;
-        if (createdJobCard?.id) {
-          resolvedServerId = String(createdJobCard.id);
-          rememberPublicPriorJobCardId(resolvedServerId);
-        }
-      } else {
-        const text = await createRes.text().catch(() => '');
-        errorText = parseJobCardSyncFailureMessage(createRes.status, text);
-      }
-    } catch (e) {
-      errorText = e?.message || 'Network error';
-    }
-  }
-
-  if (!synced) {
-    return { ok: false, serverId: null, errorText: errorText || 'Sync failed' };
-  }
-
-  if (resolvedServerId && Array.isArray(draftCard.activityQueue) && draftCard.activityQueue.length > 0) {
-    await flushJobCardActivityQueue(resolvedServerId, draftCard.activityQueue);
-  }
-  removeLocalPendingJobCard(localId);
-  if (typeof window !== 'undefined' && resolvedServerId) {
-    try {
-      window.dispatchEvent(new CustomEvent('jobcards:saved', { detail: { id: resolvedServerId } }));
-    } catch (_) {
-      /* non-fatal */
-    }
-  }
-  return { ok: true, serverId: resolvedServerId, errorText: '' };
-}
-
-function listUnsyncedLocalPendingJobCards() {
-  return readLocalPendingJobCards().filter(j => j && j.synced === false);
-}
-
-/** Searchable text for unsynced local drafts (mirrors server `q` coverage as far as stored fields allow). */
-function priorListLocalSearchHay(jc) {
-  if (!jc || typeof jc !== 'object') return '';
-  const asJson = v => {
-    if (v == null) return '';
-    if (typeof v === 'string') return v;
-    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return '';
-    }
-  };
-  const parts = [
-    jc.id,
-    jc.jobCardNumber,
-    jc.clientId,
-    jc.clientName,
-    jc.siteId,
-    jc.siteName,
-    jc.agentName,
-    jc.location,
-    jc.locationLatitude,
-    jc.locationLongitude,
-    jc.latitude,
-    jc.longitude,
-    jc.vehicleUsed,
-    jc.reasonForVisit,
-    jc.callOutCategory,
-    jc.diagnosis,
-    jc.futureWorkRequired,
-    jc.actionsTaken,
-    jc.otherComments,
-    jc.status,
-    asJson(jc.otherTechnicians),
-    asJson(jc.stockUsed),
-    asJson(jc.materialsBought),
-    asJson(jc.photos),
-    asJson(jc.serviceForms)
-  ];
-  return parts
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-}
-
-/** Id used to open a row (GET detail). Prefer `id`; merged rows also set `serverJobCardId`. */
-function getPriorCardOpenId(card) {
-  if (!card || typeof card !== 'object') return '';
-  const raw = card.id != null ? card.id : card.serverJobCardId;
-  if (raw == null) return '';
-  const s = String(raw).trim();
-  return s || '';
-}
-
-/** Merge server/public API rows with unsynced local copies (local wins on id collision). */
-function buildMergedWizardJobCardRows(serverList) {
-  const token = typeof window !== 'undefined' ? getJobCardAuthToken() : null;
-  const localPending = readLocalPendingJobCards().filter(j => j && j.synced === false);
-  const pendingIdSet = new Set(localPending.map(j => String(j.id)));
-  const pendingServerIdSet = new Set(
-    localPending
-      .map(j => j.serverJobCardId || (isLikelyServerJobCardId(j.id) ? String(j.id) : ''))
-      .filter(Boolean)
-      .map(String)
-  );
-  const serverRows = (serverList || [])
-    .filter(
-      jc =>
-        jc &&
-        !pendingIdSet.has(String(jc.id)) &&
-        !pendingServerIdSet.has(String(jc.id))
-    )
-    .map(jc => ({
-      ...jc,
-      source: token ? 'server' : 'public',
-      serverJobCardId: jc.id,
-      synced: true
-    }));
-  const localRows = localPending.map(jc => ({
-    ...jc,
-    source: 'local',
-    serverJobCardId:
-      jc.serverJobCardId || (isLikelyServerJobCardId(jc.id) ? String(jc.id) : null),
-    synced: false
-  }));
-  const priorListSortMs = (row) =>
-    new Date(row?.updatedAt || row?.createdAt || 0).getTime();
-  const rows = [...localRows, ...serverRows];
-  rows.sort((a, b) => {
-    const tb = priorListSortMs(b);
-    const ta = priorListSortMs(a);
-    if (tb !== ta) return tb - ta;
-    const nb = String(b.jobCardNumber || '');
-    const na = String(a.jobCardNumber || '');
-    return nb.localeCompare(na, undefined, { numeric: true });
-  });
-  return rows;
-}
 
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
@@ -6236,24 +5666,12 @@ const JobCardFormPublic = () => {
     persistWizardDraftRef.current = persistWizardDraft;
   }, [persistWizardDraft]);
 
-  const validateStep = (stepIndex) => {
-    if (arrivalConfirmOpen || departureConfirmOpen) {
-      return 'Confirm the date and time to continue.';
-    }
-    switch (STEP_IDS[stepIndex]) {
-      case 'assignment':
-        if (!formData.agentName) return 'Select the attending technician to continue.';
-        if (!formData.clientId) return 'Select a client or choose "No Client" to continue.';
-        return '';
-      case 'visit':
-        if (editingMeta?.useNewJobTimeFlow && !String(formData.timeOfArrival || '').trim()) {
-          return 'Set your arrival on site time (Site Visit step).';
-        }
-        return '';
-      default:
-        return '';
-    }
-  };
+  const validateStep = (stepIndex) =>
+    validateWizardStep(stepIndex, formData, {
+      useNewJobTimeFlow: editingMeta?.useNewJobTimeFlow,
+      arrivalConfirmOpen,
+      departureConfirmOpen
+    });
 
   const goToStep = (stepIndex) => {
     if (stepIndex === currentStep) return;
