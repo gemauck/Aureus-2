@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { apiClient } from '../services/apiClient'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { apiClient, registerAuthRefresh } from '../services/apiClient'
 import { clearSession, loadSession, saveSession } from '../services/authSession'
 import { trackError } from '../services/telemetry'
 import type { AuthSession, User } from '../types'
@@ -20,6 +20,37 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<AuthSession | null>(null)
+  const sessionRef = useRef<AuthSession | null>(null)
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
+
+  useEffect(() => {
+    registerAuthRefresh(async () => {
+      const current = sessionRef.current
+      if (!current?.refreshToken) return null
+      try {
+        const refreshed = await apiClient.mobileRefresh(current.refreshToken)
+        const nextSession: AuthSession = {
+          ...current,
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken
+        }
+        sessionRef.current = nextSession
+        setSession(nextSession)
+        await saveSession(nextSession)
+        return refreshed.accessToken
+      } catch (err) {
+        trackError(err, 'authRefresh')
+        setSession(null)
+        sessionRef.current = null
+        await clearSession()
+        return null
+      }
+    })
+    return () => registerAuthRefresh(null)
+  }, [])
 
   useEffect(() => {
     loadSession()

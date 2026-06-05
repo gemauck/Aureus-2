@@ -9,7 +9,31 @@ type RequestOptions = {
   token?: string
 }
 
-export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+type AuthRefreshHandler = () => Promise<string | null>
+
+let authRefreshHandler: AuthRefreshHandler | null = null
+let refreshInFlight: Promise<string | null> | null = null
+
+/** Register handler to refresh access token on 401 (set from AuthProvider). */
+export function registerAuthRefresh(handler: AuthRefreshHandler | null) {
+  authRefreshHandler = handler
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!authRefreshHandler) return null
+  if (!refreshInFlight) {
+    refreshInFlight = authRefreshHandler().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
+}
+
+export async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+  retriedAfterRefresh = false
+): Promise<T> {
   const { method = 'GET', body, token } = options
   const url = apiUrl(path)
   let response: Response
@@ -38,6 +62,17 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
   if (!response.ok) {
     const message = payload?.error?.message || 'Request failed'
+    if (
+      response.status === 401 &&
+      token &&
+      !retriedAfterRefresh &&
+      authRefreshHandler
+    ) {
+      const newToken = await refreshAccessToken()
+      if (newToken) {
+        return request<T>(path, { ...options, token: newToken }, true)
+      }
+    }
     throw new Error(message)
   }
   return payload?.data as T

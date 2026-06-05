@@ -331,7 +331,7 @@ export function StockTakeScreen() {
             <View
               style={[
                 styles.line,
-                highlightSku && item.sku === highlightSku && styles.lineHighlighted
+                highlightSku && item.sku === highlightSku ? styles.lineHighlighted : null
               ]}
             >
               <View style={{ flex: 1 }}>
