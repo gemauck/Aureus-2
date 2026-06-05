@@ -144,6 +144,23 @@
       namePt: 5.5,
       metaPt: 5
     },
+    rf2470x37: {
+      mode: 'sheet',
+      group: 'sheet',
+      label: 'Red Fern 24-up / 70×37 mm — no border (3×8)',
+      cols: 3,
+      rows: 8,
+      labelWidthMm: 70,
+      labelHeightMm: 37.125,
+      marginTopMm: 0,
+      marginLeftMm: 0,
+      gapXmm: 0,
+      gapYmm: 0,
+      apiSize: 'sm',
+      qrMaxMm: 26,
+      namePt: 7,
+      metaPt: 6
+    },
     small: {
       mode: 'flex',
       group: 'flex',
@@ -273,22 +290,29 @@
           '#erp-stock-qr-print-root .erp-qr-sheet-page {',
           '  width:210mm; min-height:297mm; box-sizing:border-box;',
           '  padding:' + preset.marginTopMm + 'mm 0 0 ' + preset.marginLeftMm + 'mm;',
-          '  margin:0; page-break-after:always;',
+          '  margin:0 !important; page-break-after:always;',
           '  display:grid;',
           '  grid-template-columns:repeat(' + preset.cols + ',' + preset.labelWidthMm + 'mm);',
+          '  grid-template-rows:repeat(' + preset.rows + ',' + preset.labelHeightMm + 'mm);',
+          '  grid-auto-rows:' + preset.labelHeightMm + 'mm;',
           '  column-gap:' + preset.gapXmm + 'mm;',
           '  row-gap:' + (preset.gapYmm || 0) + 'mm;',
-          '  background:#fff !important;',
+          '  border:none !important; background:#fff !important;',
           '}',
-          '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; }'
+          '#erp-stock-qr-print-root .erp-qr-sheet-page:last-child { page-break-after:auto; }',
+          '#erp-stock-qr-print-root .overflow-x-auto,',
+          '#erp-stock-qr-print-root .overflow-x-auto > div {',
+          '  margin:0 !important; padding:0 !important; overflow:visible !important;',
+          '}'
         ].join('\n')
       : '';
     return (
       '@media print {' +
-      (sheet ? '@page { size:A4; margin:0; }' : '@page { size:A4; margin:10mm; }') +
+      (sheet ? '@page { size:210mm 297mm; margin:0; }' : '@page { size:A4; margin:10mm; }') +
+      'html, body { margin:0 !important; padding:0 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }' +
       'body * { visibility:hidden !important; }' +
       '#erp-stock-qr-print-root, #erp-stock-qr-print-root * { visibility:visible !important; }' +
-      '#erp-stock-qr-print-root { position:absolute; left:0; top:0; box-sizing:border-box; padding:0; margin:0; background:#fff !important; ' +
+      '#erp-stock-qr-print-root { position:absolute; left:0; top:0; box-sizing:border-box; padding:0 !important; margin:0 !important; background:#fff !important; ' +
       (sheet ? 'width:210mm;' : 'width:100%;') +
       '}' +
       '#erp-stock-qr-print-root .erp-qr-preview-banner { display:none !important; }' +
@@ -2983,7 +3007,11 @@
               React.createElement('strong', null, 'A4'),
               ' in the printer and print at ',
               React.createElement('strong', null, '100% (Actual size)'),
-              ' — turn off “Fit to page”. Margins are tuned for Tower W113 / Avery L7163, L7160, and W107 / L6011.'
+              ' — turn off “Fit to page” / “Shrink to fit”. In the print dialog set ',
+              React.createElement('strong', null, 'Margins: None'),
+              ' (Chrome/Edge) or ',
+              React.createElement('strong', null, 'Scale: 100%'),
+              '. Load the matching precut sheet (W113/L7163, Red Fern 70×37, etc.). W107 is not the same as Red Fern 24-up. Misalignment usually means wrong layout or scaling.'
             )
           : null,
         React.createElement(
@@ -3116,6 +3144,9 @@
                               display: 'grid',
                               gridTemplateColumns:
                                 'repeat(' + qrPreset.cols + ', ' + qrPreset.labelWidthMm + 'mm)',
+                              gridTemplateRows:
+                                'repeat(' + qrPreset.rows + ', ' + qrPreset.labelHeightMm + 'mm)',
+                              gridAutoRows: qrPreset.labelHeightMm + 'mm',
                               columnGap: qrPreset.gapXmm + 'mm',
                               rowGap: (qrPreset.gapYmm || 0) + 'mm',
                               background: '#fff',
