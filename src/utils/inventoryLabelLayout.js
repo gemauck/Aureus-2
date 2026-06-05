@@ -62,11 +62,19 @@ export const INVENTORY_LABEL_PRESETS = {
     cols: 3,
     rows: 8,
     labelWidthMm: 70,
-    labelHeightMm: 37.125,
-    marginTopMm: 0,
+    labelHeightMm: 37,
+    /** Row pitch on sheet (8×37 mm + 0.5 mm top/bottom = A4 height). */
+    rowPitchMm: 37,
+    marginTopMm: 0.5,
     marginLeftMm: 0,
     gapXmm: 0,
     gapYmm: 0,
+    /** Fixed insets so QR/text sit at the same spot in every cell (no flex drift). */
+    contentInsetTopMm: 1.5,
+    contentInsetBottomMm: 1.5,
+    contentInsetLeftMm: 1.5,
+    contentInsetRightMm: 1,
+    qrColWidthMm: 29,
     apiSize: 'sm',
     qrMaxMm: 26,
     namePt: 7,
@@ -159,27 +167,44 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
+function sheetRowPitchMm(preset) {
+  const pitch = Number(preset.rowPitchMm)
+  if (Number.isFinite(pitch) && pitch > 0) return pitch
+  return Number(preset.labelHeightMm || 0) + Number(preset.gapYmm || 0)
+}
+
 function sheetCellCss(preset) {
+  const rowPitch = sheetRowPitchMm(preset)
+  const insetTop = Number(preset.contentInsetTopMm ?? 1.5)
+  const insetBottom = Number(preset.contentInsetBottomMm ?? 1.5)
+  const insetLeft = Number(preset.contentInsetLeftMm ?? 1.5)
+  const insetRight = Number(preset.contentInsetRightMm ?? 1)
+  const qrColW = Number(preset.qrColWidthMm ?? preset.labelWidthMm * 0.44)
+  const textLeft = insetLeft + qrColW + 0.6
+  const pageHeightMm = preset.marginTopMm + preset.rows * rowPitch
   return [
     '#erp-stock-qr-print-root .erp-qr-label-cell {',
     '  width:' + preset.labelWidthMm + 'mm;',
     '  height:' + preset.labelHeightMm + 'mm;',
     '  box-sizing:border-box; overflow:hidden;',
-    '  padding:0.8mm 1mm; margin:0;',
-    '  display:flex; flex-direction:row; align-items:center;',
+    '  padding:0; margin:0; position:relative;',
     '  border:none; border-radius:0; background:#fff; color:#000;',
     '  break-inside:avoid; page-break-inside:avoid;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-label-qr {',
-    '  flex:0 0 44%; height:100%; display:flex; align-items:center; justify-content:center;',
+    '  position:absolute; left:' + insetLeft + 'mm; top:' + insetTop + 'mm;',
+    '  bottom:' + insetBottom + 'mm; width:' + qrColW + 'mm;',
+    '  display:flex; align-items:center; justify-content:center;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-label-cell img {',
-    '  max-width:100%; max-height:calc(100% - 0.8mm); width:auto; height:auto;',
+    '  max-width:100%; max-height:100%; width:auto; height:auto;',
     '  border:none; padding:0; object-fit:contain;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-label-text {',
-    '  flex:1 1 auto; min-width:0; display:flex; flex-direction:column; justify-content:center;',
-    '  text-align:left; padding-left:0.6mm; overflow:hidden;',
+    '  position:absolute; left:' + textLeft + 'mm; top:' + insetTop + 'mm;',
+    '  bottom:' + insetBottom + 'mm; right:' + insetRight + 'mm;',
+    '  display:flex; flex-direction:column; justify-content:center;',
+    '  text-align:left; overflow:hidden;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-label-name {',
     '  font-weight:700; line-height:1.1; margin:0; overflow:hidden;',
@@ -192,13 +217,14 @@ function sheetCellCss(preset) {
     '  font-size:' + preset.metaPt + 'pt; text-align:left; width:100%; color:#000;',
     '}',
     '#erp-stock-qr-print-root .erp-qr-sheet-page {',
-    '  width:210mm; min-height:297mm; box-sizing:border-box;',
+    '  width:210mm; height:' + pageHeightMm + 'mm; max-height:' + pageHeightMm + 'mm;',
+    '  box-sizing:border-box;',
     '  padding:' + preset.marginTopMm + 'mm 0 0 ' + preset.marginLeftMm + 'mm;',
     '  margin:0; page-break-after:always;',
-    '  display:grid;',
+    '  display:grid; align-content:start; justify-content:start;',
     '  grid-template-columns:repeat(' + preset.cols + ',' + preset.labelWidthMm + 'mm);',
-    '  grid-template-rows:repeat(' + preset.rows + ',' + preset.labelHeightMm + 'mm);',
-    '  grid-auto-rows:' + preset.labelHeightMm + 'mm;',
+    '  grid-template-rows:repeat(' + preset.rows + ',' + rowPitch + 'mm);',
+    '  grid-auto-rows:' + rowPitch + 'mm;',
     '  column-gap:' + preset.gapXmm + 'mm;',
     '  row-gap:' + (preset.gapYmm || 0) + 'mm;',
     '  border:none; background:#fff; color:#000;',

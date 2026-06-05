@@ -151,11 +151,17 @@
       cols: 3,
       rows: 8,
       labelWidthMm: 70,
-      labelHeightMm: 37.125,
-      marginTopMm: 0,
+      labelHeightMm: 37,
+      rowPitchMm: 37,
+      marginTopMm: 0.5,
       marginLeftMm: 0,
       gapXmm: 0,
       gapYmm: 0,
+      contentInsetTopMm: 1.5,
+      contentInsetBottomMm: 1.5,
+      contentInsetLeftMm: 1.5,
+      contentInsetRightMm: 1,
+      qrColWidthMm: 29,
       apiSize: 'sm',
       qrMaxMm: 26,
       namePt: 7,
@@ -330,27 +336,11 @@
         'div',
         {
           key: item.inventoryItemId,
-          className:
-            'erp-qr-label-cell flex flex-row items-center overflow-hidden ' + (opts.cellClass || ''),
+          className: 'erp-qr-label-cell overflow-hidden ' + (opts.cellClass || ''),
           style: opts.cellStyle
         },
-        React.createElement(
-          'div',
-          {
-            className: 'erp-qr-label-qr shrink-0 flex items-center justify-center',
-            style: { width: '44%', height: '100%' }
-          },
-          imgEl
-        ),
-        React.createElement(
-          'div',
-          {
-            className:
-              'erp-qr-label-text flex-1 min-w-0 flex flex-col justify-center overflow-hidden'
-          },
-          nameEl,
-          skuEl
-        )
+        React.createElement('div', { className: 'erp-qr-label-qr' }, imgEl),
+        React.createElement('div', { className: 'erp-qr-label-text' }, nameEl, skuEl)
       );
     }
     return React.createElement(

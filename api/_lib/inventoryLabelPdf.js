@@ -95,16 +95,17 @@ async function renderHtmlToPdf(html) {
 }
 
 function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellHeightPt) {
-  const padX = mmToPt(1)
-  const padY = mmToPt(0.8)
-  const innerW = Math.max(0, cellWidthPt - padX * 2)
-  const innerH = Math.max(0, cellHeightPt - padY * 2)
-  const qrColW = innerW * 0.44
-  const textColW = Math.max(0, innerW - qrColW - mmToPt(0.6))
+  const insetTop = mmToPt(Number(preset.contentInsetTopMm ?? 1.5))
+  const insetBottom = mmToPt(Number(preset.contentInsetBottomMm ?? 1.5))
+  const insetLeft = mmToPt(Number(preset.contentInsetLeftMm ?? 1.5))
+  const insetRight = mmToPt(Number(preset.contentInsetRightMm ?? 1))
+  const qrColW = mmToPt(Number(preset.qrColWidthMm ?? (preset.labelWidthMm || 70) * 0.44))
+  const innerH = Math.max(0, cellHeightPt - insetTop - insetBottom)
   const qrSize = Math.min(innerH, qrColW - mmToPt(0.2))
-  const qrX = xPt + padX + (qrColW - qrSize) / 2
-  const qrY = yPt + padY + (innerH - qrSize) / 2
-  const textX = xPt + padX + qrColW + mmToPt(0.6)
+  const qrX = xPt + insetLeft + (qrColW - qrSize) / 2
+  const qrY = yPt + insetTop + (innerH - qrSize) / 2
+  const textX = xPt + insetLeft + qrColW + mmToPt(0.6)
+  const textColW = Math.max(0, cellWidthPt - insetLeft - qrColW - mmToPt(0.6) - insetRight)
   const name = String(item?.name || '').trim() || '—'
   const sku = String(item?.sku || '').trim() || '—'
 
@@ -122,7 +123,7 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
   const skuH = doc.heightOfString(sku, { width: textColW })
   const gap = mmToPt(0.3)
   const blockH = Math.min(innerH, nameH + gap + skuH)
-  const textY = yPt + padY + (innerH - blockH) / 2
+  const textY = yPt + insetTop + (innerH - blockH) / 2
 
   doc
     .font('Helvetica-Bold')
@@ -144,10 +145,14 @@ async function renderSheetPdfKit(doc, preset, items) {
   const labelH = mmToPt(preset.labelHeightMm)
   const gapX = mmToPt(preset.gapXmm || 0)
   const gapY = mmToPt(preset.gapYmm || 0)
+  const pitchX = labelW + gapX
+  const rowPitch = mmToPt(
+    Number(preset.rowPitchMm) > 0
+      ? preset.rowPitchMm
+      : Number(preset.labelHeightMm || 0) + Number(preset.gapYmm || 0)
+  )
   const originX = mmToPt(preset.marginLeftMm || 0)
   const originY = mmToPt(preset.marginTopMm || 0)
-  const pitchX = labelW + gapX
-  const pitchY = labelH + gapY
 
   for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
     if (pageIdx > 0) doc.addPage({ size: 'A4', margin: 0 })
@@ -157,7 +162,7 @@ async function renderSheetPdfKit(doc, preset, items) {
       const col = i % preset.cols
       const row = Math.floor(i / preset.cols)
       const x = originX + col * pitchX
-      const y = originY + row * pitchY
+      const y = originY + row * rowPitch
       const qrBuffer = await resolveQrBuffer(item, preset)
       drawLabelCell(doc, preset, item, qrBuffer, x, y, labelW, labelH)
     }
