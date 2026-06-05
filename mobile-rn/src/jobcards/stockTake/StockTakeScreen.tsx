@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -35,8 +35,16 @@ export function StockTakeScreen() {
   const [saving, setSaving] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [highlightSku, setHighlightSku] = useState('')
+  /** After QR scan: show only this SKU until cleared (same as web stock-take). */
+  const [scanFilterSku, setScanFilterSku] = useState('')
   const editingSkusRef = useRef<Set<string>>(new Set())
+  const rowsRef = useRef(rows)
+  const listRef = useRef<FlatList<{ sku: string }> | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    rowsRef.current = rows
+  }, [rows])
 
   useEffect(() => {
     void ensureInventoryLoaded()
@@ -101,21 +109,48 @@ export function StockTakeScreen() {
     }
   }, [sessionId, isOnline, loadSession])
 
-  const filtered = rows.filter((r) => {
+  const filtered = useMemo(() => {
+    const scanSku = scanFilterSku.trim()
+    if (scanSku) {
+      return rows.filter((r) => String(r.sku || '').trim() === scanSku)
+    }
     const q = lineSearch.trim().toLowerCase()
-    if (!q) return true
-    return `${r.name || ''} ${r.sku}`.toLowerCase().includes(q)
-  })
+    if (!q) return rows
+    return rows.filter((r) => {
+      const sku = String(r.sku || '').trim().toLowerCase()
+      const name = String(r.name || '').trim().toLowerCase()
+      return sku.includes(q) || name.includes(q)
+    })
+  }, [rows, lineSearch, scanFilterSku])
 
   useEffect(() => {
-    if (!locationId || !rows.length) return
-    const next: Record<string, string> = {}
-    for (const r of rows) {
-      if (!r.sku) continue
-      next[r.sku] = counts[r.sku] ?? String(r.quantity ?? 0)
+    if (!locationId) {
+      setCounts({})
+      setScanFilterSku('')
+      setHighlightSku('')
+      return
     }
-    setCounts((c) => ({ ...next, ...c }))
+    if (!rows.length) return
+    setCounts((prev) => {
+      const next = { ...prev }
+      for (const r of rows) {
+        if (!r.sku) continue
+        if (!(r.sku in next)) next[r.sku] = ''
+      }
+      for (const sku of Object.keys(next)) {
+        if (!rows.some((r) => r.sku === sku)) delete next[sku]
+      }
+      return next
+    })
   }, [locationId, rows])
+
+  useEffect(() => {
+    const sku = scanFilterSku.trim()
+    if (!sku || filtered.length !== 1) return
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index: 0, animated: true, viewPosition: 0.15 })
+    })
+  }, [scanFilterSku, filtered.length])
 
   const locationOptions = stockLocations.map((l) => ({
     value: l.id,
@@ -126,10 +161,12 @@ export function StockTakeScreen() {
     if (!accessToken || !locationId) return
     setSaving(true)
     try {
-      const lines = Object.entries(counts).map(([sku, countedQty]) => ({
-        sku,
-        countedQty: parseFloat(countedQty) || 0
-      }))
+      const lines = Object.entries(counts)
+        .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
+        .map(([sku, countedQty]) => ({
+          sku,
+          countedQty: parseFloat(countedQty) || 0
+        }))
       const body = {
         locationId,
         description: `Stock take ${new Date().toLocaleDateString()}`,
@@ -173,19 +210,42 @@ export function StockTakeScreen() {
     }
   }, [accessToken, sessionId, saveDraft, setWizardFlow])
 
-  function onScanResult(data: string) {
+  const clearScanFilter = useCallback(() => {
+    setScanFilterSku('')
+    setLineSearch('')
+    setHighlightSku('')
+  }, [])
+
+  const onScanResult = useCallback(async (data: string) => {
     setScanOpen(false)
     const s = String(data || '').trim()
     if (!s) return
 
+    const currentRows = rowsRef.current
     const parsed = parseInventoryQrPayload(s)
     let sku = ''
+
     if (parsed?.kind === 'inventory' && parsed.inventoryItemId) {
-      const item = rows.find(
+      let item = currentRows.find(
         (i) =>
           i.inventoryItemId &&
           String(i.inventoryItemId) === String(parsed.inventoryItemId)
       )
+      if (!item?.sku) {
+        try {
+          const catalog = await jobcardsApi.getPublicInventory()
+          const hit = catalog.find(
+            (i) => String(i.id || '').trim() === String(parsed.inventoryItemId).trim()
+          )
+          if (hit?.sku) {
+            item = currentRows.find(
+              (r) => String(r.sku || '').trim() === String(hit.sku).trim()
+            )
+          }
+        } catch {
+          /* ignore catalog lookup failure */
+        }
+      }
       if (!item?.sku) {
         Alert.alert(
           'Not in list',
@@ -195,7 +255,7 @@ export function StockTakeScreen() {
       }
       sku = String(item.sku).trim()
     } else {
-      const item = rows.find((r) => String(r.sku || '').trim() === s)
+      const item = currentRows.find((r) => String(r.sku || '').trim() === s)
       if (!item?.sku) {
         Alert.alert(
           'Unrecognized scan',
@@ -206,10 +266,10 @@ export function StockTakeScreen() {
       sku = String(item.sku).trim()
     }
 
-    setLineSearch(sku)
+    setScanFilterSku(sku)
+    setLineSearch('')
     setHighlightSku(sku)
-    setCounts((c) => ({ ...c, [sku]: c[sku] ?? '1' }))
-  }
+  }, [])
 
   return (
     <SafeAreaView style={styles.root}>
@@ -237,6 +297,13 @@ export function StockTakeScreen() {
         <Pressable style={styles.scanBtn} onPress={() => setScanOpen(true)}>
           <Text style={styles.scanBtnText}>Scan barcode / QR</Text>
         </Pressable>
+        {scanFilterSku ? (
+          <Pressable style={styles.clearScanBtn} onPress={clearScanFilter}>
+            <Text style={styles.clearScanText}>
+              Showing scan: {scanFilterSku} · tap to show all
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {!locationId ? (
@@ -250,9 +317,16 @@ export function StockTakeScreen() {
         <Text style={styles.error}>{stockError}</Text>
       ) : (
         <FlatList
+          ref={listRef}
           data={filtered}
           keyExtractor={(item: { sku: string }) => item.sku}
           contentContainerStyle={{ padding: 16 }}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({
+              offset: Math.max(0, info.averageItemLength * info.index),
+              animated: true
+            })
+          }}
           renderItem={({ item }: { item: { sku: string; name?: string; quantity?: number } }) => (
             <View
               style={[
@@ -334,6 +408,15 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   scanBtnText: { color: '#fff', fontWeight: '700' },
+  clearScanBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: jc.radius.sm,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: jc.primary
+  },
+  clearScanText: { color: jc.primaryDark, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   hint: { textAlign: 'center', color: jc.textMuted, marginTop: 40, padding: 16 },
   loadingWrap: { alignItems: 'center', marginTop: 48, gap: 12 },
   error: { textAlign: 'center', color: jc.danger, marginTop: 40, padding: 16, fontWeight: '600' },
