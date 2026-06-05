@@ -204,7 +204,7 @@
     if (typeof window.getInventoryLabelPreset === 'function') {
       return window.getInventoryLabelPreset(key);
     }
-    return QR_SHEET_PRESETS[key] || QR_SHEET_PRESETS.w113;
+    return QR_SHEET_PRESETS[key] || QR_SHEET_PRESETS.rf2470x37;
   }
 
   function qrLabelsPerPage(preset) {
@@ -543,7 +543,7 @@
 
     const [qrLocationId, setQrLocationId] = React.useState('');
     const [qrOnlyInStock, setQrOnlyInStock] = React.useState(true);
-    const [qrSizePreset, setQrSizePreset] = React.useState('w113');
+    const [qrSizePreset, setQrSizePreset] = React.useState('rf2470x37');
     const [qrSheetItems, setQrSheetItems] = React.useState([]);
     const [qrSheetLoading, setQrSheetLoading] = React.useState(false);
     const [qrPdfDownloading, setQrPdfDownloading] = React.useState(false);

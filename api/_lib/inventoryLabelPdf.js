@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit'
 import QRCode from 'qrcode'
 import { encodeInventoryQrPayload } from './inventoryQrPayload.js'
 import {
+  DEFAULT_INVENTORY_LABEL_PRESET_KEY,
   INVENTORY_LABEL_PRESETS,
   buildInventoryLabelHtmlDocument,
   getInventoryLabelPreset,
@@ -10,7 +11,12 @@ import {
   qrLabelsPerPage
 } from '../../src/utils/inventoryLabelLayout.js'
 
-export { INVENTORY_LABEL_PRESETS, inventoryLabelPdfFilename, getInventoryLabelPreset }
+export {
+  DEFAULT_INVENTORY_LABEL_PRESET_KEY,
+  INVENTORY_LABEL_PRESETS,
+  inventoryLabelPdfFilename,
+  getInventoryLabelPreset
+}
 
 const MAX_ITEMS_PER_REQUEST = 400
 const MAX_QR_DATA_URL_BYTES = 900000

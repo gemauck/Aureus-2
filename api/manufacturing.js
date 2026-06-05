@@ -28,6 +28,7 @@ import {
 } from './_lib/stockTakeVarianceExport.js'
 import {
   buildInventoryLabelPdfBuffer,
+  DEFAULT_INVENTORY_LABEL_PRESET_KEY,
   INVENTORY_LABEL_PRESETS,
   inventoryLabelPdfFilename
 } from './_lib/inventoryLabelPdf.js'
@@ -2701,7 +2702,7 @@ async function handler(req, res) {
     if (req.method === 'POST' && id === 'pdf') {
       try {
         const body = req.body || {}
-        const presetKey = String(body.presetKey || body.preset || 'w113').trim()
+        const presetKey = String(body.presetKey || body.preset || DEFAULT_INVENTORY_LABEL_PRESET_KEY).trim()
         if (!Object.prototype.hasOwnProperty.call(INVENTORY_LABEL_PRESETS, presetKey)) {
           return badRequest(res, 'Unknown label layout preset')
         }

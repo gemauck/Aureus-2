@@ -126,13 +126,15 @@ export const INVENTORY_LABEL_PRESETS = {
   }
 }
 
+export const DEFAULT_INVENTORY_LABEL_PRESET_KEY = 'rf2470x37'
+
 export const INVENTORY_LABEL_PRESET_GROUPS = [
   { id: 'sheet', label: 'Precut A4 stickers (SA)' },
   { id: 'flex', label: 'Plain A4 (flexible grid)' }
 ]
 
 export function getInventoryLabelPreset(key) {
-  return INVENTORY_LABEL_PRESETS[key] || INVENTORY_LABEL_PRESETS.w113
+  return INVENTORY_LABEL_PRESETS[key] || INVENTORY_LABEL_PRESETS[DEFAULT_INVENTORY_LABEL_PRESET_KEY]
 }
 
 export function qrLabelsPerPage(preset) {
