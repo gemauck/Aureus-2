@@ -3,15 +3,14 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View
 } from 'react-native'
-import { CameraView, useCameraPermissions } from 'expo-camera'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { InventoryBarcodeScannerModal } from '../../components/InventoryBarcodeScannerModal'
 import { parseInventoryQrPayload } from '../../../../src/utils/inventoryQrPayload.js'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
@@ -36,7 +35,6 @@ export function StockTakeScreen() {
   const [saving, setSaving] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [highlightSku, setHighlightSku] = useState('')
-  const [permission, requestPermission] = useCameraPermissions()
   const editingSkusRef = useRef<Set<string>>(new Set())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -236,19 +234,7 @@ export function StockTakeScreen() {
           value={lineSearch}
           onChangeText={setLineSearch}
         />
-        <Pressable
-          style={styles.scanBtn}
-          onPress={async () => {
-            if (!permission?.granted) {
-              const r = await requestPermission()
-              if (!r.granted) {
-                Alert.alert('Camera required', 'Allow camera to scan barcodes.')
-                return
-              }
-            }
-            setScanOpen(true)
-          }}
-        >
+        <Pressable style={styles.scanBtn} onPress={() => setScanOpen(true)}>
           <Text style={styles.scanBtnText}>Scan barcode / QR</Text>
         </Pressable>
       </View>
@@ -318,44 +304,12 @@ export function StockTakeScreen() {
         </Pressable>
       </View>
 
-      <BarcodeScanModal
+      <InventoryBarcodeScannerModal
         visible={scanOpen}
         onClose={() => setScanOpen(false)}
         onScan={onScanResult}
       />
     </SafeAreaView>
-  )
-}
-
-function BarcodeScanModal({
-  visible,
-  onClose,
-  onScan
-}: {
-  visible: boolean
-  onClose: () => void
-  onScan: (data: string) => void
-}) {
-  const lastScan = useRef({ text: '', t: 0 })
-
-  return (
-    <Modal visible={visible} animationType="slide">
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <CameraView
-          style={{ flex: 1 }}
-          barcodeScannerSettings={{ barcodeTypes: ['qr', 'code128', 'code39', 'ean13'] }}
-          onBarcodeScanned={({ data }) => {
-            const now = Date.now()
-            if (data === lastScan.current.text && now - lastScan.current.t < 2000) return
-            lastScan.current = { text: data, t: now }
-            onScan(data)
-          }}
-        />
-        <Pressable style={styles.closeScan} onPress={onClose}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Close scanner</Text>
-        </Pressable>
-      </View>
-    </Modal>
   )
 }
 
@@ -429,13 +383,5 @@ const styles = StyleSheet.create({
   },
   submitBtn: { backgroundColor: jc.success },
   footerBtnText: { color: '#fff', fontWeight: '700' },
-  disabled: { opacity: 0.5 },
-  closeScan: {
-    position: 'absolute',
-    bottom: 40,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 14,
-    borderRadius: 10
-  }
+  disabled: { opacity: 0.5 }
 })
