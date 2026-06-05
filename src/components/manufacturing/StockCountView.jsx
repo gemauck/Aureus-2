@@ -565,6 +565,7 @@
     const [qrSizePreset, setQrSizePreset] = React.useState('w113');
     const [qrSheetItems, setQrSheetItems] = React.useState([]);
     const [qrSheetLoading, setQrSheetLoading] = React.useState(false);
+    const [qrPdfDownloading, setQrPdfDownloading] = React.useState(false);
     const [qrSheetNote, setQrSheetNote] = React.useState('');
     const getInitialStockCountPage = () => {
       try {
@@ -1166,6 +1167,51 @@
         setError(e.message || 'Failed to build QR label sheet');
       } finally {
         setQrSheetLoading(false);
+      }
+    };
+
+    const downloadQrLabelPdf = async () => {
+      if (!qrSheetItems.length || qrPdfDownloading) return;
+      setQrPdfDownloading(true);
+      setError(null);
+      try {
+        const res = await fetch(apiBase + '/api/manufacturing/inventory-labels/pdf', {
+          method: 'POST',
+          headers: Object.assign({}, authHeaders(), { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            presetKey: qrSizePreset,
+            locationLabel: qrLocationLabel,
+            items: qrSheetItems.map(function (item) {
+              return {
+                inventoryItemId: item.inventoryItemId,
+                sku: item.sku,
+                name: item.name
+              };
+            })
+          })
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || res.statusText || 'PDF download failed');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download =
+          'inventory-labels-' +
+          String(qrLocationLabel || qrSizePreset || 'labels')
+            .replace(/[^a-zA-Z0-9._-]+/g, '-')
+            .replace(/^-+|-+$/g, '') +
+          '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        setError(e.message || 'Failed to download label PDF');
+      } finally {
+        setQrPdfDownloading(false);
       }
     };
 
@@ -3011,7 +3057,9 @@
               React.createElement('strong', null, 'Margins: None'),
               ' (Chrome/Edge) or ',
               React.createElement('strong', null, 'Scale: 100%'),
-              '. Load the matching precut sheet (W113/L7163, Red Fern 70×37, etc.). W107 is not the same as Red Fern 24-up. Misalignment usually means wrong layout or scaling.'
+              '. Load the matching precut sheet (W113/L7163, Red Fern 70×37, etc.). W107 is not the same as Red Fern 24-up. For consistent sizing across Mac/Windows/printers, use ',
+              React.createElement('strong', null, 'Download PDF'),
+              ' and print the PDF at 100% with no scaling.'
             )
           : null,
         React.createElement(
@@ -3051,6 +3099,23 @@
             },
             React.createElement('i', { className: 'fas fa-print mr-2' }),
             'Print labels'
+          ),
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: btn,
+              disabled: !qrSheetItems.length || qrPdfDownloading,
+              onClick: () => void downloadQrLabelPdf()
+            },
+            qrPdfDownloading
+              ? 'Preparing PDF…'
+              : React.createElement(
+                  React.Fragment,
+                  null,
+                  React.createElement('i', { className: 'fas fa-file-pdf mr-2' }),
+                  'Download PDF'
+                )
           ),
           React.createElement(
             'button',

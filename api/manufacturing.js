@@ -27,6 +27,11 @@ import {
   stockTakeVarianceExportFilename
 } from './_lib/stockTakeVarianceExport.js'
 import {
+  buildInventoryLabelPdfBuffer,
+  INVENTORY_LABEL_PRESETS,
+  inventoryLabelPdfFilename
+} from './_lib/inventoryLabelPdf.js'
+import {
   computeMovementNetAtLocationSinceTx,
   computeStockTakeApplyDeltaQty,
   refreshStockTakeLinesSystemQtyAtSubmitTx,
@@ -2689,6 +2694,41 @@ async function handler(req, res) {
       res,
       'Use GET .../stock-count/export or POST .../stock-count/import or POST .../stock-count/import-by-location'
     )
+  }
+
+  // INVENTORY QR LABEL PDF (POST /api/manufacturing/inventory-labels/pdf)
+  if (resourceType === 'inventory-labels') {
+    if (req.method === 'POST' && id === 'pdf') {
+      try {
+        const body = req.body || {}
+        const presetKey = String(body.presetKey || body.preset || 'w113').trim()
+        if (!Object.prototype.hasOwnProperty.call(INVENTORY_LABEL_PRESETS, presetKey)) {
+          return badRequest(res, 'Unknown label layout preset')
+        }
+        const items = Array.isArray(body.items) ? body.items : []
+        if (!items.length) {
+          return badRequest(res, 'items array is required')
+        }
+        const pdfBuffer = await buildInventoryLabelPdfBuffer({
+          presetKey,
+          locationLabel: body.locationLabel || body.location || '',
+          items
+        })
+        const filename = inventoryLabelPdfFilename({
+          locationLabel: body.locationLabel || body.location || '',
+          presetKey
+        })
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+        res.setHeader('Content-Length', String(pdfBuffer.length))
+        return res.end(pdfBuffer)
+      } catch (error) {
+        console.error('❌ Inventory label PDF failed:', error)
+        return serverError(res, 'Failed to generate label PDF', error.message)
+      }
+    }
+    return badRequest(res, 'Unsupported inventory-labels route')
   }
 
   // INVENTORY ITEMS
