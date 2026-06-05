@@ -136,13 +136,15 @@ function qrPixelWidth(apiSize) {
   return 256
 }
 
-async function qrPngBuffer(inventoryItemId, apiSize) {
+async function qrPngBuffer(inventoryItemId, apiSize, targetMm) {
   const payload = encodeInventoryQrPayload(inventoryItemId)
   if (!payload) return null
+  const fromMm = Number.isFinite(targetMm) && targetMm > 0 ? Math.round((targetMm * 300) / 25.4) : 0
+  const width = Math.min(512, Math.max(qrPixelWidth(apiSize), fromMm || 0, 256))
   return QRCode.toBuffer(payload, {
     type: 'png',
-    width: qrPixelWidth(apiSize),
-    margin: 2,
+    width,
+    margin: 1,
     errorCorrectionLevel: 'M'
   })
 }
@@ -170,15 +172,19 @@ export function inventoryLabelPdfFilename({ locationLabel, presetKey }) {
 }
 
 function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellHeightPt) {
-  const padX = mmToPt(1)
-  const padTop = mmToPt(0.8)
-  const innerW = Math.max(0, cellWidthPt - padX * 2)
-  const qrMaxPt = mmToPt(preset.qrMaxMm || 24)
-  const qrSize = Math.min(qrMaxPt, innerW, Math.max(mmToPt(8), cellHeightPt * 0.55))
-  const qrX = xPt + (cellWidthPt - qrSize) / 2
-  const qrY = yPt + padTop
+  const pad = mmToPt(1)
+  const innerH = Math.max(0, cellHeightPt - pad * 2)
+  const qrColW = cellWidthPt * 0.44
+  const textColW = Math.max(0, cellWidthPt - qrColW - pad * 2)
+  const qrSize = Math.min(innerH, qrColW - mmToPt(0.4))
+  const qrX = xPt + pad
+  const qrY = yPt + (cellHeightPt - qrSize) / 2
+  const textX = xPt + qrColW + pad
+  const textY = yPt + pad
+  const name = String(item?.name || '').trim() || '—'
+  const sku = String(item?.sku || '').trim() || '—'
 
-  if (qrBuffer) {
+  if (qrBuffer && qrSize > 0) {
     try {
       doc.image(qrBuffer, qrX, qrY, { width: qrSize, height: qrSize })
     } catch {
@@ -186,19 +192,14 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
     }
   }
 
-  const textY = qrY + qrSize + mmToPt(0.4)
-  const textH = Math.max(mmToPt(4), yPt + cellHeightPt - textY - mmToPt(0.5))
-  const name = String(item?.name || '').trim() || '—'
-  const sku = String(item?.sku || '').trim() || '—'
-
   doc
     .font('Helvetica-Bold')
     .fontSize(preset.namePt || 7)
     .fillColor('#000000')
-    .text(name, xPt + padX, textY, {
-      width: innerW,
-      height: textH * 0.62,
-      align: 'center',
+    .text(name, textX, textY, {
+      width: textColW,
+      height: innerH * 0.68,
+      align: 'left',
       ellipsis: true
     })
 
@@ -206,10 +207,10 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
     .font('Helvetica')
     .fontSize(preset.metaPt || 6)
     .fillColor('#000000')
-    .text(sku, xPt + padX, doc.y + mmToPt(0.2), {
-      width: innerW,
-      height: textH * 0.38,
-      align: 'center',
+    .text(sku, textX, textY + innerH * 0.68, {
+      width: textColW,
+      height: innerH * 0.32,
+      align: 'left',
       ellipsis: true
     })
 }
@@ -235,7 +236,7 @@ async function renderSheetPdf(doc, preset, items) {
       const row = Math.floor(i / preset.cols)
       const x = originX + col * pitchX
       const y = originY + row * pitchY
-      const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize)
+      const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize, preset.labelHeightMm - 2)
       drawLabelCell(doc, preset, item, qrBuffer, x, y, labelW, labelH)
     }
   }
@@ -271,7 +272,7 @@ async function renderFlexPdf(doc, preset, items) {
     const x = margin + col * pitchX
     const y = margin + row * pitchY
     const item = items[i]
-    const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize)
+    const qrBuffer = await qrPngBuffer(item.inventoryItemId, preset.apiSize, (preset.cellHeightMm || 55) - 2)
     drawLabelCell(doc, preset, item, qrBuffer, x, y, cellW, cellH)
   }
 }

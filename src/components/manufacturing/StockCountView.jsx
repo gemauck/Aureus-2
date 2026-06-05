@@ -279,13 +279,24 @@
           '  height:' + preset.labelHeightMm + 'mm;',
           '  box-sizing:border-box; overflow:hidden;',
           '  padding:0.8mm 1mm; margin:0;',
+          '  display:flex; flex-direction:row; align-items:center;',
           '  border:none !important; border-radius:0 !important;',
           '  box-shadow:none !important; background:#fff !important; color:#000 !important;',
           '  break-inside:avoid; page-break-inside:avoid;',
           '}',
+          '#erp-stock-qr-print-root .erp-qr-label-qr {',
+          '  flex:0 0 44%; height:100%; display:flex; align-items:center; justify-content:center;',
+          '}',
           '#erp-stock-qr-print-root .erp-qr-label-cell img {',
-          '  max-width:' + preset.qrMaxMm + 'mm; max-height:' + preset.qrMaxMm + 'mm;',
-          '  width:auto; height:auto; border:none !important; padding:0 !important;',
+          '  max-width:100%; max-height:calc(100% - 0.8mm); width:auto; height:auto;',
+          '  border:none !important; padding:0 !important;',
+          '}',
+          '#erp-stock-qr-print-root .erp-qr-label-text {',
+          '  flex:1 1 auto; min-width:0; display:flex; flex-direction:column; justify-content:center;',
+          '  text-align:left; padding-left:0.6mm; overflow:hidden;',
+          '}',
+          '#erp-stock-qr-print-root .erp-qr-label-name, #erp-stock-qr-print-root .erp-qr-label-meta {',
+          '  text-align:left !important; width:100%;',
           '}',
           '#erp-stock-qr-print-root .erp-qr-sheet-page {',
           '  width:210mm; min-height:297mm; box-sizing:border-box;',
@@ -333,19 +344,19 @@
         ? 'shrink-0 object-contain bg-white'
         : 'shrink-0 object-contain bg-white p-1 rounded border border-slate-200',
       style: isSheet
-        ? { maxWidth: preset.qrMaxMm + 'mm', maxHeight: preset.qrMaxMm + 'mm', width: 'auto', height: 'auto' }
+        ? { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }
         : { width: preset.qrDisplayPx, height: preset.qrDisplayPx }
     });
     const nameEl = React.createElement(
       'p',
       {
         className:
-          'erp-qr-label-name font-semibold leading-tight line-clamp-2 ' +
-          (isSheet ? 'text-center w-full' : 'mt-2 text-xs ' + text),
+          'erp-qr-label-name font-semibold leading-tight ' +
+          (isSheet ? 'line-clamp-3 w-full text-left' : 'line-clamp-2 mt-2 text-xs text-center ' + text),
         style: isSheet
           ? {
               fontSize: preset.namePt + 'pt',
-              margin: '0.4mm 0 0',
+              margin: 0,
               lineHeight: 1.1,
               overflow: 'hidden',
               width: '100%'
@@ -358,9 +369,10 @@
       'p',
       {
         className:
-          'erp-qr-label-meta font-mono ' + (isSheet ? 'text-center w-full' : 'mt-0.5 text-[11px] ' + muted),
+          'erp-qr-label-meta font-mono ' +
+          (isSheet ? 'text-left w-full' : 'mt-0.5 text-[11px] text-center ' + muted),
         style: isSheet
-          ? { fontSize: preset.metaPt + 'pt', margin: '0.2mm 0 0', lineHeight: 1.1, width: '100%' }
+          ? { fontSize: preset.metaPt + 'pt', margin: '0.3mm 0 0', lineHeight: 1.1, width: '100%' }
           : undefined
       },
       item.sku
@@ -371,13 +383,26 @@
         {
           key: item.inventoryItemId,
           className:
-            'erp-qr-label-cell flex flex-col items-center justify-start text-center overflow-hidden ' +
-            (opts.cellClass || ''),
+            'erp-qr-label-cell flex flex-row items-center overflow-hidden ' + (opts.cellClass || ''),
           style: opts.cellStyle
         },
-        imgEl,
-        nameEl,
-        skuEl
+        React.createElement(
+          'div',
+          {
+            className: 'erp-qr-label-qr shrink-0 flex items-center justify-center',
+            style: { width: '44%', height: '100%' }
+          },
+          imgEl
+        ),
+        React.createElement(
+          'div',
+          {
+            className:
+              'erp-qr-label-text flex-1 min-w-0 flex flex-col justify-center overflow-hidden'
+          },
+          nameEl,
+          skuEl
+        )
       );
     }
     return React.createElement(
@@ -385,13 +410,21 @@
       {
         key: item.inventoryItemId,
         className:
-          'flex flex-col items-center justify-start text-center rounded-lg border p-3 break-inside-avoid shadow-sm erp-qr-label-cell ' +
+          'flex flex-row items-center text-left rounded-lg border p-3 break-inside-avoid shadow-sm erp-qr-label-cell ' +
           (opts.cellClass || ''),
         style: Object.assign({ pageBreakInside: 'avoid' }, opts.cellStyle || {})
       },
-      imgEl,
-      nameEl,
-      skuEl
+      React.createElement(
+        'div',
+        { className: 'erp-qr-label-qr shrink-0 flex items-center justify-center', style: { width: '44%' } },
+        imgEl
+      ),
+      React.createElement(
+        'div',
+        { className: 'erp-qr-label-text flex-1 min-w-0 flex flex-col justify-center overflow-hidden pl-2' },
+        nameEl,
+        skuEl
+      )
     );
   }
 
