@@ -105,6 +105,13 @@ type WizardContextValue = {
 
 const WizardContext = createContext<WizardContextValue | undefined>(undefined)
 
+function activeTechnicianUsers(list: UserOption[]) {
+  return list.filter((x) => {
+    const status = (x.status || 'active').toLowerCase()
+    return status !== 'inactive' && status !== 'suspended'
+  })
+}
+
 export function JobCardWizardProvider({ children }: { children: React.ReactNode }) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
@@ -165,12 +172,17 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
 
   const loadReferenceData = useCallback(async () => {
     try {
-      const [cachedClientsRaw, cachedProjectsRaw] = await Promise.all([
+      const [cachedClientsRaw, cachedProjectsRaw, cachedUsersRaw] = await Promise.all([
         AsyncStorage.getItem(REFERENCE_CACHE_KEYS.clients),
-        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.projects)
+        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.projects),
+        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.users)
       ])
       const cachedClients = JSON.parse(cachedClientsRaw || '[]')
       if (Array.isArray(cachedClients) && cachedClients.length) setClients(cachedClients)
+      const cachedUsers = JSON.parse(cachedUsersRaw || '[]')
+      if (Array.isArray(cachedUsers) && cachedUsers.length) {
+        setUsers(activeTechnicianUsers(cachedUsers))
+      }
       const cachedProjects = JSON.parse(cachedProjectsRaw || '[]')
       if (Array.isArray(cachedProjects) && cachedProjects.length) {
         setProjects(
@@ -188,20 +200,27 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       setLoading(false)
     }
 
-    if (!isOnline || !accessToken) return
+    if (!isOnline) return
 
     void (async () => {
       try {
-        const [c, u, proj] = await Promise.all([
-          jobcardsApi.getClients(accessToken).catch(() => []),
-          jobcardsApi.getUsers(accessToken).catch(() => []),
-          jobcardsApi.getProjects(accessToken).catch(() => [])
-        ])
+        const usersPromise = jobcardsApi.getUsers(accessToken || undefined).catch(() => [])
+        const clientsPromise = accessToken
+          ? jobcardsApi.getClients(accessToken).catch(() => [])
+          : Promise.resolve([])
+        const projectsPromise = accessToken
+          ? jobcardsApi.getProjects(accessToken).catch(() => [])
+          : Promise.resolve([])
+        const [c, u, proj] = await Promise.all([clientsPromise, usersPromise, projectsPromise])
         if (c.length) {
           setClients(c)
           await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.clients, JSON.stringify(c))
         }
-        setUsers(u.filter((x) => (x.status || 'active').toLowerCase() !== 'inactive'))
+        const technicians = activeTechnicianUsers(u)
+        if (technicians.length) {
+          setUsers(technicians)
+          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.users, JSON.stringify(technicians))
+        }
         if (proj.length) {
           const normalized = proj.map((p) => ({
             id: String(p.id),

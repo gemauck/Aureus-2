@@ -35,8 +35,8 @@ npx expo prebuild --platform android --no-install
 
 COLORS="$RN/android/app/src/main/res/values/colors.xml"
 if ! grep -q splashscreen_background "$COLORS" 2>/dev/null; then
-  sed -i '' 's|</resources>|  <color name="splashscreen_background">#0284c7</color>\n</resources>|' "$COLORS" 2>/dev/null \
-    || sed -i 's|</resources>|  <color name="splashscreen_background">#0284c7</color>\n</resources>|' "$COLORS"
+  sed -i '' 's|</resources>|  <color name="splashscreen_background">#1d4ed8</color>\n</resources>|' "$COLORS" 2>/dev/null \
+    || sed -i 's|</resources>|  <color name="splashscreen_background">#1d4ed8</color>\n</resources>|' "$COLORS"
 fi
 
 cd "$RN/android"

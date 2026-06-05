@@ -57,10 +57,15 @@ export const jobcardsApi = {
     return request<{ clients: ClientOption[] }>('/api/public/clients').then((d) => d.clients || [])
   },
 
-  getUsers(token: string) {
-    return request<{ users: UserOption[] } | UserOption[]>('/api/users', { token }).then((d) =>
-      Array.isArray(d) ? d : d.users || []
-    )
+  getUsers(token?: string) {
+    return request<{ users: UserOption[] }>('/api/public/users')
+      .then((d) => d.users || [])
+      .catch(() => {
+        if (!token) return []
+        return request<{ users: UserOption[] } | UserOption[]>('/api/users', { token }).then((d) =>
+          Array.isArray(d) ? d : d.users || []
+        )
+      })
   },
 
   getPublicLocations() {
