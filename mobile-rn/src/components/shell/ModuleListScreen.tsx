@@ -26,6 +26,8 @@ type Props<T> = {
   emptyLabel?: string
   navigation?: NativeStackScreenProps<RootStackParamList, keyof RootStackParamList>['navigation']
   showNotifications?: boolean
+  onItemPress?: (item: T) => void
+  renderItemExtra?: (item: T) => React.ReactNode
 }
 
 export function ModuleListScreen<T>({
@@ -38,7 +40,9 @@ export function ModuleListScreen<T>({
   searchFilter,
   emptyLabel = 'No items found.',
   navigation,
-  showNotifications = true
+  showNotifications = true,
+  onItemPress,
+  renderItemExtra
 }: Props<T>) {
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
@@ -117,12 +121,21 @@ export function ModuleListScreen<T>({
             }
             ListEmptyComponent={<Text style={styles.empty}>{emptyLabel}</Text>}
             renderItem={({ item }) => (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{renderTitle(item)}</Text>
-                {renderSubtitle ? (
-                  <Text style={styles.cardSub}>{renderSubtitle(item) || '—'}</Text>
-                ) : null}
-              </View>
+              <Pressable
+                style={styles.card}
+                onPress={onItemPress ? () => onItemPress(item) : undefined}
+                disabled={!onItemPress}
+              >
+                <View style={styles.cardRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>{renderTitle(item)}</Text>
+                    {renderSubtitle ? (
+                      <Text style={styles.cardSub}>{renderSubtitle(item) || '—'}</Text>
+                    ) : null}
+                  </View>
+                  {renderItemExtra ? renderItemExtra(item) : null}
+                </View>
+              </Pressable>
             )}
           />
         )}
@@ -155,6 +168,7 @@ const styles = StyleSheet.create({
     ...erp.shadowSm
   },
   cardTitle: { fontSize: 16, fontWeight: '700', color: erp.text },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start' },
   cardSub: { fontSize: 13, color: erp.textMuted, marginTop: 4 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
   error: { color: erp.danger, fontWeight: '600', textAlign: 'center' },

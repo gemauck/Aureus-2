@@ -23,40 +23,44 @@ export function LandingScreen() {
       <ModuleHeader title="Job cards" subtitle="Service & Maintenance" />
       <OfflineBanner visible={!isOnline} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+        <View style={styles.heroWrap}>
+          <View style={styles.heroIcon}>
+            <Text style={styles.heroIconGlyph}>✓</Text>
+          </View>
           <Text style={styles.kicker}>Field service</Text>
           <Text style={styles.title}>Job cards</Text>
           <Text style={styles.subtitle}>
-            Capture visits, stock, and sign-off — online or offline.
+            Capture visits, stock, and sign-off in one guided flow. Works offline; sync when you
+            are back online.
           </Text>
         </View>
 
         {loading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={jc.primary} />
-            <Text style={styles.loadingText}>Refreshing reference data…</Text>
+            <Text style={styles.loadingText}>Loading technicians, clients & projects…</Text>
           </View>
         ) : null}
 
         <MenuButton
-          icon="✚"
-          title="New job card"
-          subtitle="Guided 5-step wizard for a site visit."
-          tint="#0284c7"
+          icon="+"
+          title="Create new job card"
+          subtitle="Start the guided wizard for a new visit."
+          tint={jc.primary}
           onPress={startNewJobCard}
         />
         <MenuButton
-          icon="☰"
-          title="Existing job cards"
-          subtitle="Search, filter, reopen drafts and synced cards."
-          tint="#0369a1"
+          icon="↺"
+          title="View or edit existing job card"
+          subtitle="Search and filter drafts and synced cards on this device."
+          tint={jc.primaryDark}
           onPress={openPriorList}
         />
         <MenuButton
           icon="▦"
           title="Stock-Take"
           subtitle="Count stock by location and submit for review."
-          tint="#0d9488"
+          tint={jc.accentTeal}
           onPress={openStockTake}
         />
 
@@ -64,8 +68,11 @@ export function LandingScreen() {
           <View style={styles.syncBox}>
             <Text style={styles.syncTitle}>
               {pendingAutoSync
-                ? 'Syncing to server…'
-                : `${unsyncedCount} card${unsyncedCount === 1 ? '' : 's'} waiting to sync`}
+                ? 'Syncing job cards to the server…'
+                : `${unsyncedCount} job card${unsyncedCount === 1 ? '' : 's'} waiting to sync`}
+            </Text>
+            <Text style={styles.syncSub}>
+              Stock used is recorded in Manufacturing only after the job card reaches the server.
             </Text>
             <Pressable
               style={[styles.syncBtn, (!isOnline || pendingAutoSync) && styles.disabled]}
@@ -99,7 +106,7 @@ function MenuButton({
       style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}
       onPress={onPress}
     >
-      <View style={[styles.iconWrap, { backgroundColor: `${tint}18` }]}>
+      <View style={[styles.iconWrap, { backgroundColor: `${tint}14` }]}>
         <Text style={[styles.icon, { color: tint }]}>{icon}</Text>
       </View>
       <View style={styles.menuText}>
@@ -112,24 +119,47 @@ function MenuButton({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: jc.bg },
+  root: { flex: 1, backgroundColor: jc.bgGradientMid },
   content: { padding: jc.space.lg, gap: jc.space.sm, paddingBottom: 40 },
-  hero: {
-    backgroundColor: jc.primary,
+  heroWrap: {
+    alignItems: 'center',
+    paddingVertical: jc.space.lg,
+    marginBottom: jc.space.sm
+  },
+  heroIcon: {
+    width: 64,
+    height: 64,
     borderRadius: jc.radius.xl,
-    padding: jc.space.xl,
-    marginBottom: jc.space.sm,
+    backgroundColor: jc.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: jc.space.md,
     ...jc.shadow
   },
+  heroIconGlyph: { color: '#fff', fontSize: 28, fontWeight: '800' },
   kicker: {
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     fontSize: 11,
     fontWeight: '700',
-    color: '#bae6fd'
+    color: jc.primary
   },
-  title: { fontSize: 28, fontWeight: '800', color: '#fff', marginTop: 4, letterSpacing: -0.5 },
-  subtitle: { color: '#e0f2fe', lineHeight: 22, marginTop: 8, fontSize: 15 },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: jc.text,
+    marginTop: 6,
+    letterSpacing: -0.5,
+    textAlign: 'center'
+  },
+  subtitle: {
+    color: jc.textMuted,
+    lineHeight: 22,
+    marginTop: jc.space.sm,
+    fontSize: 15,
+    textAlign: 'center',
+    maxWidth: 340
+  },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -137,49 +167,51 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4
   },
-  loadingText: { color: jc.textMuted, fontSize: 13 },
+  loadingText: { color: jc.textMuted, fontSize: 13, flex: 1 },
   menuBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: jc.surface,
-    borderRadius: jc.radius.lg,
+    borderRadius: jc.radius.xxl,
     padding: jc.space.lg,
     gap: jc.space.md,
-    ...jc.shadow,
+    ...jc.shadowSm,
     borderWidth: 1,
     borderColor: jc.border
   },
-  menuBtnPressed: { opacity: 0.92, transform: [{ scale: 0.995 }] },
+  menuBtnPressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: jc.radius.lg,
     alignItems: 'center',
     justifyContent: 'center'
   },
-  icon: { fontSize: 20, fontWeight: '700' },
+  icon: { fontSize: 22, fontWeight: '700' },
   menuText: { flex: 1 },
-  menuTitle: { fontSize: 17, fontWeight: '700', color: jc.text },
+  menuTitle: { fontSize: 16, fontWeight: '700', color: jc.text },
   menuSub: { fontSize: 13, color: jc.textMuted, marginTop: 3, lineHeight: 18 },
-  chevron: { fontSize: 22, color: jc.textSubtle, fontWeight: '300' },
+  chevron: { fontSize: 24, color: jc.primaryMuted, fontWeight: '300' },
   syncBox: {
-    backgroundColor: '#fffbeb',
-    borderRadius: jc.radius.lg,
+    backgroundColor: jc.primarySoft,
+    borderRadius: jc.radius.xl,
     padding: jc.space.lg,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: jc.primaryMuted,
     gap: jc.space.sm,
     marginTop: jc.space.sm
   },
-  syncTitle: { fontWeight: '600', color: '#92400e' },
+  syncTitle: { fontWeight: '700', color: jc.primaryDark, fontSize: 14 },
+  syncSub: { color: jc.textMuted, fontSize: 12, lineHeight: 17 },
   syncBtn: {
     backgroundColor: jc.surface,
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: jc.primaryMuted,
     padding: 12,
     borderRadius: jc.radius.md,
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: 4
   },
-  syncBtnText: { fontWeight: '700', color: '#b45309' },
+  syncBtnText: { fontWeight: '700', color: jc.primaryDark },
   disabled: { opacity: 0.5 }
 })

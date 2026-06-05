@@ -57,6 +57,7 @@
         'time-tracking': '/time-tracking',
         'my-tasks': '/my-tasks',
         'leave-platform': '/leave-platform',
+        'messages': '/messages',
         
         // Settings sub-pages
         'settings-notifications': '/settings?tab=notifications',

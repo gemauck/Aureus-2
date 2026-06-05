@@ -25,6 +25,7 @@
     "expo-image-picker": "~15.1.0",
     "expo-linking": "^6.3.1",
     "expo-location": "~17.0.1",
+    "expo-notifications": "^0.28.19",
     "expo-secure-store": "^13.0.2",
     "expo-updates": "~0.25.28",
     "jsqr": "^1.4.0",

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +14,17 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
 import { erp } from '../../theme/appTheme'
 import { projectsApi } from '../api'
+import { AssigneePickerModal } from '../components/AssigneePickerModal'
 import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
 import type { ProjectsStackParamList } from '../navigation'
-import type { ProjectTask, TaskComment } from '../types'
-import { formatDate, formatDateTime, TASK_PRIORITIES, TASK_STATUSES } from '../utils'
+import type { ChecklistItem, ErpUser, ProjectTask, TaskComment } from '../types'
+import {
+  formatDate,
+  formatDateTime,
+  isTaskOverdue,
+  TASK_PRIORITIES,
+  TASK_STATUSES
+} from '../utils'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'TaskDetail'>
 
@@ -29,6 +37,13 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const [saving, setSaving] = useState(false)
   const [commentDraft, setCommentDraft] = useState('')
   const [postingComment, setPostingComment] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [descDraft, setDescDraft] = useState('')
+  const [users, setUsers] = useState<ErpUser[]>([])
+  const [showAssignee, setShowAssignee] = useState(false)
+  const [showSubtask, setShowSubtask] = useState(false)
+  const [subtaskTitle, setSubtaskTitle] = useState('')
+  const [creatingSubtask, setCreatingSubtask] = useState(false)
 
   const load = useCallback(async () => {
     if (!accessToken) return
@@ -37,6 +52,8 @@ export function TaskDetailScreen({ route, navigation }: Props) {
     try {
       const t = await projectsApi.getTask(accessToken, taskId)
       setTask(t)
+      setTitleDraft(t.title || '')
+      setDescDraft(t.description || '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load task')
     } finally {
@@ -47,6 +64,11 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!accessToken) return
+    void projectsApi.listUsers(accessToken).then(setUsers).catch(() => setUsers([]))
+  }, [accessToken])
 
   const patchTask = async (body: Record<string, unknown>) => {
     if (!accessToken || !task) return
@@ -84,6 +106,50 @@ export function TaskDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  const saveFields = async () => {
+    if (!task) return
+    const body: Record<string, unknown> = {}
+    if (titleDraft.trim() && titleDraft !== task.title) body.title = titleDraft.trim()
+    if (descDraft !== (task.description || '')) body.description = descDraft
+    if (Object.keys(body).length) await patchTask(body)
+  }
+
+  const toggleChecklistItem = async (idx: number) => {
+    if (!task?.checklist) return
+    const next: ChecklistItem[] = task.checklist.map((item, i) =>
+      i === idx ? { ...item, done: !item.done } : item
+    )
+    await patchTask({ checklist: next })
+  }
+
+  const createSubtask = async () => {
+    if (!accessToken || !subtaskTitle.trim()) return
+    setCreatingSubtask(true)
+    try {
+      await projectsApi.createTask(accessToken, {
+        projectId,
+        parentTaskId: taskId,
+        title: subtaskTitle.trim(),
+        status: 'To Do',
+        priority: 'Medium'
+      })
+      setSubtaskTitle('')
+      setShowSubtask(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add subtask')
+    } finally {
+      setCreatingSubtask(false)
+    }
+  }
+
+  const assignUser = async (user: ErpUser | null) => {
+    await patchTask({
+      assigneeId: user?.id || null,
+      assignee: user?.name || user?.email || ''
+    })
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -108,6 +174,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const comments = task.comments || []
   const subtasks = task.subtasks || []
   const checklist = task.checklist || []
+  const overdue = isTaskOverdue(task)
 
   return (
     <View style={styles.root}>
@@ -116,8 +183,18 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           <FontAwesome5 name="arrow-left" size={16} color={erp.primary} />
           <Text style={styles.backText}>{projectName || 'Project'}</Text>
         </Pressable>
-        <Text style={styles.title}>{task.title || 'Untitled task'}</Text>
-        {task.status ? <ProjectStatusBadge label={task.status} /> : null}
+        <TextInput
+          style={styles.titleInput}
+          value={titleDraft}
+          onChangeText={setTitleDraft}
+          onBlur={() => void saveFields()}
+          placeholder="Task title"
+          placeholderTextColor={erp.textSubtle}
+        />
+        <View style={styles.headerMeta}>
+          {task.status ? <ProjectStatusBadge label={task.status} /> : null}
+          {overdue ? <Text style={styles.overduePill}>Overdue</Text> : null}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
@@ -182,40 +259,76 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           ) : null}
         </View>
 
-        {task.description ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.description}>{task.description}</Text>
-          </View>
-        ) : null}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Assignee</Text>
+          <Pressable style={styles.assigneeBtn} onPress={() => setShowAssignee(true)}>
+            <FontAwesome5 name="user" size={14} color={erp.primary} />
+            <Text style={styles.assigneeText}>{task.assignee || 'Tap to assign'}</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Description</Text>
+          <TextInput
+            style={styles.descriptionInput}
+            value={descDraft}
+            onChangeText={setDescDraft}
+            onBlur={() => void saveFields()}
+            placeholder="What needs to be done?"
+            placeholderTextColor={erp.textSubtle}
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
 
         {checklist.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Checklist</Text>
             {checklist.map((item, idx) => (
-              <View key={item.id || idx} style={styles.checkItem}>
+              <Pressable
+                key={item.id || idx}
+                style={styles.checkItem}
+                onPress={() => void toggleChecklistItem(idx)}
+              >
                 <FontAwesome5
                   name={item.done ? 'check-square' : 'square'}
                   size={16}
                   color={item.done ? erp.success : erp.textSubtle}
                 />
                 <Text style={[styles.checkText, item.done && styles.checkDone]}>{item.text}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : null}
 
-        {subtasks.length > 0 ? (
-          <View style={styles.section}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Subtasks ({subtasks.length})</Text>
-            {subtasks.map((st) => (
-              <View key={st.id} style={styles.subtaskCard}>
+            <Pressable onPress={() => setShowSubtask(true)}>
+              <Text style={styles.addLink}>+ Add</Text>
+            </Pressable>
+          </View>
+          {subtasks.length === 0 ? (
+            <Text style={styles.emptyComments}>No subtasks yet.</Text>
+          ) : (
+            subtasks.map((st) => (
+              <Pressable
+                key={st.id}
+                style={styles.subtaskCard}
+                onPress={() =>
+                  navigation.push('TaskDetail', {
+                    taskId: st.id,
+                    projectId,
+                    projectName
+                  })
+                }
+              >
                 <Text style={styles.subtaskTitle}>{st.title}</Text>
                 {st.status ? <ProjectStatusBadge label={st.status} compact /> : null}
-              </View>
-            ))}
-          </View>
-        ) : null}
+              </Pressable>
+            ))
+          )}
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
@@ -254,6 +367,45 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       </ScrollView>
+
+      <AssigneePickerModal
+        visible={showAssignee}
+        users={users}
+        selectedId={task.assigneeId}
+        onSelect={(u) => void assignUser(u)}
+        onClose={() => setShowAssignee(false)}
+      />
+
+      <Modal visible={showSubtask} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add subtask</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Subtask title"
+              value={subtaskTitle}
+              onChangeText={setSubtaskTitle}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancel} onPress={() => setShowSubtask(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSave, creatingSubtask && styles.disabled]}
+                disabled={creatingSubtask || !subtaskTitle.trim()}
+                onPress={() => void createSubtask()}
+              >
+                {creatingSubtask ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Add</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -275,7 +427,23 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   backText: { color: erp.primary, fontWeight: '700', fontSize: 15 },
-  title: { fontSize: 22, fontWeight: '800', color: erp.text, lineHeight: 28 },
+  titleInput: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: erp.text,
+    lineHeight: 28,
+    paddingVertical: 4
+  },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  overduePill: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: erp.danger,
+    backgroundColor: erp.dangerSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999
+  },
   body: { padding: erp.space.lg, paddingBottom: 40, gap: 16 },
   section: { gap: 10 },
   sectionTitle: { fontSize: 13, fontWeight: '800', color: erp.textMuted, textTransform: 'uppercase' },
@@ -303,7 +471,7 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 11, fontWeight: '700', color: erp.textSubtle, textTransform: 'uppercase' },
   infoValue: { fontSize: 14, fontWeight: '700', color: erp.text, marginTop: 4 },
-  description: {
+  descriptionInput: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.md,
     padding: 14,
@@ -311,8 +479,62 @@ const styles = StyleSheet.create({
     borderColor: erp.border,
     fontSize: 15,
     color: erp.text,
-    lineHeight: 22
+    lineHeight: 22,
+    minHeight: 100
   },
+  assigneeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: erp.surface,
+    borderRadius: erp.radius.md,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: erp.border
+  },
+  assigneeText: { fontSize: 15, fontWeight: '700', color: erp.text },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  addLink: { fontSize: 14, fontWeight: '800', color: erp.primary },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalCard: {
+    backgroundColor: erp.surface,
+    borderTopLeftRadius: erp.radius.xl,
+    borderTopRightRadius: erp.radius.xl,
+    padding: erp.space.lg,
+    paddingBottom: 32
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, color: erp.text },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.md,
+    padding: 12,
+    backgroundColor: erp.bg,
+    color: erp.text,
+    marginBottom: 12
+  },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  modalCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: erp.radius.md,
+    borderWidth: 1,
+    borderColor: erp.border
+  },
+  modalCancelText: { fontWeight: '700', color: erp.textMuted },
+  modalSave: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: erp.radius.md,
+    backgroundColor: erp.primary
+  },
+  modalSaveText: { fontWeight: '800', color: '#fff' },
   checkItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   checkText: { fontSize: 14, color: erp.text, flex: 1 },
   checkDone: { textDecorationLine: 'line-through', color: erp.textMuted },

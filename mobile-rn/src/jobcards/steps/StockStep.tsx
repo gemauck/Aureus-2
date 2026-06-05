@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo } from 'react'
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { createStockEntryRow } from '../../../../src/jobCardWizard/formDefaults.js'
 import { useJobCardWizard } from '../WizardContext'
 import { useLocationInventory } from '../hooks/useLocationInventory'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
+import { InfoBanner } from '../components/InfoBanner'
+import { formStyles } from '../components/formStyles'
 import { jc } from '../theme'
 import type { JobCardFormData, StockEntryRow as StockRow, StockLocation } from '../types'
 
@@ -12,20 +14,18 @@ function StockEntryRowEditor({
   row,
   idx,
   total,
-  stockLocations,
   locationOptions,
   onUpdate,
   onRemove,
-  onApply
+  onAddLine
 }: {
   row: StockRow
   idx: number
   total: number
-  stockLocations: StockLocation[]
   locationOptions: { value: string; label: string }[]
   onUpdate: (id: string, patch: Partial<StockRow>) => void
   onRemove: (id: string) => void
-  onApply: () => void
+  onAddLine: (rowId: string) => void
 }) {
   const { rows, loading, error } = useLocationInventory(row.locationId, Boolean(row.locationId))
 
@@ -39,14 +39,15 @@ function StockEntryRowEditor({
   )
 
   const selectedPick = rows.find((i) => i.sku === row.sku)
+  const canAdd = Boolean(row.locationId && row.sku && row.quantity > 0)
 
   return (
     <View style={styles.stockRow}>
       {total > 1 ? (
         <View style={styles.locHeader}>
-          <Text style={styles.locLabel}>Line {idx + 1}</Text>
+          <Text style={styles.locLabel}>Stock location {idx + 1}</Text>
           <Pressable onPress={() => onRemove(row.id)}>
-            <Text style={styles.remove}>Remove</Text>
+            <Text style={styles.remove}>Remove location</Text>
           </Pressable>
         </View>
       ) : null}
@@ -55,7 +56,7 @@ function StockEntryRowEditor({
         value={row.locationId}
         options={locationOptions}
         onChange={(locationId) => onUpdate(row.id, { locationId, sku: '' })}
-        placeholder="Select location…"
+        placeholder="Select stock location first…"
       />
       {row.locationId && loading ? (
         <View style={styles.loadingRow}>
@@ -64,19 +65,19 @@ function StockEntryRowEditor({
         </View>
       ) : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {row.locationId && !loading && skuOptions.length === 0 ? (
+        <Text style={styles.noStockHint}>No on-hand stock at this location.</Text>
+      ) : null}
       <SearchableSelect
         label="Component / SKU"
         value={row.sku}
         options={skuOptions}
-        onChange={(sku) => {
-          onUpdate(row.id, { sku })
-          onApply()
-        }}
+        onChange={(sku) => onUpdate(row.id, { sku })}
         placeholder={
           !row.locationId
             ? 'Choose location first'
             : skuOptions.length
-              ? 'Search SKU…'
+              ? 'Search component…'
               : 'No stock at this location'
         }
         disabled={!row.locationId || loading}
@@ -89,13 +90,20 @@ function StockEntryRowEditor({
         }
       />
       <TextInput
-        style={styles.input}
+        style={formStyles.input}
         keyboardType="decimal-pad"
         placeholder="Quantity used"
+        placeholderTextColor={jc.textSubtle}
         value={row.quantity ? String(row.quantity) : ''}
         onChangeText={(t) => onUpdate(row.id, { quantity: parseFloat(t) || 0 })}
-        onBlur={onApply}
       />
+      <Pressable
+        style={[formStyles.primaryBtn, !canAdd && styles.btnDisabled]}
+        disabled={!canAdd}
+        onPress={() => onAddLine(row.id)}
+      >
+        <Text style={formStyles.primaryBtnText}>+ Add to job card</Text>
+      </Pressable>
     </View>
   )
 }
@@ -119,21 +127,34 @@ export function StockStep() {
     label: l.name || l.code || l.id
   }))
 
-  function applyStockFromRows() {
-    const lines = stockEntryRows
-      .filter((r) => r.locationId && r.sku && r.quantity > 0)
-      .map((r) => {
-        const loc = stockLocations.find((l) => l.id === r.locationId)
-        return {
-          id: r.id,
-          sku: r.sku,
-          quantity: r.quantity,
-          locationId: r.locationId,
-          locationName: loc?.name || '',
-          itemName: r.sku
-        }
-      })
-    setFormData((f) => ({ ...f, stockUsed: lines }))
+  const totalMaterialCost = useMemo(
+    () => (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0),
+    [formData.materialsBought]
+  )
+
+  function addStockFromRow(rowId: string) {
+    const row = stockEntryRows.find((r) => r.id === rowId)
+    if (!row?.locationId || !row.sku || !(row.quantity > 0)) return
+    const loc = stockLocations.find((l) => l.id === row.locationId)
+    const line = {
+      id: row.id,
+      sku: row.sku,
+      quantity: row.quantity,
+      locationId: row.locationId,
+      locationName: loc?.name || '',
+      itemName: row.sku
+    }
+    setFormData((f) => {
+      const existing = f.stockUsed.filter((x) => x.id !== line.id)
+      return { ...f, stockUsed: [...existing, line] }
+    })
+  }
+
+  function removeStockLine(id: string) {
+    setFormData((f) => ({
+      ...f,
+      stockUsed: f.stockUsed.filter((x) => x.id !== id)
+    }))
   }
 
   function updateRow(id: string, patch: Partial<(typeof stockEntryRows)[0]>) {
@@ -143,50 +164,74 @@ export function StockStep() {
   return (
     <View>
       {!stockLocations.length ? (
-        <Text style={styles.warn}>
+        <InfoBanner tone="warning">
           Stock locations not loaded — check your connection and reopen this step.
-        </Text>
+        </InfoBanner>
       ) : null}
+
       <SectionCard
-        title="Stock used"
-        subtitle="Pick a warehouse, then choose a SKU. Lists load per location."
+        title="Stock Used"
+        subtitle="Record components issued from inventory for this job."
         accent
+        badge={formData.stockUsed.length ? `${formData.stockUsed.length} item(s)` : undefined}
       >
+        <InfoBanner tone="info">
+          Select the stock location first (e.g. each bakkie or warehouse). The component list only
+          includes items with quantity on hand at that site. Use “Add another stock location” when
+          stock comes from more than one place.
+        </InfoBanner>
+
         {stockEntryRows.map((row, idx) => (
           <StockEntryRowEditor
             key={row.id}
             row={row}
             idx={idx}
             total={stockEntryRows.length}
-            stockLocations={stockLocations}
             locationOptions={locationOptions}
             onUpdate={updateRow}
             onRemove={(id) => setStockEntryRows((rows) => rows.filter((r) => r.id !== id))}
-            onApply={applyStockFromRows}
+            onAddLine={addStockFromRow}
           />
         ))}
+
         <Pressable
-          style={styles.secondaryBtn}
+          style={formStyles.secondaryBtn}
           onPress={() => setStockEntryRows((r) => [...r, createStockEntryRow()])}
         >
-          <Text style={styles.secondaryBtnText}>+ Add stock line</Text>
+          <Text style={formStyles.secondaryBtnText}>+ Add another stock location</Text>
         </Pressable>
+
         {formData.stockUsed.length > 0 ? (
           <View style={styles.appliedBox}>
-            <Text style={styles.summary}>{formData.stockUsed.length} line(s) on job card</Text>
             {formData.stockUsed.map((line) => (
-              <Text key={`${line.sku}-${line.locationId}`} style={styles.lineItem}>
-                {line.itemName || line.sku} × {line.quantity} @ {line.locationName || 'site'}
-              </Text>
+              <View key={line.id || `${line.sku}-${line.locationId}`} style={styles.appliedRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.appliedTitle}>{line.itemName || line.sku}</Text>
+                  <Text style={styles.appliedSub}>
+                    {line.locationName || 'Location N/A'} · Qty: {line.quantity} · SKU: {line.sku}
+                  </Text>
+                </View>
+                <Pressable onPress={() => removeStockLine(String(line.id))} hitSlop={8}>
+                  <Text style={styles.remove}>Remove</Text>
+                </Pressable>
+              </View>
             ))}
           </View>
         ) : (
-          <Text style={styles.hint}>Pick location, SKU, and qty — saves automatically.</Text>
+          <Text style={styles.hint}>No stock lines added yet.</Text>
         )}
       </SectionCard>
 
-      <SectionCard title="Materials bought (ad-hoc)">
-        <MaterialSection formData={formData} setFormData={setFormData} />
+      <SectionCard
+        title="Materials Bought (Ad-hoc)"
+        subtitle="Purchases made on site that are not from inventory."
+        badge={formData.materialsBought.length ? `${formData.materialsBought.length}` : undefined}
+      >
+        <MaterialSection
+          formData={formData}
+          setFormData={setFormData}
+          totalMaterialCost={totalMaterialCost}
+        />
       </SectionCard>
     </View>
   )
@@ -194,10 +239,12 @@ export function StockStep() {
 
 function MaterialSection({
   formData,
-  setFormData
+  setFormData,
+  totalMaterialCost
 }: {
   formData: JobCardFormData
   setFormData: React.Dispatch<React.SetStateAction<JobCardFormData>>
+  totalMaterialCost: number
 }) {
   const [matDraft, setMatDraft] = React.useState({
     itemName: '',
@@ -208,33 +255,40 @@ function MaterialSection({
 
   return (
     <>
+      <View style={formStyles.row}>
+        <TextInput
+          style={[formStyles.input, { flex: 1 }]}
+          placeholder="Item name *"
+          placeholderTextColor={jc.textSubtle}
+          value={matDraft.itemName}
+          onChangeText={(itemName) => setMatDraft((d) => ({ ...d, itemName }))}
+        />
+        <TextInput
+          style={[formStyles.input, { flex: 0.45 }]}
+          keyboardType="decimal-pad"
+          placeholder="Cost (R) *"
+          placeholderTextColor={jc.textSubtle}
+          value={matDraft.cost}
+          onChangeText={(cost) => setMatDraft((d) => ({ ...d, cost }))}
+        />
+      </View>
       <TextInput
-        style={styles.input}
-        placeholder="Item name"
-        value={matDraft.itemName}
-        onChangeText={(itemName) => setMatDraft((d) => ({ ...d, itemName }))}
-      />
-      <TextInput
-        style={styles.input}
+        style={formStyles.input}
         placeholder="Description"
+        placeholderTextColor={jc.textSubtle}
         value={matDraft.description}
         onChangeText={(description) => setMatDraft((d) => ({ ...d, description }))}
       />
       <TextInput
-        style={styles.input}
-        placeholder="Reason"
+        style={formStyles.input}
+        placeholder="Reason for purchase"
+        placeholderTextColor={jc.textSubtle}
         value={matDraft.reason}
         onChangeText={(reason) => setMatDraft((d) => ({ ...d, reason }))}
       />
-      <TextInput
-        style={styles.input}
-        keyboardType="decimal-pad"
-        placeholder="Cost"
-        value={matDraft.cost}
-        onChangeText={(cost) => setMatDraft((d) => ({ ...d, cost }))}
-      />
       <Pressable
-        style={styles.primaryBtn}
+        style={[formStyles.primaryBtn, !matDraft.itemName.trim() && styles.btnDisabled]}
+        disabled={!matDraft.itemName.trim()}
         onPress={() => {
           if (!matDraft.itemName.trim()) return
           setFormData((f) => ({
@@ -253,69 +307,92 @@ function MaterialSection({
           setMatDraft({ itemName: '', description: '', reason: '', cost: '' })
         }}
       >
-        <Text style={styles.primaryBtnText}>Add material</Text>
+        <Text style={formStyles.primaryBtnText}>+ Add material</Text>
       </Pressable>
-      {formData.materialsBought.map((m) => (
-        <View key={m.id} style={styles.matRow}>
-          <Text style={styles.matTitle}>{m.itemName}</Text>
-          <Text style={styles.matSub}>
-            R{m.cost} — {m.reason}
-          </Text>
-          <Pressable
-            onPress={() =>
-              setFormData((f) => ({
-                ...f,
-                materialsBought: f.materialsBought.filter((x) => x.id !== m.id)
-              }))
-            }
-          >
-            <Text style={styles.matRemove}>Remove</Text>
-          </Pressable>
-        </View>
-      ))}
+
+      {formData.materialsBought.length ? (
+        <>
+          {formData.materialsBought.map((m) => (
+            <View key={m.id} style={styles.matRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.matTitle}>{m.itemName}</Text>
+                {m.description ? <Text style={styles.matSub}>{m.description}</Text> : null}
+                {m.reason ? <Text style={styles.matSub}>Reason: {m.reason}</Text> : null}
+                <Text style={styles.matCost}>R {m.cost.toFixed(2)}</Text>
+              </View>
+              <Pressable
+                onPress={() =>
+                  setFormData((f) => ({
+                    ...f,
+                    materialsBought: f.materialsBought.filter((x) => x.id !== m.id)
+                  }))
+                }
+              >
+                <Text style={styles.remove}>Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total cost</Text>
+            <Text style={styles.totalValue}>R {totalMaterialCost.toFixed(2)}</Text>
+          </View>
+        </>
+      ) : (
+        <Text style={styles.hint}>No ad-hoc purchases recorded yet.</Text>
+      )}
     </>
   )
 }
 
 const styles = StyleSheet.create({
-  stockRow: { gap: 10, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: jc.border },
+  stockRow: {
+    gap: jc.space.sm,
+    marginBottom: jc.space.md,
+    paddingBottom: jc.space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: jc.border
+  },
   locLabel: { fontSize: 12, fontWeight: '600', color: jc.textMuted },
   locHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   remove: { color: jc.danger, fontSize: 13, fontWeight: '600' },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   loadingText: { color: jc.textMuted, fontSize: 13 },
-  errorText: { color: '#b45309', fontSize: 13 },
-  warn: { color: '#b45309', marginBottom: 12, padding: 10, backgroundColor: '#fffbeb', borderRadius: jc.radius.md },
-  input: {
+  errorText: { color: jc.warning, fontSize: 13 },
+  noStockHint: { color: jc.textMuted, fontSize: 12 },
+  btnDisabled: { opacity: 0.45 },
+  appliedBox: { gap: jc.space.sm, marginTop: jc.space.sm },
+  appliedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: jc.space.sm,
+    backgroundColor: jc.surfaceMuted,
+    borderRadius: jc.radius.md,
     borderWidth: 1,
     borderColor: jc.border,
-    borderRadius: jc.radius.md,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: jc.surface,
-    color: jc.text
+    padding: jc.space.md
   },
-  primaryBtn: { backgroundColor: jc.primary, padding: 14, borderRadius: jc.radius.md, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontWeight: '700' },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: jc.primary,
-    padding: 12,
-    borderRadius: jc.radius.md,
-    alignItems: 'center'
-  },
-  secondaryBtnText: { color: jc.primaryDark, fontWeight: '700' },
-  appliedBox: {
-    backgroundColor: jc.primarySoft,
-    padding: jc.space.md,
-    borderRadius: jc.radius.md,
-    gap: 4
-  },
-  summary: { color: jc.primaryDark, fontWeight: '700' },
-  lineItem: { color: jc.text, fontSize: 13 },
+  appliedTitle: { fontWeight: '700', color: jc.text, fontSize: 14 },
+  appliedSub: { color: jc.textMuted, fontSize: 12, marginTop: 2 },
   hint: { color: jc.textMuted, fontSize: 13, fontStyle: 'italic' },
-  matRow: { paddingVertical: 8, borderTopWidth: 1, borderTopColor: jc.border },
-  matTitle: { fontWeight: '600', color: jc.text },
-  matSub: { color: jc.textMuted, fontSize: 13 },
-  matRemove: { color: jc.danger, marginTop: 4, fontWeight: '600' }
+  matRow: {
+    flexDirection: 'row',
+    gap: jc.space.sm,
+    paddingVertical: jc.space.sm,
+    borderTopWidth: 1,
+    borderTopColor: jc.border
+  },
+  matTitle: { fontWeight: '700', color: jc.text },
+  matSub: { color: jc.textMuted, fontSize: 13, marginTop: 2 },
+  matCost: { fontWeight: '700', color: jc.text, marginTop: 4 },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: jc.border,
+    paddingTop: jc.space.md,
+    marginTop: jc.space.sm
+  },
+  totalLabel: { fontWeight: '700', color: jc.text },
+  totalValue: { fontSize: 18, fontWeight: '800', color: jc.primary }
 })

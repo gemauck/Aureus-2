@@ -1,10 +1,13 @@
 import React from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, TextInput, View } from 'react-native'
 import { useJobCardWizard } from '../WizardContext'
 import { SectionCard } from '../components/SectionCard'
+import { DateTimeField } from '../components/DateTimeField'
+import { formStyles } from '../components/formStyles'
 import { VoiceNoteField } from '../media/VoiceNoteField'
 import { SectionMediaPicker } from '../media/SectionMediaPicker'
 import { ServiceFormSection } from '../serviceForms/ServiceFormSection'
+import { jc } from '../theme'
 
 export function WorkStep() {
   const {
@@ -18,13 +21,17 @@ export function WorkStep() {
 
   return (
     <View>
-      <SectionCard title="Diagnosis" subtitle="What was found on site?">
+      <SectionCard
+        title="Diagnosis"
+        subtitle="Summarise the fault, findings or observations."
+      >
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={[formStyles.input, formStyles.multiline]}
           multiline
           value={formData.diagnosis}
           onChangeText={(diagnosis) => setFormData((f) => ({ ...f, diagnosis }))}
-          placeholder="Diagnosis notes…"
+          placeholder="e.g. Pump not priming due to airlock in suction line…"
+          placeholderTextColor={jc.textSubtle}
         />
         <VoiceNoteField
           section="diagnosis"
@@ -39,13 +46,14 @@ export function WorkStep() {
         />
       </SectionCard>
 
-      <SectionCard title="Actions Taken">
+      <SectionCard title="Actions Taken" subtitle="Document work performed on site.">
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={[formStyles.input, formStyles.multiline]}
           multiline
           value={formData.actionsTaken}
           onChangeText={(actionsTaken) => setFormData((f) => ({ ...f, actionsTaken }))}
           placeholder="Work performed…"
+          placeholderTextColor={jc.textSubtle}
         />
         <VoiceNoteField
           section="actionsTaken"
@@ -60,27 +68,47 @@ export function WorkStep() {
         />
       </SectionCard>
 
-      <SectionCard title="Future Work Required">
+      <SectionCard
+        title="Future Work"
+        subtitle="Capture additional work required and schedule the next visit."
+      >
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={[formStyles.input, formStyles.multiline]}
           multiline
           value={formData.futureWorkRequired}
           onChangeText={(futureWorkRequired) => setFormData((f) => ({ ...f, futureWorkRequired }))}
-          placeholder="Follow-up work…"
+          placeholder="Describe remaining tasks, parts to source, or follow-up work…"
+          placeholderTextColor={jc.textSubtle}
         />
         <SectionMediaPicker
           section="futureWorkRequired"
           items={sectionWorkMedia.futureWorkRequired}
           onChange={(futureWorkRequired) => setSectionWorkMedia((m) => ({ ...m, futureWorkRequired }))}
         />
+        <DateTimeField
+          label="Scheduled follow-up date & time"
+          value={formData.futureWorkScheduledAt}
+          onChange={(futureWorkScheduledAt) => setFormData((f) => ({ ...f, futureWorkScheduledAt }))}
+        />
       </SectionCard>
 
-      <SectionCard title="Other Comments">
+      <SectionCard
+        title="Additional Notes"
+        subtitle="Handover notes, risks or recommended next actions."
+      >
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={[formStyles.input, formStyles.multiline]}
           multiline
           value={formData.otherComments}
           onChangeText={(otherComments) => setFormData((f) => ({ ...f, otherComments }))}
+          placeholder="Outstanding concerns, customer requests, safety notes…"
+          placeholderTextColor={jc.textSubtle}
+        />
+        <VoiceNoteField
+          section="otherComments"
+          voiceClips={voiceAttachments}
+          onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
       </SectionCard>
 
@@ -88,15 +116,3 @@ export function WorkStep() {
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: '#fff'
-  },
-  multiline: { minHeight: 100, textAlignVertical: 'top' }
-})

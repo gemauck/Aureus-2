@@ -3,7 +3,7 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications'];
+const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications', 'messages'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 /** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
 const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense'];
@@ -1178,6 +1178,35 @@ const MainLayout = () => {
     }, [manufacturingComponentReady]);
     
     const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
+    const Messenger = window.Messenger || (() => <div className="text-center py-12 text-gray-500">Messages loading...</div>);
+
+    const [chatUnread, setChatUnread] = React.useState(0);
+    React.useEffect(() => {
+        if (!user?.id) return;
+        const token = window.storage?.getToken?.();
+        if (!token) return;
+        const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+        const loadUnread = async () => {
+            try {
+                const res = await fetch(`${apiBase}/api/chat/unread`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    credentials: 'include'
+                });
+                if (!res.ok) return;
+                const json = await res.json();
+                const count = json?.data?.unreadCount ?? json?.unreadCount ?? 0;
+                setChatUnread(count);
+            } catch (_) { /* chat tables may not exist yet */ }
+        };
+        loadUnread();
+        const interval = setInterval(loadUnread, 30000);
+        const onChatUnread = (e) => setChatUnread(e.detail?.count ?? 0);
+        window.addEventListener('chat:unread', onChatUnread);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('chat:unread', onChatUnread);
+        };
+    }, [user?.id]);
     
     const Users = React.useMemo(() => {
         const UsersComponent = window.Users || window.UserManagement;
@@ -1448,6 +1477,7 @@ const MainLayout = () => {
         { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
+        { id: 'messages', label: 'Messages', icon: 'fa-comments', permission: null },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
         // Leave & HR hidden from nav for now — restore: { id: 'leave-platform', label: 'Leave & HR', icon: 'fa-user-clock', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
@@ -1642,6 +1672,8 @@ const MainLayout = () => {
                     return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
                 case 'teams': 
                     return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
+                case 'messages':
+                    return <ErrorBoundary key="messages"><Messenger /></ErrorBoundary>;
                 case 'users': 
                     if (permissionChecker && window.PERMISSIONS) {
                         if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_USERS)) {
@@ -1724,7 +1756,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker, erpCalendarReady, user, isDark]);
+    }, [currentPage, Dashboard, Projects, Teams, Messenger, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker, erpCalendarReady, user, isDark]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
@@ -1754,7 +1786,7 @@ const MainLayout = () => {
                     setSidebarOpen(false);
                 }
             }}
-            className={`w-full flex items-center ${
+            className={`w-full flex items-center relative ${
                 sidebarOpen
                     ? `${effectiveIsMobile ? 'px-4 py-2.5 mx-0 my-0.5' : 'px-5 py-2.5 mx-2 my-1'} space-x-3 rounded-xl justify-start text-left`
                     : 'px-3 py-2.5 mx-2 my-1 justify-center rounded-xl'
@@ -1770,7 +1802,19 @@ const MainLayout = () => {
             title={!sidebarOpen ? item.label : ''}
         >
             <i className={`fas ${item.icon} ${sidebarOpen ? 'text-base' : 'text-lg'} ${currentPage === item.id ? (isDark ? 'text-blue-300' : 'text-blue-700') : 'opacity-70'}`}></i>
-            {sidebarOpen && <span className={`text-base font-medium ${currentPage === item.id ? '' : 'font-normal'}`}>{item.label}</span>}
+            {sidebarOpen && (
+                <span className={`text-base font-medium flex-1 flex items-center justify-between gap-2 ${currentPage === item.id ? '' : 'font-normal'}`}>
+                    <span>{item.label}</span>
+                    {item.id === 'messages' && chatUnread > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">
+                            {chatUnread > 99 ? '99+' : chatUnread}
+                        </span>
+                    )}
+                </span>
+            )}
+            {!sidebarOpen && item.id === 'messages' && chatUnread > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-blue-500 border-2 border-gray-900" />
+            )}
         </button>
     );
 

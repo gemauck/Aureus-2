@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Modal,
   Pressable,
@@ -16,6 +16,7 @@ import { COMPANY_NAME, erp } from '../../theme/appTheme'
 import { useAuth } from '../../state/AuthContext'
 import { getVisibleMenuItems } from '../../utils/menuAccess'
 import { useAppShell } from './AppShellContext'
+import { erpApi } from '../../services/erpApi'
 
 type Props = {
   navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList>>
@@ -36,10 +37,30 @@ function formatRole(role?: string) {
 export function DrawerMenu({ navigationRef, currentRoute }: Props) {
   const insets = useSafeAreaInsets()
   const { menuOpen, closeMenu } = useAppShell()
-  const { user, signOut } = useAuth()
+  const { user, signOut, accessToken } = useAuth()
+  const [chatUnread, setChatUnread] = useState(0)
   const items = getVisibleMenuItems(user)
   const mainItems = items.filter((i) => i.section !== 'footer')
   const footerItems = items.filter((i) => i.section === 'footer')
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    const load = async () => {
+      try {
+        const count = await erpApi.getChatUnreadCount(accessToken)
+        if (!cancelled) setChatUnread(count)
+      } catch {
+        if (!cancelled) setChatUnread(0)
+      }
+    }
+    load()
+    const id = setInterval(load, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [accessToken, menuOpen])
 
   function navigateTo(screen: keyof RootStackParamList) {
     closeMenu()
@@ -64,6 +85,11 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
           style={styles.itemIcon}
         />
         <Text style={[styles.itemLabel, active && styles.itemLabelActive]}>{item.label}</Text>
+        {item.id === 'messages' && chatUnread > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{chatUnread > 99 ? '99+' : chatUnread}</Text>
+          </View>
+        ) : null}
       </Pressable>
     )
   }
@@ -196,6 +222,16 @@ const styles = StyleSheet.create({
   itemIcon: { width: 22, textAlign: 'center' },
   itemLabel: { color: erp.sidebarText, fontSize: 15, fontWeight: '500', flex: 1 },
   itemLabelActive: { color: '#fff', fontWeight: '700' },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   divider: { height: 1, backgroundColor: erp.sidebarHover, marginVertical: 8, marginHorizontal: 8 },
   signOutItem: { marginTop: 4 }
 })

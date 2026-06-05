@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { erp } from '../../theme/appTheme'
 import type { ProjectTask } from '../types'
-import { formatDate, priorityColor } from '../utils'
+import { formatDate, isTaskDueSoon, isTaskOverdue, priorityColor } from '../utils'
 import { ProjectStatusBadge } from './ProjectStatusBadge'
 
 type Props = {
@@ -13,12 +13,22 @@ type Props = {
 }
 
 export function TaskRow({ task, showProject, onPress }: Props) {
+  const overdue = isTaskOverdue(task)
+  const dueSoon = isTaskDueSoon(task)
   const priColor = priorityColor(task.priority)
   const subCount = task.subtasks?.length ?? 0
   const commentCount = task.comments?.length ?? 0
 
   return (
-    <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        pressed && styles.pressed,
+        overdue && styles.cardOverdue,
+        dueSoon && !overdue && styles.cardDueSoon
+      ]}
+      onPress={onPress}
+    >
       <View style={styles.top}>
         <Text style={styles.title} numberOfLines={2}>
           {task.title || 'Untitled task'}
@@ -43,9 +53,15 @@ export function TaskRow({ task, showProject, onPress }: Props) {
             <FontAwesome5 name="user" size={10} color={erp.textMuted} /> {task.assignee}
           </Text>
         ) : null}
+        {overdue ? (
+          <Text style={styles.overdueBadge}>Overdue</Text>
+        ) : dueSoon ? (
+          <Text style={styles.dueSoonBadge}>Due soon</Text>
+        ) : null}
         {task.dueDate ? (
-          <Text style={styles.metaChip}>
-            <FontAwesome5 name="calendar" size={10} color={erp.textMuted} /> {formatDate(task.dueDate)}
+          <Text style={[styles.metaChip, overdue && { color: erp.danger }]}>
+            <FontAwesome5 name="calendar" size={10} color={overdue ? erp.danger : erp.textMuted} />{' '}
+            {formatDate(task.dueDate)}
           </Text>
         ) : null}
         {subCount > 0 ? (
@@ -72,6 +88,8 @@ const styles = StyleSheet.create({
     borderColor: erp.border,
     marginBottom: 8
   },
+  cardOverdue: { borderColor: '#fecaca', backgroundColor: '#fffbfb' },
+  cardDueSoon: { borderColor: '#fde68a' },
   pressed: { opacity: 0.92 },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { flex: 1, fontSize: 15, fontWeight: '800', color: erp.text, lineHeight: 20 },
@@ -79,5 +97,7 @@ const styles = StyleSheet.create({
   priorityText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
   project: { fontSize: 12, color: erp.textMuted, marginTop: 6, fontWeight: '600' },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 },
-  metaChip: { fontSize: 12, color: erp.textMuted, fontWeight: '600' }
+  metaChip: { fontSize: 12, color: erp.textMuted, fontWeight: '600' },
+  overdueBadge: { fontSize: 10, fontWeight: '800', color: erp.danger },
+  dueSoonBadge: { fontSize: 10, fontWeight: '800', color: erp.warning }
 })

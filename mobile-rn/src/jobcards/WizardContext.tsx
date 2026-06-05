@@ -48,6 +48,8 @@ import type {
 
 type WizardContextValue = {
   loading: boolean
+  referenceRefreshing: boolean
+  ensureReferenceDataLoaded: () => Promise<void>
   wizardFlow: WizardFlow
   setWizardFlow: (f: WizardFlow) => void
   currentStep: number
@@ -117,6 +119,7 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const { isOnline } = useNetwork()
 
   const [loading, setLoading] = useState(true)
+  const [referenceRefreshing, setReferenceRefreshing] = useState(false)
   const [wizardFlow, setWizardFlow] = useState<WizardFlow>('landing')
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<JobCardFormData>(createEmptyFormData())
@@ -170,58 +173,61 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     setUnsyncedCount(list.length)
   }, [])
 
-  const loadReferenceData = useCallback(async () => {
-    try {
-      const [cachedClientsRaw, cachedProjectsRaw, cachedUsersRaw] = await Promise.all([
-        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.clients),
-        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.projects),
-        AsyncStorage.getItem(REFERENCE_CACHE_KEYS.users)
-      ])
-      const cachedClients = JSON.parse(cachedClientsRaw || '[]')
-      if (Array.isArray(cachedClients) && cachedClients.length) setClients(cachedClients)
-      const cachedUsers = JSON.parse(cachedUsersRaw || '[]')
-      if (Array.isArray(cachedUsers) && cachedUsers.length) {
-        setUsers(activeTechnicianUsers(cachedUsers))
-      }
-      const cachedProjects = JSON.parse(cachedProjectsRaw || '[]')
-      if (Array.isArray(cachedProjects) && cachedProjects.length) {
-        setProjects(
-          cachedProjects.map((p: { id: string; name?: string; clientId?: string; clientName?: string }) => ({
-            id: String(p.id),
-            name: p.name || String(p.id),
-            clientId: p.clientId ? String(p.clientId) : undefined,
-            clientName: p.clientName
-          }))
-        )
-      }
-    } catch {
-      /* cache optional */
-    } finally {
-      setLoading(false)
-    }
+  const loadReferenceData = useCallback(
+    async (opts: { silent?: boolean } = {}) => {
+      const silent = Boolean(opts.silent)
+      if (!silent) setLoading(true)
+      else setReferenceRefreshing(true)
 
-    if (!isOnline) return
-
-    void (async () => {
       try {
-        const usersPromise = jobcardsApi.getUsers(accessToken || undefined).catch(() => [])
-        const clientsPromise = accessToken
-          ? jobcardsApi.getClients(accessToken).catch(() => [])
-          : Promise.resolve([])
-        const projectsPromise = accessToken
-          ? jobcardsApi.getProjects(accessToken).catch(() => [])
-          : Promise.resolve([])
-        const [c, u, proj] = await Promise.all([clientsPromise, usersPromise, projectsPromise])
-        if (c.length) {
-          setClients(c)
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.clients, JSON.stringify(c))
+        const [cachedClientsRaw, cachedProjectsRaw, cachedUsersRaw] = await Promise.all([
+          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.clients),
+          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.projects),
+          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.users)
+        ])
+        const cachedClients = JSON.parse(cachedClientsRaw || '[]')
+        if (Array.isArray(cachedClients) && cachedClients.length) setClients(cachedClients)
+        const cachedUsers = JSON.parse(cachedUsersRaw || '[]')
+        if (Array.isArray(cachedUsers) && cachedUsers.length) {
+          setUsers(activeTechnicianUsers(cachedUsers))
         }
-        const technicians = activeTechnicianUsers(u)
+        const cachedProjects = JSON.parse(cachedProjectsRaw || '[]')
+        if (Array.isArray(cachedProjects) && cachedProjects.length) {
+          setProjects(
+            cachedProjects.map(
+              (p: { id: string; name?: string; clientId?: string; clientName?: string; status?: string }) => ({
+                id: String(p.id),
+                name: p.name || String(p.id),
+                clientId: p.clientId ? String(p.clientId) : undefined,
+                clientName: p.clientName,
+                status: p.status
+              })
+            )
+          )
+        }
+
+        if (!isOnline) return
+
+        const [c, u, proj] = await Promise.all([
+          jobcardsApi.loadClients(accessToken || undefined),
+          jobcardsApi.getUsers(accessToken || undefined),
+          accessToken ? jobcardsApi.getProjects(accessToken) : Promise.resolve([])
+        ])
+
+        if (Array.isArray(c)) {
+          setClients(c)
+          if (c.length) {
+            await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.clients, JSON.stringify(c))
+          }
+        }
+
+        const technicians = activeTechnicianUsers(Array.isArray(u) ? u : [])
+        setUsers(technicians)
         if (technicians.length) {
-          setUsers(technicians)
           await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.users, JSON.stringify(technicians))
         }
-        if (proj.length) {
+
+        if (Array.isArray(proj)) {
           const normalized = proj.map((p) => ({
             id: String(p.id),
             name: p.name || String(p.id),
@@ -230,13 +236,24 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
             status: p.status
           }))
           setProjects(normalized)
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.projects, JSON.stringify(normalized))
+          if (normalized.length) {
+            await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.projects, JSON.stringify(normalized))
+          }
         }
       } catch {
-        /* background refresh */
+        /* cache / network optional */
+      } finally {
+        if (!silent) setLoading(false)
+        else setReferenceRefreshing(false)
       }
-    })()
-  }, [accessToken, isOnline])
+    },
+    [accessToken, isOnline]
+  )
+
+  const ensureReferenceDataLoaded = useCallback(async () => {
+    if (users.length && clients.length) return
+    await loadReferenceData({ silent: true })
+  }, [users.length, clients.length, loadReferenceData])
 
   const ensureInventoryLoaded = useCallback(async () => {
     if (inventoryLoadedRef.current && inventory.length) return
@@ -300,6 +317,7 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   }, [isOnline, accessToken, refreshUnsyncedCount])
 
   const startNewJobCard = useCallback(() => {
+    void ensureReferenceDataLoaded()
     const now = new Date().toISOString()
     const meta = buildNewJobCardEditingMeta(now)
     const agent = user?.name || user?.email || ''
@@ -319,7 +337,7 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     setStepError('')
     setArrivalConfirmOpen(true)
     setWizardFlow('form')
-  }, [user])
+  }, [user, ensureReferenceDataLoaded])
 
   const refreshPriorList = useCallback(async () => {
     setPriorLoading(true)
@@ -343,9 +361,10 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   }, [accessToken, isOnline, priorSearch, priorClientId])
 
   const openPriorList = useCallback(() => {
+    void ensureReferenceDataLoaded()
     setWizardFlow('prior_list')
     void refreshPriorList()
-  }, [refreshPriorList])
+  }, [refreshPriorList, ensureReferenceDataLoaded])
 
   const openStockTake = useCallback(() => {
     setWizardFlow('stock_take')
@@ -618,6 +637,8 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const value = useMemo<WizardContextValue>(
     () => ({
       loading,
+      referenceRefreshing,
+      ensureReferenceDataLoaded,
       wizardFlow,
       setWizardFlow,
       currentStep,
@@ -674,6 +695,8 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     }),
     [
       loading,
+      referenceRefreshing,
+      ensureReferenceDataLoaded,
       wizardFlow,
       currentStep,
       formData,

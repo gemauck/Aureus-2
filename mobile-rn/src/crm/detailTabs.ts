@@ -15,15 +15,15 @@ export const ALL_DETAIL_TABS: CrmDetailTabConfig[] = [
   { key: 'overview', label: 'Overview', icon: 'info-circle' },
   { key: 'contacts', label: 'Contacts', icon: 'address-book' },
   { key: 'sites', label: 'Sites', icon: 'map-marker-alt' },
-  { key: 'calendar', label: 'Calendar', icon: 'calendar-alt' },
-  { key: 'activity', label: 'Activity', icon: 'history' },
+  { key: 'calendar', label: 'Calendar', shortLabel: 'Cal', icon: 'calendar-alt' },
+  { key: 'activity', label: 'Activity', shortLabel: 'Feed', icon: 'history' },
   { key: 'notes', label: 'Notes', icon: 'sticky-note' },
   { key: 'kyc', label: 'KYC', icon: 'id-card', clientOnly: true },
   { key: 'opportunities', label: 'Opportunities', shortLabel: 'Opps', icon: 'bullseye', clientOnly: true },
   { key: 'projects', label: 'Projects', icon: 'folder-open', clientOnly: true },
   { key: 'services', label: 'Service & Maint.', shortLabel: 'S&M', icon: 'wrench', clientOnly: true },
-  { key: 'jobcards', label: 'Job cards', icon: 'clipboard-list', clientOnly: true },
-  { key: 'contracts', label: 'Contracts', icon: 'file-contract', clientOnly: true },
+  { key: 'jobcards', label: 'Job cards', shortLabel: 'Jobs', icon: 'clipboard-list', clientOnly: true },
+  { key: 'contracts', label: 'Contracts', shortLabel: 'Deals', icon: 'file-contract', clientOnly: true },
   { key: 'proposals', label: 'Proposals', icon: 'clipboard-list', leadOnly: true }
 ]
 

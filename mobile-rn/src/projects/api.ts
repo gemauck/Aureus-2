@@ -1,5 +1,6 @@
 import { request } from '../services/apiClient'
 import type {
+  ErpUser,
   ProjectActivityEntry,
   ProjectDetail,
   ProjectNote,
@@ -36,6 +37,12 @@ export const projectsApi = {
       token,
       body
     }).then((d) => d.project)
+  },
+
+  listUsers(token: string) {
+    return request<{ users?: ErpUser[] } | ErpUser[]>('/api/users', { token }).then((d) =>
+      Array.isArray(d) ? d : d.users || []
+    )
   },
 
   listProjectTasks(token: string, projectId: string, includeComments = true) {
@@ -81,10 +88,29 @@ export const projectsApi = {
     ).then((d) => d.notes || [])
   },
 
+  getNote(token: string, projectId: string, noteId: string) {
+    return request<{ note: ProjectNote }>(
+      `/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`,
+      { token }
+    ).then((d) => d.note)
+  },
+
   createNote(token: string, projectId: string, body: { title?: string; content?: string }) {
     return request<{ note: ProjectNote }>(
       `/api/projects/${encodeURIComponent(projectId)}/notes`,
       { method: 'POST', token, body }
+    ).then((d) => d.note)
+  },
+
+  updateNote(
+    token: string,
+    projectId: string,
+    noteId: string,
+    body: { title?: string; content?: string }
+  ) {
+    return request<{ note: ProjectNote }>(
+      `/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`,
+      { method: 'PUT', token, body }
     ).then((d) => d.note)
   },
 

@@ -20,22 +20,29 @@ import { useAuth } from '../../state/AuthContext'
 import { erp } from '../../theme/appTheme'
 import type { RootStackParamList } from '../../navigation/types'
 import { projectsApi } from '../api'
+import { ProjectInsightsBar } from '../components/ProjectInsightsBar'
 import { ProjectRow } from '../components/ProjectRow'
 import { TaskRow } from '../components/TaskRow'
 import type { ProjectsStackParamList } from '../navigation'
 import type {
   ProjectFilterKey,
+  ProjectListView,
+  ProjectSortKey,
   ProjectStatusFilter,
   ProjectSummary,
   ProjectTask,
   ProjectsTab,
-  TaskFilterStatus
+  TaskFilterStatus,
+  TaskScopeFilter
 } from '../types'
 import {
+  computeInsights,
   filterProjects,
   filterTasks,
+  groupProjectsByClient,
   loadStarredIds,
   PROJECT_STATUSES,
+  sortProjects,
   toggleStarred,
   uniqueClients
 } from '../utils'
@@ -58,8 +65,10 @@ const TASK_STATUS_FILTERS: TaskFilterStatus[] = [
 
 export function ProjectsHomeScreen({ navigation }: Props) {
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const [tab, setTab] = useState<ProjectsTab>('projects')
+  const [listView, setListView] = useState<ProjectListView>('list')
+  const [sortKey, setSortKey] = useState<ProjectSortKey>('name')
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [allTasks, setAllTasks] = useState<ProjectTask[]>([])
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
@@ -72,6 +81,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   const [clientFilter, setClientFilter] = useState('all')
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskFilterStatus>('all')
   const [taskProjectFilter, setTaskProjectFilter] = useState('all')
+  const [taskScope, setTaskScope] = useState<TaskScopeFilter>('all')
 
   const load = useCallback(
     async (silent = false) => {
@@ -107,21 +117,29 @@ export function ProjectsHomeScreen({ navigation }: Props) {
 
   const clients = useMemo(() => uniqueClients(projects), [projects])
   const filteredProjects = useMemo(
-    () => filterProjects(projects, query, filter, statusFilter, clientFilter, starredIds),
-    [projects, query, filter, statusFilter, clientFilter, starredIds]
-  )
-  const filteredTasks = useMemo(
-    () => filterTasks(allTasks, query, taskStatusFilter, taskProjectFilter),
-    [allTasks, query, taskStatusFilter, taskProjectFilter]
-  )
-
-  const activeCount = useMemo(
     () =>
-      projects.filter((p) => {
-        const st = String(p.status || '').toLowerCase()
-        return st === 'active' || st === 'in progress'
-      }).length,
-    [projects]
+      sortProjects(
+        filterProjects(projects, query, filter, statusFilter, clientFilter, starredIds),
+        sortKey
+      ),
+    [projects, query, filter, statusFilter, clientFilter, starredIds, sortKey]
+  )
+  const clientGroups = useMemo(() => groupProjectsByClient(filteredProjects), [filteredProjects])
+  const filteredTasks = useMemo(
+    () =>
+      filterTasks(
+        allTasks,
+        query,
+        taskStatusFilter,
+        taskProjectFilter,
+        taskScope,
+        user?.id
+      ),
+    [allTasks, query, taskStatusFilter, taskProjectFilter, taskScope, user?.id]
+  )
+  const insights = useMemo(
+    () => computeInsights(projects, allTasks, starredIds, user?.id),
+    [projects, allTasks, starredIds, user?.id]
   )
 
   const handleToggleStar = async (projectId: string) => {
@@ -139,23 +157,38 @@ export function ProjectsHomeScreen({ navigation }: Props) {
       />
       <ScreenBody padded={false}>
         <View style={styles.hero}>
+          <Text style={styles.heroTitle}>Delivery hub</Text>
+          <Text style={styles.heroSub}>
+            Client projects, tasks, and compliance trackers in one place
+          </Text>
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statNum}>{projects.length}</Text>
+              <Text style={styles.statNum}>{insights.totalProjects}</Text>
               <Text style={styles.statLbl}>Projects</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statNum}>{activeCount}</Text>
+              <Text style={styles.statNum}>{insights.activeProjects}</Text>
               <Text style={styles.statLbl}>Active</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBox}>
-              <Text style={styles.statNum}>{allTasks.length}</Text>
-              <Text style={styles.statLbl}>Tasks</Text>
+              <Text style={styles.statNum}>{insights.myOpenTasks}</Text>
+              <Text style={styles.statLbl}>My tasks</Text>
             </View>
           </View>
         </View>
+
+        {tab === 'tasks' ? (
+          <ProjectInsightsBar
+            insights={insights}
+            taskScope={taskScope}
+            onScopePress={(scope) => {
+              setTab('tasks')
+              setTaskScope((prev) => (prev === scope ? 'all' : scope))
+            }}
+          />
+        ) : null}
 
         <View style={styles.tabRow}>
           {(['projects', 'tasks'] as ProjectsTab[]).map((key) => {
@@ -196,6 +229,38 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         </View>
 
         {tab === 'projects' ? (
+          <>
+            <View style={styles.viewToggleRow}>
+              <Pressable
+                style={[styles.viewToggle, listView === 'list' && styles.viewToggleActive]}
+                onPress={() => setListView('list')}
+              >
+                <FontAwesome5 name="list" size={12} color={listView === 'list' ? erp.primary : erp.textMuted} />
+                <Text style={[styles.viewToggleText, listView === 'list' && styles.viewToggleTextActive]}>
+                  List
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.viewToggle, listView === 'client' && styles.viewToggleActive]}
+                onPress={() => setListView('client')}
+              >
+                <FontAwesome5 name="building" size={12} color={listView === 'client' ? erp.primary : erp.textMuted} />
+                <Text style={[styles.viewToggleText, listView === 'client' && styles.viewToggleTextActive]}>
+                  By client
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.sortBtn}
+                onPress={() => {
+                  const order: ProjectSortKey[] = ['name', 'client', 'updated', 'due']
+                  const idx = order.indexOf(sortKey)
+                  setSortKey(order[(idx + 1) % order.length])
+                }}
+              >
+                <FontAwesome5 name="sort" size={12} color={erp.textMuted} />
+                <Text style={styles.sortBtnText}>Sort: {sortKey}</Text>
+              </Pressable>
+            </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -256,12 +321,33 @@ export function ProjectsHomeScreen({ navigation }: Props) {
               </>
             ) : null}
           </ScrollView>
+          </>
         ) : (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipsRow}
           >
+            {(
+              [
+                { key: 'all' as TaskScopeFilter, label: 'All tasks' },
+                { key: 'mine' as TaskScopeFilter, label: 'Assigned to me' },
+                { key: 'overdue' as TaskScopeFilter, label: 'Overdue' },
+                { key: 'dueSoon' as TaskScopeFilter, label: 'Due soon' }
+              ] as const
+            ).map((s) => {
+              const active = taskScope === s.key
+              return (
+                <Pressable
+                  key={s.key}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setTaskScope(s.key)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+                </Pressable>
+              )
+            })}
+            <View style={styles.chipDivider} />
             {TASK_STATUS_FILTERS.map((st) => {
               const active = taskStatusFilter === st
               return (
@@ -293,6 +379,47 @@ export function ProjectsHomeScreen({ navigation }: Props) {
             </Pressable>
           </View>
         ) : tab === 'projects' ? (
+          listView === 'client' ? (
+            <FlatList
+              data={clientGroups}
+              keyExtractor={(g) => g.clientKey}
+              contentContainerStyle={styles.list}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => {
+                    setRefreshing(true)
+                    void load(true)
+                  }}
+                  tintColor={erp.primary}
+                />
+              }
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <FontAwesome5 name="folder-open" size={32} color={erp.textSubtle} />
+                  <Text style={styles.emptyTitle}>No projects match</Text>
+                </View>
+              }
+              renderItem={({ item: group }) => (
+                <View style={styles.clientGroup}>
+                  <View style={styles.clientHeader}>
+                    <FontAwesome5 name="building" size={14} color={erp.primary} />
+                    <Text style={styles.clientName}>{group.clientName}</Text>
+                    <Text style={styles.clientCount}>{group.projects.length}</Text>
+                  </View>
+                  {group.projects.map((item) => (
+                    <ProjectRow
+                      key={item.id}
+                      project={item}
+                      starred={starredIds.has(item.id)}
+                      onToggleStar={() => void handleToggleStar(item.id)}
+                      onPress={() => navigation.navigate('ProjectDetail', { projectId: item.id })}
+                    />
+                  ))}
+                </View>
+              )}
+            />
+          ) : (
           <FlatList
             data={filteredProjects}
             keyExtractor={(item) => item.id}
@@ -323,6 +450,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
               />
             )}
           />
+          )
         ) : (
           <FlatList
             data={filteredTasks}
@@ -376,6 +504,8 @@ const styles = StyleSheet.create({
     padding: 16,
     ...erp.shadowSm
   },
+  heroTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  heroSub: { fontSize: 12, color: erp.sidebarTextMuted, marginBottom: 14, lineHeight: 17 },
   statsRow: { flexDirection: 'row', alignItems: 'center' },
   statBox: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 22, fontWeight: '800', color: '#fff' },
@@ -457,5 +587,46 @@ const styles = StyleSheet.create({
   retryText: { color: '#fff', fontWeight: '800' },
   emptyWrap: { alignItems: 'center', padding: 40, gap: 8 },
   emptyTitle: { fontSize: 17, fontWeight: '800', color: erp.text },
-  emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' }
+  emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' },
+  viewToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: erp.space.lg,
+    paddingBottom: 8
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: erp.radius.md,
+    backgroundColor: erp.surface,
+    borderWidth: 1,
+    borderColor: erp.border
+  },
+  viewToggleActive: { backgroundColor: erp.primarySoft, borderColor: erp.primary },
+  viewToggleText: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
+  viewToggleTextActive: { color: erp.primary },
+  sortBtn: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  sortBtnText: { fontSize: 11, fontWeight: '700', color: erp.textMuted, textTransform: 'capitalize' },
+  clientGroup: { marginBottom: 16 },
+  clientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 4
+  },
+  clientName: { flex: 1, fontSize: 15, fontWeight: '800', color: erp.text },
+  clientCount: { fontSize: 12, fontWeight: '700', color: erp.textMuted }
 })

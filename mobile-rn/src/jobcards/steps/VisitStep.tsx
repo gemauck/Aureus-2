@@ -1,26 +1,61 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  formatTravelDurationMinutes,
+  jobSiteMinutesFromDatetimeLocals
+} from '../../../../src/components/manufacturing/jobCardActivityDisplay.js'
+import { formatWizardDatetimeLabel } from '../../../../src/jobCardWizard/util.js'
 import { JOB_CARD_CALL_OUT_CATEGORY_OPTIONS } from '../../../../src/jobCardWizard/constants.js'
 import { useJobCardWizard } from '../WizardContext'
 import { DateTimeField } from '../components/DateTimeField'
 import { SectionCard } from '../components/SectionCard'
+import { SearchableSelect } from '../components/SearchableSelect'
+import { formStyles } from '../components/formStyles'
+import { VoiceNoteField } from '../media/VoiceNoteField'
 import { LocationPickerModal } from '../map/LocationPickerModal'
+import { jc } from '../theme'
 
 export function VisitStep() {
-  const { formData, setFormData, editingMeta } = useJobCardWizard()
+  const { formData, setFormData, editingMeta, voiceAttachments, setVoiceAttachments } =
+    useJobCardWizard()
   const [mapOpen, setMapOpen] = React.useState(false)
+
+  const categoryOptions = useMemo(
+    () => JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt: string) => ({ value: opt, label: opt })),
+    []
+  )
+
+  const jobSiteDurationLabel = useMemo(() => {
+    const mins = jobSiteMinutesFromDatetimeLocals(
+      formData.timeOfArrival,
+      formData.departureFromSite
+    )
+    return formatTravelDurationMinutes(mins)
+  }, [formData.timeOfArrival, formData.departureFromSite])
 
   return (
     <View>
-      <SectionCard title="Call Out Category">
-        <View style={styles.pickerWrap}>
+      <SectionCard
+        title="Call Out Category"
+        subtitle="Choose the type of call-out or visit."
+      >
+        <SearchableSelect
+          label="Call out category"
+          value={formData.callOutCategory}
+          options={categoryOptions}
+          onChange={(callOutCategory) => setFormData((f) => ({ ...f, callOutCategory }))}
+          placeholder="Select category…"
+        />
+        <View style={styles.chipWrap}>
           {JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt: string) => (
             <Pressable
               key={opt}
               style={[styles.chip, formData.callOutCategory === opt && styles.chipActive]}
               onPress={() => setFormData((f) => ({ ...f, callOutCategory: opt }))}
             >
-              <Text style={formData.callOutCategory === opt ? styles.chipTextActive : styles.chipText}>
+              <Text
+                style={formData.callOutCategory === opt ? styles.chipTextActive : styles.chipText}
+              >
                 {opt}
               </Text>
             </Pressable>
@@ -28,39 +63,59 @@ export function VisitStep() {
         </View>
       </SectionCard>
 
-      <SectionCard title="Visit Details">
-        <Text style={styles.label}>Location</Text>
-        <View style={styles.row}>
+      <SectionCard
+        title="Visit Details"
+        subtitle="Capture the customer location and call-out reason."
+      >
+        <Text style={formStyles.label}>Location</Text>
+        <View style={formStyles.row}>
           <TextInput
-            style={[styles.input, { flex: 1 }]}
+            style={[formStyles.input, { flex: 1 }]}
             value={formData.location}
             onChangeText={(location) => setFormData((f) => ({ ...f, location }))}
             placeholder="Facility, area or coordinates"
+            placeholderTextColor={jc.textSubtle}
           />
           <Pressable style={styles.mapBtn} onPress={() => setMapOpen(true)}>
-            <Text style={styles.mapBtnText}>Map</Text>
+            <Text style={styles.mapBtnText}>📍 Map</Text>
           </Pressable>
         </View>
         {formData.latitude && formData.longitude ? (
           <Text style={styles.coords}>
-            {formData.latitude}, {formData.longitude}
+            Coordinates: {formData.latitude}, {formData.longitude}
           </Text>
         ) : null}
-        <Text style={styles.label}>Reason for Call Out / Visit</Text>
+        <Text style={formStyles.label}>Reason for call out / visit</Text>
         <TextInput
-          style={[styles.input, styles.multiline]}
+          style={[formStyles.input, formStyles.multiline]}
           multiline
           value={formData.reasonForVisit}
           onChangeText={(reasonForVisit) => setFormData((f) => ({ ...f, reasonForVisit }))}
-          placeholder="Why was the technician requested?"
+          placeholder="Why was the technician requested to attend?"
+          placeholderTextColor={jc.textSubtle}
+        />
+        <VoiceNoteField
+          section="reasonForVisit"
+          voiceClips={voiceAttachments}
+          onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
       </SectionCard>
 
       <SectionCard
-        title="Job time"
-        subtitle="Set or change your arrival time on site."
+        title="Job Time"
+        subtitle={
+          editingMeta?.useNewJobTimeFlow
+            ? 'Arrival was set when you opened this job. Adjust if needed; departure is on sign-off.'
+            : 'Arrival through departure; total time is calculated automatically.'
+        }
         accent
       >
+        {editingMeta?.useNewJobTimeFlow && formData.timeOfArrival ? (
+          <Text style={styles.arrivedLabel}>
+            Arrived: {formatWizardDatetimeLabel(formData.timeOfArrival)}
+          </Text>
+        ) : null}
         <DateTimeField
           label="Arrival on site *"
           value={formData.timeOfArrival}
@@ -73,24 +128,31 @@ export function VisitStep() {
               value={formData.departureFromSite}
               onChange={(departureFromSite) => setFormData((f) => ({ ...f, departureFromSite }))}
             />
+            <View style={styles.durationBox}>
+              <Text style={formStyles.label}>Total time</Text>
+              <Text style={styles.durationValue}>{jobSiteDurationLabel || '—'}</Text>
+            </View>
             <TextInput
-              style={styles.input}
+              style={formStyles.input}
               placeholder="Vehicle used"
+              placeholderTextColor={jc.textSubtle}
               value={formData.vehicleUsed}
               onChangeText={(vehicleUsed) => setFormData((f) => ({ ...f, vehicleUsed }))}
             />
-            <View style={styles.row}>
+            <View style={formStyles.row}>
               <TextInput
-                style={[styles.input, { flex: 1 }]}
+                style={[formStyles.input, { flex: 1 }]}
                 keyboardType="numeric"
                 placeholder="KM before"
+                placeholderTextColor={jc.textSubtle}
                 value={String(formData.kmReadingBefore || '')}
                 onChangeText={(kmReadingBefore) => setFormData((f) => ({ ...f, kmReadingBefore }))}
               />
               <TextInput
-                style={[styles.input, { flex: 1 }]}
+                style={[formStyles.input, { flex: 1 }]}
                 keyboardType="numeric"
                 placeholder="KM after"
+                placeholderTextColor={jc.textSubtle}
                 value={String(formData.kmReadingAfter || '')}
                 onChangeText={(kmReadingAfter) => setFormData((f) => ({ ...f, kmReadingAfter }))}
               />
@@ -117,35 +179,33 @@ export function VisitStep() {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 14, fontWeight: '600', color: '#334155', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: '#fff'
-  },
-  multiline: { minHeight: 88, textAlignVertical: 'top' },
-  row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  mapBtn: {
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 10
-  },
-  mapBtnText: { color: '#fff', fontWeight: '700' },
-  coords: { fontSize: 12, color: '#64748b' },
-  pickerWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: jc.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e2e8f0'
+    borderColor: jc.border
   },
-  chipActive: { backgroundColor: '#0284c7', borderColor: '#0284c7' },
-  chipText: { color: '#334155', fontSize: 13 },
-  chipTextActive: { color: '#fff', fontSize: 13, fontWeight: '600' }
+  chipActive: { backgroundColor: jc.primary, borderColor: jc.primary },
+  chipText: { color: jc.text, fontSize: 12 },
+  chipTextActive: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  mapBtn: {
+    backgroundColor: jc.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: jc.radius.md
+  },
+  mapBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  coords: { fontSize: 12, color: jc.textMuted, marginTop: -4 },
+  arrivedLabel: { fontSize: 14, fontWeight: '600', color: jc.text, marginBottom: 4 },
+  durationBox: {
+    backgroundColor: jc.surfaceMuted,
+    borderRadius: jc.radius.md,
+    borderWidth: 1,
+    borderColor: jc.border,
+    padding: jc.space.md
+  },
+  durationValue: { fontSize: 16, fontWeight: '700', color: jc.text, marginTop: 4 }
 })

@@ -65,13 +65,9 @@ type PanelProps = {
   clientNotes: CrmClientNote[]
   notesDraft: string
   newNoteDraft: string
-  savingNotes: boolean
-  savingNewNote: boolean
   loadingExtras: boolean
   onNotesDraftChange: (v: string) => void
   onNewNoteDraftChange: (v: string) => void
-  onSaveSummaryNotes: () => void
-  onSaveNewNote: () => void
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
@@ -85,13 +81,9 @@ export function CrmDetailPanelContent(props: PanelProps) {
     clientNotes,
     notesDraft,
     newNoteDraft,
-    savingNotes,
-    savingNewNote,
     loadingExtras,
     onNotesDraftChange,
-    onNewNoteDraftChange,
-    onSaveSummaryNotes,
-    onSaveNewNote
+    onNewNoteDraftChange
   } = props
 
   const stage = displayStage(entity)
@@ -424,70 +416,93 @@ export function CrmDetailPanelContent(props: PanelProps) {
   }
 
   if (tab === 'notes') {
+    const comments = entityComments(entity)
     return (
       <View style={styles.section}>
-        <Text style={styles.groupTitle}>Summary notes</Text>
-        <TextInput
-          style={styles.notesInput}
-          multiline
-          value={notesDraft}
-          onChangeText={onNotesDraftChange}
-          placeholder="General notes about this record…"
-          placeholderTextColor={erp.textSubtle}
-          textAlignVertical="top"
-        />
-        <Pressable
-          style={[styles.saveBtn, savingNotes && styles.saveBtnDisabled]}
-          disabled={savingNotes}
-          onPress={onSaveSummaryNotes}
-        >
-          {savingNotes ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveBtnText}>Save summary</Text>
-          )}
-        </Pressable>
+        <View style={styles.panelCard}>
+          <View style={styles.panelHeader}>
+            <FontAwesome5 name="sticky-note" size={14} color={erp.primary} />
+            <Text style={styles.panelTitle}>Summary notes</Text>
+          </View>
+          <Text style={styles.panelHint}>
+            Edit below, then tap Save summary in the bar at the bottom.
+          </Text>
+          <TextInput
+            style={styles.notesInput}
+            multiline
+            value={notesDraft}
+            onChangeText={onNotesDraftChange}
+            placeholder="General notes about this record…"
+            placeholderTextColor={erp.textSubtle}
+            textAlignVertical="top"
+          />
+        </View>
 
         {entityType === 'client' ? (
           <>
-            <Text style={[styles.groupTitle, { marginTop: 20 }]}>Client notes</Text>
-            {loadingExtras ? (
-              <ActivityIndicator color={erp.primary} />
-            ) : clientNotes.length ? (
-              clientNotes.map((note) => (
-                <View key={note.id} style={styles.miniCard}>
-                  <Text style={styles.miniTitle}>{note.title || 'Note'}</Text>
-                  <Text style={styles.bodyText}>{note.content || '—'}</Text>
+            <View style={styles.panelCard}>
+              <View style={styles.panelHeader}>
+                <FontAwesome5 name="list-alt" size={14} color={erp.primary} />
+                <Text style={styles.panelTitle}>Client notes</Text>
+                {clientNotes.length > 0 ? (
+                  <View style={styles.countPill}>
+                    <Text style={styles.countPillText}>{clientNotes.length}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {loadingExtras ? (
+                <ActivityIndicator color={erp.primary} style={{ marginVertical: 12 }} />
+              ) : clientNotes.length ? (
+                clientNotes.map((note) => (
+                  <View key={note.id} style={styles.noteCard}>
+                    <Text style={styles.miniTitle}>{note.title || 'Note'}</Text>
+                    <Text style={styles.bodyText}>{note.content || '—'}</Text>
+                    <Text style={styles.timelineMeta}>
+                      {[note.author?.name, formatDate(note.createdAt)].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.miniSub}>No structured notes yet — add one below.</Text>
+              )}
+              <TextInput
+                style={[styles.notesInput, { marginTop: 12 }]}
+                multiline
+                value={newNoteDraft}
+                onChangeText={onNewNoteDraftChange}
+                placeholder="Add a new client note…"
+                placeholderTextColor={erp.textSubtle}
+                textAlignVertical="top"
+              />
+              {newNoteDraft.trim() ? (
+                <Text style={styles.panelHint}>Tap Add note in the bottom bar when ready.</Text>
+              ) : null}
+            </View>
+          </>
+        ) : (
+          <View style={styles.panelCard}>
+            <View style={styles.panelHeader}>
+              <FontAwesome5 name="comments" size={14} color={erp.primary} />
+              <Text style={styles.panelTitle}>Discussion</Text>
+            </View>
+            {comments.length ? (
+              comments.map((c, idx) => (
+                <View key={c.id || `lead-c-${idx}`} style={styles.noteCard}>
+                  <Text style={styles.bodyText}>{c.text || c.content || '—'}</Text>
                   <Text style={styles.timelineMeta}>
-                    {[note.author?.name, formatDate(note.createdAt)].filter(Boolean).join(' · ')}
+                    {[formatCommentAuthor(c), formatDate(c.createdAt || c.timestamp)]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                 </View>
               ))
             ) : (
-              <Text style={styles.miniSub}>No structured notes yet.</Text>
+              <Text style={styles.miniSub}>
+                No discussion comments yet. Use summary notes above for lead notes — they sync with the web CRM.
+              </Text>
             )}
-            <TextInput
-              style={styles.notesInput}
-              multiline
-              value={newNoteDraft}
-              onChangeText={onNewNoteDraftChange}
-              placeholder="Add a new client note…"
-              placeholderTextColor={erp.textSubtle}
-              textAlignVertical="top"
-            />
-            <Pressable
-              style={[styles.saveBtn, styles.saveBtnSecondary, savingNewNote && styles.saveBtnDisabled]}
-              disabled={savingNewNote || !newNoteDraft.trim()}
-              onPress={onSaveNewNote}
-            >
-              {savingNewNote ? (
-                <ActivityIndicator color={erp.primary} />
-              ) : (
-                <Text style={[styles.saveBtnText, styles.saveBtnTextSecondary]}>Add note</Text>
-              )}
-            </Pressable>
-          </>
-        ) : null}
+          </View>
+        )}
       </View>
     )
   }
@@ -549,7 +564,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: erp.border,
     marginBottom: 4,
-    gap: 4
+    gap: 4,
+    ...erp.shadowSm
+  },
+  panelCard: {
+    backgroundColor: erp.surface,
+    borderRadius: erp.radius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: erp.border,
+    gap: 10,
+    ...erp.shadowSm
+  },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  panelTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: erp.text },
+  panelHint: { fontSize: 12, color: erp.textSubtle, lineHeight: 17 },
+  countPill: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: erp.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  countPillText: { fontSize: 11, fontWeight: '800', color: erp.primary },
+  noteCard: {
+    backgroundColor: erp.surfaceMuted,
+    borderRadius: erp.radius.md,
+    padding: 12,
+    gap: 4,
+    marginTop: 4
   },
   completedCard: { opacity: 0.72 },
   miniTitle: { fontSize: 15, fontWeight: '800', color: erp.text },
@@ -579,23 +624,14 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: 'center', padding: 36, gap: 10 },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: erp.textMuted, textAlign: 'center' },
   notesInput: {
-    minHeight: 100,
+    minHeight: 120,
     borderWidth: 1,
     borderColor: erp.border,
     borderRadius: erp.radius.md,
     padding: 12,
-    backgroundColor: erp.surface,
+    backgroundColor: erp.surfaceMuted,
     color: erp.text,
-    fontSize: 15
-  },
-  saveBtn: {
-    backgroundColor: erp.primary,
-    borderRadius: erp.radius.md,
-    paddingVertical: 12,
-    alignItems: 'center'
-  },
-  saveBtnSecondary: { backgroundColor: erp.primarySoft, borderWidth: 1, borderColor: erp.primary },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: '#fff', fontWeight: '800' },
-  saveBtnTextSecondary: { color: erp.primary }
+    fontSize: 15,
+    lineHeight: 22
+  }
 })

@@ -46,6 +46,14 @@
           "photosPermission": "Allow photo library access for job card attachments."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1d4ed8",
+          "sounds": []
+        }
+      ],
       "expo-updates"
     ]
   }

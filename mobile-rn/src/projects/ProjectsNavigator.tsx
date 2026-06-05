@@ -1,5 +1,6 @@
 import React from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { NoteDetailScreen } from './screens/NoteDetailScreen'
 import { ProjectDetailScreen } from './screens/ProjectDetailScreen'
 import { ProjectsHomeScreen } from './screens/ProjectsHomeScreen'
 import { TaskDetailScreen } from './screens/TaskDetailScreen'
@@ -13,6 +14,7 @@ export function ProjectsNavigator() {
       <Stack.Screen name="ProjectsHome" component={ProjectsHomeScreen} />
       <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <Stack.Screen name="NoteDetail" component={NoteDetailScreen} />
     </Stack.Navigator>
   )
 }

@@ -24,9 +24,24 @@ export type ProjectSummary = {
   hasMonthlyDataReviewProcess?: boolean
   hasComplianceReviewProcess?: boolean
   includeInProgressTracker?: boolean
+  monthlyProgress?: unknown
+  documentSections?: DocumentSectionsJson
   createdAt?: string
   updatedAt?: string
 }
+
+export type DocumentSectionsJson = Record<
+  string,
+  Array<{
+    id?: string
+    name?: string
+    documents?: Array<{
+      id?: string
+      name?: string
+      collectionStatus?: Record<string, string>
+    }>
+  }>
+>
 
 export type ProjectTaskList = {
   id: string
@@ -46,6 +61,12 @@ export type TaskComment = {
   timestamp?: string
 }
 
+export type ChecklistItem = {
+  id?: string
+  text?: string
+  done?: boolean
+}
+
 export type ProjectTask = {
   id: string
   title?: string
@@ -59,7 +80,7 @@ export type ProjectTask = {
   startDate?: string
   projectId?: string
   order?: number
-  checklist?: Array<{ id?: string; text?: string; done?: boolean }>
+  checklist?: ChecklistItem[]
   subtasks?: ProjectTask[]
   comments?: TaskComment[]
   tags?: string[]
@@ -115,11 +136,51 @@ export type ProjectDetail = ProjectSummary & {
   team?: ProjectTeamMember[]
   activityLog?: ProjectActivityEntry[]
   customFieldDefinitions?: Array<{ id: string; name?: string; type?: string }>
+  projectContacts?: string
+}
+
+export type ErpUser = {
+  id: string
+  name?: string
+  email?: string
+}
+
+export type DriveLink = {
+  label: string
+  url: string
+}
+
+export type DocCollectionSummary = {
+  year: string
+  monthKey: string
+  monthLabel: string
+  totalCells: number
+  collected: number
+  pending: number
+  other: number
+}
+
+export type ProjectInsights = {
+  totalProjects: number
+  activeProjects: number
+  starredCount: number
+  totalTasks: number
+  myOpenTasks: number
+  overdueTasks: number
+  dueSoonTasks: number
 }
 
 export type ProjectsTab = 'projects' | 'tasks'
 
+export type ProjectListView = 'list' | 'client'
+
 export type ProjectFilterKey = 'all' | 'active' | 'starred'
+
+export type ProjectSortKey = 'name' | 'client' | 'updated' | 'due'
+
+export type TaskScopeFilter = 'all' | 'mine' | 'overdue' | 'dueSoon'
+
+export type TaskViewMode = 'list' | 'kanban' | 'lists'
 
 export type ProjectStatusFilter = 'all' | 'Active' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled'
 
@@ -133,3 +194,9 @@ export type ProjectDetailTab =
   | 'processes'
 
 export type TaskFilterStatus = 'all' | 'To Do' | 'In Progress' | 'Done' | 'Blocked' | 'Archived'
+
+export type ClientProjectGroup = {
+  clientKey: string
+  clientName: string
+  projects: ProjectSummary[]
+}

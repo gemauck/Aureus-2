@@ -1,12 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
@@ -45,7 +48,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const [jobCards, setJobCards] = useState<CrmJobCard[]>([])
   const [clientNotes, setClientNotes] = useState<CrmClientNote[]>([])
   const [loadingExtras, setLoadingExtras] = useState(false)
-  const [loadedExtras, setLoadedExtras] = useState<Set<string>>(new Set())
+  const [notesFeedback, setNotesFeedback] = useState('')
+  const loadedExtrasRef = useRef<Set<string>>(new Set())
 
   const tabs = useMemo(() => detailTabsFor(entityType), [entityType])
 
@@ -53,7 +57,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     if (!accessToken) return
     setLoading(true)
     setError('')
-    setLoadedExtras(new Set())
+    loadedExtrasRef.current = new Set()
     setTags([])
     setOpportunities([])
     setJobCards([])
@@ -65,10 +69,16 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           : await crmApi.getLead(accessToken, entityId)
       setEntity(data)
       setNotesDraft(String(data.notes || ''))
+
       if (entityType === 'client') {
-        const clientTags = await crmApi.getClientTags(accessToken, entityId).catch(() => [])
+        const [clientTags, notes] = await Promise.all([
+          crmApi.getClientTags(accessToken, entityId).catch(() => [] as CrmTag[]),
+          crmApi.getClientNotes(accessToken, entityId).catch(() => [] as CrmClientNote[])
+        ])
         setTags(clientTags)
-        setLoadedExtras(new Set(['tags']))
+        setClientNotes(notes)
+        loadedExtrasRef.current.add('tags')
+        loadedExtrasRef.current.add('notes')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load record')
@@ -85,7 +95,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     async (activeTab: CrmDetailTab) => {
       if (!accessToken || !entity) return
       const key = `${activeTab}`
-      if (loadedExtras.has(key)) return
+      if (loadedExtrasRef.current.has(key)) return
 
       setLoadingExtras(true)
       try {
@@ -101,29 +111,39 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           const notes = await crmApi.getClientNotes(accessToken, entityId)
           setClientNotes(notes)
         }
-        setLoadedExtras((prev) => new Set(prev).add(key))
-      } catch {
-        /* non-fatal */
+        loadedExtrasRef.current.add(key)
+      } catch (e) {
+        if (activeTab === 'notes') {
+          setError(e instanceof Error ? e.message : 'Could not load notes')
+        }
       } finally {
         setLoadingExtras(false)
       }
     },
-    [accessToken, entity, entityId, entityType, loadedExtras]
+    [accessToken, entity, entityId, entityType]
   )
 
   useEffect(() => {
     void loadExtrasForTab(tab)
   }, [tab, loadExtrasForTab])
 
+  useEffect(() => {
+    if (!notesFeedback) return
+    const t = setTimeout(() => setNotesFeedback(''), 2500)
+    return () => clearTimeout(t)
+  }, [notesFeedback])
+
   const saveSummaryNotes = async () => {
     if (!accessToken || !entity) return
     setSavingNotes(true)
+    setError('')
     try {
       const updated =
         entityType === 'client'
           ? await crmApi.patchClient(accessToken, entityId, { notes: notesDraft })
           : await crmApi.patchLead(accessToken, entityId, { notes: notesDraft })
       setEntity(updated)
+      setNotesFeedback('Summary saved')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save notes')
     } finally {
@@ -134,6 +154,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const saveNewNote = async () => {
     if (!accessToken || entityType !== 'client' || !newNoteDraft.trim()) return
     setSavingNewNote(true)
+    setError('')
     try {
       const note = await crmApi.createClientNote(accessToken, entityId, {
         content: newNoteDraft.trim(),
@@ -141,6 +162,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
       })
       setClientNotes((prev) => [note, ...prev])
       setNewNoteDraft('')
+      setNotesFeedback('Note added')
+      loadedExtrasRef.current.add('notes')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add note')
     } finally {
@@ -150,48 +173,53 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center} edges={['top']}>
         <ActivityIndicator size="large" color={erp.primary} />
-      </View>
+      </SafeAreaView>
     )
   }
 
   if (error && !entity) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center} edges={['top']}>
         <Text style={styles.error}>{error}</Text>
         <Pressable onPress={() => navigation.goBack()}>
           <Text style={styles.backLink}>Go back</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     )
   }
 
   if (!entity) return null
 
   const stage = displayStage(entity)
+  const onNotesTab = tab === 'notes'
 
   return (
-    <View style={styles.root}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <View style={styles.hero}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <FontAwesome5 name="arrow-left" size={16} color={erp.primary} />
+          <FontAwesome5 name="arrow-left" size={14} color="#fff" />
           <Text style={styles.backText}>CRM</Text>
         </Pressable>
-        <View style={styles.headerBody}>
+        <View style={styles.heroBody}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={3}>
               {entity.name || 'Unnamed'}
             </Text>
             {entity.isStarred ? (
-              <FontAwesome5 name="star" solid size={16} color="#f59e0b" style={{ marginTop: 4 }} />
+              <FontAwesome5 name="star" solid size={16} color="#fbbf24" style={{ marginTop: 4 }} />
             ) : null}
           </View>
-          <View style={styles.headerMeta}>
-            {stage ? <CrmStatusBadge label={stage} /> : null}
-            {entity.industry ? <Text style={styles.industry}>{entity.industry}</Text> : null}
+          <View style={styles.heroMeta}>
             <Text style={styles.entityKind}>{entityType === 'client' ? 'Client' : 'Lead'}</Text>
+            {entity.industry ? <Text style={styles.industry}>{entity.industry}</Text> : null}
           </View>
+          {stage ? (
+            <View style={styles.heroBadgeWrap}>
+              <CrmStatusBadge label={stage} />
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -199,7 +227,10 @@ export function CrmDetailScreen({ route, navigation }: Props) {
         tabs={tabs}
         active={tab}
         entity={entity}
-        onSelect={setTab}
+        onSelect={(next) => {
+          setError('')
+          setTab(next)
+        }}
         extras={{
           opportunities: opportunities.length,
           jobCards: jobCards.length,
@@ -209,66 +240,160 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
       {error ? (
         <View style={styles.errorBanner}>
+          <FontAwesome5 name="exclamation-circle" size={14} color={erp.danger} />
           <Text style={styles.errorBannerText}>{error}</Text>
+          <Pressable onPress={() => setError('')} hitSlop={8}>
+            <FontAwesome5 name="times" size={14} color={erp.danger} />
+          </Pressable>
         </View>
       ) : null}
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <CrmDetailPanelContent
-          tab={tab}
-          entity={entity}
-          entityType={entityType}
-          tags={tags}
-          opportunities={opportunities}
-          jobCards={jobCards}
-          clientNotes={clientNotes}
-          notesDraft={notesDraft}
-          newNoteDraft={newNoteDraft}
-          savingNotes={savingNotes}
-          savingNewNote={savingNewNote}
-          loadingExtras={loadingExtras}
-          onNotesDraftChange={setNotesDraft}
-          onNewNoteDraftChange={setNewNoteDraft}
-          onSaveSummaryNotes={() => void saveSummaryNotes()}
-          onSaveNewNote={() => void saveNewNote()}
-        />
-      </ScrollView>
-    </View>
+      {notesFeedback ? (
+        <View style={styles.successBanner}>
+          <FontAwesome5 name="check-circle" size={14} color={erp.success} />
+          <Text style={styles.successBannerText}>{notesFeedback}</Text>
+        </View>
+      ) : null}
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.body, onNotesTab && styles.bodyWithFooter]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
+          <CrmDetailPanelContent
+            tab={tab}
+            entity={entity}
+            entityType={entityType}
+            tags={tags}
+            opportunities={opportunities}
+            jobCards={jobCards}
+            clientNotes={clientNotes}
+            notesDraft={notesDraft}
+            newNoteDraft={newNoteDraft}
+            loadingExtras={loadingExtras}
+            onNotesDraftChange={setNotesDraft}
+            onNewNoteDraftChange={setNewNoteDraft}
+          />
+        </ScrollView>
+
+        {onNotesTab ? (
+          <View style={styles.notesFooter}>
+            <Pressable
+              style={[styles.footerBtn, savingNotes && styles.footerBtnDisabled]}
+              disabled={savingNotes}
+              onPress={() => void saveSummaryNotes()}
+            >
+              {savingNotes ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <FontAwesome5 name="save" size={14} color="#fff" />
+                  <Text style={styles.footerBtnText}>Save summary</Text>
+                </>
+              )}
+            </Pressable>
+            {entityType === 'client' && newNoteDraft.trim() ? (
+              <Pressable
+                style={[styles.footerBtn, styles.footerBtnSecondary, savingNewNote && styles.footerBtnDisabled]}
+                disabled={savingNewNote}
+                onPress={() => void saveNewNote()}
+              >
+                {savingNewNote ? (
+                  <ActivityIndicator color={erp.primary} size="small" />
+                ) : (
+                  <>
+                    <FontAwesome5 name="plus" size={14} color={erp.primary} />
+                    <Text style={[styles.footerBtnText, styles.footerBtnTextSecondary]}>Add note</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  flex: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: erp.bg },
   error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
   backLink: { color: erp.primary, fontWeight: '700', marginTop: 8 },
-  header: {
-    paddingTop: 12,
+  hero: {
+    backgroundColor: erp.sidebar,
     paddingHorizontal: erp.space.lg,
-    paddingBottom: 12,
-    backgroundColor: erp.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: erp.border
+    paddingTop: 8,
+    paddingBottom: 16
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  backText: { color: erp.primary, fontWeight: '700', fontSize: 15 },
-  headerBody: { gap: 8 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  backText: { color: '#bae6fd', fontWeight: '700', fontSize: 15 },
+  heroBody: { gap: 8 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  title: { flex: 1, fontSize: 22, fontWeight: '800', color: erp.text, lineHeight: 28 },
-  headerMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  industry: { fontSize: 13, color: erp.textMuted, fontWeight: '600' },
+  title: { flex: 1, fontSize: 22, fontWeight: '800', color: '#fff', lineHeight: 28 },
+  heroMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
+  industry: { fontSize: 13, color: erp.sidebarTextMuted, fontWeight: '600' },
   entityKind: {
     fontSize: 11,
     fontWeight: '800',
-    color: erp.primary,
+    color: '#93c5fd',
     textTransform: 'uppercase',
-    letterSpacing: 0.5
+    letterSpacing: 0.6
   },
+  heroBadgeWrap: { alignSelf: 'flex-start' },
   errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: erp.dangerSoft,
     paddingHorizontal: erp.space.lg,
-    paddingVertical: 8
+    paddingVertical: 10
   },
-  errorBannerText: { color: erp.danger, fontWeight: '600', fontSize: 13 },
-  body: { padding: erp.space.lg, paddingBottom: 48 }
+  errorBannerText: { flex: 1, color: erp.danger, fontWeight: '600', fontSize: 13 },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: erp.successSoft,
+    paddingHorizontal: erp.space.lg,
+    paddingVertical: 10
+  },
+  successBannerText: { color: erp.success, fontWeight: '700', fontSize: 13 },
+  body: { padding: erp.space.lg, paddingBottom: 24 },
+  bodyWithFooter: { paddingBottom: 100 },
+  notesFooter: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: erp.space.lg,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    borderTopWidth: 1,
+    borderTopColor: erp.border,
+    backgroundColor: erp.surface,
+    ...erp.shadowSm
+  },
+  footerBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: erp.primary,
+    paddingVertical: 14,
+    borderRadius: erp.radius.md
+  },
+  footerBtnSecondary: {
+    backgroundColor: erp.primarySoft,
+    borderWidth: 1,
+    borderColor: erp.primary
+  },
+  footerBtnDisabled: { opacity: 0.65 },
+  footerBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  footerBtnTextSecondary: { color: erp.primary }
 })

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { erp } from '../../theme/appTheme'
@@ -14,73 +14,106 @@ type Props = {
 }
 
 export function CrmDetailTabBar({ tabs, active, entity, onSelect, extras }: Props) {
+  const scrollRef = useRef<ScrollView>(null)
+  const tabIndex = tabs.findIndex((t) => t.key === active)
+
+  useEffect(() => {
+    if (tabIndex < 0 || !scrollRef.current) return
+    // Nudge active tab into view (approximate chip width)
+    scrollRef.current.scrollTo({ x: Math.max(0, tabIndex * 108 - 24), animated: true })
+  }, [tabIndex])
+
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.bar}
-      contentContainerStyle={styles.content}
-    >
-      {tabs.map((t) => {
-        const isActive = active === t.key
-        const count = tabCount(t.key, entity, extras)
-        return (
-          <Pressable
-            key={t.key}
-            style={[styles.tab, isActive && styles.tabActive]}
-            onPress={() => onSelect(t.key)}
-          >
-            <FontAwesome5
-              name={t.icon}
-              size={11}
-              color={isActive ? erp.primary : erp.textMuted}
-              solid={isActive}
-            />
-            <Text style={[styles.label, isActive && styles.labelActive]} numberOfLines={1}>
-              {t.shortLabel || t.label}
-            </Text>
-            {count != null && count > 0 ? (
-              <View style={[styles.badge, isActive && styles.badgeActive]}>
-                <Text style={[styles.badgeText, isActive && styles.badgeTextActive]}>{count}</Text>
-              </View>
-            ) : null}
-          </Pressable>
-        )
-      })}
-    </ScrollView>
+    <View style={styles.wrap}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {tabs.map((t) => {
+          const isActive = active === t.key
+          const count = tabCount(t.key, entity, extras)
+          const label = t.shortLabel || t.label
+          return (
+            <Pressable
+              key={t.key}
+              style={[styles.chip, isActive && styles.chipActive]}
+              onPress={() => onSelect(t.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+            >
+              <FontAwesome5
+                name={t.icon}
+                size={12}
+                color={isActive ? '#fff' : erp.textMuted}
+                solid={isActive}
+              />
+              <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]} numberOfLines={1}>
+                {label}
+              </Text>
+              {count != null && count > 0 ? (
+                <View style={[styles.badge, isActive && styles.badgeActive]}>
+                  <Text style={[styles.badgeText, isActive && styles.badgeTextActive]}>{count}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  wrap: {
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
     borderBottomColor: erp.border,
-    maxHeight: 52
+    ...erp.shadowSm
   },
-  content: { paddingHorizontal: 8, alignItems: 'center' },
-  tab: {
+  content: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 8,
+    flexDirection: 'row'
+  },
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    marginHorizontal: 2,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent'
-  },
-  tabActive: { borderBottomColor: erp.primary },
-  label: { fontSize: 12, fontWeight: '700', color: erp.textMuted, maxWidth: 120 },
-  labelActive: { color: erp.primary },
-  badge: {
-    minWidth: 18,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: erp.surfaceMuted,
-    alignItems: 'center'
+    borderWidth: 1,
+    borderColor: erp.border,
+    minHeight: 40,
+    marginRight: 8
   },
-  badgeActive: { backgroundColor: erp.primarySoft },
-  badgeText: { fontSize: 10, fontWeight: '800', color: erp.textMuted },
-  badgeTextActive: { color: erp.primary }
+  chipActive: {
+    backgroundColor: erp.primary,
+    borderColor: erp.primary
+  },
+  chipLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: erp.textMuted,
+    maxWidth: 140
+  },
+  chipLabelActive: { color: '#fff' },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: erp.surface,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  badgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  badgeText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
+  badgeTextActive: { color: '#fff' }
 })

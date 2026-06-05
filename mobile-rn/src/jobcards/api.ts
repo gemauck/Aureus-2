@@ -10,6 +10,23 @@ import type {
   UserOption
 } from './types'
 
+function unwrapList<T>(data: unknown, key: string): T[] {
+  if (Array.isArray(data)) return data as T[]
+  if (data && typeof data === 'object' && key in data) {
+    const inner = (data as Record<string, unknown>)[key]
+    return Array.isArray(inner) ? (inner as T[]) : []
+  }
+  return []
+}
+
+function filterActiveClients(list: ClientOption[]): ClientOption[] {
+  return list.filter((c) => {
+    const status = (c.status || 'active').toLowerCase()
+    const type = (c.type || 'client').toLowerCase()
+    return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type)
+  })
+}
+
 export const jobcardsApi = {
   list(token: string, params: { page?: number; search?: string; clientId?: string } = {}) {
     const q = new URLSearchParams({
@@ -48,24 +65,40 @@ export const jobcardsApi = {
   },
 
   getClients(token: string) {
-    return request<{ clients: ClientOption[] }>('/api/clients', { token }).then(
-      (d) => d.clients || []
-    )
+    return request<unknown>('/api/clients', { token })
+      .then((d) => filterActiveClients(unwrapList<ClientOption>(d, 'clients')))
+      .catch(() => [])
   },
 
   getPublicClients() {
-    return request<{ clients: ClientOption[] }>('/api/public/clients').then((d) => d.clients || [])
+    return request<unknown>('/api/public/clients')
+      .then((d) => filterActiveClients(unwrapList<ClientOption>(d, 'clients')))
+      .catch(() => [])
+  },
+
+  /** Public first (ERP job card form), authenticated fallback. */
+  async loadClients(token?: string) {
+    const fromPublic = await jobcardsApi.getPublicClients()
+    if (fromPublic.length) return fromPublic
+    if (!token) return []
+    return jobcardsApi.getClients(token)
   },
 
   getUsers(token?: string) {
-    return request<{ users: UserOption[] }>('/api/public/users')
-      .then((d) => d.users || [])
+    return request<unknown>('/api/public/users')
+      .then((d) => unwrapList<UserOption>(d, 'users'))
       .catch(() => {
-        if (!token) return []
-        return request<{ users: UserOption[] } | UserOption[]>('/api/users', { token }).then((d) =>
-          Array.isArray(d) ? d : d.users || []
+        if (!token) return Promise.resolve([] as UserOption[])
+        return request<unknown>('/api/users', { token }).then((d) =>
+          unwrapList<UserOption>(d, 'users')
         )
       })
+  },
+
+  getClientSites(clientId: string) {
+    return request<unknown>(`/api/public/sites/client/${encodeURIComponent(clientId)}`)
+      .then((d) => unwrapList<{ id: string; name?: string }>(d, 'sites'))
+      .catch(() => [])
   },
 
   getPublicLocations() {
@@ -104,10 +137,12 @@ export const jobcardsApi = {
   },
 
   getProjects(token: string) {
-    return request<{ projects: Array<{ id: string; name?: string; clientId?: string; clientName?: string; status?: string }> }>(
-      '/api/projects?limit=500',
-      { token }
-    ).then((d) => d.projects || [])
+    return request<unknown>('/api/projects?limit=500', { token }).then((d) =>
+      unwrapList<{ id: string; name?: string; clientId?: string; clientName?: string; status?: string }>(
+        d,
+        'projects'
+      )
+    )
   },
 
   syncActivity(token: string, jobCardId: string, events: unknown[]) {

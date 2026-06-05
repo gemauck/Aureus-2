@@ -132,7 +132,8 @@ export type ClientOption = {
   id: string
   name: string
   status?: string
-  sites?: string
+  type?: string
+  sites?: string | Array<{ id?: string; name?: string; siteName?: string }>
   clientSites?: Array<{ id: string; name?: string; siteName?: string }>
 }
 
@@ -140,6 +141,7 @@ export type UserOption = {
   id: string
   name?: string
   email?: string
+  department?: string
   status?: string
 }
 

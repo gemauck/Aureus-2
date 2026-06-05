@@ -15,8 +15,10 @@ import { ServiceMaintenanceScreen } from '../screens/ServiceMaintenanceScreen'
 import { SettingsScreen } from '../screens/SettingsScreen'
 import { createPlaceholderScreen } from '../screens/ModulePlaceholderScreen'
 import { JobCardsRootScreen } from '../jobcards/screens/JobCardsRootScreen'
+import { MessagesNavigator } from '../messages/MessagesNavigator'
 import { DrawerMenu } from '../components/shell/DrawerMenu'
 import { useAuth } from '../state/AuthContext'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 import { erp } from '../theme/appTheme'
 import type { RootStackParamList } from './types'
 
@@ -75,6 +77,13 @@ function AuthenticatedApp() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>()
   const [currentRoute, setCurrentRoute] = React.useState('Dashboard')
 
+  usePushNotifications((conversationId) => {
+    navigationRef.current?.navigate('Messages', {
+      screen: 'Chat',
+      params: { conversationId, title: 'Chat' }
+    } as never)
+  })
+
   return (
     <>
       <NavigationContainer
@@ -106,6 +115,7 @@ function AuthenticatedApp() {
           <Stack.Screen name="Helpdesk" component={HelpdeskScreen} />
           <Stack.Screen name="Tools" component={ToolsScreen} />
           <Stack.Screen name="Documents" component={DocumentsScreen} />
+          <Stack.Screen name="Messages" component={MessagesNavigator} />
           <Stack.Screen name="Reports" component={ReportsScreen} />
           <Stack.Screen name="MyNotes" component={MyNotesScreen} />
         </Stack.Navigator>

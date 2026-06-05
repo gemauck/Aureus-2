@@ -16,7 +16,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
 import { erp } from '../../theme/appTheme'
 import { projectsApi } from '../api'
+import { DocumentCollectionSummary } from '../components/DocumentCollectionSummary'
 import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
+import { TaskKanbanView, TaskListGroupedView } from '../components/TaskKanbanView'
 import { TaskRow } from '../components/TaskRow'
 import type { ProjectsStackParamList } from '../navigation'
 import type {
@@ -26,15 +28,23 @@ import type {
   ProjectDocument,
   ProjectNote,
   ProjectTask,
-  TaskFilterStatus
+  TaskFilterStatus,
+  TaskViewMode
 } from '../types'
 import {
+  activityIcon,
   enabledProcesses,
   formatDate,
   formatDateRange,
   formatDateTime,
+  formatRelative,
+  parseDriveLinks,
   progressPercent,
+  PROJECT_STATUS_EDIT,
   projectTasks,
+  stripHtml,
+  summarizeDocumentCollection,
+  taskCompletionStats,
   TASK_STATUSES,
   webProjectUrl
 } from '../utils'
@@ -82,6 +92,8 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   const [newNoteTitle, setNewNoteTitle] = useState('')
   const [newNoteContent, setNewNoteContent] = useState('')
   const [creatingNote, setCreatingNote] = useState(false)
+  const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>('list')
+  const [activityFilter, setActivityFilter] = useState('all')
 
   const load = useCallback(
     async (silent = false) => {
@@ -122,6 +134,41 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   }, [tasks, taskQuery, taskStatus])
 
   const processes = useMemo(() => (project ? enabledProcesses(project) : []), [project])
+  const driveLinks = useMemo(() => (project ? parseDriveLinks(project) : []), [project])
+  const docSummary = useMemo(
+    () => (project ? summarizeDocumentCollection(project.documentSections) : null),
+    [project]
+  )
+  const taskStats = useMemo(() => taskCompletionStats(tasks), [tasks])
+
+  const filteredActivity = useMemo(() => {
+    const entries = activity.length ? activity : project?.activityLog || []
+    if (activityFilter === 'all') return entries
+    return entries.filter((e) => {
+      const cat = String(e.type || '').toLowerCase()
+      if (activityFilter === 'tasks') return cat.includes('task')
+      if (activityFilter === 'trackers') return cat.includes('document') || cat.includes('fms')
+      if (activityFilter === 'notes') return cat.includes('note')
+      return true
+    })
+  }, [activity, project?.activityLog, activityFilter])
+
+  const openTask = (task: ProjectTask) =>
+    navigation.navigate('TaskDetail', {
+      taskId: task.id,
+      projectId,
+      projectName: project?.name
+    })
+
+  const updateProjectStatus = async (status: string) => {
+    if (!accessToken || !project) return
+    try {
+      const updated = await projectsApi.patchProject(accessToken, projectId, { status })
+      setProject((prev) => (prev ? { ...prev, ...updated } : updated))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update status')
+    }
+  }
 
   const createTask = async () => {
     if (!accessToken || !newTaskTitle.trim()) return
@@ -267,7 +314,47 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${pct}%` }]} />
               </View>
+              <Text style={styles.taskStatLine}>
+                {taskStats.done}/{taskStats.total} tasks done
+                {taskStats.overdue > 0 ? ` · ${taskStats.overdue} overdue` : ''}
+              </Text>
             </View>
+
+            <Text style={styles.sectionLabel}>Project status</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {PROJECT_STATUS_EDIT.map((st) => {
+                const active = project.status === st
+                return (
+                  <Pressable
+                    key={st}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => void updateProjectStatus(st)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{st}</Text>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+
+            {docSummary && project.hasDocumentCollectionProcess ? (
+              <DocumentCollectionSummary summary={docSummary} projectId={projectId} />
+            ) : null}
+
+            {driveLinks.length > 0 ? (
+              <View style={styles.subSection}>
+                <Text style={styles.subTitle}>Drive links</Text>
+                {driveLinks.map((link, idx) => (
+                  <Pressable
+                    key={`${link.url}-${idx}`}
+                    style={styles.driveRow}
+                    onPress={() => void Linking.openURL(link.url)}
+                  >
+                    <FontAwesome5 name="cloud" size={14} color={erp.primary} />
+                    <Text style={styles.driveLabel}>{link.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             <InfoRow label="Type" value={project.type} />
             <InfoRow label="Priority" value={project.priority} />
             <InfoRow label="Assigned to" value={project.assignedTo} />
@@ -294,7 +381,10 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
                     onPress={() => void Linking.openURL(webProjectUrl(projectId, p.tab))}
                   >
                     <FontAwesome5 name={p.icon} size={14} color={erp.primary} />
-                    <Text style={styles.processChipText}>{p.label}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.processChipText}>{p.label}</Text>
+                      <Text style={styles.processPurpose}>{p.purpose}</Text>
+                    </View>
                     <FontAwesome5 name="external-link-alt" size={10} color={erp.textSubtle} />
                   </Pressable>
                 ))}
@@ -305,6 +395,24 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'tasks' ? (
           <View style={styles.section}>
+            <View style={styles.taskViewToggle}>
+              {(['list', 'kanban', 'lists'] as TaskViewMode[]).map((mode) => (
+                <Pressable
+                  key={mode}
+                  style={[styles.viewModeBtn, taskViewMode === mode && styles.viewModeBtnActive]}
+                  onPress={() => setTaskViewMode(mode)}
+                >
+                  <Text
+                    style={[
+                      styles.viewModeText,
+                      taskViewMode === mode && styles.viewModeTextActive
+                    ]}
+                  >
+                    {mode === 'list' ? 'List' : mode === 'kanban' ? 'Board' : 'By list'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <View style={styles.taskToolbar}>
               <TextInput
                 style={styles.taskSearch}
@@ -335,19 +443,17 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
             </ScrollView>
             {filteredTasks.length === 0 ? (
               <Text style={styles.empty}>No tasks match.</Text>
+            ) : taskViewMode === 'kanban' ? (
+              <TaskKanbanView tasks={filteredTasks} onTaskPress={openTask} />
+            ) : taskViewMode === 'lists' ? (
+              <TaskListGroupedView
+                tasks={filteredTasks}
+                taskLists={project.taskLists || []}
+                onTaskPress={openTask}
+              />
             ) : (
               filteredTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onPress={() =>
-                    navigation.navigate('TaskDetail', {
-                      taskId: task.id,
-                      projectId,
-                      projectName: project.name
-                    })
-                  }
-                />
+                <TaskRow key={task.id} task={task} onPress={() => openTask(task)} />
               ))
             )}
           </View>
@@ -363,19 +469,29 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
               <Text style={styles.empty}>No project notes yet.</Text>
             ) : (
               notes.map((note) => (
-                <View key={note.id} style={styles.noteCard}>
+                <Pressable
+                  key={note.id}
+                  style={styles.noteCard}
+                  onPress={() =>
+                    navigation.navigate('NoteDetail', {
+                      projectId,
+                      noteId: note.id,
+                      projectName: project.name
+                    })
+                  }
+                >
                   <Text style={styles.noteTitle}>{note.title || 'Untitled'}</Text>
                   {note.content ? (
-                    <Text style={styles.noteContent} numberOfLines={8}>
-                      {note.content.replace(/<[^>]+>/g, ' ').trim()}
+                    <Text style={styles.noteContent} numberOfLines={4}>
+                      {stripHtml(note.content)}
                     </Text>
                   ) : null}
                   <Text style={styles.noteMeta}>
-                    {[note.author?.name, formatDateTime(note.updatedAt || note.createdAt)]
+                    {[note.author?.name, formatRelative(note.updatedAt || note.createdAt)]
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>
-                </View>
+                </Pressable>
               ))
             )}
           </View>
@@ -383,14 +499,37 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'activity' ? (
           <View style={styles.section}>
-            {activity.length === 0 && (!project.activityLog || project.activityLog.length === 0) ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.taskChips}>
+              {['all', 'tasks', 'trackers', 'notes'].map((f) => {
+                const active = activityFilter === f
+                return (
+                  <Pressable
+                    key={f}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setActivityFilter(f)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+            {filteredActivity.length === 0 ? (
               <Text style={styles.empty}>No activity recorded.</Text>
             ) : (
-              (activity.length ? activity : project.activityLog || []).map((entry) => (
+              filteredActivity.map((entry) => (
                 <View key={entry.id} style={styles.activityCard}>
-                  <Text style={styles.activityDesc}>{entry.description || entry.type || 'Activity'}</Text>
+                  <View style={styles.activityTop}>
+                    <FontAwesome5
+                      name={activityIcon(entry.type)}
+                      size={14}
+                      color={erp.primary}
+                    />
+                    <Text style={styles.activityDesc}>{entry.description || entry.type || 'Activity'}</Text>
+                  </View>
                   <Text style={styles.activityMeta}>
-                    {[entry.userName || entry.user?.name, formatDateTime(entry.createdAt)]
+                    {[entry.userName || entry.user?.name, formatRelative(entry.createdAt)]
                       .filter(Boolean)
                       .join(' · ')}
                   </Text>
@@ -477,6 +616,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.processTitle}>{p.label}</Text>
                     <Text style={styles.processDesc}>{p.description}</Text>
+                    <Text style={styles.processPurpose}>{p.purpose}</Text>
                     <Text style={styles.processHint}>Open full tracker on web →</Text>
                   </View>
                 </Pressable>
@@ -661,7 +801,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: erp.border
   },
-  processChipText: { flex: 1, fontWeight: '700', color: erp.text },
+  processChipText: { fontWeight: '700', color: erp.text },
+  processPurpose: { fontSize: 11, color: erp.textSubtle, marginTop: 2, lineHeight: 15 },
+  taskStatLine: { fontSize: 12, color: erp.textMuted, marginTop: 10, fontWeight: '600' },
+  sectionLabel: { fontSize: 12, fontWeight: '800', color: erp.textMuted, textTransform: 'uppercase' },
+  driveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    backgroundColor: erp.surface,
+    borderRadius: erp.radius.md,
+    borderWidth: 1,
+    borderColor: erp.border
+  },
+  driveLabel: { fontSize: 14, fontWeight: '700', color: erp.primary },
+  taskViewToggle: {
+    flexDirection: 'row',
+    backgroundColor: erp.surfaceMuted,
+    borderRadius: erp.radius.md,
+    padding: 4,
+    marginBottom: 8
+  },
+  viewModeBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
+  viewModeBtnActive: { backgroundColor: erp.surface, ...erp.shadowSm },
+  viewModeText: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
+  viewModeTextActive: { color: erp.primary },
+  activityTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   taskToolbar: { flexDirection: 'row', gap: 8 },
   taskSearch: {
     flex: 1,

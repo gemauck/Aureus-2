@@ -71,6 +71,9 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/teams/Teams.jsx',
         './src/components/teams/TeamsSimple.jsx',
         
+        // Messages
+        './src/components/messages/Messenger.jsx',
+        
         // Users
         './src/components/users/UserModal.jsx',
         './src/components/users/InviteUserModal.jsx',

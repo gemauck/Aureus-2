@@ -735,6 +735,29 @@ const Teams = () => {
         }
     }, [selectedTeam?.id, refreshTeams]);
 
+    const openTeamChat = useCallback(async () => {
+        if (!selectedTeam?.id) return;
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+            if (!token) throw new Error('Not authenticated');
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const res = await fetch(`${apiBase}/api/chat/from-team/${encodeURIComponent(selectedTeam.id)}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json?.error?.message || 'Could not open team chat');
+            const conv = json?.data?.conversation || json?.conversation;
+            const convId = conv?.id;
+            if (!convId) throw new Error('No conversation returned');
+            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'messages' } }));
+            window.location.hash = `#/messages?conversation=${encodeURIComponent(convId)}`;
+        } catch (e) {
+            if (typeof window.alert === 'function') window.alert(e.message || 'Could not open team chat');
+        }
+    }, [selectedTeam?.id]);
+
     const removeMemberFromTeam = useCallback(async (userId) => {
         if (!selectedTeam?.id || !userId) return;
         if (!window.confirm('Remove this member from the team?')) return;
@@ -882,6 +905,20 @@ const Teams = () => {
                                 )}
                             </div>
                         </div>
+                        <button
+                            type="button"
+                            onClick={openTeamChat}
+                            className={`shrink-0 px-4 py-3 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 min-h-[44px] ${
+                                isDark
+                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-900/30'
+                                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-md'
+                            }`}
+                            title="Open group chat with all team members"
+                        >
+                            <i className="fas fa-comments" aria-hidden="true" />
+                            <span className="hidden sm:inline">Message team</span>
+                            <span className="sm:hidden">Chat</span>
+                        </button>
                         <div className={`flex items-center flex-wrap sm:flex-nowrap gap-2 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-1.5 shrink-0`} role="group" aria-label="Section tabs">
                             <button
                                 onClick={() => setActiveTab('discussions')}

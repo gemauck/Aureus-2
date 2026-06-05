@@ -20,6 +20,8 @@ type Props = {
   placeholder?: string
   disabled?: boolean
   hint?: string
+  loading?: boolean
+  emptyLabel?: string
 }
 
 export function SearchableSelect({
@@ -29,7 +31,9 @@ export function SearchableSelect({
   onChange,
   placeholder = 'Search or select…',
   disabled,
-  hint
+  hint,
+  loading,
+  emptyLabel = 'No options available'
 }: Props) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
@@ -37,10 +41,17 @@ export function SearchableSelect({
   const selected = options.find((o) => o.value === value)
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    const list = options.filter((o) => o.value)
+    const list = options.filter((o) => String(o.value || '').trim())
     if (!q) return list
     return list.filter((o) => o.label.toLowerCase().includes(q))
   }, [options, filter])
+
+  const listEmptyMessage = useMemo(() => {
+    if (loading) return 'Loading…'
+    if (!options.length) return emptyLabel
+    if (filter.trim()) return 'No matches'
+    return emptyLabel
+  }, [loading, options.length, filter, emptyLabel])
 
   return (
     <View style={styles.wrap}>
@@ -100,7 +111,15 @@ export function SearchableSelect({
                   </Pressable>
                 )
               }}
-              ListEmptyComponent={<Text style={styles.empty}>No matches</Text>}
+              ListEmptyComponent={
+                loading ? (
+                  <View style={styles.emptyWrap}>
+                    <Text style={styles.empty}>{listEmptyMessage}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.empty}>{listEmptyMessage}</Text>
+                )
+              }
             />
           </View>
         </View>
@@ -169,5 +188,6 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, fontSize: 16, color: jc.text },
   rowTextSelected: { color: jc.primaryDark, fontWeight: '600' },
   check: { color: jc.primary, fontWeight: '700', fontSize: 16 },
-  empty: { padding: 24, color: jc.textMuted, textAlign: 'center' }
+  empty: { padding: 24, color: jc.textMuted, textAlign: 'center' },
+  emptyWrap: { padding: 24, alignItems: 'center' }
 })

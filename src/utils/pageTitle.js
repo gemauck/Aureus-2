@@ -12,6 +12,7 @@
         projects: 'Projects',
         tasks: 'Tasks',
         teams: 'Teams',
+        messages: 'Messages',
         users: 'Users',
         'leave-platform': 'Leave & HR',
         manufacturing: 'Manufacturing',

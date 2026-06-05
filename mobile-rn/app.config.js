@@ -1,8 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 
-/** Bump only when native modules / permissions change — not for JS-only OTA publishes. */
-const RUNTIME_VERSION = 'erp-mobile-1'
+/** Bump when native modules / permissions change — expo-notifications added for chat push. */
+const RUNTIME_VERSION = 'erp-mobile-2'
 
 const OTA_BASE =
   process.env.MOBILE_OTA_PUBLIC_URL ||

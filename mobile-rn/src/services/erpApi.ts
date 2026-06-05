@@ -87,5 +87,9 @@ export const erpApi = {
     return request<{ clients?: Array<{ id: string }> }>('/api/clients', { token }).then((d) => ({
       total: d.clients?.length || 0
     }))
+  },
+
+  getChatUnreadCount(token: string) {
+    return request<{ unreadCount: number }>('/api/chat/unread', { token }).then((d) => d.unreadCount || 0)
   }
 }

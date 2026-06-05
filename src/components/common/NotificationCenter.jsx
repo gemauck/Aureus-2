@@ -363,6 +363,7 @@ const NotificationCenter = () => {
         switch(type) {
             case 'mention': return 'fa-at';
             case 'comment': return 'fa-comment';
+            case 'message': return 'fa-comments';
             case 'task': return 'fa-tasks';
             case 'invoice': return 'fa-file-invoice';
             case 'system': return 'fa-info-circle';
@@ -374,6 +375,7 @@ const NotificationCenter = () => {
         switch(type) {
             case 'mention': return 'text-blue-600';
             case 'comment': return 'text-green-600';
+            case 'message': return 'text-indigo-600';
             case 'task': return 'text-primary-600';
             case 'invoice': return 'text-orange-600';
             case 'system': return 'text-gray-600';

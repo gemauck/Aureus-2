@@ -13,6 +13,12 @@ export type RootStackParamList = {
   Helpdesk: undefined
   Tools: undefined
   Documents: undefined
+  Messages:
+    | {
+        screen?: 'MessagesHome' | 'Chat'
+        params?: { conversationId: string; title?: string }
+      }
+    | undefined
   Notifications: undefined
   Reports: undefined
   Settings: undefined

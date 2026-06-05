@@ -105,6 +105,12 @@ model User {
   hrLibraryDocumentsUploaded  HrLibraryDocument[]           @relation("HrLibraryDocumentUploader")
   travelBookingRequestsCreated  TravelBookingRequest[]       @relation("TravelBookingRequester")
   travelBookingRequestsAssigned TravelBookingRequest[]       @relation("TravelBookingAssignee")
+  chatConversationsCreated      ChatConversation[]           @relation("ChatConversationCreator")
+  chatParticipations            ChatParticipant[]
+  chatMessagesSent              ChatMessage[]                @relation("ChatMessageSender")
+  chatMessageReads              ChatMessageRead[]
+  chatMessageReactions          ChatMessageReaction[]
+  pushDeviceTokens              PushDeviceToken[]
 
   @@index([createdAt])
   @@index([role])
@@ -2852,4 +2858,100 @@ model ErpCalendarEvent {
   @@index([userId])
   @@index([startUtc])
   @@index([endUtc])
+}
+
+model ChatConversation {
+  id                 String            @id @default(cuid())
+  type               String            @default("direct") // direct | group
+  name               String            @default("")
+  avatar             String            @default("")
+  createdById        String
+  teamId             String?
+  lastMessageAt      DateTime          @default(now())
+  lastMessagePreview String            @default("")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  createdBy          User              @relation("ChatConversationCreator", fields: [createdById], references: [id])
+  participants       ChatParticipant[]
+  messages           ChatMessage[]
+
+  @@index([lastMessageAt])
+  @@index([createdById])
+  @@index([teamId])
+}
+
+model ChatParticipant {
+  id             String           @id @default(cuid())
+  conversationId String
+  userId         String
+  role           String           @default("member") // admin | member
+  lastReadAt     DateTime?
+  muted          Boolean          @default(false)
+  joinedAt       DateTime         @default(now())
+  leftAt         DateTime?
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model ChatMessage {
+  id             String            @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String            @default("")
+  attachments    Json              @default("[]")
+  replyToId      String?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  conversation   ChatConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation("ChatMessageSender", fields: [senderId], references: [id])
+  replyTo        ChatMessage?      @relation("ChatMessageReply", fields: [replyToId], references: [id])
+  replies        ChatMessage[]     @relation("ChatMessageReply")
+  reads          ChatMessageRead[]
+  reactions      ChatMessageReaction[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model ChatMessageRead {
+  id        String      @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+model ChatMessageReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model PushDeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("expo")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

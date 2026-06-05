@@ -57,6 +57,8 @@
     "test:jobcards:ui": "node tests/jobcards-ui-smoke.mjs",
     "repair:inventory-location-costs": "node scripts/repair-location-unit-costs-from-catalog.js",
     "migrate:drop-location-inventory-unit-cost": "psql \"$DATABASE_URL\" -f drop-location-inventory-unit-cost.sql",
+    "migrate:chat-messaging": "psql \"$DATABASE_URL\" -f migrations/add-chat-messaging.sql",
+    "migrate:chat-reactions-push": "psql \"$DATABASE_URL\" -f migrations/add-chat-reactions-push.sql",
     "audit:inventory-catalog-pricing": "node scripts/audit-catalog-vs-location-unit-cost-valuation.js",
     "backfill:orphan-inventory-items": "node scripts/backfill-orphan-inventory-items.js",
     "dedupe:inventory-by-name": "node scripts/dedupe-inventory-items-by-name.js",

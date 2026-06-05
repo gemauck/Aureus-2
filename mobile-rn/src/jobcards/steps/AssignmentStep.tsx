@@ -1,24 +1,47 @@
-import React, { useEffect, useMemo } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import React, { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useNetwork } from '../../hooks/useNetwork'
+import { jobcardsApi } from '../api'
 import { NO_CLIENT_ID, useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
+import { formStyles } from '../components/formStyles'
 import { jc } from '../theme'
+import type { ClientOption } from '../types'
 
-function parseSites(client: { sites?: string; clientSites?: Array<{ id: string; name?: string }> }) {
+type SiteOption = { id: string; name: string }
+
+function technicianLabel(user: { name?: string; email?: string; department?: string; id: string }) {
+  const base = user.name || user.email || user.id
+  return user.department ? `${base} (${user.department})` : base
+}
+
+function technicianValue(user: { name?: string; email?: string; id: string }) {
+  return user.name || user.email || user.id
+}
+
+function parseSitesFromClient(client: ClientOption): SiteOption[] {
   if (Array.isArray(client.clientSites) && client.clientSites.length) {
     return client.clientSites.map((s) => ({
       id: s.id,
-      name: s.name || s.id
+      name: s.name || s.siteName || s.id
     }))
   }
+
+  if (Array.isArray(client.sites) && client.sites.length) {
+    return client.sites.map((s, i) => ({
+      id: s.id || `site_${i}`,
+      name: s.name || s.siteName || `Site ${i + 1}`
+    }))
+  }
+
   try {
     if (typeof client.sites === 'string' && client.sites.trim()) {
       const parsed = JSON.parse(client.sites)
       if (Array.isArray(parsed)) {
-        return parsed.map((s: { id?: string; name?: string }, i: number) => ({
+        return parsed.map((s: { id?: string; name?: string; siteName?: string }, i: number) => ({
           id: s.id || `site_${i}`,
-          name: s.name || `Site ${i + 1}`
+          name: s.name || s.siteName || `Site ${i + 1}`
         }))
       }
     }
@@ -29,32 +52,111 @@ function parseSites(client: { sites?: string; clientSites?: Array<{ id: string; 
 }
 
 export function AssignmentStep() {
-  const { formData, setFormData, clients, users, projects } = useJobCardWizard()
-  const [techInput, setTechInput] = React.useState('')
+  const {
+    formData,
+    setFormData,
+    clients,
+    users,
+    projects,
+    referenceRefreshing,
+    ensureReferenceDataLoaded
+  } = useJobCardWizard()
+  const { isOnline } = useNetwork()
+  const [techInput, setTechInput] = useState('')
+  const [availableSites, setAvailableSites] = useState<SiteOption[]>([])
+  const [sitesLoading, setSitesLoading] = useState(false)
+
+  useEffect(() => {
+    void ensureReferenceDataLoaded()
+  }, [ensureReferenceDataLoaded])
 
   const clientOptions = useMemo(
     () => [
-      { value: NO_CLIENT_ID, label: 'No Client (enter details manually)' },
-      ...clients.map((c) => ({ value: c.id, label: c.name || c.id }))
+      ...clients.map((c) => ({ value: c.id, label: c.name || c.id })),
+      { value: NO_CLIENT_ID, label: 'No Client (enter details manually)' }
     ],
     [clients]
   )
 
-  const userOptions = useMemo(
+  const leadTechnicianOptions = useMemo(
     () =>
-      users.map((u) => ({
-        value: u.name || u.email || u.id,
-        label: u.name || u.email || u.id
-      })),
+      users.map((u) => {
+        const value = technicianValue(u)
+        return { value, label: technicianLabel(u) }
+      }),
     [users]
   )
 
-  const sites = useMemo(() => {
-    const c = clients.find((x) => x.id === formData.clientId)
-    return c ? parseSites(c) : []
-  }, [clients, formData.clientId])
+  const teamTechnicianOptions = useMemo(
+    () =>
+      users
+        .filter((u) => {
+          const value = technicianValue(u)
+          return value !== formData.agentName && !formData.otherTechnicians.includes(value)
+        })
+        .map((u) => {
+          const value = technicianValue(u)
+          return { value, label: value }
+        }),
+    [users, formData.agentName, formData.otherTechnicians]
+  )
 
-  const siteOptions = sites.map((s) => ({ value: s.id, label: s.name }))
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSitesForClient() {
+      if (!formData.clientId || formData.clientId === NO_CLIENT_ID) {
+        setAvailableSites([])
+        return
+      }
+
+      const client = clients.find((c) => c.id === formData.clientId)
+      if (!client) {
+        setAvailableSites([])
+        return
+      }
+
+      let sites = parseSitesFromClient(client)
+
+      if (isOnline && sites.length === 0) {
+        setSitesLoading(true)
+        try {
+          const apiSites = await jobcardsApi.getClientSites(formData.clientId)
+          if (!cancelled && apiSites.length) {
+            sites = apiSites.map((s, i) => ({
+              id: s.id || `site_${i}`,
+              name: s.name || `Site ${i + 1}`
+            }))
+          }
+        } finally {
+          if (!cancelled) setSitesLoading(false)
+        }
+      }
+
+      if (!cancelled) {
+        setAvailableSites(sites)
+        setFormData((prev) =>
+          prev.clientName === (client.name || '') ? prev : { ...prev, clientName: client.name || '' }
+        )
+      }
+    }
+
+    void loadSitesForClient()
+    return () => {
+      cancelled = true
+    }
+  }, [formData.clientId, clients, isOnline, setFormData])
+
+  useEffect(() => {
+    if (!formData.siteId || !availableSites.length) return
+    const site = availableSites.find((s) => String(s.id) === String(formData.siteId))
+    if (!site?.name) return
+    const nextName = String(site.name).trim()
+    if (String(formData.siteName || '').trim() === nextName) return
+    setFormData((prev) => ({ ...prev, siteName: nextName }))
+  }, [formData.siteId, formData.siteName, availableSites, setFormData])
+
+  const siteOptions = availableSites.map((s) => ({ value: s.id, label: s.name }))
 
   const projectOptions = useMemo(() => {
     const hasClientFilter = Boolean(formData.clientId) && formData.clientId !== NO_CLIENT_ID
@@ -94,7 +196,7 @@ export function AssignmentStep() {
   }
 
   function onSiteChange(siteId: string) {
-    const site = sites.find((s) => s.id === siteId)
+    const site = availableSites.find((s) => s.id === siteId)
     setFormData((f) => ({ ...f, siteId, siteName: site?.name || '' }))
   }
 
@@ -103,7 +205,7 @@ export function AssignmentStep() {
     setFormData((f) => ({
       ...f,
       projectId: projectId || '',
-      projectName: project?.name || ''
+      projectName: project?.name || f.projectName || ''
     }))
   }
 
@@ -116,11 +218,20 @@ export function AssignmentStep() {
     setTechInput('')
   }
 
+  const listsLoading = referenceRefreshing && !users.length && !clients.length
+
   return (
     <View>
+      {listsLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={jc.primary} size="small" />
+          <Text style={styles.loadingText}>Loading technicians and clients…</Text>
+        </View>
+      ) : null}
+
       <SectionCard title="Heading" subtitle="Short label for this visit." accent>
         <TextInput
-          style={styles.input}
+          style={formStyles.input}
           value={formData.heading}
           onChangeText={(heading) => setFormData((f) => ({ ...f, heading }))}
           placeholder="e.g. Pump service — Unit 3"
@@ -132,9 +243,11 @@ export function AssignmentStep() {
         <SearchableSelect
           label="Technician *"
           value={formData.agentName}
-          options={userOptions}
+          options={leadTechnicianOptions}
           onChange={(agentName) => setFormData((f) => ({ ...f, agentName }))}
           placeholder="Choose technician…"
+          loading={referenceRefreshing && !leadTechnicianOptions.length}
+          emptyLabel="No technicians available — check connection and try again"
         />
       </SectionCard>
 
@@ -142,12 +255,18 @@ export function AssignmentStep() {
         <SearchableSelect
           label="Add team member"
           value={techInput}
-          options={userOptions}
+          options={teamTechnicianOptions}
           onChange={setTechInput}
           placeholder="Search team members…"
+          loading={referenceRefreshing && !teamTechnicianOptions.length}
+          emptyLabel="No team members available"
         />
-        <Pressable style={styles.addBtn} onPress={addTechnician}>
-          <Text style={styles.addBtnText}>+ Add to team</Text>
+        <Pressable
+          style={[formStyles.primaryBtn, !techInput && styles.addBtnDisabled]}
+          disabled={!techInput}
+          onPress={addTechnician}
+        >
+          <Text style={formStyles.primaryBtnText}>+ Add to team</Text>
         </Pressable>
         {formData.otherTechnicians.length ? (
           <View style={styles.tags}>
@@ -176,18 +295,20 @@ export function AssignmentStep() {
           options={clientOptions}
           onChange={onClientChange}
           placeholder="Search clients…"
+          loading={referenceRefreshing && !clientOptions.length}
+          emptyLabel="No clients available — check connection and try again"
         />
         {formData.clientId === NO_CLIENT_ID ? (
           <>
             <TextInput
-              style={styles.input}
+              style={formStyles.input}
               placeholder="Client name (manual)"
               placeholderTextColor={jc.textSubtle}
               value={formData.clientName}
               onChangeText={(clientName) => setFormData((f) => ({ ...f, clientName }))}
             />
             <TextInput
-              style={styles.input}
+              style={formStyles.input}
               placeholder="Site (manual)"
               placeholderTextColor={jc.textSubtle}
               value={formData.siteName}
@@ -200,8 +321,16 @@ export function AssignmentStep() {
             value={formData.siteId}
             options={siteOptions}
             onChange={onSiteChange}
-            placeholder={siteOptions.length ? 'Search sites…' : 'No sites for client'}
-            disabled={!formData.clientId || siteOptions.length === 0}
+            placeholder={
+              sitesLoading
+                ? 'Loading sites…'
+                : siteOptions.length
+                  ? 'Search sites…'
+                  : 'No sites for client'
+            }
+            disabled={!formData.clientId || sitesLoading || siteOptions.length === 0}
+            loading={sitesLoading}
+            emptyLabel="No sites for this client"
           />
         )}
       </SectionCard>
@@ -216,8 +345,8 @@ export function AssignmentStep() {
             projectOptions.length
               ? 'Search projects…'
               : formData.clientId && formData.clientId !== NO_CLIENT_ID
-                ? 'No projects for this client'
-                : 'Select a client to filter projects'
+                ? 'No projects linked to selected client'
+                : 'No projects available'
           }
           disabled={!projectOptions.length}
           hint={
@@ -228,34 +357,36 @@ export function AssignmentStep() {
                 : 'Projects load when online'
           }
         />
+        <TextInput
+          style={formStyles.input}
+          placeholder="Project name (manual if not listed)"
+          placeholderTextColor={jc.textSubtle}
+          value={formData.projectName}
+          onChangeText={(projectName) => setFormData((f) => ({ ...f, projectName }))}
+        />
       </SectionCard>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderColor: jc.border,
-    borderRadius: jc.radius.md,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: jc.surface,
-    color: jc.text
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: jc.space.md,
+    paddingHorizontal: 4
   },
-  addBtn: {
-    backgroundColor: jc.primary,
-    padding: 12,
-    borderRadius: jc.radius.md,
-    alignItems: 'center'
-  },
-  addBtnText: { color: '#fff', fontWeight: '700' },
+  loadingText: { color: jc.textMuted, fontSize: 13 },
+  addBtnDisabled: { opacity: 0.5 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: {
     backgroundColor: jc.primarySoft,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: jc.radius.sm
+    borderRadius: jc.radius.sm,
+    borderWidth: 1,
+    borderColor: jc.primaryMuted
   },
   tagText: { color: jc.primaryDark, fontSize: 13, fontWeight: '600' }
 })

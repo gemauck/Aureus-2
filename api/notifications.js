@@ -49,7 +49,8 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     const metadataObj = typeof metadata === 'string' ? (() => { try { return JSON.parse(metadata); } catch (_) { return {}; } })() : (metadata || {});
     // Team discussion notifications always show in the bell (discussions section = in-app)
     const isTeamDiscussion = metadataObj.source === 'team_discussion' || metadataObj.source === 'team_discussion_reply';
-    let shouldCreateInApp = isTeamDiscussion || (type === 'mention' && settings.inAppMentions) || (type === 'comment' && settings.inAppComments) ||
+    const isChatMessage = type === 'message' || metadataObj.source === 'chat_message';
+    let shouldCreateInApp = isTeamDiscussion || isChatMessage || (type === 'mention' && settings.inAppMentions) || (type === 'comment' && settings.inAppComments) ||
         (type === 'task' && settings.inAppTasks) || (type === 'invoice' && settings.inAppInvoices) || (type === 'system' && settings.inAppSystem);
 
     let validLink = link || '';
@@ -76,6 +77,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         validLink.includes('#/clients?') ||
         validLink.includes('#/leads/') ||
         validLink.includes('#/helpdesk/') || validLink.includes('#/teams') ||
+        validLink.includes('#/messages') ||
         validLink.includes('#/reports') || validLink.includes('#/leave-platform') ||
         (validLink.includes('#/projects/') && validLink.includes('task='))
     );
@@ -211,7 +213,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         }
     }
 
-    const shouldSendEmail = (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
+    const shouldSendEmail = isChatMessage ? settings.emailSystem : (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
         (type === 'task' && settings.emailTasks) || (type === 'invoice' && settings.emailInvoices) || (type === 'system' && settings.emailSystem);
     if (!targetUser.email) {
         if (type === 'comment' || type === 'mention') console.warn('📧 Notification: user has no email, skipping:', id, targetUser.name);

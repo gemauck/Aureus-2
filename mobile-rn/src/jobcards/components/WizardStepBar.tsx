@@ -1,5 +1,5 @@
 import React from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { STEP_IDS, STEP_META } from '../WizardContext'
 import { jc } from '../theme'
 
@@ -16,7 +16,11 @@ export function WizardStepBar({ currentStep, onSelect }: Props) {
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${progress}%` }]} />
       </View>
-      <View style={styles.steps}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.steps}
+      >
         {STEP_IDS.map((stepId, index) => {
           const meta = STEP_META[stepId as keyof typeof STEP_META]
           const active = index === currentStep
@@ -36,17 +40,23 @@ export function WizardStepBar({ currentStep, onSelect }: Props) {
                   complete && styles.dotComplete
                 ]}
               >
-                <Text style={[styles.dotText, (active || complete) && styles.dotTextActive]}>
+                <Text
+                  style={[
+                    styles.dotText,
+                    active && styles.dotTextOnPrimary,
+                    complete && !active && styles.dotTextComplete
+                  ]}
+                >
                   {complete ? '✓' : index + 1}
                 </Text>
               </View>
-              <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
+              <Text style={[styles.label, active && styles.labelActive]} numberOfLines={2}>
                 {meta?.title || stepId}
               </Text>
             </Pressable>
           )
         })}
-      </View>
+      </ScrollView>
     </View>
   )
 }
@@ -59,35 +69,54 @@ const styles = StyleSheet.create({
     paddingBottom: jc.space.sm
   },
   progressTrack: {
-    height: 3,
+    height: 4,
     backgroundColor: jc.border,
     marginHorizontal: jc.space.lg
   },
   progressFill: {
-    height: 3,
+    height: 4,
     backgroundColor: jc.primary,
     borderRadius: 2
   },
   steps: {
     flexDirection: 'row',
-    paddingHorizontal: jc.space.sm,
+    paddingHorizontal: jc.space.md,
     paddingTop: jc.space.sm,
-    justifyContent: 'space-between'
+    gap: 4
   },
-  step: { flex: 1, alignItems: 'center', paddingHorizontal: 2 },
+  step: {
+    width: 72,
+    alignItems: 'center',
+    paddingHorizontal: 2
+  },
   dot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: jc.border,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: jc.surfaceMuted,
+    borderWidth: 1,
+    borderColor: jc.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4
   },
-  dotActive: { backgroundColor: jc.primary },
-  dotComplete: { backgroundColor: jc.primaryMuted },
+  dotActive: {
+    backgroundColor: jc.primary,
+    borderColor: jc.primary
+  },
+  dotComplete: {
+    backgroundColor: jc.primarySoft,
+    borderColor: jc.primaryMuted
+  },
   dotText: { fontSize: 12, fontWeight: '700', color: jc.textMuted },
-  dotTextActive: { color: jc.primaryDark },
-  label: { fontSize: 10, fontWeight: '600', color: jc.textSubtle, textAlign: 'center' },
+  dotTextOnPrimary: { color: '#fff' },
+  dotTextComplete: { color: jc.primaryDark },
+  label: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: jc.textSubtle,
+    textAlign: 'center',
+    lineHeight: 13
+  },
   labelActive: { color: jc.primary, fontWeight: '700' }
 })
