@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -20,8 +21,10 @@ type Props = {
 }
 
 /** Live ML Kit stream scanning — reliable on iOS; can crash some Android devices (e.g. Samsung A53). */
-const IOS_BARCODE_TYPES = ['qr', 'code128', 'code39', 'ean13'] as const
-const ANDROID_SNAPSHOT_INTERVAL_MS = 750
+const BARCODE_TYPES = ['qr', 'code128', 'code39', 'ean13'] as const
+const ANDROID_SNAPSHOT_INTERVAL_MS = 450
+/** Typical inventory sticker aspect (e.g. Avery L7163). */
+const LABEL_FRAME_ASPECT = 99.1 / 38.1
 
 export function InventoryBarcodeScannerModal({ visible, onClose, onScan }: Props) {
   const [permission, requestPermission] = useCameraPermissions()
@@ -133,18 +136,22 @@ function ScannerCamera({
   const cameraRef = useRef<CameraView>(null)
   const lastScan = useRef({ text: '', t: 0 })
   const scanningRef = useRef(false)
+  const scannedRef = useRef(false)
   const useAndroidSnapshot = Platform.OS === 'android'
 
   const tryAcceptScan = useCallback(
     (data: string) => {
+      if (scannedRef.current) return
       const now = Date.now()
       const s = String(data || '').trim()
       if (!s) return
       if (s === lastScan.current.text && now - lastScan.current.t < 2000) return
       lastScan.current = { text: s, t: now }
+      scannedRef.current = true
       onScan(s)
+      onClose()
     },
-    [onScan]
+    [onClose, onScan]
   )
 
   useEffect(() => {
@@ -152,7 +159,7 @@ function ScannerCamera({
     let cancelled = false
 
     const tick = async () => {
-      if (cancelled || scanningRef.current || !cameraRef.current) return
+      if (cancelled || scanningRef.current || scannedRef.current || !cameraRef.current) return
       scanningRef.current = true
       let uri = ''
       try {
@@ -163,7 +170,7 @@ function ScannerCamera({
         })
         uri = photo?.uri || ''
         if (!uri || cancelled) return
-        const results = await Camera.scanFromURLAsync(uri, ['qr'])
+        const results = await Camera.scanFromURLAsync(uri, [...BARCODE_TYPES])
         const data = results?.[0]?.data
         if (data) tryAcceptScan(data)
       } catch {
@@ -196,23 +203,53 @@ function ScannerCamera({
         {...(useAndroidSnapshot
           ? {}
           : {
-              barcodeScannerSettings: { barcodeTypes: [...IOS_BARCODE_TYPES] },
+              barcodeScannerSettings: { barcodeTypes: [...BARCODE_TYPES] },
               onBarcodeScanned: ({ data }) => tryAcceptScan(data)
             })}
       />
-      <View style={styles.overlay}>
-        <Text style={styles.overlayText}>
-          {useAndroidSnapshot
-            ? 'Point at the inventory QR label'
-            : 'Point at the QR label or barcode'}
-        </Text>
-        {!cameraReady ? (
-          <Text style={styles.hint}>Initializing…</Text>
-        ) : null}
-      </View>
+      <ScanPlacementOverlay ready={cameraReady} />
       <Pressable style={styles.closeScan} onPress={onClose}>
         <Text style={styles.closeScanText}>Close scanner</Text>
       </Pressable>
+    </View>
+  )
+}
+
+function ScanPlacementOverlay({ ready }: { ready: boolean }) {
+  const { width: screenW, height: screenH } = Dimensions.get('window')
+  const frameW = Math.min(screenW * 0.86, screenW - 32)
+  const frameH = Math.min(frameW / LABEL_FRAME_ASPECT, screenH * 0.28)
+  const sideW = (screenW - frameW) / 2
+  const dim = 'rgba(0,0,0,0.55)'
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={styles.overlayHeader}>
+        <Text style={styles.overlayText}>Align inventory label in frame</Text>
+        <Text style={styles.overlaySubtext}>
+          {ready ? 'Scanning automatically — no photo needed' : 'Starting camera…'}
+        </Text>
+      </View>
+      <View style={{ flex: 1, backgroundColor: dim }} />
+      <View style={{ flexDirection: 'row', height: frameH }}>
+        <View style={{ width: sideW, backgroundColor: dim }} />
+        <View
+          style={{
+            width: frameW,
+            height: frameH,
+            borderWidth: 2,
+            borderColor: 'rgba(255,255,255,0.85)',
+            borderRadius: 8
+          }}
+        >
+          <View style={[styles.corner, styles.cornerTL]} />
+          <View style={[styles.corner, styles.cornerTR]} />
+          <View style={[styles.corner, styles.cornerBL]} />
+          <View style={[styles.corner, styles.cornerBR]} />
+        </View>
+        <View style={{ width: sideW, backgroundColor: dim }} />
+      </View>
+      <View style={{ flex: 1, backgroundColor: dim }} />
     </View>
   )
 }
@@ -224,15 +261,51 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   message: { color: '#fff', fontSize: 16, textAlign: 'center', fontWeight: '600' },
   hint: { color: '#cbd5e1', fontSize: 13, textAlign: 'center' },
-  overlay: {
+  overlayHeader: {
     position: 'absolute',
-    top: 16,
+    top: 12,
     left: 16,
     right: 16,
+    zIndex: 2,
     alignItems: 'center',
-    gap: 6
+    gap: 4
   },
-  overlayText: { color: '#fff', fontWeight: '700', textAlign: 'center' },
+  overlayText: { color: '#fff', fontWeight: '700', textAlign: 'center', fontSize: 16 },
+  overlaySubtext: { color: '#e2e8f0', fontSize: 13, textAlign: 'center' },
+  corner: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderColor: '#38bdf8'
+  },
+  cornerTL: {
+    top: -2,
+    left: -2,
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderTopLeftRadius: 8
+  },
+  cornerTR: {
+    top: -2,
+    right: -2,
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderTopRightRadius: 8
+  },
+  cornerBL: {
+    bottom: -2,
+    left: -2,
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderBottomLeftRadius: 8
+  },
+  cornerBR: {
+    bottom: -2,
+    right: -2,
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderBottomRightRadius: 8
+  },
   btn: {
     marginTop: 8,
     backgroundColor: jc.primary,

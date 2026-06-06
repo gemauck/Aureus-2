@@ -337,7 +337,6 @@ export function StockTakeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.lineName}>{item.name || item.sku}</Text>
                 <Text style={styles.lineSku}>{item.sku}</Text>
-                <Text style={styles.onHand}>On hand: {item.quantity ?? 0}</Text>
               </View>
               <TextInput
                 style={styles.qtyInput}
@@ -438,7 +437,6 @@ const styles = StyleSheet.create({
   },
   lineName: { fontWeight: '600', color: jc.text },
   lineSku: { fontSize: 12, color: jc.textMuted },
-  onHand: { fontSize: 12, color: jc.primaryDark, marginTop: 2, fontWeight: '600' },
   qtyInput: {
     width: 72,
     borderWidth: 1,
