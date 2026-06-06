@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -50,6 +50,7 @@ export function CrmHomeScreen({ navigation }: Props) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<CrmFilterKey>('all')
   const [industry, setIndustry] = useState('all')
+  const [industryPickerOpen, setIndustryPickerOpen] = useState(false)
 
   const load = useCallback(
     async (silent = false) => {
@@ -84,62 +85,53 @@ export function CrmHomeScreen({ navigation }: Props) {
   const counts = useMemo(() => tabCounts(clients, leads), [clients, leads])
   const source = tab === 'clients' ? clients : leads
   const industries = useMemo(() => uniqueIndustries(source), [source])
+  const showIndustryFilter = industries.length > 2
+  const industryLabel =
+    industry === 'all' ? 'All industries' : industry
+
   const filtered = useMemo(
     () => filterEntities(source, query, filter, industry),
     [source, query, filter, industry]
   )
 
+  const switchTab = (key: CrmTab) => {
+    setTab(key)
+    setIndustry('all')
+    setQuery('')
+    setFilter('all')
+  }
+
   return (
     <View style={styles.root}>
       <AppHeader
         title="CRM"
-        subtitle="Clients, leads & pipeline"
+        subtitle={`${counts.clients} clients · ${counts.leads} leads`}
         showNotifications
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
       <ScreenBody padded={false}>
-        <View style={styles.hero}>
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{counts.clients}</Text>
-              <Text style={styles.statLbl}>Clients</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{counts.leads}</Text>
-              <Text style={styles.statLbl}>Leads</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{filtered.length}</Text>
-              <Text style={styles.statLbl}>Showing</Text>
-            </View>
-          </View>
-        </View>
-
         <View style={styles.tabRow}>
           {(['clients', 'leads'] as CrmTab[]).map((key) => {
             const active = tab === key
+            const count = key === 'clients' ? counts.clients : counts.leads
             return (
               <Pressable
                 key={key}
                 style={[styles.tabBtn, active && styles.tabBtnActive]}
-                onPress={() => {
-                  setTab(key)
-                  setIndustry('all')
-                }}
+                onPress={() => switchTab(key)}
               >
                 <FontAwesome5
                   name={key === 'clients' ? 'building' : 'user-plus'}
-                  size={14}
+                  size={13}
                   color={active ? '#fff' : erp.textMuted}
+                  style={styles.tabIcon}
                 />
                 <Text style={[styles.tabText, active && styles.tabTextActive]}>
                   {key === 'clients' ? 'Clients' : 'Leads'}
                 </Text>
                 <View style={[styles.tabCount, active && styles.tabCountActive]}>
                   <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
-                    {key === 'clients' ? counts.clients : counts.leads}
+                    {count}
                   </Text>
                 </View>
               </Pressable>
@@ -148,27 +140,26 @@ export function CrmHomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.searchWrap}>
-          <FontAwesome5 name="search" size={14} color={erp.textSubtle} style={styles.searchIcon} />
-          <TextInput
-            style={styles.search}
-            placeholder={`Search ${tab}…`}
-            placeholderTextColor={erp.textSubtle}
-            value={query}
-            onChangeText={setQuery}
-          />
+          <View style={styles.searchField}>
+            <FontAwesome5 name="search" size={14} color={erp.textSubtle} style={styles.searchIcon} />
+            <TextInput
+              style={styles.search}
+              placeholder={`Search ${tab}…`}
+              placeholderTextColor={erp.textSubtle}
+              value={query}
+              onChangeText={setQuery}
+              clearButtonMode="while-editing"
+            />
+          </View>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
+        <View style={styles.filterBar}>
           {FILTERS.map((f) => {
             const active = filter === f.key
             return (
               <Pressable
                 key={f.key}
-                style={[styles.chip, active && styles.chipActive]}
+                style={[styles.filterBtn, active && styles.filterBtnActive]}
                 onPress={() => setFilter(f.key)}
               >
                 <FontAwesome5
@@ -176,31 +167,34 @@ export function CrmHomeScreen({ navigation }: Props) {
                   size={11}
                   color={active ? erp.primary : erp.textMuted}
                   solid={f.key === 'starred' && active}
+                  style={styles.filterIcon}
                 />
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
               </Pressable>
             )
           })}
-          {industries.length > 2 ? (
-            <>
-              <View style={styles.chipDivider} />
-              {industries.slice(0, 8).map((ind) => {
-                const active = industry === ind
-                return (
-                  <Pressable
-                    key={ind}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setIndustry(ind)}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {ind === 'all' ? 'All industries' : ind}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </>
-          ) : null}
-        </ScrollView>
+        </View>
+
+        {showIndustryFilter ? (
+          <Pressable
+            style={styles.industryBtn}
+            onPress={() => setIndustryPickerOpen(true)}
+          >
+            <FontAwesome5 name="industry" size={12} color={erp.textMuted} style={styles.industryIcon} />
+            <Text style={styles.industryBtnText} numberOfLines={1}>
+              {industryLabel}
+            </Text>
+            <FontAwesome5 name="chevron-down" size={10} color={erp.textSubtle} />
+          </Pressable>
+        ) : null}
+
+        <View style={styles.resultsMeta}>
+          <Text style={styles.resultsMetaText}>
+            {filtered.length} {tab === 'clients' ? 'client' : 'lead'}
+            {filtered.length === 1 ? '' : 's'}
+            {filter !== 'all' || industry !== 'all' || query.trim() ? ' matching filters' : ''}
+          </Text>
+        </View>
 
         {loading && !refreshing ? (
           <View style={styles.center}>
@@ -252,103 +246,185 @@ export function CrmHomeScreen({ navigation }: Props) {
           />
         )}
       </ScreenBody>
+
+      <Modal
+        visible={industryPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIndustryPickerOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setIndustryPickerOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Industry</Text>
+            {industries.map((ind) => {
+              const active = industry === ind
+              const label = ind === 'all' ? 'All industries' : ind
+              return (
+                <Pressable
+                  key={ind}
+                  style={[styles.modalRow, active && styles.modalRowActive]}
+                  onPress={() => {
+                    setIndustry(ind)
+                    setIndustryPickerOpen(false)
+                  }}
+                >
+                  <Text style={[styles.modalRowText, active && styles.modalRowTextActive]}>
+                    {label}
+                  </Text>
+                  {active ? (
+                    <FontAwesome5 name="check" size={14} color={erp.primary} />
+                  ) : null}
+                </Pressable>
+              )
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
 
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: erp.bg },
-  hero: {
-    marginHorizontal: erp.space.lg,
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: erp.sidebar,
-    borderRadius: erp.radius.lg,
-    padding: 16,
-    ...erp.shadowSm
-  },
-  statsRow: { flexDirection: 'row', alignItems: 'center' },
-  statBox: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  statLbl: { fontSize: 12, color: erp.sidebarTextMuted, marginTop: 2, fontWeight: '600' },
-  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.12)' },
-  tabRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: erp.space.lg,
-    paddingTop: 12,
-    paddingBottom: 8
-  },
-  tabBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: erp.radius.md,
-    backgroundColor: erp.surface,
-    borderWidth: 1,
-    borderColor: erp.border
-  },
-  tabBtnActive: { backgroundColor: erp.primary, borderColor: erp.primary },
-  tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 14 },
-  tabTextActive: { color: '#fff' },
-  tabCount: {
-    minWidth: 22,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: erp.surfaceMuted,
-    alignItems: 'center'
-  },
-  tabCountActive: { backgroundColor: 'rgba(255,255,255,0.22)' },
-  tabCountText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
-  tabCountTextActive: { color: '#fff' },
-  searchWrap: { paddingHorizontal: erp.space.lg, paddingBottom: 8, position: 'relative' },
-  searchIcon: { position: 'absolute', left: 28, top: 15, zIndex: 1 },
-  search: {
-    borderWidth: 1,
-    borderColor: erp.border,
-    borderRadius: erp.radius.md,
-    paddingVertical: 12,
-    paddingLeft: 38,
-    paddingRight: 14,
-    backgroundColor: erp.surface,
-    fontSize: 16,
-    color: erp.text
-  },
-  chipsRow: { paddingHorizontal: erp.space.lg, paddingBottom: 10, gap: 8, alignItems: 'center' },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: erp.surface,
-    borderWidth: 1,
-    borderColor: erp.border
-  },
-  chipActive: { backgroundColor: erp.primarySoft, borderColor: erp.primary },
-  chipText: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
-  chipTextActive: { color: erp.primary },
-  chipDivider: { width: 1, height: 20, backgroundColor: erp.border, marginHorizontal: 4 },
-  list: { paddingHorizontal: erp.space.lg, paddingBottom: 28 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
-  loadingText: { color: erp.textMuted, fontWeight: '600' },
-  error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
-  retryBtn: {
-    marginTop: 4,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: erp.radius.md,
-    backgroundColor: erp.primary
-  },
-  retryText: { color: '#fff', fontWeight: '800' },
-  emptyWrap: { alignItems: 'center', padding: 40, gap: 8 },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: erp.text },
-  emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' }
+    root: { flex: 1, backgroundColor: erp.bg },
+    tabRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: erp.space.lg,
+      paddingTop: 10,
+      paddingBottom: 4
+    },
+    tabBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 11,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.surface,
+      borderWidth: 1,
+      borderColor: erp.border
+    },
+    tabBtnActive: { backgroundColor: erp.primary, borderColor: erp.primary },
+    tabIcon: { marginRight: 6 },
+    tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 14 },
+    tabTextActive: { color: '#fff' },
+    tabCount: {
+      minWidth: 22,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 999,
+      backgroundColor: erp.surfaceMuted,
+      alignItems: 'center',
+      marginLeft: 6
+    },
+    tabCountActive: { backgroundColor: 'rgba(255,255,255,0.22)' },
+    tabCountText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
+    tabCountTextActive: { color: '#fff' },
+    searchWrap: { paddingHorizontal: erp.space.lg, paddingTop: 10, paddingBottom: 8 },
+    searchField: { position: 'relative', justifyContent: 'center' },
+    searchIcon: { position: 'absolute', left: 14, zIndex: 1 },
+    search: {
+      borderWidth: 1,
+      borderColor: erp.border,
+      borderRadius: erp.radius.md,
+      paddingVertical: 12,
+      paddingLeft: 38,
+      paddingRight: 14,
+      backgroundColor: erp.surface,
+      fontSize: 16,
+      color: erp.text
+    },
+    filterBar: {
+      flexDirection: 'row',
+      marginHorizontal: erp.space.lg,
+      marginBottom: 8,
+      padding: 4,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.surfaceMuted,
+      borderWidth: 1,
+      borderColor: erp.border
+    },
+    filterBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 9,
+      borderRadius: erp.radius.sm
+    },
+    filterBtnActive: {
+      backgroundColor: erp.surface,
+      ...erp.shadowSm
+    },
+    filterIcon: { marginRight: 5 },
+    filterText: { fontSize: 13, fontWeight: '700', color: erp.textMuted },
+    filterTextActive: { color: erp.primary },
+    industryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: erp.space.lg,
+      marginBottom: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.surface,
+      borderWidth: 1,
+      borderColor: erp.border
+    },
+    industryIcon: { marginRight: 8 },
+    industryBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: erp.text },
+    resultsMeta: {
+      paddingHorizontal: erp.space.lg,
+      paddingBottom: 8
+    },
+    resultsMetaText: { fontSize: 12, fontWeight: '600', color: erp.textSubtle },
+    list: { paddingHorizontal: erp.space.lg, paddingBottom: 28 },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
+    loadingText: { color: erp.textMuted, fontWeight: '600' },
+    error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
+    retryBtn: {
+      marginTop: 4,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.primary
+    },
+    retryText: { color: '#fff', fontWeight: '800' },
+    emptyWrap: { alignItems: 'center', padding: 40, gap: 8 },
+    emptyTitle: { fontSize: 17, fontWeight: '800', color: erp.text },
+    emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(15, 23, 42, 0.45)',
+      justifyContent: 'flex-end'
+    },
+    modalSheet: {
+      backgroundColor: erp.surface,
+      borderTopLeftRadius: erp.radius.xl,
+      borderTopRightRadius: erp.radius.xl,
+      paddingTop: 16,
+      paddingBottom: 28,
+      maxHeight: '60%'
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: erp.text,
+      paddingHorizontal: erp.space.lg,
+      marginBottom: 8
+    },
+    modalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: erp.space.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: erp.borderLight
+    },
+    modalRowActive: { backgroundColor: erp.primarySoft },
+    modalRowText: { fontSize: 15, fontWeight: '600', color: erp.text, flex: 1 },
+    modalRowTextActive: { color: erp.primary, fontWeight: '700' }
   })
 }
