@@ -195,7 +195,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function ConfigRow({
   label,
   icon,
-  tint = erp.primary,
+  tint,
   enabled,
   onToggle,
   onMoveUp,
@@ -215,10 +215,13 @@ function ConfigRow({
   canMoveDown?: boolean
   hideReorder?: boolean
 }) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
+  const resolvedTint = tint ?? erp.primary
   return (
     <View style={styles.configRow}>
-      <View style={[styles.configIcon, { backgroundColor: `${tint}18` }]}>
-        <FontAwesome5 name={icon as never} size={14} color={tint} />
+      <View style={[styles.configIcon, { backgroundColor: `${resolvedTint}18` }]}>
+        <FontAwesome5 name={icon as never} size={14} color={resolvedTint} />
       </View>
       <Text style={styles.configLabel}>{label}</Text>
       {!hideReorder ? (

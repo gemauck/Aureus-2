@@ -47,6 +47,7 @@ export function ModuleListScreen<T>({
   onItemPress,
   renderItemExtra
 }: Props<T>) {
+  const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)

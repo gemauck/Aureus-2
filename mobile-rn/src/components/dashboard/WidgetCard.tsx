@@ -22,7 +22,7 @@ export function WidgetCard({
   title,
   subtitle,
   icon,
-  iconColor = erp.primary,
+  iconColor,
   children,
   onPressHeader,
   actionLabel,
@@ -31,11 +31,12 @@ export function WidgetCard({
 }: Props) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const resolvedIconColor = iconColor ?? erp.primary
   const headerPressable = onPressHeader || onAction
 
   return (
     <View style={[styles.card, style]}>
-      <View style={[styles.accent, { backgroundColor: iconColor }]} />
+      <View style={[styles.accent, { backgroundColor: resolvedIconColor }]} />
       <Pressable
         style={({ pressed }) => [styles.header, pressed && headerPressable && styles.headerPressed]}
         onPress={onPressHeader || onAction}
@@ -43,8 +44,8 @@ export function WidgetCard({
       >
         <View style={styles.headerLeft}>
           {icon ? (
-            <View style={[styles.iconWrap, { backgroundColor: `${iconColor}14` }]}>
-              <FontAwesome5 name={icon as never} size={15} color={iconColor} />
+            <View style={[styles.iconWrap, { backgroundColor: `${resolvedIconColor}14` }]}>
+              <FontAwesome5 name={icon as never} size={15} color={resolvedIconColor} />
             </View>
           ) : null}
           <View style={{ flex: 1 }}>

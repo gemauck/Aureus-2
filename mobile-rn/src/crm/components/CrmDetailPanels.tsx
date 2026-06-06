@@ -77,6 +77,7 @@ type PanelProps = {
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
+  const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
   const {
     tab,
