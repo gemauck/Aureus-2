@@ -5,7 +5,8 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 9,
+  /** Match JS APP_VERSION_CODE in older OTA bundles until devices refresh (avoids APK re-download loop). */
+  versionCode: 8,
   versionName: '0.3.4',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes:

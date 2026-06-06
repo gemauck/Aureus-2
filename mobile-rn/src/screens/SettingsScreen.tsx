@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { APP_VERSION } from '../jobcards/theme'
+import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
 import { OTA_RUNTIME_VERSION } from '../constants/ota'
 import { AppHeader } from '../components/shell/AppHeader'
 import { ScreenBody } from '../components/shell/ScreenBody'
@@ -59,7 +59,20 @@ export function SettingsScreen({ navigation }: Props) {
   async function onCheckApk() {
     setChecking('apk')
     try {
-      await checkApkUpdate()
+      if (Platform.OS !== 'android') return
+      const res = await fetch(`${API_BASE_URL}/api/public/mobile-app-version`, {
+        headers: { Accept: 'application/json' }
+      })
+      const payload = res.ok ? await res.json() : null
+      const remote = (payload?.data || payload)?.android
+      if (remote?.forceApkInstall && remote.versionCode > APP_VERSION_CODE) {
+        await checkApkUpdate()
+        return
+      }
+      Alert.alert(
+        'APK up to date',
+        'Your installed app shell is current. UI changes (like the theme toggle) come via JS update — use “Check for JS update (OTA)” above, then fully restart the app.'
+      )
     } finally {
       setChecking(null)
     }
@@ -115,7 +128,7 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>App</Text>
           <View style={styles.card}>
             <Row icon="server" label="Server" value={API_BASE_URL} />
-            <Row icon="mobile-alt" label="App version" value={APP_VERSION} />
+            <Row icon="mobile-alt" label="App version" value={`${APP_VERSION} (${APP_VERSION_CODE})`} />
             <Row icon="code-branch" label="JS updates (OTA)" value={otaEnabled ? 'Self-hosted' : 'Off'} />
             {otaEnabled ? (
               <>
