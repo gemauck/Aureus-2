@@ -4,15 +4,15 @@ import { FontAwesome5 } from '@expo/vector-icons'
 
 import type { ProjectTask, ProjectTaskList } from '../types'
 import {
-import { useThemedStyles } from '../../theme/useThemedStyles'
-import type { ErpTheme } from '../../theme/palettes'
-import { useTheme } from '../../theme/ThemeContext'
   groupTasksByList,
   groupTasksByStatus,
   isTaskOverdue,
   listColor,
   priorityColor
 } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   tasks: ProjectTask[]

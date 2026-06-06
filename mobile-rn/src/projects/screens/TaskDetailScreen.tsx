@@ -19,15 +19,15 @@ import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
 import type { ProjectsStackParamList } from '../navigation'
 import type { ChecklistItem, ErpUser, ProjectTask, TaskComment } from '../types'
 import {
-import { useThemedStyles } from '../../theme/useThemedStyles'
-import type { ErpTheme } from '../../theme/palettes'
-import { useTheme } from '../../theme/ThemeContext'
   formatDate,
   formatDateTime,
   isTaskOverdue,
   TASK_PRIORITIES,
   TASK_STATUSES
 } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'TaskDetail'>
 

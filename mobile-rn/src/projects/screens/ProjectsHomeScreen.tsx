@@ -36,9 +36,6 @@ import type {
   TaskScopeFilter
 } from '../types'
 import {
-import { useThemedStyles } from '../../theme/useThemedStyles'
-import type { ErpTheme } from '../../theme/palettes'
-import { useTheme } from '../../theme/ThemeContext'
   computeInsights,
   filterProjects,
   filterTasks,
@@ -49,6 +46,9 @@ import { useTheme } from '../../theme/ThemeContext'
   toggleStarred,
   uniqueClients
 } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'ProjectsHome'>
 

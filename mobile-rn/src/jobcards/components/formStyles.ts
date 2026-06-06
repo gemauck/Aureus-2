@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native'
 import { useMemo } from 'react'
-import type { JcTheme } from '../theme/palettes'
-import { useTheme } from '../theme/ThemeContext'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function createFormStyles(jc: JcTheme) {
   return StyleSheet.create({

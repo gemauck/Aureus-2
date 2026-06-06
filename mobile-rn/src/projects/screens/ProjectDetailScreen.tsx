@@ -32,9 +32,6 @@ import type {
   TaskViewMode
 } from '../types'
 import {
-import { useThemedStyles } from '../../theme/useThemedStyles'
-import type { ErpTheme } from '../../theme/palettes'
-import { useTheme } from '../../theme/ThemeContext'
   activityIcon,
   enabledProcesses,
   formatDate,
@@ -51,6 +48,9 @@ import { useTheme } from '../../theme/ThemeContext'
   TASK_STATUSES,
   webProjectUrl
 } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'ProjectDetail'>
 

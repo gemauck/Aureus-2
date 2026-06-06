@@ -1,8 +1,5 @@
 import React, { useMemo, useState } from 'react'
 import {
-import { useThemedStyles } from '../../theme/useThemedStyles'
-import type { JcTheme } from '../../theme/palettes'
-import { useTheme } from '../../theme/ThemeContext'
   FlatList,
   Modal,
   Pressable,
@@ -11,6 +8,9 @@ import { useTheme } from '../../theme/ThemeContext'
   TextInput,
   View
 } from 'react-native'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export type SelectOption = { value: string; label: string }
 
