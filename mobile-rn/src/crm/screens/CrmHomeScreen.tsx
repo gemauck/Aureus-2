@@ -22,7 +22,7 @@ import type { RootStackParamList } from '../../navigation/types'
 import { crmApi } from '../api'
 import { CrmEntityRow } from '../components/CrmEntityRow'
 import type { CrmClient, CrmFilterKey, CrmLead, CrmTab } from '../types'
-import { filterEntities, tabCounts, uniqueIndustries } from '../utils'
+import { filterEntities, normalizeEntity, sortByName, tabCounts, uniqueIndustries } from '../utils'
 import type { CrmStackParamList } from '../navigation'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -66,8 +66,8 @@ export function CrmHomeScreen({ navigation }: Props) {
           crmApi.listClients(accessToken),
           crmApi.listLeads(accessToken)
         ])
-        setClients(c)
-        setLeads(l)
+        setClients(c.map(normalizeEntity))
+        setLeads(l.map(normalizeEntity))
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load CRM data')
       } finally {
@@ -90,7 +90,7 @@ export function CrmHomeScreen({ navigation }: Props) {
     industry === 'all' ? 'All industries' : industry
 
   const filtered = useMemo(
-    () => filterEntities(source, query, filter, industry),
+    () => sortByName(filterEntities(source, query, filter, industry)),
     [source, query, filter, industry]
   )
 

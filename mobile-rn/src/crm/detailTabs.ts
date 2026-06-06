@@ -3,7 +3,6 @@ import {
   entityActivityLog,
   entityComments,
   entityContacts,
-  entityContracts,
   entityFollowUps,
   entityProjects,
   entityProposals,
@@ -21,9 +20,13 @@ export const ALL_DETAIL_TABS: CrmDetailTabConfig[] = [
   { key: 'kyc', label: 'KYC', icon: 'id-card', clientOnly: true },
   { key: 'opportunities', label: 'Opportunities', shortLabel: 'Opps', icon: 'bullseye', clientOnly: true },
   { key: 'projects', label: 'Projects', icon: 'folder-open', clientOnly: true },
-  { key: 'services', label: 'Service & Maint.', shortLabel: 'S&M', icon: 'wrench', clientOnly: true },
-  { key: 'jobcards', label: 'Job cards', shortLabel: 'Jobs', icon: 'clipboard-list', clientOnly: true },
-  { key: 'contracts', label: 'Contracts', shortLabel: 'Deals', icon: 'file-contract', clientOnly: true },
+  {
+    key: 'services',
+    label: 'Service & Maintenance',
+    shortLabel: 'S&M',
+    icon: 'wrench',
+    clientOnly: true
+  },
   { key: 'proposals', label: 'Proposals', icon: 'clipboard-list', leadOnly: true }
 ]
 
@@ -59,12 +62,10 @@ export function tabCount(
       return entityProjects(entity).length || null
     case 'proposals':
       return entityProposals(entity).length || null
-    case 'contracts':
-      return entityContracts(entity).length || null
-    case 'services':
-      return entityServices(entity).length || null
-    case 'jobcards':
-      return extras.jobCards ?? null
+    case 'services': {
+      const n = entityServices(entity).length + (extras.jobCards ?? 0)
+      return n > 0 ? n : null
+    }
     case 'notes':
       return extras.clientNotes != null && extras.clientNotes > 0
         ? extras.clientNotes

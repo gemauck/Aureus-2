@@ -215,9 +215,7 @@ export type CrmDetailTab =
   | 'calendar'
   | 'activity'
   | 'proposals'
-  | 'contracts'
   | 'services'
-  | 'jobcards'
   | 'kyc'
   | 'notes'
 

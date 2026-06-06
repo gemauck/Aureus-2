@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 
+import { CrmQuickAdd } from './CrmQuickAdd'
 import { CrmStatusBadge } from './CrmStatusBadge'
 import type {
   CrmClientNote,
@@ -21,11 +22,11 @@ import type {
   CrmTag
 } from '../types'
 import {
-  displayStage,
+  displayClientStatus,
+  displayLeadStage,
   entityActivityLog,
   entityComments,
   entityContacts,
-  entityContracts,
   entityFollowUps,
   entityProjects,
   entityProposals,
@@ -33,7 +34,8 @@ import {
   entitySites,
   formatCommentAuthor,
   formatDate,
-  formatMoney
+  formatMoney,
+  newLocalId
 } from '../utils'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -72,8 +74,11 @@ type PanelProps = {
   notesDraft: string
   newNoteDraft: string
   loadingExtras: boolean
+  patchBusy?: boolean
   onNotesDraftChange: (v: string) => void
   onNewNoteDraftChange: (v: string) => void
+  onPatchEntity: (body: Record<string, unknown>) => Promise<void>
+  onCreateOpportunity?: (body: { title: string; value?: number }) => Promise<void>
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
@@ -90,21 +95,25 @@ export function CrmDetailPanelContent(props: PanelProps) {
     notesDraft,
     newNoteDraft,
     loadingExtras,
+    patchBusy,
     onNotesDraftChange,
-    onNewNoteDraftChange
+    onNewNoteDraftChange,
+    onPatchEntity,
+    onCreateOpportunity
   } = props
 
-  const stage = displayStage(entity)
-  const lead = entityType === 'lead' ? (entity as CrmLead) : null
+  const clientStatus = displayClientStatus(entity)
+  const leadStage = displayLeadStage(entity)
 
   if (tab === 'overview') {
+    const lead = entityType === 'lead' ? (entity as CrmLead) : null
     return (
       <View style={styles.section}>
-        {(lead?.value ?? 0) > 0 ? (
+        {lead && (lead.value ?? 0) > 0 ? (
           <View style={styles.highlightCard}>
             <Text style={styles.highlightLabel}>Lead value</Text>
-            <Text style={styles.highlightValue}>{formatMoney(lead?.value)}</Text>
-            {lead?.probability != null ? (
+            <Text style={styles.highlightValue}>{formatMoney(lead.value)}</Text>
+            {lead.probability != null ? (
               <Text style={styles.highlightSub}>{lead.probability}% probability</Text>
             ) : null}
           </View>
@@ -124,12 +133,22 @@ export function CrmDetailPanelContent(props: PanelProps) {
             ))}
           </View>
         ) : null}
-        <InfoRow label="Status" value={entity.status} />
-        <InfoRow label="Engagement stage" value={stage} />
-        <InfoRow label="AIDA status" value={entity.aidaStatus || undefined} />
-        <InfoRow label="Industry" value={entity.industry} />
-        <InfoRow label="Last contact" value={formatDate(entity.lastContact)} />
-        <InfoRow label="Address" value={entity.address} />
+        {entityType === 'client' ? (
+          <>
+            <InfoRow label="Industry" value={entity.industry} />
+            <InfoRow label="Status" value={clientStatus} />
+            <InfoRow label="Last contact" value={formatDate(entity.lastContact)} />
+            <InfoRow label="Address" value={entity.address} />
+          </>
+        ) : (
+          <>
+            <InfoRow label="Industry" value={entity.industry} />
+            <InfoRow label="Engagement stage" value={leadStage} />
+            <InfoRow label="AIDA status" value={entity.aidaStatus || undefined} />
+            <InfoRow label="Last contact" value={formatDate(entity.lastContact)} />
+            <InfoRow label="Address" value={entity.address} />
+          </>
+        )}
         {entity.website ? (
           <Pressable
             onPress={() =>
@@ -143,14 +162,6 @@ export function CrmDetailPanelContent(props: PanelProps) {
         ) : null}
         {entity.externalAgent?.name ? (
           <InfoRow label="External agent" value={entity.externalAgent.name} />
-        ) : null}
-        {entity.billingTerms ? (
-          <View style={styles.groupCard}>
-            <Text style={styles.groupTitle}>Billing terms</Text>
-            <InfoRow label="Payment" value={entity.billingTerms.paymentTerms} />
-            <InfoRow label="Frequency" value={entity.billingTerms.billingFrequency} />
-            <InfoRow label="Currency" value={entity.billingTerms.currency} />
-          </View>
         ) : null}
         {entity.groupMemberships?.length ? (
           <View style={styles.groupCard}>
@@ -168,84 +179,169 @@ export function CrmDetailPanelContent(props: PanelProps) {
 
   if (tab === 'contacts') {
     const contacts = entityContacts(entity)
-    if (!contacts.length) return <EmptyState icon="address-book" title="No contacts on file" />
     return (
       <View style={styles.section}>
-        {contacts.map((c, idx) => (
-          <View key={c.id || idx} style={styles.miniCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.miniTitle}>{c.name || 'Contact'}</Text>
-              {c.isPrimary ? <Text style={styles.primaryBadge}>Primary</Text> : null}
+        <CrmQuickAdd
+          label="Add contact"
+          busy={patchBusy}
+          fields={[
+            { key: 'name', label: 'Name', required: true },
+            { key: 'email', label: 'Email', keyboardType: 'email-address' },
+            { key: 'phone', label: 'Phone', keyboardType: 'phone-pad' },
+            { key: 'role', label: 'Role' }
+          ]}
+          onSubmit={async (values) => {
+            await onPatchEntity({
+              contacts: [
+                ...contacts,
+                {
+                  id: newLocalId('contact'),
+                  name: values.name,
+                  email: values.email || undefined,
+                  phone: values.phone || undefined,
+                  role: values.role || undefined
+                }
+              ]
+            })
+          }}
+        />
+        {!contacts.length ? (
+          <EmptyState icon="address-book" title="No contacts on file" />
+        ) : (
+          contacts.map((c, idx) => (
+            <View key={c.id || idx} style={styles.miniCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.miniTitle}>{c.name || 'Contact'}</Text>
+                {c.isPrimary ? <Text style={styles.primaryBadge}>Primary</Text> : null}
+              </View>
+              {c.role || c.title ? <Text style={styles.miniSub}>{c.role || c.title}</Text> : null}
+              {c.notes ? <Text style={styles.miniSub}>{c.notes}</Text> : null}
+              {c.email ? (
+                <Pressable onPress={() => void Linking.openURL(`mailto:${c.email}`)}>
+                  <Text style={styles.link}>{c.email}</Text>
+                </Pressable>
+              ) : null}
+              {c.phone || c.mobile ? (
+                <Pressable onPress={() => void Linking.openURL(`tel:${c.phone || c.mobile}`)}>
+                  <Text style={styles.link}>{c.phone || c.mobile}</Text>
+                </Pressable>
+              ) : null}
             </View>
-            {c.role || c.title ? <Text style={styles.miniSub}>{c.role || c.title}</Text> : null}
-            {c.notes ? <Text style={styles.miniSub}>{c.notes}</Text> : null}
-            {c.email ? (
-              <Pressable onPress={() => void Linking.openURL(`mailto:${c.email}`)}>
-                <Text style={styles.link}>{c.email}</Text>
-              </Pressable>
-            ) : null}
-            {c.phone || c.mobile ? (
-              <Pressable onPress={() => void Linking.openURL(`tel:${c.phone || c.mobile}`)}>
-                <Text style={styles.link}>{c.phone || c.mobile}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ))}
+          ))
+        )}
       </View>
     )
   }
 
   if (tab === 'sites') {
     const sites = entitySites(entity)
-    if (!sites.length) return <EmptyState icon="map-marker-alt" title="No sites linked" />
     return (
       <View style={styles.section}>
-        {sites.map((s, idx) => (
-          <View key={s.id || idx} style={styles.miniCard}>
-            <Text style={styles.miniTitle}>{s.name || s.siteName || 'Site'}</Text>
-            {s.address ? <Text style={styles.miniSub}>{s.address}</Text> : null}
-            {s.contactPerson ? (
-              <Text style={styles.miniSub}>
-                {s.contactPerson}
-                {s.contactPhone ? ` · ${s.contactPhone}` : ''}
-              </Text>
-            ) : null}
-            {s.contactEmail ? (
-              <Pressable onPress={() => void Linking.openURL(`mailto:${s.contactEmail}`)}>
-                <Text style={styles.link}>{s.contactEmail}</Text>
-              </Pressable>
-            ) : null}
-            <View style={styles.badgeRow}>
-              {s.engagementStage ? <CrmStatusBadge label={s.engagementStage} compact /> : null}
-              {s.aidaStatus ? <CrmStatusBadge label={s.aidaStatus} compact /> : null}
+        <CrmQuickAdd
+          label="Add site"
+          busy={patchBusy}
+          fields={[
+            { key: 'name', label: 'Site name', required: true },
+            { key: 'address', label: 'Address', multiline: true },
+            { key: 'contactPerson', label: 'Contact person' },
+            { key: 'contactPhone', label: 'Contact phone', keyboardType: 'phone-pad' }
+          ]}
+          onSubmit={async (values) => {
+            await onPatchEntity({
+              sites: [
+                ...sites,
+                {
+                  id: newLocalId('site'),
+                  name: values.name,
+                  siteName: values.name,
+                  address: values.address || undefined,
+                  contactPerson: values.contactPerson || undefined,
+                  contactPhone: values.contactPhone || undefined,
+                  aidaStatus: entityType === 'lead' ? 'Awareness' : undefined
+                }
+              ]
+            })
+          }}
+        />
+        {!sites.length ? (
+          <EmptyState icon="map-marker-alt" title="No sites linked" />
+        ) : (
+          sites.map((s, idx) => (
+            <View key={s.id || idx} style={styles.miniCard}>
+              <Text style={styles.miniTitle}>{s.name || s.siteName || 'Site'}</Text>
+              {s.address ? <Text style={styles.miniSub}>{s.address}</Text> : null}
+              {s.contactPerson ? (
+                <Text style={styles.miniSub}>
+                  {s.contactPerson}
+                  {s.contactPhone ? ` · ${s.contactPhone}` : ''}
+                </Text>
+              ) : null}
+              {s.contactEmail ? (
+                <Pressable onPress={() => void Linking.openURL(`mailto:${s.contactEmail}`)}>
+                  <Text style={styles.link}>{s.contactEmail}</Text>
+                </Pressable>
+              ) : null}
+              {entityType === 'lead' ? (
+                <View style={styles.badgeRow}>
+                  {s.engagementStage ? <CrmStatusBadge label={s.engagementStage} compact /> : null}
+                  {s.aidaStatus ? <CrmStatusBadge label={s.aidaStatus} compact /> : null}
+                </View>
+              ) : null}
             </View>
-          </View>
-        ))}
+          ))
+        )}
       </View>
     )
   }
 
   if (tab === 'calendar') {
     const followUps = entityFollowUps(entity)
-    if (!followUps.length) return <EmptyState icon="calendar-alt" title="No follow-ups scheduled" />
+    const today = new Date().toISOString().slice(0, 10)
     return (
       <View style={styles.section}>
-        {followUps.map((f, idx) => (
-          <View key={f.id || idx} style={[styles.miniCard, f.completed && styles.completedCard]}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.miniTitle}>{f.type || 'Follow-up'}</Text>
-              {f.completed ? (
-                <FontAwesome5 name="check-circle" size={14} color={erp.success} />
-              ) : (
-                <FontAwesome5 name="clock" size={14} color={erp.warning} />
-              )}
+        <CrmQuickAdd
+          label="Add follow-up"
+          busy={patchBusy}
+          fields={[
+            { key: 'type', label: 'Type', placeholder: 'Call, meeting, email…' },
+            { key: 'date', label: 'Date (YYYY-MM-DD)', placeholder: today, required: true },
+            { key: 'description', label: 'Notes', multiline: true }
+          ]}
+          onSubmit={async (values) => {
+            await onPatchEntity({
+              followUps: [
+                ...followUps,
+                {
+                  id: newLocalId('followup'),
+                  type: values.type || 'Follow-up',
+                  date: values.date,
+                  description: values.description || undefined,
+                  completed: false
+                }
+              ]
+            })
+          }}
+        />
+        {!followUps.length ? (
+          <EmptyState icon="calendar-alt" title="No follow-ups scheduled" />
+        ) : (
+          followUps.map((f, idx) => (
+            <View key={f.id || idx} style={[styles.miniCard, f.completed && styles.completedCard]}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.miniTitle}>{f.type || 'Follow-up'}</Text>
+                {f.completed ? (
+                  <FontAwesome5 name="check-circle" size={14} color={erp.success} />
+                ) : (
+                  <FontAwesome5 name="clock" size={14} color={erp.warning} />
+                )}
+              </View>
+              <Text style={styles.miniSub}>
+                {[formatDate(f.date), f.time].filter(Boolean).join(' at ')}
+              </Text>
+              {f.description ? <Text style={styles.bodyText}>{f.description}</Text> : null}
             </View>
-            <Text style={styles.miniSub}>
-              {[formatDate(f.date), f.time].filter(Boolean).join(' at ')}
-            </Text>
-            {f.description ? <Text style={styles.bodyText}>{f.description}</Text> : null}
-          </View>
-        ))}
+          ))
+        )}
       </View>
     )
   }
@@ -286,24 +382,44 @@ export function CrmDetailPanelContent(props: PanelProps) {
 
   if (tab === 'opportunities') {
     if (loadingExtras) return <ActivityIndicator color={erp.primary} style={{ marginTop: 24 }} />
-    if (!opportunities.length) return <EmptyState icon="bullseye" title="No opportunities" />
     return (
       <View style={styles.section}>
-        {opportunities.map((opp) => (
-          <View key={opp.id} style={styles.miniCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.miniTitle}>{opp.name || opp.title || 'Opportunity'}</Text>
-              {opp.isStarred ? <FontAwesome5 name="star" solid size={12} color="#f59e0b" /> : null}
+        {onCreateOpportunity ? (
+          <CrmQuickAdd
+            label="Add opportunity"
+            busy={patchBusy}
+            fields={[
+              { key: 'title', label: 'Title', required: true },
+              { key: 'value', label: 'Value (ZAR)', keyboardType: 'numeric' }
+            ]}
+            onSubmit={async (values) => {
+              const value = values.value ? parseFloat(values.value.replace(/[^\d.]/g, '')) : 0
+              await onCreateOpportunity({
+                title: values.title,
+                value: Number.isFinite(value) ? value : 0
+              })
+            }}
+          />
+        ) : null}
+        {!opportunities.length ? (
+          <EmptyState icon="bullseye" title="No opportunities" />
+        ) : (
+          opportunities.map((opp) => (
+            <View key={opp.id} style={styles.miniCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.miniTitle}>{opp.name || opp.title || 'Opportunity'}</Text>
+                {opp.isStarred ? <FontAwesome5 name="star" solid size={12} color="#f59e0b" /> : null}
+              </View>
+              {(opp.value ?? 0) > 0 ? (
+                <Text style={styles.valueText}>{formatMoney(opp.value)}</Text>
+              ) : null}
+              <View style={styles.badgeRow}>
+                {opp.status ? <CrmStatusBadge label={opp.status} compact /> : null}
+                {opp.engagementStage ? <CrmStatusBadge label={opp.engagementStage} compact /> : null}
+              </View>
             </View>
-            {(opp.value ?? 0) > 0 ? (
-              <Text style={styles.valueText}>{formatMoney(opp.value)}</Text>
-            ) : null}
-            <View style={styles.badgeRow}>
-              {opp.status ? <CrmStatusBadge label={opp.status} compact /> : null}
-              {opp.engagementStage ? <CrmStatusBadge label={opp.engagementStage} compact /> : null}
-            </View>
-          </View>
-        ))}
+          ))
+        )}
       </View>
     )
   }
@@ -347,59 +463,48 @@ export function CrmDetailPanelContent(props: PanelProps) {
     )
   }
 
-  if (tab === 'contracts') {
-    const contracts = entityContracts(entity)
-    if (!contracts.length) return <EmptyState icon="file-contract" title="No contracts" />
-    return (
-      <View style={styles.section}>
-        {contracts.map((c, idx) => (
-          <View key={c.id || idx} style={styles.miniCard}>
-            <Text style={styles.miniTitle}>{c.name || 'Contract'}</Text>
-            {c.type ? <Text style={styles.miniSub}>{c.type}</Text> : null}
-            {c.uploadDate ? <Text style={styles.miniSub}>Uploaded {formatDate(c.uploadDate)}</Text> : null}
-            {c.url ? (
-              <Pressable onPress={() => void Linking.openURL(c.url!)}>
-                <Text style={styles.link}>View file</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ))}
-      </View>
-    )
-  }
-
   if (tab === 'services') {
     const services = entityServices(entity)
-    if (!services.length) return <EmptyState icon="wrench" title="No service records" />
+    const hasJobCards = jobCards.length > 0
+    const hasServices = services.length > 0
+    if (loadingExtras && !hasJobCards && !hasServices) {
+      return <ActivityIndicator color={erp.primary} style={{ marginTop: 24 }} />
+    }
+    if (!hasServices && !hasJobCards) {
+      return <EmptyState icon="wrench" title="No service or job card records" />
+    }
     return (
       <View style={styles.section}>
-        {services.map((s, idx) => (
-          <View key={s.id || idx} style={styles.miniCard}>
-            <Text style={styles.miniTitle}>{s.name || 'Service'}</Text>
-            {s.description ? <Text style={styles.miniSub}>{s.description}</Text> : null}
-            {(s.price ?? 0) > 0 ? <Text style={styles.valueText}>{formatMoney(s.price)}</Text> : null}
-            {s.status ? <CrmStatusBadge label={s.status} compact /> : null}
-          </View>
-        ))}
-      </View>
-    )
-  }
-
-  if (tab === 'jobcards') {
-    if (loadingExtras) return <ActivityIndicator color={erp.primary} style={{ marginTop: 24 }} />
-    if (!jobCards.length) return <EmptyState icon="clipboard-list" title="No job cards" />
-    return (
-      <View style={styles.section}>
-        {jobCards.map((jc) => (
-          <View key={jc.id} style={styles.miniCard}>
-            <Text style={styles.miniTitle}>{jc.jobCardNumber || jc.id}</Text>
-            <Text style={styles.miniSub}>
-              {[jc.siteName, jc.reasonForVisit].filter(Boolean).join(' · ') || jc.agentName || '—'}
+        {hasServices ? (
+          <>
+            <Text style={styles.sectionHeading}>Service records</Text>
+            {services.map((s, idx) => (
+              <View key={s.id || idx} style={styles.miniCard}>
+                <Text style={styles.miniTitle}>{s.name || 'Service'}</Text>
+                {s.description ? <Text style={styles.miniSub}>{s.description}</Text> : null}
+                {(s.price ?? 0) > 0 ? <Text style={styles.valueText}>{formatMoney(s.price)}</Text> : null}
+                {s.status ? <CrmStatusBadge label={s.status} compact /> : null}
+              </View>
+            ))}
+          </>
+        ) : null}
+        {hasJobCards ? (
+          <>
+            <Text style={[styles.sectionHeading, hasServices && styles.sectionHeadingSpaced]}>
+              Job cards
             </Text>
-            {jc.status ? <CrmStatusBadge label={jc.status} compact /> : null}
-            {jc.createdAt ? <Text style={styles.miniSub}>{formatDate(jc.createdAt)}</Text> : null}
-          </View>
-        ))}
+            {jobCards.map((jc) => (
+              <View key={jc.id} style={styles.miniCard}>
+                <Text style={styles.miniTitle}>{jc.jobCardNumber || jc.id}</Text>
+                <Text style={styles.miniSub}>
+                  {[jc.siteName, jc.reasonForVisit].filter(Boolean).join(' · ') || jc.agentName || '—'}
+                </Text>
+                {jc.status ? <CrmStatusBadge label={jc.status} compact /> : null}
+                {jc.createdAt ? <Text style={styles.miniSub}>{formatDate(jc.createdAt)}</Text> : null}
+              </View>
+            ))}
+          </>
+        ) : null}
       </View>
     )
   }
@@ -521,12 +626,21 @@ export function CrmDetailPanelContent(props: PanelProps) {
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
   section: { gap: 10 },
+  sectionHeading: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: erp.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4
+  },
+  sectionHeadingSpaced: { marginTop: 8 },
   highlightCard: {
     backgroundColor: erp.primarySoft,
     borderRadius: erp.radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: erp.primaryMuted
+    borderColor: erp.primary
   },
   highlightLabel: { fontSize: 11, fontWeight: '700', color: erp.primary, textTransform: 'uppercase' },
   highlightValue: { fontSize: 24, fontWeight: '800', color: erp.text, marginTop: 4 },

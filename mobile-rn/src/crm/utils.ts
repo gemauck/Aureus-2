@@ -59,14 +59,50 @@ export function formatCommentAuthor(c: {
   return c.userName || ''
 }
 
-export function displayStage(entity: CrmEntityBase) {
-  const v =
-    entity.engagementStage ||
-    entity.stage ||
-    entity.status ||
-    entity.aidaStatus ||
-    ''
-  return String(v || '').trim()
+function normalizeFlag(value: unknown): boolean {
+  if (value === true || value === 1) return true
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    return normalized === 'true' || normalized === '1' || normalized === 'yes'
+  }
+  return false
+}
+
+/** Match web ERP starred-client resolution (per-user StarredClient table). */
+export function resolveStarredState(entity: CrmEntityBase): boolean {
+  if (normalizeFlag(entity.isStarred)) return true
+  if (normalizeFlag((entity as { starred?: unknown }).starred)) return true
+  const starredBy = (entity as { starredBy?: unknown[] }).starredBy
+  if (Array.isArray(starredBy) && starredBy.length > 0) return true
+  return false
+}
+
+export function normalizeEntity<T extends CrmEntityBase>(entity: T): T {
+  return { ...entity, isStarred: resolveStarredState(entity) }
+}
+
+export function displayClientStatus(entity: CrmEntityBase): string {
+  const raw = String(entity.status || entity.engagementStage || '').trim()
+  if (!raw) return 'Active'
+  const lower = raw.toLowerCase()
+  if (lower === 'inactive') return 'Inactive'
+  if (lower === 'active') return 'Active'
+  return raw
+}
+
+export function displayLeadStage(entity: CrmEntityBase): string {
+  return String(entity.engagementStage || entity.stage || entity.status || 'Potential').trim()
+}
+
+export function displayStage(entity: CrmEntityBase, kind?: CrmTab | 'client' | 'lead'): string {
+  const isLead = kind === 'leads' || kind === 'lead' || entity.type === 'lead'
+  return isLead ? displayLeadStage(entity) : displayClientStatus(entity)
+}
+
+export function sortByName<T extends CrmEntityBase>(items: T[]): T[] {
+  return [...items].sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+  )
 }
 
 export function statusTint(status: string) {
@@ -98,9 +134,10 @@ export function filterEntities<T extends CrmEntityBase>(
 ) {
   const q = query.trim().toLowerCase()
   return items.filter((item) => {
-    if (filter === 'starred' && !item.isStarred) return false
+    const starred = resolveStarredState(item)
+    if (filter === 'starred' && !starred) return false
     if (filter === 'active') {
-      const st = String(item.status || '').toLowerCase()
+      const st = String(item.status || item.engagementStage || '').toLowerCase()
       if (st && st !== 'active' && !st.includes('potential')) return false
     }
     if (industry && industry !== 'all') {
@@ -140,4 +177,8 @@ export function tabCounts(clients: CrmClient[], leads: CrmLead[]) {
 
 export function entityKindLabel(tab: CrmTab) {
   return tab === 'clients' ? 'Client' : 'Lead'
+}
+
+export function newLocalId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }

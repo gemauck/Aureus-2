@@ -83,5 +83,23 @@ export const crmApi = {
     return request<{ jobCards?: CrmJobCard[] }>(`/api/jobcards?${q}`, { token }).then(
       (d) => d.jobCards || []
     )
+  },
+
+  toggleStar(token: string, clientId: string) {
+    return request<{ starred: boolean }>(`/api/starred-clients/${encodeURIComponent(clientId)}`, {
+      method: 'PUT',
+      token
+    })
+  },
+
+  createOpportunity(
+    token: string,
+    body: { title: string; clientId: string; value?: number; engagementStage?: string; aidaStatus?: string }
+  ) {
+    return request<{ opportunity: CrmOpportunity }>('/api/opportunities', {
+      method: 'POST',
+      token,
+      body
+    }).then((d) => d.opportunity)
   }
 }

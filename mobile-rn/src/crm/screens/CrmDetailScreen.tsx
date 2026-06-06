@@ -28,7 +28,7 @@ import type {
   CrmOpportunity,
   CrmTag
 } from '../types'
-import { displayStage } from '../utils'
+import { displayStage, normalizeEntity, resolveStarredState } from '../utils'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -53,6 +53,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const [jobCards, setJobCards] = useState<CrmJobCard[]>([])
   const [clientNotes, setClientNotes] = useState<CrmClientNote[]>([])
   const [loadingExtras, setLoadingExtras] = useState(false)
+  const [patchBusy, setPatchBusy] = useState(false)
+  const [starBusy, setStarBusy] = useState(false)
   const [notesFeedback, setNotesFeedback] = useState('')
   const loadedExtrasRef = useRef<Set<string>>(new Set())
 
@@ -72,7 +74,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
         entityType === 'client'
           ? await crmApi.getClient(accessToken, entityId)
           : await crmApi.getLead(accessToken, entityId)
-      setEntity(data)
+      setEntity(normalizeEntity(data))
       setNotesDraft(String(data.notes || ''))
 
       if (entityType === 'client') {
@@ -108,7 +110,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           const opps = await crmApi.getOpportunitiesForClient(accessToken, entityId)
           setOpportunities(opps)
         }
-        if (activeTab === 'jobcards' && entityType === 'client') {
+        if (activeTab === 'services' && entityType === 'client') {
           const cards = await crmApi.getJobCardsForClient(accessToken, entityId)
           setJobCards(cards)
         }
@@ -138,6 +140,59 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     return () => clearTimeout(t)
   }, [notesFeedback])
 
+  const patchEntity = async (body: Record<string, unknown>) => {
+    if (!accessToken || !entity) return
+    setPatchBusy(true)
+    setError('')
+    try {
+      const updated =
+        entityType === 'client'
+          ? await crmApi.patchClient(accessToken, entityId, body)
+          : await crmApi.patchLead(accessToken, entityId, body)
+      setEntity(normalizeEntity(updated))
+      setNotesFeedback('Saved')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save changes')
+      throw e
+    } finally {
+      setPatchBusy(false)
+    }
+  }
+
+  const createOpportunity = async (body: { title: string; value?: number }) => {
+    if (!accessToken || entityType !== 'client') return
+    setPatchBusy(true)
+    setError('')
+    try {
+      const opp = await crmApi.createOpportunity(accessToken, {
+        title: body.title,
+        clientId: entityId,
+        value: body.value
+      })
+      setOpportunities((prev) => [opp, ...prev])
+      loadedExtrasRef.current.add('opportunities')
+      setNotesFeedback('Opportunity added')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add opportunity')
+      throw e
+    } finally {
+      setPatchBusy(false)
+    }
+  }
+
+  const toggleStar = async () => {
+    if (!accessToken || !entity) return
+    setStarBusy(true)
+    try {
+      const result = await crmApi.toggleStar(accessToken, entityId)
+      setEntity((prev) => (prev ? { ...prev, isStarred: result.starred } : prev))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update star')
+    } finally {
+      setStarBusy(false)
+    }
+  }
+
   const saveSummaryNotes = async () => {
     if (!accessToken || !entity) return
     setSavingNotes(true)
@@ -147,7 +202,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
         entityType === 'client'
           ? await crmApi.patchClient(accessToken, entityId, { notes: notesDraft })
           : await crmApi.patchLead(accessToken, entityId, { notes: notesDraft })
-      setEntity(updated)
+      setEntity(normalizeEntity(updated))
       setNotesFeedback('Summary saved')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save notes')
@@ -197,7 +252,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
   if (!entity) return null
 
-  const stage = displayStage(entity)
+  const stage = displayStage(entity, entityType)
+  const starred = resolveStarredState(entity)
   const onNotesTab = tab === 'notes'
 
   return (
@@ -212,9 +268,19 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             <Text style={styles.title} numberOfLines={3}>
               {entity.name || 'Unnamed'}
             </Text>
-            {entity.isStarred ? (
-              <FontAwesome5 name="star" solid size={16} color="#fbbf24" style={{ marginTop: 4 }} />
-            ) : null}
+            <Pressable
+              onPress={() => void toggleStar()}
+              disabled={starBusy}
+              hitSlop={8}
+              style={{ marginTop: 4 }}
+            >
+              <FontAwesome5
+                name="star"
+                solid={starred}
+                size={16}
+                color={starred ? '#fbbf24' : 'rgba(255,255,255,0.35)'}
+              />
+            </Pressable>
           </View>
           <View style={styles.heroMeta}>
             <Text style={styles.entityKind}>{entityType === 'client' ? 'Client' : 'Lead'}</Text>
@@ -281,8 +347,11 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             notesDraft={notesDraft}
             newNoteDraft={newNoteDraft}
             loadingExtras={loadingExtras}
+            patchBusy={patchBusy}
             onNotesDraftChange={setNotesDraft}
             onNewNoteDraftChange={setNewNoteDraft}
+            onPatchEntity={patchEntity}
+            onCreateOpportunity={entityType === 'client' ? createOpportunity : undefined}
           />
         </ScrollView>
 
