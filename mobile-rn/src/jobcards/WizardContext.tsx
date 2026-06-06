@@ -123,7 +123,7 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     refreshUnsyncedCount,
     bumpLocalDrafts,
     runSyncNow,
-    syncEngineRef
+    syncOnePendingCard
   } = useJobCardSync()
 
   const [loading, setLoading] = useState(true)
@@ -410,10 +410,11 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   )
 
   const persistLocal = useCallback(
-    async (payload: Record<string, unknown>) => {
+    async (payload: Record<string, unknown>, opts: { scheduleAutoSync?: boolean } = {}) => {
+      const scheduleAutoSync = opts.scheduleAutoSync !== false
       await offlineStore.upsertLocalPendingJobCardAsync({ ...payload, synced: false })
       await refreshUnsyncedCount()
-      bumpLocalDrafts()
+      if (scheduleAutoSync) bumpLocalDrafts()
     },
     [refreshUnsyncedCount, bumpLocalDrafts]
   )
@@ -463,12 +464,11 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
         }) as Record<string, unknown>
 
         jobCardData.id = editingMeta.localId
-        await persistLocal(jobCardData)
+        const tryImmediateSync = Boolean(isOnline && accessToken)
+        await persistLocal(jobCardData, { scheduleAutoSync: !tryImmediateSync })
 
-        if (isOnline && accessToken) {
-          const result = await syncEngineRef.current.syncOneLocalPendingJobCardToServer(
-            jobCardData as never
-          )
+        if (tryImmediateSync) {
+          const result = await syncOnePendingCard(jobCardData)
           if (result.ok && result.serverId) {
             setEditingMeta((m) =>
               m
@@ -479,6 +479,8 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
                   }
                 : m
             )
+          } else if (!result.ok) {
+            bumpLocalDrafts()
           }
         }
         setFormData((f) => ({ ...f, status: normalizedStatus }))
@@ -494,7 +496,9 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       persistLocal,
       isOnline,
       accessToken,
-      selectedPhotos
+      selectedPhotos,
+      syncOnePendingCard,
+      bumpLocalDrafts
     ]
   )
 
@@ -602,12 +606,11 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const syncOneCard = useCallback(
     async (row: PriorListRow) => {
       if (!accessToken || !isOnline) return
-      await syncEngineRef.current.syncOneLocalPendingJobCardToServer(row as never)
-      await refreshUnsyncedCount()
-      bumpLocalDrafts()
+      const result = await syncOnePendingCard(row as Record<string, unknown>)
+      if (!result.ok) bumpLocalDrafts()
       await refreshPriorList()
     },
-    [accessToken, isOnline, refreshUnsyncedCount, bumpLocalDrafts, refreshPriorList, syncEngineRef]
+    [accessToken, isOnline, syncOnePendingCard, bumpLocalDrafts, refreshPriorList]
   )
 
   const value = useMemo<WizardContextValue>(

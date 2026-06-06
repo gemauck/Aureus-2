@@ -15,13 +15,15 @@ import { createMobileSyncEngine } from './sync'
 
 type SyncEngine = ReturnType<typeof createMobileSyncEngine>
 
+type SyncOneResult = Awaited<ReturnType<SyncEngine['syncOneLocalPendingJobCardToServer']>>
+
 type JobCardSyncContextValue = {
   unsyncedCount: number
   pendingAutoSync: boolean
   refreshUnsyncedCount: () => Promise<void>
   bumpLocalDrafts: () => void
   runSyncNow: () => Promise<{ synced: number; failed: number }>
-  syncEngineRef: React.MutableRefObject<SyncEngine>
+  syncOnePendingCard: (card: Record<string, unknown>) => Promise<SyncOneResult>
 }
 
 const JobCardSyncContext = createContext<JobCardSyncContextValue | undefined>(undefined)
@@ -32,21 +34,24 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
   const [unsyncedCount, setUnsyncedCount] = useState(0)
   const [pendingAutoSync, setPendingAutoSync] = useState(false)
   const [localDraftsTick, setLocalDraftsTick] = useState(0)
-  const inFlightRef = useRef(false)
+  const syncInFlightRef = useRef(false)
+  const accessTokenRef = useRef(accessToken)
+  const isOnlineRef = useRef(isOnline)
+
+  useEffect(() => {
+    accessTokenRef.current = accessToken
+  }, [accessToken])
+
+  useEffect(() => {
+    isOnlineRef.current = isOnline
+  }, [isOnline])
 
   const syncEngineRef = useRef<SyncEngine>(
     createMobileSyncEngine(
-      () => accessToken,
-      () => isOnline
+      () => accessTokenRef.current,
+      () => isOnlineRef.current
     )
   )
-
-  useEffect(() => {
-    syncEngineRef.current = createMobileSyncEngine(
-      () => accessToken,
-      () => isOnline
-    )
-  }, [accessToken, isOnline])
 
   const refreshUnsyncedCount = useCallback(async () => {
     const list = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
@@ -57,25 +62,54 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
     setLocalDraftsTick((t) => t + 1)
   }, [])
 
+  const withSyncLock = useCallback(
+    async <T,>(fn: () => Promise<T>): Promise<T | null> => {
+      if (syncInFlightRef.current) return null
+      syncInFlightRef.current = true
+      setPendingAutoSync(true)
+      try {
+        return await fn()
+      } finally {
+        syncInFlightRef.current = false
+        setPendingAutoSync(false)
+      }
+    },
+    []
+  )
+
+  const syncOnePendingCard = useCallback(
+    async (card: Record<string, unknown>): Promise<SyncOneResult> => {
+      if (!accessTokenRef.current || !isOnlineRef.current) {
+        return { ok: false, serverId: null, errorText: 'Offline' }
+      }
+      const result = await withSyncLock(() =>
+        syncEngineRef.current.syncOneLocalPendingJobCardToServer(card as never)
+      )
+      if (result === null) {
+        return { ok: false, serverId: null, errorText: 'Sync already in progress' }
+      }
+      await refreshUnsyncedCount()
+      if (result.ok) bumpLocalDrafts()
+      return result
+    },
+    [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts]
+  )
+
   const runAutoSyncPendingJobCards = useCallback(async () => {
-    if (inFlightRef.current) return { synced: 0, failed: 0 }
-    if (!accessToken || !isOnline) return { synced: 0, failed: 0 }
+    if (!accessTokenRef.current || !isOnlineRef.current) return { synced: 0, failed: 0 }
 
     const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
     if (!pending.length) return { synced: 0, failed: 0 }
 
-    inFlightRef.current = true
-    setPendingAutoSync(true)
-    try {
-      const result = await syncEngineRef.current.runAutoSyncPendingJobCards(pending)
+    const result = await withSyncLock(async () => {
+      const batch = await syncEngineRef.current.runAutoSyncPendingJobCards(pending)
       await refreshUnsyncedCount()
-      if (result.synced > 0) setLocalDraftsTick((t) => t + 1)
-      return result
-    } finally {
-      inFlightRef.current = false
-      setPendingAutoSync(false)
-    }
-  }, [accessToken, isOnline, refreshUnsyncedCount])
+      return batch
+    })
+    if (!result) return { synced: 0, failed: 0 }
+    if (result.synced > 0) bumpLocalDrafts()
+    return result
+  }, [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts])
 
   useEffect(() => {
     migrateLegacyOfflineQueue().then(() => refreshUnsyncedCount())
@@ -102,12 +136,12 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
     const onAppStateChange = (next: AppStateStatus) => {
       if (next !== 'active') return
       void refreshUnsyncedCount().then(() => {
-        if (isOnline && accessToken) void runAutoSyncPendingJobCards()
+        if (isOnlineRef.current && accessTokenRef.current) void runAutoSyncPendingJobCards()
       })
     }
     const sub = AppState.addEventListener('change', onAppStateChange)
     return () => sub.remove()
-  }, [isOnline, accessToken, refreshUnsyncedCount, runAutoSyncPendingJobCards])
+  }, [refreshUnsyncedCount, runAutoSyncPendingJobCards])
 
   const value = useMemo<JobCardSyncContextValue>(
     () => ({
@@ -116,14 +150,15 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       refreshUnsyncedCount,
       bumpLocalDrafts,
       runSyncNow: runAutoSyncPendingJobCards,
-      syncEngineRef
+      syncOnePendingCard
     }),
     [
       unsyncedCount,
       pendingAutoSync,
       refreshUnsyncedCount,
       bumpLocalDrafts,
-      runAutoSyncPendingJobCards
+      runAutoSyncPendingJobCards,
+      syncOnePendingCard
     ]
   )
 
