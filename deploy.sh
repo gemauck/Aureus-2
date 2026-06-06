@@ -182,6 +182,16 @@ if [ ! -f "${VITE_PROJECTS_ENTRY}" ]; then
 fi
 echo "  ✓ Vite projects bundle present"
 
+if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh" ]; then
+  echo
+  echo "-> Publishing mobile JS OTA bundle (automatic in-app updates)..."
+  if bash "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh"; then
+    echo "  ✓ Mobile OTA bundle published on server"
+  else
+    echo "  ⚠ Mobile OTA publish failed — devices may stay on the previous JS bundle until the next deploy"
+  fi
+fi
+
 if [ -f scripts/poa-review/setup-venv.sh ]; then
   echo
   echo "-> Ensuring POA Review Python venv (pandas, openpyxl)..."

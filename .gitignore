@@ -48,6 +48,10 @@ logs
 # User uploads (runtime files, do not commit)
 uploads/
 
+# Mobile OTA bundles (generated on each deploy by publish-mobile-ota-selfhosted.sh)
+public/mobile-ota/updates/**/*
+!public/mobile-ota/updates/.gitkeep
+
 # Runtime data
 pids
 *.pid

@@ -4,16 +4,17 @@ import { AuthProvider } from './state/AuthContext'
 import { RootNavigator } from './navigation/RootNavigator'
 import { AppShellProvider } from './components/shell/AppShellContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { useAppUpdateCheck } from './hooks/useAppUpdateCheck'
+import { OtaBootstrapGate } from './components/OtaBootstrapGate'
 import { useOTAUpdates } from './hooks/useOTAUpdates'
 
 function AppShell() {
-  useAppUpdateCheck(true)
   useOTAUpdates(true)
   return (
-    <AppShellProvider>
-      <RootNavigator />
-    </AppShellProvider>
+    <OtaBootstrapGate>
+      <AppShellProvider>
+        <RootNavigator />
+      </AppShellProvider>
+    </OtaBootstrapGate>
   )
 }
 

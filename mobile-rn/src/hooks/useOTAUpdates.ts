@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
 import * as Updates from 'expo-updates'
 
+const FOREGROUND_DEBOUNCE_MS = 45_000
+const BACKGROUND_POLL_MS = 5 * 60_000
+
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
   | { status: 'downloaded'; willReload: boolean }
   | { status: 'error'; message: string }
 
-async function applyOtaUpdate(options: { silent?: boolean } = {}): Promise<OtaCheckResult> {
+export async function applyOtaUpdate(options: { silent?: boolean } = {}): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
   if (!Updates.isEnabled) return { status: 'disabled' }
@@ -51,30 +54,52 @@ async function applyOtaUpdate(options: { silent?: boolean } = {}): Promise<OtaCh
   }
 }
 
-/** Check Expo Updates (JS bundle OTA) on launch and when app returns to foreground. */
+/** Silent OTA checks on launch, foreground, and periodic poll while the app is open. */
 export function useOTAUpdates(enabled = true) {
-  const checkedRef = useRef(false)
+  const inFlightRef = useRef(false)
+  const lastCheckRef = useRef(0)
 
   const check = useCallback(async (opts: { silent?: boolean; force?: boolean } = {}) => {
-    if (!enabled) return applyOtaUpdate(opts)
-    if (opts.silent && checkedRef.current && !opts.force) {
+    if (!enabled && !opts.force) return applyOtaUpdate(opts)
+
+    const now = Date.now()
+    if (!opts.force && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {
       return { status: 'current' as const }
     }
-    if (opts.silent) checkedRef.current = true
-    return applyOtaUpdate(opts)
+    if (inFlightRef.current) return { status: 'current' as const }
+
+    inFlightRef.current = true
+    lastCheckRef.current = now
+    try {
+      return await applyOtaUpdate({ silent: opts.silent !== false })
+    } finally {
+      inFlightRef.current = false
+    }
   }, [enabled])
 
   useEffect(() => {
     if (!enabled) return
-    void check({ silent: true })
-    const sub = AppState.addEventListener('change', (state) => {
+
+    void check({ silent: true, force: true })
+
+    const onActive = (state: string) => {
       if (state === 'active') void check({ silent: true })
-    })
-    return () => sub.remove()
+    }
+    const sub = AppState.addEventListener('change', onActive)
+
+    const poll = setInterval(() => {
+      if (AppState.currentState === 'active') void check({ silent: true })
+    }, BACKGROUND_POLL_MS)
+
+    return () => {
+      sub.remove()
+      clearInterval(poll)
+    }
   }, [enabled, check])
 
   return {
-    checkForOTAUpdate: (interactive = true) => check({ silent: !interactive, force: true }),
+    checkForOTAUpdate: (interactive = true) =>
+      check({ silent: !interactive, force: true }),
     otaEnabled: Updates.isEnabled,
     otaChannel: Updates.channel,
     runtimeVersion: Updates.runtimeVersion,
@@ -82,5 +107,3 @@ export function useOTAUpdates(enabled = true) {
     isEmbeddedLaunch: Updates.isEmbeddedLaunch
   }
 }
-
-export { applyOtaUpdate }

@@ -8,7 +8,9 @@ const ANDROID_VERSION = {
   versionCode: 8,
   versionName: '0.3.4',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
-  releaseNotes: 'Self-hosted OTA on abcoafrica.co.za — no Expo account needed.'
+  releaseNotes: 'Self-hosted OTA on abcoafrica.co.za — no Expo account needed.',
+  /** Set true only when native modules/permissions change and users must install a new APK once. */
+  forceApkInstall: false
 }
 
 async function handler(req, res) {

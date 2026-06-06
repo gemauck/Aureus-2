@@ -108,8 +108,9 @@ export function SettingsScreen({ navigation }: Props) {
             )}
           </Pressable>
           <Text style={styles.updateHint}>
-            OTA delivers UI and logic fixes without reinstalling. A new APK is only needed for native
-            changes (camera, permissions, etc.).
+            Updates install automatically when you open the app — no action needed. Use the buttons
+            above only if you want to check manually. A new APK is required only when native modules
+            change (rare).
           </Text>
         </View>
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Linking, Platform } from 'react-native'
 import { API_BASE_URL } from '../config'
 import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
@@ -9,6 +9,8 @@ type MobileAppVersionPayload = {
     versionName?: string
     apkUrl?: string
     releaseNotes?: string
+    /** When true, user must install a new APK (native module / permission change). OTA cannot replace this. */
+    forceApkInstall?: boolean
   }
 }
 
@@ -25,26 +27,28 @@ async function fetchLatestVersion(): Promise<MobileAppVersionPayload | null> {
   }
 }
 
-/** Check server for newer APK and prompt user to download (Android sideload builds). */
-export function useAppUpdateCheck(enabled = true) {
-  const checkedRef = useRef(false)
+/** Only prompts for APK when the server explicitly requires a native shell upgrade. JS changes use OTA. */
+export function useAppUpdateCheck(enabled = false) {
+  const promptedRef = useRef(false)
 
-  const check = useCallback(async (silent = false) => {
+  const check = useCallback(async (interactive = false) => {
     if (Platform.OS !== 'android') return
     const latest = await fetchLatestVersion()
     const remote = latest?.android
     if (!remote?.versionCode || remote.versionCode <= APP_VERSION_CODE) return
-    if (silent && checkedRef.current) return
-    checkedRef.current = true
+    if (!remote.forceApkInstall) return
+    if (!interactive && promptedRef.current) return
+    promptedRef.current = true
+
     const url = remote.apkUrl || `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
     Alert.alert(
-      'Update available',
+      'App update required',
       remote.releaseNotes ||
-        `Version ${remote.versionName || remote.versionCode} is available. You have ${APP_VERSION}.`,
+        `Version ${remote.versionName || remote.versionCode} includes native changes. Install once to resume automatic updates.`,
       [
         { text: 'Later', style: 'cancel' },
         {
-          text: 'Download update',
+          text: 'Download',
           onPress: () => void Linking.openURL(url)
         }
       ]
@@ -53,12 +57,12 @@ export function useAppUpdateCheck(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return
-    void check(true)
+    void check(false)
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void check(true)
+      if (state === 'active') void check(false)
     })
     return () => sub.remove()
   }, [enabled, check])
 
-  return { checkForUpdate: () => check(false) }
+  return { checkForUpdate: () => check(true) }
 }
