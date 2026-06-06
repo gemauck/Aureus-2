@@ -61,6 +61,18 @@ export function SettingsScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dashboard</Text>
+          <Pressable
+            style={styles.linkBtn}
+            onPress={() => navigation.navigate('DashboardCustomize')}
+          >
+            <FontAwesome5 name="sliders-h" size={16} color={erp.primary} />
+            <Text style={styles.linkBtnText}>Customize dashboard widgets</Text>
+            <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
+          </Pressable>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>App</Text>
           <View style={styles.card}>
             <Row icon="server" label="Server" value={API_BASE_URL} />
@@ -180,6 +192,18 @@ const styles = StyleSheet.create({
   updateBtnBusy: { opacity: 0.7 },
   updateBtnText: { color: erp.text, fontWeight: '700', fontSize: 15 },
   updateHint: { fontSize: 12, color: erp.textMuted, lineHeight: 18, marginTop: 4 },
+  linkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: erp.surface,
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.lg,
+    padding: 16,
+    ...erp.shadowSm
+  },
+  linkBtnText: { flex: 1, color: erp.text, fontWeight: '700', fontSize: 15 },
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -26,13 +26,20 @@ export function WidgetCard({
   onAction,
   style
 }: Props) {
+  const headerPressable = onPressHeader || onAction
+
   return (
     <View style={[styles.card, style]}>
-      <Pressable style={styles.header} onPress={onPressHeader} disabled={!onPressHeader}>
+      <View style={[styles.accent, { backgroundColor: iconColor }]} />
+      <Pressable
+        style={({ pressed }) => [styles.header, pressed && headerPressable && styles.headerPressed]}
+        onPress={onPressHeader || onAction}
+        disabled={!headerPressable}
+      >
         <View style={styles.headerLeft}>
           {icon ? (
-            <View style={[styles.iconWrap, { backgroundColor: `${iconColor}18` }]}>
-              <FontAwesome5 name={icon as never} size={14} color={iconColor} />
+            <View style={[styles.iconWrap, { backgroundColor: `${iconColor}14` }]}>
+              <FontAwesome5 name={icon as never} size={15} color={iconColor} />
             </View>
           ) : null}
           <View style={{ flex: 1 }}>
@@ -41,9 +48,16 @@ export function WidgetCard({
           </View>
         </View>
         {actionLabel && onAction ? (
-          <Pressable onPress={onAction} hitSlop={8}>
+          <Pressable
+            onPress={onAction}
+            hitSlop={8}
+            style={({ pressed }) => [styles.actionPill, pressed && styles.actionPillPressed]}
+          >
             <Text style={styles.action}>{actionLabel}</Text>
+            <FontAwesome5 name="chevron-right" size={10} color={erp.primary} />
           </Pressable>
+        ) : headerPressable ? (
+          <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
         ) : null}
       </Pressable>
       <View style={styles.body}>{children}</View>
@@ -54,31 +68,43 @@ export function WidgetCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
-    borderRadius: erp.radius.lg,
-    borderWidth: 1,
-    borderColor: erp.border,
+    borderRadius: erp.radius.xl,
     overflow: 'hidden',
-    ...erp.shadowSm
+    ...erp.shadow
+  },
+  accent: {
+    height: 3,
+    width: '100%'
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: erp.space.md,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: erp.borderLight
+    paddingVertical: 16,
+    gap: 10
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  headerPressed: { backgroundColor: erp.surfaceMuted },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center'
   },
-  title: { fontSize: 16, fontWeight: '800', color: erp.text },
-  subtitle: { fontSize: 12, color: erp.textMuted, marginTop: 2 },
-  action: { color: erp.primary, fontWeight: '700', fontSize: 13 },
-  body: { padding: erp.space.md }
+  title: { fontSize: 16, fontWeight: '800', color: erp.text, letterSpacing: -0.2 },
+  subtitle: { fontSize: 12, color: erp.textMuted, marginTop: 3 },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: erp.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999
+  },
+  actionPillPressed: { opacity: 0.85 },
+  action: { color: erp.primary, fontWeight: '700', fontSize: 12 },
+  body: { paddingHorizontal: erp.space.md, paddingBottom: erp.space.md }
 })

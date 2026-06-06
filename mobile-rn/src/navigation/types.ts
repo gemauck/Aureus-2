@@ -22,6 +22,7 @@ export type RootStackParamList = {
   Notifications: undefined
   Reports: undefined
   Settings: undefined
+  DashboardCustomize: undefined
 }
 
 export type MenuItemId = keyof Omit<

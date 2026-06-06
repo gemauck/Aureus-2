@@ -13,6 +13,7 @@ import { MyTasksScreen } from '../screens/MyTasksScreen'
 import { NotificationsScreen } from '../screens/NotificationsScreen'
 import { ServiceMaintenanceScreen } from '../screens/ServiceMaintenanceScreen'
 import { SettingsScreen } from '../screens/SettingsScreen'
+import { DashboardCustomizeScreen } from '../screens/DashboardCustomizeScreen'
 import { createPlaceholderScreen } from '../screens/ModulePlaceholderScreen'
 import { JobCardsRootScreen } from '../jobcards/screens/JobCardsRootScreen'
 import { MessagesNavigator } from '../messages/MessagesNavigator'
@@ -108,6 +109,7 @@ function AuthenticatedApp() {
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="ServiceMaintenance" component={ServiceMaintenanceScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="DashboardCustomize" component={DashboardCustomizeScreen} />
           <Stack.Screen name="JobCards" component={JobCardsRootScreen} />
           <Stack.Screen name="Teams" component={TeamsScreen} />
           <Stack.Screen name="Users" component={UsersScreen} />
