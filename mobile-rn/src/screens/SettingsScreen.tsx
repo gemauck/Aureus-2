@@ -19,7 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>
 
 export function SettingsScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
-  const { erp, mode, setMode } = useTheme()
+  const { erp, preference, setPreference } = useTheme()
   const { user, signOut } = useAuth()
   const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId, isEmbeddedLaunch } =
     useOTAUpdates(false)
@@ -111,18 +111,27 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={styles.label}>Theme</Text>
             <View style={styles.segmentRow}>
               <AppearanceOption
+                label="System"
+                icon="mobile-alt"
+                selected={preference === 'system'}
+                onPress={() => setPreference('system')}
+              />
+              <AppearanceOption
                 label="Light"
                 icon="sun"
-                selected={mode === 'light'}
-                onPress={() => setMode('light')}
+                selected={preference === 'light'}
+                onPress={() => setPreference('light')}
               />
               <AppearanceOption
                 label="Dark"
                 icon="moon"
-                selected={mode === 'dark'}
-                onPress={() => setMode('dark')}
+                selected={preference === 'dark'}
+                onPress={() => setPreference('dark')}
               />
             </View>
+            {preference === 'system' ? (
+              <Text style={styles.themeHint}>Matches your device light or dark setting.</Text>
+            ) : null}
           </View>
         </View>
 
@@ -283,8 +292,9 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       borderColor: erp.primary,
       backgroundColor: erp.primarySoft
     },
-    segmentLabel: { fontSize: 14, fontWeight: '600', color: erp.textMuted },
+    segmentLabel: { fontSize: 13, fontWeight: '600', color: erp.textMuted },
     segmentLabelSelected: { color: erp.primary, fontWeight: '700' },
+    themeHint: { fontSize: 12, color: erp.textMuted, marginTop: 10, lineHeight: 18 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
     rowLabel: { flex: 1, color: erp.text, fontWeight: '600' },
     rowValue: { color: erp.textMuted, fontSize: 13, maxWidth: '50%', textAlign: 'right' },

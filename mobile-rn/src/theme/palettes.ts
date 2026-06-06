@@ -74,6 +74,8 @@ export type JcTheme = {
 }
 
 export type ThemeMode = 'light' | 'dark'
+/** User choice in Settings; `system` follows the device appearance. */
+export type ThemePreference = ThemeMode | 'system'
 
 export const lightErp: ErpTheme = {
   bg: '#f8fafc',
@@ -232,4 +234,11 @@ export function resolveThemes(mode: ThemeMode): { erp: ErpTheme; jc: JcTheme; is
     jc: isDark ? darkJc : lightJc,
     isDark
   }
+}
+
+export function resolveColorScheme(
+  preference: ThemePreference,
+  systemScheme: ThemeMode
+): ThemeMode {
+  return preference === 'system' ? systemScheme : preference
 }
