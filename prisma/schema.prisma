@@ -2310,6 +2310,7 @@ model NotificationSetting {
   emailTasks    Boolean  @default(true)
   emailInvoices Boolean  @default(true)
   emailSystem   Boolean  @default(true)
+  emailMessages Boolean  @default(false)
   inAppMentions Boolean  @default(true)
   inAppComments Boolean  @default(true)
   inAppTasks    Boolean  @default(true)

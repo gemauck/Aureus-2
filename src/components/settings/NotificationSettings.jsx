@@ -8,6 +8,7 @@ const NotificationSettings = () => {
         emailTasks: false,
         emailInvoices: true,
         emailSystem: true,
+        emailMessages: false,
         inAppMentions: true,
         inAppComments: true,
         inAppTasks: true,
@@ -50,6 +51,7 @@ const NotificationSettings = () => {
                         emailTasks: loadedSettings.emailTasks !== undefined ? loadedSettings.emailTasks : false,
                         emailInvoices: loadedSettings.emailInvoices !== undefined ? loadedSettings.emailInvoices : true,
                         emailSystem: loadedSettings.emailSystem !== undefined ? loadedSettings.emailSystem : true,
+                        emailMessages: loadedSettings.emailMessages !== undefined ? loadedSettings.emailMessages : false,
                         inAppMentions: loadedSettings.inAppMentions !== undefined ? loadedSettings.inAppMentions : true,
                         inAppComments: loadedSettings.inAppComments !== undefined ? loadedSettings.inAppComments : true,
                         inAppTasks: loadedSettings.inAppTasks !== undefined ? loadedSettings.inAppTasks : true,
@@ -130,7 +132,8 @@ const NotificationSettings = () => {
                         { key: 'emailComments', label: 'Comments', desc: 'Get notified via email when someone comments on your items' },
                         { key: 'emailTasks', label: 'Tasks', desc: 'Get notified via email about task assignments and updates' },
                         { key: 'emailInvoices', label: 'Invoices', desc: 'Get notified via email about invoice status and due dates' },
-                        { key: 'emailSystem', label: 'System Alerts', desc: 'Get notified via email about important system events' }
+                        { key: 'emailSystem', label: 'System Alerts', desc: 'Get notified via email about important system events' },
+                        { key: 'emailMessages', label: 'Messages', desc: 'Get notified via email for new Messenger chats and DMs' }
                     ].map(item => (
                         <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                             <div>

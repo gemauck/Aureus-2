@@ -40,7 +40,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         settings = await prisma.notificationSetting.create({
             data: {
                 userId: id,
-                emailTasks: true, emailMentions: true, emailComments: true, emailInvoices: true, emailSystem: true,
+                emailTasks: true, emailMentions: true, emailComments: true, emailInvoices: true, emailSystem: true, emailMessages: false,
                 inAppTasks: true, inAppMentions: true, inAppComments: true, inAppInvoices: true, inAppSystem: true
             }
         });
@@ -213,7 +213,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         }
     }
 
-    const shouldSendEmail = isChatMessage ? settings.emailSystem : (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
+    const shouldSendEmail = isChatMessage ? settings.emailMessages : (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||
         (type === 'task' && settings.emailTasks) || (type === 'invoice' && settings.emailInvoices) || (type === 'system' && settings.emailSystem);
     if (!targetUser.email) {
         if (type === 'comment' || type === 'mention') console.warn('📧 Notification: user has no email, skipping:', id, targetUser.name);

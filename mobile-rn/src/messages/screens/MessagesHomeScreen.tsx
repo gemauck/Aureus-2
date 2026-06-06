@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -48,6 +49,9 @@ export function MessagesHomeScreen({ navigation }: Props) {
   const [userSearch, setUserSearch] = useState('')
   const [users, setUsers] = useState<ChatUser[]>([])
   const [searchingUsers, setSearchingUsers] = useState(false)
+  const [emailMessages, setEmailMessages] = useState(false)
+  const [emailPrefLoading, setEmailPrefLoading] = useState(true)
+  const [emailPrefSaving, setEmailPrefSaving] = useState(false)
 
   const load = useCallback(
     async (silent = false) => {
@@ -69,6 +73,36 @@ export function MessagesHomeScreen({ navigation }: Props) {
     const id = setInterval(() => load(true), 15000)
     return () => clearInterval(id)
   }, [load])
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const settings = await chatApi.getNotificationSettings(accessToken)
+        if (!cancelled) setEmailMessages(!!settings.emailMessages)
+      } catch {
+        if (!cancelled) setEmailMessages(false)
+      } finally {
+        if (!cancelled) setEmailPrefLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [accessToken])
+
+  const toggleEmailMessages = async () => {
+    if (!accessToken || emailPrefSaving) return
+    const next = !emailMessages
+    setEmailPrefSaving(true)
+    try {
+      const settings = await chatApi.updateEmailMessages(accessToken, next)
+      setEmailMessages(!!settings.emailMessages)
+    } catch {
+      Alert.alert('Email notifications', 'Could not update your preference.')
+    } finally {
+      setEmailPrefSaving(false)
+    }
+  }
 
   useEffect(() => {
     if (!showNew || !accessToken) return
@@ -125,6 +159,17 @@ export function MessagesHomeScreen({ navigation }: Props) {
             <Text style={styles.newBtnText}>+ New</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          style={styles.emailPrefRow}
+          onPress={() => void toggleEmailMessages()}
+          disabled={emailPrefLoading || emailPrefSaving}
+        >
+          <Text style={styles.emailPrefLabel}>Email notifications</Text>
+          <View style={[styles.emailPrefSwitch, emailMessages && styles.emailPrefSwitchOn]}>
+            <View style={[styles.emailPrefKnob, emailMessages && styles.emailPrefKnobOn]} />
+          </View>
+        </Pressable>
 
         {loading && !conversations.length ? (
           <ActivityIndicator style={styles.loader} color={erp.primary} />
@@ -217,7 +262,40 @@ export function MessagesHomeScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
-  toolbar: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  toolbar: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  emailPrefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: erp.surface,
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12
+  },
+  emailPrefLabel: { fontSize: 14, color: erp.text, fontWeight: '500' },
+  emailPrefSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: erp.surfaceMuted,
+    justifyContent: 'center',
+    paddingHorizontal: 2
+  },
+  emailPrefSwitchOn: { backgroundColor: erp.success },
+  emailPrefKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  emailPrefKnobOn: { alignSelf: 'flex-end' },
   search: {
     flex: 1,
     backgroundColor: erp.surface,

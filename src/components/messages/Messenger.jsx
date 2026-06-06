@@ -210,7 +210,9 @@ const Messenger = () => {
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [totalUnread, setTotalUnread] = useState(0);
   const [typingUsers, setTypingUsers] = useState([]);
-  const [reactionPickerId, setReactionPickerId] = useState(null);
+  const [emailMessages, setEmailMessages] = useState(false);
+  const [emailPrefLoading, setEmailPrefLoading] = useState(true);
+  const [emailPrefSaving, setEmailPrefSaving] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -307,6 +309,34 @@ const Messenger = () => {
   }, [scrollToBottom]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  useEffect(() => {
+    let cancelled = false;
+    chatFetch('/api/notifications/settings')
+      .then((data) => {
+        if (cancelled) return;
+        setEmailMessages(!!data?.settings?.emailMessages);
+      })
+      .catch(() => { if (!cancelled) setEmailMessages(false); })
+      .finally(() => { if (!cancelled) setEmailPrefLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleEmailMessages = async () => {
+    const next = !emailMessages;
+    setEmailPrefSaving(true);
+    try {
+      const data = await chatFetch('/api/notifications/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ emailMessages: next })
+      });
+      setEmailMessages(!!data?.settings?.emailMessages);
+    } catch (e) {
+      window.alert(e.message || 'Could not update email preference');
+    } finally {
+      setEmailPrefSaving(false);
+    }
+  };
 
   useEffect(() => {
     const token = window.storage?.getToken?.();
@@ -800,6 +830,22 @@ const Messenger = () => {
               <i className="fas fa-search text-white/70 text-sm" />
               <input type="search" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 bg-transparent border-0 outline-none text-sm text-white placeholder-white/60" />
+            </div>
+            <div className={`mt-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/50 text-blue-100' : 'bg-white/15 text-white'}`}>
+              <span className="text-xs flex items-center gap-1.5">
+                <i className="fas fa-envelope text-[11px] opacity-80" />
+                Email notifications
+              </span>
+              <button
+                type="button"
+                disabled={emailPrefLoading || emailPrefSaving}
+                onClick={() => void toggleEmailMessages()}
+                className={`relative w-10 h-5 rounded-full transition-colors ${emailMessages ? 'bg-emerald-400' : (isDark ? 'bg-gray-700' : 'bg-white/30')} disabled:opacity-50`}
+                title={emailMessages ? 'Email alerts on for new messages' : 'Email alerts off for new messages'}
+                aria-pressed={emailMessages}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailMessages ? 'translate-x-5' : ''}`} />
+              </button>
             </div>
           </div>
 

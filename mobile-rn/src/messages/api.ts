@@ -166,5 +166,19 @@ export const chatApi = {
       method: 'POST',
       body: {}
     }).then((d) => d.conversation)
+  },
+
+  getNotificationSettings(token: string) {
+    return request<{ settings: { emailMessages?: boolean } }>('/api/notifications/settings', { token }).then(
+      (d) => d.settings || {}
+    )
+  },
+
+  updateEmailMessages(token: string, emailMessages: boolean) {
+    return request<{ settings: { emailMessages?: boolean } }>('/api/notifications/settings', {
+      token,
+      method: 'PUT',
+      body: { emailMessages }
+    }).then((d) => d.settings || {})
   }
 }
