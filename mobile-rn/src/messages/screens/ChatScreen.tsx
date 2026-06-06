@@ -91,6 +91,8 @@ function ReadReceiptsModal({
   loading: boolean
   onClose: () => void
 }) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const fmt = (iso?: string) =>
     iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 
