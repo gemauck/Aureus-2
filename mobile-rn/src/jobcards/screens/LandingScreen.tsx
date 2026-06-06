@@ -4,9 +4,13 @@ import { ModuleHeader } from '../../components/shell/ModuleHeader'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { useNetwork } from '../../hooks/useNetwork'
 import { useJobCardWizard } from '../WizardContext'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function LandingScreen() {
+  const { jc } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const { isOnline } = useNetwork()
   const {
     loading,
@@ -118,7 +122,8 @@ function MenuButton({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: jc.bgGradientMid },
   content: { padding: jc.space.lg, gap: jc.space.sm, paddingBottom: 40 },
   heroWrap: {
@@ -214,4 +219,5 @@ const styles = StyleSheet.create({
   },
   syncBtnText: { fontWeight: '700', color: jc.primaryDark },
   disabled: { opacity: 0.5 }
-})
+  })
+}

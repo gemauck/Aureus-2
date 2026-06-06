@@ -13,9 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { API_BASE_URL } from '../services/apiClient'
 import { useAuth } from '../state/AuthContext'
-import { COMPANY_NAME, erp } from '../theme/appTheme'
+import { COMPANY_NAME } from '../theme/appTheme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 export function LoginScreen() {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -96,7 +101,8 @@ export function LoginScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.sidebar },
   flex: { flex: 1, justifyContent: 'center', padding: erp.space.xl },
   hero: { alignItems: 'center', marginBottom: 28 },
@@ -142,4 +148,5 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.7 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   serverHint: { fontSize: 11, color: erp.textSubtle, textAlign: 'center', marginTop: 16 }
-})
+  })
+}

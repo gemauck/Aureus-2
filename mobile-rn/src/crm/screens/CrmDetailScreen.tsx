@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { crmApi } from '../api'
 import { CrmDetailPanelContent } from '../components/CrmDetailPanels'
 import { CrmDetailTabBar } from '../components/CrmDetailTabBar'
@@ -29,10 +29,15 @@ import type {
   CrmTag
 } from '../types'
 import { displayStage } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<CrmStackParamList, 'CrmDetail'>
 
 export function CrmDetailScreen({ route, navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { entityType, entityId } = route.params
   const { accessToken } = useAuth()
   const [entity, setEntity] = useState<CrmEntityBase | null>(null)
@@ -320,7 +325,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: erp.bg },
@@ -396,4 +402,5 @@ const styles = StyleSheet.create({
   footerBtnDisabled: { opacity: 0.65 },
   footerBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   footerBtnTextSecondary: { color: erp.primary }
-})
+  })
+}

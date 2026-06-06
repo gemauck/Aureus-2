@@ -1,5 +1,9 @@
 import * as Location from 'expo-location'
 import type { GpsPoint, TripSession } from '../types/jobCard'
+import {
+  ensureForegroundLocationPermission,
+  readCurrentCoordinates
+} from './locationPermission'
 
 const EARTH_RADIUS_KM = 6371
 
@@ -41,16 +45,11 @@ type WatchHandle = Location.LocationSubscription | null
 
 let watchSub: WatchHandle = null
 
-export async function ensureLocationPermission(): Promise<boolean> {
-  const { status } = await Location.requestForegroundPermissionsAsync()
-  return status === Location.PermissionStatus.GRANTED
-}
-
 export async function startTripTracking(
   onUpdate: (trip: TripSession) => void,
   trip: TripSession
 ): Promise<TripSession> {
-  const granted = await ensureLocationPermission()
+  const granted = await ensureForegroundLocationPermission()
   if (!granted) {
     throw new Error('Location permission is required to track travel distance.')
   }
@@ -72,12 +71,10 @@ export async function startTripTracking(
     distanceKm: routeDistanceKm(points)
   })
 
-  const initial = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced
-  })
+  const initial = await readCurrentCoordinates()
   points.push({
-    latitude: initial.coords.latitude,
-    longitude: initial.coords.longitude,
+    latitude: initial.latitude,
+    longitude: initial.longitude,
     timestamp: new Date().toISOString()
   })
   const initialTrip = emit()

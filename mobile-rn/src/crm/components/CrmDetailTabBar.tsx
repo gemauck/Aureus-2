@@ -1,9 +1,12 @@
 import React, { useEffect, useRef } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import { tabCount } from '../detailTabs'
 import type { CrmDetailTab, CrmDetailTabConfig, CrmEntityBase } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   tabs: CrmDetailTabConfig[]
@@ -14,6 +17,8 @@ type Props = {
 }
 
 export function CrmDetailTabBar({ tabs, active, entity, onSelect, extras }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const scrollRef = useRef<ScrollView>(null)
   const tabIndex = tabs.findIndex((t) => t.key === active)
 
@@ -66,7 +71,8 @@ export function CrmDetailTabBar({ tabs, active, entity, onSelect, extras }: Prop
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   wrap: {
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
@@ -116,4 +122,5 @@ const styles = StyleSheet.create({
   badgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
   badgeText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
   badgeTextActive: { color: '#fff' }
-})
+  })
+}

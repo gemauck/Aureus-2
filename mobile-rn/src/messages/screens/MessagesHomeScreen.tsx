@@ -15,9 +15,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { chatApi, type ChatConversation, type ChatUser } from '../api'
 import type { MessagesStackParamList } from '../navigation'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'MessagesHome'>
 
@@ -39,6 +42,8 @@ function initials(name?: string, email?: string) {
 }
 
 export function MessagesHomeScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { accessToken, user } = useAuth()
   const userId = user?.id || ''
   const [conversations, setConversations] = useState<ChatConversation[]>([])
@@ -260,7 +265,8 @@ export function MessagesHomeScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   toolbar: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   emailPrefRow: {
@@ -363,4 +369,5 @@ const styles = StyleSheet.create({
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   userSub: { color: erp.textMuted, fontSize: 13 },
   online: { color: erp.success, fontSize: 12, fontWeight: '600' }
-})
+  })
+}

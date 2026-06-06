@@ -17,7 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import type { RootStackParamList } from '../../navigation/types'
 import { projectsApi } from '../api'
 import { ProjectInsightsBar } from '../components/ProjectInsightsBar'
@@ -36,6 +36,9 @@ import type {
   TaskScopeFilter
 } from '../types'
 import {
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
   computeInsights,
   filterProjects,
   filterTasks,
@@ -64,6 +67,8 @@ const TASK_STATUS_FILTERS: TaskFilterStatus[] = [
 ]
 
 export function ProjectsHomeScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { accessToken, user } = useAuth()
   const [tab, setTab] = useState<ProjectsTab>('projects')
@@ -493,7 +498,8 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   hero: {
     marginHorizontal: erp.space.lg,
@@ -629,4 +635,5 @@ const styles = StyleSheet.create({
   },
   clientName: { flex: 1, fontSize: 15, fontWeight: '800', color: erp.text },
   clientCount: { fontSize: 12, fontWeight: '700', color: erp.textMuted }
-})
+  })
+}

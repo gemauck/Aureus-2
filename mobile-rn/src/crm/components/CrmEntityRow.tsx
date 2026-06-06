@@ -1,10 +1,13 @@
 import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { CrmEntityBase, CrmTab } from '../types'
 import { displayStage, entityContacts, entityFollowUps, entitySites, formatDate, formatMoney } from '../utils'
 import { CrmStatusBadge } from './CrmStatusBadge'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   entity: CrmEntityBase
@@ -13,6 +16,8 @@ type Props = {
 }
 
 export function CrmEntityRow({ entity, tab, onPress }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const stage = displayStage(entity)
   const contacts = entityContacts(entity)
   const sites = entitySites(entity)
@@ -71,7 +76,8 @@ export function CrmEntityRow({ entity, tab, onPress }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.lg,
@@ -99,4 +105,5 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 },
   metaChip: { fontSize: 12, color: erp.textMuted, fontWeight: '600' },
   lastContact: { fontSize: 12, color: erp.textSubtle, marginTop: 10 }
-})
+  })
+}

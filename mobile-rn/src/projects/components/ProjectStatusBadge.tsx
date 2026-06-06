@@ -1,6 +1,5 @@
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { erp } from '../../theme/appTheme'
 import { statusColor } from '../utils'
 
 type Props = {

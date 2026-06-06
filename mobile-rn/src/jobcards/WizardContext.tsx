@@ -27,8 +27,8 @@ import { API_BASE_URL } from '../config'
 import { jobcardsApi } from './api'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { voiceClipToPayloadUrl } from './media/mediaUri'
-import { offlineStore, migrateLegacyOfflineQueue } from './offlineStore'
-import { createMobileSyncEngine } from './sync'
+import { offlineStore } from './offlineStore'
+import { useJobCardSync } from './JobCardSyncContext'
 import type {
   ProjectOption,
   ClientOption,
@@ -117,6 +117,14 @@ function activeTechnicianUsers(list: UserOption[]) {
 export function JobCardWizardProvider({ children }: { children: React.ReactNode }) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
+  const {
+    unsyncedCount,
+    pendingAutoSync,
+    refreshUnsyncedCount,
+    bumpLocalDrafts,
+    runSyncNow,
+    syncEngineRef
+  } = useJobCardSync()
 
   const [loading, setLoading] = useState(true)
   const [referenceRefreshing, setReferenceRefreshing] = useState(false)
@@ -143,8 +151,6 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const [voiceAttachments, setVoiceAttachments] = useState<VoiceClip[]>([])
   const [selectedPhotos, setSelectedPhotos] = useState<MediaItem[]>([])
   const [signatureLocked, setSignatureLocked] = useState(false)
-  const [unsyncedCount, setUnsyncedCount] = useState(0)
-  const [pendingAutoSync, setPendingAutoSync] = useState(false)
   const [priorRows, setPriorRows] = useState<PriorListRow[]>([])
   const [priorLoading, setPriorLoading] = useState(false)
   const [priorSearch, setPriorSearch] = useState('')
@@ -153,25 +159,6 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const [photosLoading, setPhotosLoading] = useState(false)
   const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false)
   const [departureConfirmOpen, setDepartureConfirmOpen] = useState(false)
-
-  const syncEngineRef = useRef(
-    createMobileSyncEngine(
-      () => accessToken,
-      () => isOnline
-    )
-  )
-
-  useEffect(() => {
-    syncEngineRef.current = createMobileSyncEngine(
-      () => accessToken,
-      () => isOnline
-    )
-  }, [accessToken, isOnline])
-
-  const refreshUnsyncedCount = useCallback(async () => {
-    const list = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-    setUnsyncedCount(list.length)
-  }, [])
 
   const loadReferenceData = useCallback(
     async (opts: { silent?: boolean } = {}) => {
@@ -298,23 +285,8 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   }, [isOnline, inventory.length])
 
   useEffect(() => {
-    migrateLegacyOfflineQueue().then(() => {
-      loadReferenceData()
-      refreshUnsyncedCount()
-    })
-  }, [loadReferenceData, refreshUnsyncedCount])
-
-  useEffect(() => {
-    if (!isOnline || !accessToken) return
-    void (async () => {
-      const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-      if (!pending.length) return
-      setPendingAutoSync(true)
-      await syncEngineRef.current.runAutoSyncPendingJobCards(pending)
-      await refreshUnsyncedCount()
-      setPendingAutoSync(false)
-    })()
-  }, [isOnline, accessToken, refreshUnsyncedCount])
+    loadReferenceData()
+  }, [loadReferenceData])
 
   const startNewJobCard = useCallback(() => {
     void ensureReferenceDataLoaded()
@@ -370,6 +342,18 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     setWizardFlow('stock_take')
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
+
+  const priorAutoSyncRefreshRef = useRef(false)
+  useEffect(() => {
+    if (pendingAutoSync) {
+      priorAutoSyncRefreshRef.current = true
+      return
+    }
+    if (priorAutoSyncRefreshRef.current && wizardFlow === 'prior_list') {
+      priorAutoSyncRefreshRef.current = false
+      void refreshPriorList()
+    }
+  }, [pendingAutoSync, wizardFlow, refreshPriorList])
 
   const validateStep = useCallback(
     (stepIndex: number) =>
@@ -429,8 +413,9 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     async (payload: Record<string, unknown>) => {
       await offlineStore.upsertLocalPendingJobCardAsync({ ...payload, synced: false })
       await refreshUnsyncedCount()
+      bumpLocalDrafts()
     },
-    [refreshUnsyncedCount]
+    [refreshUnsyncedCount, bumpLocalDrafts]
   )
 
   const persistDraftQuiet = useCallback(
@@ -561,16 +546,6 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     setCurrentStep((s) => Math.max(s - 1, 0))
   }, [])
 
-  const runSyncNow = useCallback(async () => {
-    if (!accessToken || !isOnline) return { synced: 0, failed: 0 }
-    setPendingAutoSync(true)
-    const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-    const result = await syncEngineRef.current.runAutoSyncPendingJobCards(pending)
-    await refreshUnsyncedCount()
-    setPendingAutoSync(false)
-    return result
-  }, [accessToken, isOnline, refreshUnsyncedCount])
-
   const openJobCard = useCallback(
     async (row: PriorListRow) => {
       const rowId = String(row.id)
@@ -629,9 +604,10 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       if (!accessToken || !isOnline) return
       await syncEngineRef.current.syncOneLocalPendingJobCardToServer(row as never)
       await refreshUnsyncedCount()
+      bumpLocalDrafts()
       await refreshPriorList()
     },
-    [accessToken, isOnline, refreshUnsyncedCount, refreshPriorList]
+    [accessToken, isOnline, refreshUnsyncedCount, bumpLocalDrafts, refreshPriorList, syncEngineRef]
   )
 
   const value = useMemo<WizardContextValue>(

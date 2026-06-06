@@ -6,9 +6,11 @@ import { useLocationInventory } from '../hooks/useLocationInventory'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
 import { InfoBanner } from '../components/InfoBanner'
-import { formStyles } from '../components/formStyles'
-import { jc } from '../theme'
+import { useFormStyles } from '../components/formStyles'
 import type { JobCardFormData, StockEntryRow as StockRow, StockLocation } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 function StockEntryRowEditor({
   row,
@@ -27,6 +29,9 @@ function StockEntryRowEditor({
   onRemove: (id: string) => void
   onAddLine: (rowId: string) => void
 }) {
+  const styles = useThemedStyles(createStyles)
+  const formStyles = useFormStyles()
+  const { jc } = useTheme()
   const { rows, loading, error } = useLocationInventory(row.locationId, Boolean(row.locationId))
 
   const skuOptions = useMemo(
@@ -109,6 +114,8 @@ function StockEntryRowEditor({
 }
 
 export function StockStep() {
+  const formStyles = useFormStyles()
+  const styles = useThemedStyles(createStyles)
   const {
     formData,
     setFormData,
@@ -246,6 +253,9 @@ function MaterialSection({
   setFormData: React.Dispatch<React.SetStateAction<JobCardFormData>>
   totalMaterialCost: number
 }) {
+  const styles = useThemedStyles(createStyles)
+  const formStyles = useFormStyles()
+  const { jc } = useTheme()
   const [matDraft, setMatDraft] = React.useState({
     itemName: '',
     description: '',
@@ -344,7 +354,8 @@ function MaterialSection({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   stockRow: {
     gap: jc.space.sm,
     marginBottom: jc.space.md,
@@ -395,4 +406,5 @@ const styles = StyleSheet.create({
   },
   totalLabel: { fontWeight: '700', color: jc.text },
   totalValue: { fontSize: 18, fontWeight: '800', color: jc.primary }
-})
+  })
+}

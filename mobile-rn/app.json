@@ -5,21 +5,19 @@
     "version": "0.3.4",
     "orientation": "portrait",
     "scheme": "abcotronics",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
     "android": {
       "package": "com.abcotronics.erp.mobile",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1d4ed8"
       },
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "RECORD_AUDIO"
@@ -30,8 +28,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Abcotronics ERP to track job travel while you are on a trip.",
-          "locationWhenInUsePermission": "Allow Abcotronics ERP to record your location for job cards and travel distance."
+          "locationWhenInUsePermission": "Allow location access when you pick a visit point on the map or track travel distance.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [

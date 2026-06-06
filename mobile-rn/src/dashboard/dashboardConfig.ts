@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { RootStackParamList } from '../navigation/types'
-import { erp } from '../theme/appTheme'
+import type { ErpTheme } from '../theme/palettes'
 
 const STORAGE_KEY = '@erp_dashboard_config_v1'
 
@@ -41,30 +41,32 @@ export type WidgetDef = {
   screen: keyof RootStackParamList
 }
 
-export const WIDGET_DEFS: Record<DashboardWidgetId, WidgetDef> = {
-  tasks: {
-    id: 'tasks',
-    title: 'My Tasks',
-    subtitle: 'Project tasks and personal to-dos',
-    icon: 'check-square',
-    iconColor: erp.success,
-    screen: 'MyTasks'
-  },
-  notifications: {
-    id: 'notifications',
-    title: 'Notifications',
-    subtitle: 'Updates from across the ERP',
-    icon: 'bell',
-    iconColor: erp.warning,
-    screen: 'Notifications'
-  },
-  jobCards: {
-    id: 'jobCards',
-    title: 'Recent job cards',
-    subtitle: 'Latest field service visits',
-    icon: 'clipboard-list',
-    iconColor: erp.primary,
-    screen: 'JobCards'
+export function getWidgetDefs(erp: ErpTheme): Record<DashboardWidgetId, WidgetDef> {
+  return {
+    tasks: {
+      id: 'tasks',
+      title: 'My Tasks',
+      subtitle: 'Project tasks and personal to-dos',
+      icon: 'check-square',
+      iconColor: erp.success,
+      screen: 'MyTasks'
+    },
+    notifications: {
+      id: 'notifications',
+      title: 'Notifications',
+      subtitle: 'Updates from across the ERP',
+      icon: 'bell',
+      iconColor: erp.warning,
+      screen: 'Notifications'
+    },
+    jobCards: {
+      id: 'jobCards',
+      title: 'Recent job cards',
+      subtitle: 'Latest field service visits',
+      icon: 'clipboard-list',
+      iconColor: erp.primary,
+      screen: 'JobCards'
+    }
   }
 }
 
@@ -76,31 +78,42 @@ export type QuickActionDef = {
   screen: keyof RootStackParamList
 }
 
-export const QUICK_ACTION_DEFS: Record<DashboardQuickActionId, QuickActionDef> = {
-  jobCards: { id: 'jobCards', label: 'Job cards', icon: 'wrench', tint: erp.primary, screen: 'JobCards' },
-  projects: { id: 'projects', label: 'Projects', icon: 'project-diagram', tint: '#7c3aed', screen: 'Projects' },
-  crm: { id: 'crm', label: 'CRM', icon: 'users', tint: '#0891b2', screen: 'Clients' },
-  myTasks: { id: 'myTasks', label: 'My tasks', icon: 'check-square', tint: erp.success, screen: 'MyTasks' },
-  messages: { id: 'messages', label: 'Messages', icon: 'comments', tint: '#6366f1', screen: 'Messages' },
-  notifications: {
-    id: 'notifications',
-    label: 'Notifications',
-    icon: 'bell',
-    tint: erp.warning,
-    screen: 'Notifications'
-  },
-  teams: { id: 'teams', label: 'Teams', icon: 'user-friends', tint: '#8b5cf6', screen: 'Teams' },
-  manufacturing: {
-    id: 'manufacturing',
-    label: 'Manufacturing',
-    icon: 'industry',
-    tint: '#475569',
-    screen: 'Manufacturing'
+export function getQuickActionDefs(erp: ErpTheme): Record<DashboardQuickActionId, QuickActionDef> {
+  return {
+    jobCards: { id: 'jobCards', label: 'Job cards', icon: 'wrench', tint: erp.primary, screen: 'JobCards' },
+    projects: { id: 'projects', label: 'Projects', icon: 'project-diagram', tint: '#7c3aed', screen: 'Projects' },
+    crm: { id: 'crm', label: 'CRM', icon: 'users', tint: '#0891b2', screen: 'Clients' },
+    myTasks: { id: 'myTasks', label: 'My tasks', icon: 'check-square', tint: erp.success, screen: 'MyTasks' },
+    messages: { id: 'messages', label: 'Messages', icon: 'comments', tint: '#6366f1', screen: 'Messages' },
+    notifications: {
+      id: 'notifications',
+      label: 'Notifications',
+      icon: 'bell',
+      tint: erp.warning,
+      screen: 'Notifications'
+    },
+    teams: { id: 'teams', label: 'Teams', icon: 'user-friends', tint: '#8b5cf6', screen: 'Teams' },
+    manufacturing: {
+      id: 'manufacturing',
+      label: 'Manufacturing',
+      icon: 'industry',
+      tint: '#475569',
+      screen: 'Manufacturing'
+    }
   }
 }
 
-export const ALL_WIDGET_IDS = Object.keys(WIDGET_DEFS) as DashboardWidgetId[]
-export const ALL_QUICK_ACTION_IDS = Object.keys(QUICK_ACTION_DEFS) as DashboardQuickActionId[]
+export const ALL_WIDGET_IDS: DashboardWidgetId[] = ['tasks', 'notifications', 'jobCards']
+export const ALL_QUICK_ACTION_IDS: DashboardQuickActionId[] = [
+  'jobCards',
+  'projects',
+  'crm',
+  'myTasks',
+  'messages',
+  'notifications',
+  'teams',
+  'manufacturing'
+]
 
 function normalizeConfig(raw: Partial<DashboardConfig> | null | undefined): DashboardConfig {
   const base = { ...DEFAULT_DASHBOARD_CONFIG, ...raw }

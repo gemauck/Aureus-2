@@ -4,8 +4,10 @@ import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { JOB_CARD_IMAGE_MAX_DIMENSION } from '../../../../src/jobCardWizard/constants.js'
 import { MediaGallery } from './MediaGallery'
-import { jc } from '../theme'
 import type { MediaItem } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   photos: MediaItem[]
@@ -23,6 +25,8 @@ async function compressUri(uri: string): Promise<string> {
 }
 
 export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const [busy, setBusy] = useState(false)
 
   async function pick() {
@@ -107,7 +111,8 @@ export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   btn: {
     flex: 1,
@@ -120,4 +125,5 @@ const styles = StyleSheet.create({
   btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   busyText: { color: jc.textMuted, fontSize: 13 }
-})
+  })
+}

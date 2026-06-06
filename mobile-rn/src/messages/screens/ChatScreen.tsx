@@ -16,9 +16,12 @@ import { Audio } from 'expo-av'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { apiUrl } from '../../config'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { chatApi, type ChatAttachment, type ChatMessage, type MessageReadReceipts } from '../api'
 import type { MessagesStackParamList } from '../navigation'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<MessagesStackParamList, 'Chat'>
 
@@ -35,6 +38,7 @@ function resolveMediaUrl(url?: string) {
 }
 
 function VoiceAttachment({ attachment, mine }: { attachment: ChatAttachment; mine: boolean }) {
+  const styles = useThemedStyles(createStyles)
   const [playing, setPlaying] = useState(false)
   const soundRef = useRef<Audio.Sound | null>(null)
 
@@ -132,6 +136,8 @@ function ReadReceiptsModal({
 }
 
 export function ChatScreen({ route }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { conversationId } = route.params
   const { accessToken, user } = useAuth()
   const userId = user?.id || ''
@@ -478,7 +484,8 @@ export function ChatScreen({ route }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   loader: { marginTop: 40 },
   list: { padding: 12, paddingBottom: 8 },
@@ -632,4 +639,5 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   modalCloseText: { fontWeight: '700', color: erp.primary }
-})
+  })
+}

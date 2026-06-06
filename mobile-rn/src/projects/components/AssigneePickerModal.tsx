@@ -9,8 +9,11 @@ import {
   View
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { ErpUser } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   visible: boolean
@@ -21,6 +24,8 @@ type Props = {
 }
 
 export function AssigneePickerModal({ visible, users, selectedId, onSelect, onClose }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
@@ -90,7 +95,8 @@ export function AssigneePickerModal({ visible, users, selectedId, onSelect, onCl
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: erp.surface,
@@ -141,4 +147,5 @@ const styles = StyleSheet.create({
   email: { fontSize: 12, color: erp.textMuted },
   cancel: { marginTop: 12, alignItems: 'center', paddingVertical: 12 },
   cancelText: { fontWeight: '700', color: erp.textMuted }
-})
+  })
+}

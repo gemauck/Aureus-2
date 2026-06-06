@@ -12,11 +12,14 @@ import { FontAwesome5 } from '@expo/vector-icons'
 import type { NavigationContainerRef } from '@react-navigation/native'
 import { ALL_MENU_ITEMS } from '../../navigation/menuItems'
 import type { RootStackParamList } from '../../navigation/types'
-import { COMPANY_NAME, erp } from '../../theme/appTheme'
+import { COMPANY_NAME } from '../../theme/appTheme'
 import { useAuth } from '../../state/AuthContext'
 import { getVisibleMenuItems } from '../../utils/menuAccess'
 import { useAppShell } from './AppShellContext'
 import { erpApi } from '../../services/erpApi'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList>>
@@ -35,6 +38,8 @@ function formatRole(role?: string) {
 }
 
 export function DrawerMenu({ navigationRef, currentRoute }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const insets = useSafeAreaInsets()
   const { menuOpen, closeMenu } = useAppShell()
   const { user, signOut, accessToken } = useAuth()
@@ -156,7 +161,8 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, flexDirection: 'row' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.45)' },
   panel: {
@@ -234,4 +240,5 @@ const styles = StyleSheet.create({
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   divider: { height: 1, backgroundColor: erp.sidebarHover, marginVertical: 8, marginHorizontal: 8 },
   signOutItem: { marginTop: 4 }
-})
+  })
+}

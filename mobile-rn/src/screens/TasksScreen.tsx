@@ -2,9 +2,12 @@ import React, { useCallback, useState } from 'react'
 import { FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native'
 import { apiClient } from '../services/apiClient'
 import { useAuth } from '../state/AuthContext'
-import { erp } from '../theme/appTheme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+
 
 export function TasksScreen() {
+  const styles = useThemedStyles(createStyles)
   const { accessToken } = useAuth()
   const [items, setItems] = useState<Array<{ id: string; title?: string; name?: string; status?: string }>>([])
 
@@ -28,7 +31,8 @@ export function TasksScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: erp.bg, padding: 16 },
   button: { backgroundColor: erp.primary, borderRadius: 8, padding: 10, marginBottom: 12 },
   buttonText: { color: '#ffffff', fontWeight: '600', textAlign: 'center' },
@@ -38,4 +42,5 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: erp.text
   }
-})
+  })
+}

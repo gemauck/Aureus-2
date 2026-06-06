@@ -12,7 +12,8 @@ import {
 import { CameraView, Camera, useCameraPermissions } from 'expo-camera'
 import * as FileSystem from 'expo-file-system'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { jc } from '../jobcards/theme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { JcTheme } from '../theme/palettes'
 
 type Props = {
   visible: boolean
@@ -27,6 +28,7 @@ const ANDROID_SNAPSHOT_INTERVAL_MS = 450
 const LABEL_FRAME_ASPECT = 99.1 / 38.1
 
 export function InventoryBarcodeScannerModal({ visible, onClose, onScan }: Props) {
+  const styles = useThemedStyles(createStyles)
   const [permission, requestPermission] = useCameraPermissions()
   const [mountError, setMountError] = useState('')
   const [canMountCamera, setCanMountCamera] = useState(false)
@@ -216,6 +218,7 @@ function ScannerCamera({
 }
 
 function ScanPlacementOverlay({ ready }: { ready: boolean }) {
+  const styles = useThemedStyles(createStyles)
   const { width: screenW, height: screenH } = Dimensions.get('window')
   const frameW = Math.min(screenW * 0.86, screenW - 32)
   const frameH = Math.min(frameW / LABEL_FRAME_ASPECT, screenH * 0.28)
@@ -254,7 +257,8 @@ function ScanPlacementOverlay({ ready }: { ready: boolean }) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   cameraWrap: { flex: 1 },
   camera: { flex: 1 },
@@ -331,4 +335,5 @@ const styles = StyleSheet.create({
     borderRadius: 10
   },
   closeScanText: { color: '#fff', fontWeight: '700' }
-})
+  })
+}

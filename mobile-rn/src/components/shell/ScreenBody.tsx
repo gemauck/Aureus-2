@@ -1,6 +1,8 @@
 import React from 'react'
 import { StyleSheet, View, ViewStyle } from 'react-native'
-import { erp } from '../../theme/appTheme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+
 
 type Props = {
   children: React.ReactNode
@@ -9,10 +11,13 @@ type Props = {
 }
 
 export function ScreenBody({ children, style, padded = true }: Props) {
+  const styles = useThemedStyles(createStyles)
   return <View style={[styles.body, padded && styles.padded, style]}>{children}</View>
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   body: { flex: 1, backgroundColor: erp.bg },
   padded: { paddingHorizontal: erp.space.lg }
-})
+  })
+}

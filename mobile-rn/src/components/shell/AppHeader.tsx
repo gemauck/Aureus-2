@@ -2,8 +2,11 @@ import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import { useAppShell } from './AppShellContext'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   title: string
@@ -22,6 +25,8 @@ export function AppHeader({
   onSettingsPress,
   rightSlot
 }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const insets = useSafeAreaInsets()
   const { openMenu } = useAppShell()
 
@@ -59,7 +64,8 @@ export function AppHeader({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   wrap: {
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
@@ -92,4 +98,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   }
-})
+  })
+}

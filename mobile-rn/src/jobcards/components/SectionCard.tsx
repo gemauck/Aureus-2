@@ -1,6 +1,7 @@
 import React from 'react'
 import { StyleSheet, Text, View, ViewProps } from 'react-native'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Props = ViewProps & {
   title: string
@@ -10,6 +11,7 @@ type Props = ViewProps & {
 }
 
 export function SectionCard({ title, subtitle, children, style, accent, badge, ...rest }: Props) {
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={[styles.card, style]} {...rest}>
       <View style={[styles.accent, accent && styles.accentActive]} />
@@ -31,7 +33,8 @@ export function SectionCard({ title, subtitle, children, style, accent, badge, .
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: jc.surface,
     borderRadius: jc.radius.xl,
@@ -68,4 +71,5 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 12, fontWeight: '700', color: jc.primaryDark },
   body: { marginTop: jc.space.md, gap: jc.space.sm }
-})
+  })
+}

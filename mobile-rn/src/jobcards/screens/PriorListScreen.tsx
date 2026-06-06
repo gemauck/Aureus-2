@@ -12,10 +12,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { priorListLocalSearchHay } from '../../../../src/jobCardWizard/priorList.js'
 import { useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
-import { jc } from '../theme'
 import type { PriorListRow } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function PriorListScreen() {
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const {
     priorRows,
     priorLoading,
@@ -248,7 +252,8 @@ function PriorRow({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: jc.bg },
   header: { paddingHorizontal: jc.space.lg, paddingTop: jc.space.md, gap: 4 },
   back: { color: jc.primary, fontWeight: '600', fontSize: 15 },
@@ -300,4 +305,5 @@ const styles = StyleSheet.create({
   },
   syncChipText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   openChevron: { fontSize: 22, color: jc.textSubtle, paddingHorizontal: 4 }
-})
+  })
+}

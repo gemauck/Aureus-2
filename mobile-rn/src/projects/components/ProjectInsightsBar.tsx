@@ -1,8 +1,11 @@
 import React from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { ProjectInsights } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   insights: ProjectInsights
@@ -11,6 +14,8 @@ type Props = {
 }
 
 export function ProjectInsightsBar({ insights, taskScope, onScopePress }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const chips = [
     {
       key: 'mine' as const,
@@ -63,7 +68,8 @@ export function ProjectInsightsBar({ insights, taskScope, onScopePress }: Props)
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   row: { paddingHorizontal: erp.space.lg, paddingBottom: 10, gap: 8, alignItems: 'stretch' },
   summaryCard: {
     backgroundColor: erp.primarySoft,
@@ -90,4 +96,5 @@ const styles = StyleSheet.create({
   },
   chipLabel: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
   chipValue: { fontSize: 14, fontWeight: '800' }
-})
+  })
+}

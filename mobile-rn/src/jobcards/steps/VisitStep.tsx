@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import {
   formatTravelDurationMinutes,
   jobSiteMinutesFromDatetimeLocals
@@ -10,12 +10,49 @@ import { useJobCardWizard } from '../WizardContext'
 import { DateTimeField } from '../components/DateTimeField'
 import { SectionCard } from '../components/SectionCard'
 import { SearchableSelect } from '../components/SearchableSelect'
-import { formStyles } from '../components/formStyles'
+import { useFormStyles } from '../components/formStyles'
 import { VoiceNoteField } from '../media/VoiceNoteField'
-import { LocationPickerModal } from '../map/LocationPickerModal'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
+
+type LocationPickerProps = React.ComponentProps<
+  typeof import('../map/LocationPickerModal').LocationPickerModal
+>
+
+function DeferredLocationPickerModal(props: LocationPickerProps) {
+  const { jc } = useTheme()
+  const [Picker, setPicker] = React.useState<React.ComponentType<LocationPickerProps> | null>(null)
+
+  React.useEffect(() => {
+    if (!props.visible) return
+    let cancelled = false
+    void import('../map/LocationPickerModal').then((mod) => {
+      if (!cancelled) setPicker(() => mod.LocationPickerModal)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [props.visible])
+
+  if (!props.visible) return null
+  if (!Picker) {
+    return (
+      <Modal visible animationType="slide" onRequestClose={props.onClose}>
+        <View style={deferredStyles.loading}>
+          <ActivityIndicator color={jc.primary} size="large" />
+          <Text style={deferredStyles.loadingText}>Loading map…</Text>
+        </View>
+      </Modal>
+    )
+  }
+  return <Picker {...props} />
+}
 
 export function VisitStep() {
+  const formStyles = useFormStyles()
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const { formData, setFormData, editingMeta, voiceAttachments, setVoiceAttachments } =
     useJobCardWizard()
   const [mapOpen, setMapOpen] = React.useState(false)
@@ -161,7 +198,7 @@ export function VisitStep() {
         ) : null}
       </SectionCard>
 
-      <LocationPickerModal
+      <DeferredLocationPickerModal
         visible={mapOpen}
         initialLatitude={formData.latitude}
         initialLongitude={formData.longitude}
@@ -181,7 +218,19 @@ export function VisitStep() {
   )
 }
 
-const styles = StyleSheet.create({
+const deferredStyles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: jc.surface,
+    gap: 12
+  },
+  loadingText: { color: jc.textMuted, fontWeight: '600' }
+})
+
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   chip: {
     paddingHorizontal: 12,
@@ -211,4 +260,5 @@ const styles = StyleSheet.create({
     padding: jc.space.md
   },
   durationValue: { fontSize: 16, fontWeight: '700', color: jc.text, marginTop: 4 }
-})
+  })
+}

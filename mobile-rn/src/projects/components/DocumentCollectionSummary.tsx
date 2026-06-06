@@ -1,9 +1,12 @@
 import React from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { DocCollectionSummary } from '../types'
 import { webProjectUrl } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   summary: DocCollectionSummary
@@ -11,6 +14,8 @@ type Props = {
 }
 
 export function DocumentCollectionSummary({ summary, projectId }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const pct = summary.totalCells
     ? Math.round((summary.collected / summary.totalCells) * 100)
     : 0
@@ -43,6 +48,7 @@ export function DocumentCollectionSummary({ summary, projectId }: Props) {
 }
 
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={styles.stat}>
       <Text style={[styles.statNum, { color }]}>{value}</Text>
@@ -51,7 +57,8 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.lg,
@@ -76,4 +83,5 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 18, fontWeight: '800' },
   statLbl: { fontSize: 11, color: erp.textMuted, fontWeight: '600' },
   hint: { fontSize: 12, color: erp.textSubtle, lineHeight: 17 }
-})
+  })
+}

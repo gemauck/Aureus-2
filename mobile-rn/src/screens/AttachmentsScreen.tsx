@@ -1,9 +1,12 @@
 import React, { useState } from 'react'
 import { Alert, Button, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useAuth } from '../state/AuthContext'
-import { erp } from '../theme/appTheme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+
 
 export function AttachmentsScreen() {
+  const styles = useThemedStyles(createStyles)
   const { accessToken } = useAuth()
   const [endpoint, setEndpoint] = useState('/api/project-documents')
 
@@ -26,7 +29,8 @@ export function AttachmentsScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: erp.bg, padding: 16 },
   card: { backgroundColor: erp.surface, borderRadius: 10, padding: 12, gap: 10 },
   title: { fontSize: 18, fontWeight: '700', color: erp.text },
@@ -39,4 +43,5 @@ const styles = StyleSheet.create({
     color: erp.text,
     backgroundColor: erp.surfaceMuted
   }
-})
+  })
+}

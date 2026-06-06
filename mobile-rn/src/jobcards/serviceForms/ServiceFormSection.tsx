@@ -2,9 +2,11 @@ import React, { useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 export function ServiceFormSection() {
+  const styles = useThemedStyles(createStyles)
   const { formTemplates, formData, setFormData } = useJobCardWizard()
   const [templateId, setTemplateId] = useState('')
 
@@ -74,7 +76,8 @@ export function ServiceFormSection() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: { marginTop: 12, gap: 8 },
   title: { fontSize: 16, fontWeight: '700', color: jc.text },
   btn: { backgroundColor: jc.primary, padding: 12, borderRadius: 10, alignItems: 'center' },
@@ -96,4 +99,5 @@ const styles = StyleSheet.create({
     backgroundColor: jc.surfaceMuted,
     color: jc.text
   }
-})
+  })
+}

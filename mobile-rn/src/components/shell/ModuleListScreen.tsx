@@ -12,8 +12,11 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { AppHeader } from './AppHeader'
 import { ScreenBody } from './ScreenBody'
-import { erp } from '../../theme/appTheme'
+
 import type { RootStackParamList } from '../../navigation/types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props<T> = {
   title: string
@@ -44,6 +47,7 @@ export function ModuleListScreen<T>({
   onItemPress,
   renderItemExtra
 }: Props<T>) {
+  const styles = useThemedStyles(createStyles)
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -144,7 +148,8 @@ export function ModuleListScreen<T>({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   searchWrap: { paddingHorizontal: erp.space.lg, paddingBottom: 8, paddingTop: 8 },
   search: {
@@ -174,4 +179,5 @@ const styles = StyleSheet.create({
   error: { color: erp.danger, fontWeight: '600', textAlign: 'center' },
   retry: { color: erp.primary, fontWeight: '700' },
   empty: { textAlign: 'center', color: erp.textMuted, padding: 32, fontSize: 15 }
-})
+  })
+}

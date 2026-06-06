@@ -11,8 +11,9 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { WebView } from 'react-native-webview'
-import * as Location from 'expo-location'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   visible: boolean
@@ -136,6 +137,8 @@ export function LocationPickerModal({
   initialLongitude,
   initialLabel
 }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const webRef = useRef<WebView>(null)
   const [mapReady, setMapReady] = useState(false)
   const [marker, setMarker] = useState<{ latitude: number; longitude: number } | null>(null)
@@ -208,13 +211,18 @@ export function LocationPickerModal({
     setHint('')
     setLocating(true)
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Allow location to pick your current position.')
+      const { ensureForegroundLocationPermission, readCurrentCoordinates } = await import(
+        '../../services/locationPermission'
+      )
+      const granted = await ensureForegroundLocationPermission()
+      if (!granted) {
+        Alert.alert(
+          'Permission needed',
+          'Allow location when prompted to use your current position, or pick a point on the map instead.'
+        )
         return
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const { latitude, longitude } = pos.coords
+      const { latitude, longitude } = await readCurrentCoordinates()
       injectMarker(latitude, longitude, true)
       await applyPick(latitude, longitude)
     } catch {
@@ -368,7 +376,8 @@ export function LocationPickerModal({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: jc.surface },
   header: {
     flexDirection: 'row',
@@ -491,4 +500,5 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: { color: '#fff', fontWeight: '700' },
   btnDisabled: { opacity: 0.55 }
-})
+  })
+}

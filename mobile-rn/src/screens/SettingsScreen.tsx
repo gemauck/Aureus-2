@@ -10,15 +10,18 @@ import { API_BASE_URL } from '../config'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAuth } from '../state/AuthContext'
-import { erp } from '../theme/appTheme'
 import type { RootStackParamList } from '../navigation/types'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>
 
 export function SettingsScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp, mode, setMode } = useTheme()
   const { user, signOut } = useAuth()
-  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId } =
-    useOTAUpdates(false)
+  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId } = useOTAUpdates(false)
   const { checkForUpdate: checkApkUpdate } = useAppUpdateCheck(false)
   const [checking, setChecking] = useState<'ota' | 'apk' | null>(null)
 
@@ -57,6 +60,27 @@ export function SettingsScreen({ navigation }: Props) {
             <Text style={styles.label}>Signed in as</Text>
             <Text style={styles.value}>{user?.name || user?.email}</Text>
             {user?.role ? <Text style={styles.meta}>{user.role}</Text> : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>Theme</Text>
+            <View style={styles.segmentRow}>
+              <AppearanceOption
+                label="Light"
+                icon="sun"
+                selected={mode === 'light'}
+                onPress={() => setMode('light')}
+              />
+              <AppearanceOption
+                label="Dark"
+                icon="moon"
+                selected={mode === 'dark'}
+                onPress={() => setMode('dark')}
+              />
+            </View>
           </View>
         </View>
 
@@ -139,7 +163,33 @@ export function SettingsScreen({ navigation }: Props) {
   )
 }
 
+function AppearanceOption({
+  label,
+  icon,
+  selected,
+  onPress
+}: {
+  label: string
+  icon: string
+  selected: boolean
+  onPress: () => void
+}) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
+  return (
+    <Pressable
+      style={[styles.segmentOption, selected && styles.segmentOptionSelected]}
+      onPress={onPress}
+    >
+      <FontAwesome5 name={icon as never} size={14} color={selected ? erp.primary : erp.textMuted} />
+      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>{label}</Text>
+    </Pressable>
+  )
+}
+
 function Row({ icon, label, value }: { icon: string; label: string; value: string }) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   return (
     <View style={styles.row}>
       <FontAwesome5 name={icon as never} size={14} color={erp.textMuted} style={{ width: 20 }} />
@@ -151,70 +201,91 @@ function Row({ icon, label, value }: { icon: string; label: string; value: strin
   )
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: erp.bg },
-  section: { marginTop: 8, marginBottom: 16 },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: erp.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 8
-  },
-  card: {
-    backgroundColor: erp.surface,
-    borderRadius: erp.radius.lg,
-    borderWidth: 1,
-    borderColor: erp.border,
-    padding: 16,
-    ...erp.shadowSm
-  },
-  label: { fontSize: 12, color: erp.textMuted },
-  value: { fontSize: 17, fontWeight: '800', color: erp.text, marginTop: 4 },
-  meta: { fontSize: 13, color: erp.textMuted, marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  rowLabel: { flex: 1, color: erp.text, fontWeight: '600' },
-  rowValue: { color: erp.textMuted, fontSize: 13, maxWidth: '50%', textAlign: 'right' },
-  updateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: erp.surface,
-    borderWidth: 1,
-    borderColor: erp.border,
-    borderRadius: erp.radius.md,
-    padding: 14,
-    marginBottom: 10,
-    ...erp.shadowSm
-  },
-  updateBtnBusy: { opacity: 0.7 },
-  updateBtnText: { color: erp.text, fontWeight: '700', fontSize: 15 },
-  updateHint: { fontSize: 12, color: erp.textMuted, lineHeight: 18, marginTop: 4 },
-  linkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: erp.surface,
-    borderWidth: 1,
-    borderColor: erp.border,
-    borderRadius: erp.radius.lg,
-    padding: 16,
-    ...erp.shadowSm
-  },
-  linkBtnText: { flex: 1, color: erp.text, fontWeight: '700', fontSize: 15 },
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: erp.dangerSoft,
-    padding: 14,
-    borderRadius: erp.radius.md,
-    marginTop: 8
-  },
-  signOutText: { color: erp.danger, fontWeight: '700', fontSize: 16 },
-  backBtn: { padding: 16, alignItems: 'center' },
-  backText: { color: erp.primary, fontWeight: '600' }
-})
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: erp.bg },
+    section: { marginTop: 8, marginBottom: 16 },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: erp.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginBottom: 8
+    },
+    card: {
+      backgroundColor: erp.surface,
+      borderRadius: erp.radius.lg,
+      borderWidth: 1,
+      borderColor: erp.border,
+      padding: 16,
+      ...erp.shadowSm
+    },
+    label: { fontSize: 12, color: erp.textMuted },
+    value: { fontSize: 17, fontWeight: '800', color: erp.text, marginTop: 4 },
+    meta: { fontSize: 13, color: erp.textMuted, marginTop: 4 },
+    segmentRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+    segmentOption: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: erp.radius.md,
+      borderWidth: 1,
+      borderColor: erp.border,
+      backgroundColor: erp.surfaceMuted
+    },
+    segmentOptionSelected: {
+      borderColor: erp.primary,
+      backgroundColor: erp.primarySoft
+    },
+    segmentLabel: { fontSize: 14, fontWeight: '600', color: erp.textMuted },
+    segmentLabelSelected: { color: erp.primary, fontWeight: '700' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+    rowLabel: { flex: 1, color: erp.text, fontWeight: '600' },
+    rowValue: { color: erp.textMuted, fontSize: 13, maxWidth: '50%', textAlign: 'right' },
+    updateBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: erp.surface,
+      borderWidth: 1,
+      borderColor: erp.border,
+      borderRadius: erp.radius.md,
+      padding: 14,
+      marginBottom: 10,
+      ...erp.shadowSm
+    },
+    updateBtnBusy: { opacity: 0.7 },
+    updateBtnText: { color: erp.text, fontWeight: '700', fontSize: 15 },
+    updateHint: { fontSize: 12, color: erp.textMuted, lineHeight: 18, marginTop: 4 },
+    linkBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: erp.surface,
+      borderWidth: 1,
+      borderColor: erp.border,
+      borderRadius: erp.radius.lg,
+      padding: 16,
+      ...erp.shadowSm
+    },
+    linkBtnText: { flex: 1, color: erp.text, fontWeight: '700', fontSize: 15 },
+    signOutBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: erp.dangerSoft,
+      padding: 14,
+      borderRadius: erp.radius.md,
+      marginTop: 8
+    },
+    signOutText: { color: erp.danger, fontWeight: '700', fontSize: 16 },
+    backBtn: { padding: 16, alignItems: 'center' },
+    backText: { color: erp.primary, fontWeight: '600' }
+  })
+}

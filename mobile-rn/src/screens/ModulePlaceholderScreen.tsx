@@ -7,7 +7,10 @@ import { AppHeader } from '../components/shell/AppHeader'
 import { ScreenBody } from '../components/shell/ScreenBody'
 import { SCREEN_TITLES } from '../navigation/menuItems'
 import type { RootStackParamList } from '../navigation/types'
-import { erp } from '../theme/appTheme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
+
 
 export type PlaceholderConfig = {
   webPath: string
@@ -19,6 +22,8 @@ type Props = NativeStackScreenProps<RootStackParamList, keyof RootStackParamList
 
 export function createPlaceholderScreen(config: PlaceholderConfig) {
   return function PlaceholderScreen({ navigation, route }: Props) {
+    const styles = useThemedStyles(createStyles)
+    const { erp } = useTheme()
     const title = SCREEN_TITLES[route.name as keyof RootStackParamList] || route.name
     const url = `${API_BASE_URL}${config.webPath}`
 
@@ -46,7 +51,8 @@ export function createPlaceholderScreen(config: PlaceholderConfig) {
   }
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   card: {
     marginTop: 24,
@@ -82,7 +88,8 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: { marginTop: 14, padding: 10 },
   secondaryBtnText: { color: erp.textMuted, fontWeight: '600' }
-})
+  })
+}
 
 /** @deprecated use createPlaceholderScreen */
 export function ModulePlaceholderScreen(props: Props) {

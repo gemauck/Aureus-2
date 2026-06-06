@@ -12,13 +12,16 @@ import {
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { projectsApi } from '../api'
 import { AssigneePickerModal } from '../components/AssigneePickerModal'
 import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
 import type { ProjectsStackParamList } from '../navigation'
 import type { ChecklistItem, ErpUser, ProjectTask, TaskComment } from '../types'
 import {
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
   formatDate,
   formatDateTime,
   isTaskOverdue,
@@ -29,6 +32,8 @@ import {
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'TaskDetail'>
 
 export function TaskDetailScreen({ route, navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { taskId, projectId, projectName } = route.params
   const { accessToken } = useAuth()
   const [task, setTask] = useState<ProjectTask | null>(null)
@@ -410,7 +415,8 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
@@ -573,4 +579,5 @@ const styles = StyleSheet.create({
   },
   postBtnText: { color: '#fff', fontWeight: '800' },
   disabled: { opacity: 0.6 }
-})
+  })
+}

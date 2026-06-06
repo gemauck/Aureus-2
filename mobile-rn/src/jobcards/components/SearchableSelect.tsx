@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import {
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
   FlatList,
   Modal,
   Pressable,
@@ -8,7 +11,6 @@ import {
   TextInput,
   View
 } from 'react-native'
-import { jc } from '../theme'
 
 export type SelectOption = { value: string; label: string }
 
@@ -35,6 +37,8 @@ export function SearchableSelect({
   loading,
   emptyLabel = 'No options available'
 }: Props) {
+  const { jc } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
 
@@ -128,7 +132,8 @@ export function SearchableSelect({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: jc.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
   trigger: {
@@ -190,4 +195,5 @@ const styles = StyleSheet.create({
   check: { color: jc.primary, fontWeight: '700', fontSize: 16 },
   empty: { padding: 24, color: jc.textMuted, textAlign: 'center' },
   emptyWrap: { padding: 24, alignItems: 'center' }
-})
+  })
+}

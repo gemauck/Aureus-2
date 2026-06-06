@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Audio } from 'expo-av'
-import { jc } from '../theme'
 import type { VoiceClip } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Props = {
   section: string
@@ -12,6 +13,7 @@ type Props = {
 }
 
 export function VoiceNoteField({ section, voiceClips, onVoiceSaved, onRemove }: Props) {
+  const styles = useThemedStyles(createStyles)
   const [recording, setRecording] = useState<Audio.Recording | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const soundRef = useRef<Audio.Sound | null>(null)
@@ -116,7 +118,8 @@ export function VoiceNoteField({ section, voiceClips, onVoiceSaved, onRemove }: 
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: { gap: 8 },
   recordBtn: {
     backgroundColor: jc.accentPurple,
@@ -143,4 +146,5 @@ const styles = StyleSheet.create({
   playBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   clipName: { flex: 1, color: jc.text, fontSize: 13, fontWeight: '500' },
   remove: { color: jc.danger, fontWeight: '600', fontSize: 12 }
-})
+  })
+}

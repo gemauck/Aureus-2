@@ -20,8 +20,11 @@ import { MessagesNavigator } from '../messages/MessagesNavigator'
 import { DrawerMenu } from '../components/shell/DrawerMenu'
 import { useAuth } from '../state/AuthContext'
 import { usePushNotifications } from '../hooks/usePushNotifications'
-import { erp } from '../theme/appTheme'
+
 import type { RootStackParamList } from './types'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
@@ -67,6 +70,8 @@ const MyNotesScreen = createPlaceholderScreen({
 })
 
 function LoadingScreen() {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={styles.loading}>
       <ActivityIndicator size="large" color={erp.primary} />
@@ -146,6 +151,8 @@ export function RootNavigator() {
   return <AuthGate />
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: erp.bg }
-})
+  })
+}

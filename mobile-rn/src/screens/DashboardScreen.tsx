@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Pressable,
@@ -16,8 +16,8 @@ import { ScreenBody } from '../components/shell/ScreenBody'
 import { WidgetCard } from '../components/dashboard/WidgetCard'
 import {
   DEFAULT_DASHBOARD_CONFIG,
-  QUICK_ACTION_DEFS,
-  WIDGET_DEFS,
+  getQuickActionDefs,
+  getWidgetDefs,
   loadDashboardConfig,
   visibleQuickActions,
   visibleWidgets,
@@ -27,12 +27,15 @@ import {
 import { openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
 import { erpApi, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
-import { erp } from '../theme/appTheme'
+
 import type { RootStackParamList } from '../navigation/types'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>
 
-function statusTone(status?: string): { bg: string; fg: string } {
+function statusTone(erp: ErpTheme, status?: string): { bg: string; fg: string } {
   const s = String(status || '').toLowerCase()
   if (s.includes('complete') || s.includes('done')) return { bg: erp.successSoft, fg: erp.success }
   if (s.includes('progress') || s.includes('active')) return { bg: erp.primarySoft, fg: erp.primary }
@@ -53,6 +56,7 @@ function StatCard({
   tint: string
   onPress: () => void
 }) {
+  const styles = useThemedStyles(createStyles)
   return (
     <Pressable
       style={({ pressed }) => [styles.statCard, pressed && styles.statCardPressed]}
@@ -78,6 +82,7 @@ function QuickTile({
   tint: string
   onPress: () => void
 }) {
+  const styles = useThemedStyles(createStyles)
   return (
     <Pressable
       style={({ pressed }) => [styles.quickTile, pressed && styles.quickTilePressed]}
@@ -108,7 +113,9 @@ function ListRow({
   dotColor?: string
   onPress: () => void
 }) {
-  const tone = statusTone(badge)
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
+  const tone = statusTone(erp, badge)
   return (
     <Pressable
       style={({ pressed }) => [styles.listRow, pressed && styles.listRowPressed]}
@@ -160,6 +167,7 @@ function NotificationRow({
   item: DashboardNotification
   onPress: () => void
 }) {
+  const { erp } = useTheme()
   return (
     <ListRow
       title={item.title || item.message || 'Notification'}
@@ -178,6 +186,7 @@ function JobCardRow({
   card: DashboardJobCard
   onPress: () => void
 }) {
+  const { erp } = useTheme()
   return (
     <ListRow
       title={card.jobCardNumber || card.id}
@@ -190,6 +199,10 @@ function JobCardRow({
 }
 
 export function DashboardScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
+  const widgetDefs = useMemo(() => getWidgetDefs(erp), [erp])
+  const quickActionDefs = useMemo(() => getQuickActionDefs(erp), [erp])
   const { user, accessToken } = useAuth()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -256,7 +269,7 @@ export function DashboardScreen({ navigation }: Props) {
   const widgets = visibleWidgets(dashConfig)
 
   const renderWidget = (id: DashboardWidgetId) => {
-    const def = WIDGET_DEFS[id]
+    const def = widgetDefs[id]
     const goToModule = () => openModule(navigation, def.screen)
 
     if (id === 'tasks') {
@@ -401,7 +414,7 @@ export function DashboardScreen({ navigation }: Props) {
               <Text style={styles.quickHeading}>Quick access</Text>
               <View style={styles.quickGrid}>
                 {quickActions.map((id) => {
-                  const def = QUICK_ACTION_DEFS[id]
+                  const def = quickActionDefs[id]
                   return (
                     <QuickTile
                       key={id}
@@ -450,7 +463,8 @@ export function DashboardScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   scroll: { paddingBottom: 36 },
   hero: {
@@ -575,4 +589,5 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
   empty: { color: erp.textMuted, fontSize: 14, lineHeight: 20, paddingVertical: 8 },
   emptySection: { paddingHorizontal: erp.space.lg, paddingVertical: 24, alignItems: 'center', gap: 8 }
-})
+  })
+}

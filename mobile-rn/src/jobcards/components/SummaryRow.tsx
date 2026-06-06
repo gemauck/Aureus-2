@@ -1,8 +1,10 @@
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 export function SummaryRow({ label, value }: { label: string; value?: string | number | null }) {
+  const styles = useThemedStyles(createStyles)
   const display = value != null && String(value).trim() !== '' ? String(value) : '—'
   return (
     <View style={styles.row}>
@@ -14,7 +16,8 @@ export function SummaryRow({ label, value }: { label: string; value?: string | n
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -36,4 +39,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'right'
   }
-})
+  })
+}

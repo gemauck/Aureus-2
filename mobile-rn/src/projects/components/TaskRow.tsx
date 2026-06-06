@@ -1,10 +1,13 @@
 import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { ProjectTask } from '../types'
 import { formatDate, isTaskDueSoon, isTaskOverdue, priorityColor } from '../utils'
 import { ProjectStatusBadge } from './ProjectStatusBadge'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   task: ProjectTask
@@ -13,6 +16,8 @@ type Props = {
 }
 
 export function TaskRow({ task, showProject, onPress }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const overdue = isTaskOverdue(task)
   const dueSoon = isTaskDueSoon(task)
   const priColor = priorityColor(task.priority)
@@ -79,7 +84,8 @@ export function TaskRow({ task, showProject, onPress }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.md,
@@ -100,4 +106,5 @@ const styles = StyleSheet.create({
   metaChip: { fontSize: 12, color: erp.textMuted, fontWeight: '600' },
   overdueBadge: { fontSize: 10, fontWeight: '800', color: erp.danger },
   dueSoonBadge: { fontSize: 10, fontWeight: '800', color: erp.warning }
-})
+  })
+}

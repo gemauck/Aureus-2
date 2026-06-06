@@ -1,7 +1,10 @@
 import React from 'react'
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
+
 
 type Props = {
   title: string
@@ -26,6 +29,8 @@ export function WidgetCard({
   onAction,
   style
 }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const headerPressable = onPressHeader || onAction
 
   return (
@@ -65,7 +70,8 @@ export function WidgetCard({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.xl,
@@ -107,4 +113,5 @@ const styles = StyleSheet.create({
   actionPillPressed: { opacity: 0.85 },
   action: { color: erp.primary, fontWeight: '700', fontSize: 12 },
   body: { paddingHorizontal: erp.space.md, paddingBottom: erp.space.md }
-})
+  })
+}

@@ -4,8 +4,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ModuleListScreen } from '../components/shell/ModuleListScreen'
 import { erpApi, type DashboardNotification } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
-import { erp } from '../theme/appTheme'
+
 import type { RootStackParamList } from '../navigation/types'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>
 
@@ -17,6 +19,7 @@ function parseConversationId(item: DashboardNotification): string | null {
 }
 
 export function NotificationsScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
   const { accessToken } = useAuth()
 
   const loadItems = useCallback(async () => {
@@ -61,7 +64,8 @@ export function NotificationsScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   unreadDot: {
     width: 8,
     height: 8,
@@ -69,4 +73,5 @@ const styles = StyleSheet.create({
     backgroundColor: erp.primary,
     marginLeft: 8
   }
-})
+  })
+}

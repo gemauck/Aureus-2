@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Props = {
   label: string
@@ -63,6 +64,7 @@ function formatDisplay(value: string, mode: 'datetime' | 'date') {
 }
 
 export function DateTimeField({ label, value, onChange, mode = 'datetime' }: Props) {
+  const styles = useThemedStyles(createStyles)
   const [show, setShow] = useState(false)
   const [draft, setDraft] = useState(() => parseFieldDate(value, mode))
   /** Android datetime uses date picker then time picker. */
@@ -163,7 +165,8 @@ export function DateTimeField({ label, value, onChange, mode = 'datetime' }: Pro
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: 13, fontWeight: '600', color: jc.textMuted },
   btn: {
@@ -227,4 +230,5 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   doneText: { color: '#fff', fontWeight: '700' }
-})
+  })
+}

@@ -5,9 +5,11 @@ import { jobcardsApi } from '../api'
 import { NO_CLIENT_ID, useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
-import { formStyles } from '../components/formStyles'
-import { jc } from '../theme'
+import { useFormStyles } from '../components/formStyles'
 import type { ClientOption } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type SiteOption = { id: string; name: string }
 
@@ -52,6 +54,9 @@ function parseSitesFromClient(client: ClientOption): SiteOption[] {
 }
 
 export function AssignmentStep() {
+  const formStyles = useFormStyles()
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const {
     formData,
     setFormData,
@@ -369,7 +374,8 @@ export function AssignmentStep() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,4 +395,5 @@ const styles = StyleSheet.create({
     borderColor: jc.primaryMuted
   },
   tagText: { color: jc.primaryDark, fontSize: 13, fontWeight: '600' }
-})
+  })
+}

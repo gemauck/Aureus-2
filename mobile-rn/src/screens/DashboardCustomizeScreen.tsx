@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Pressable,
@@ -14,20 +14,27 @@ import { AppHeader } from '../components/shell/AppHeader'
 import { ScreenBody } from '../components/shell/ScreenBody'
 import {
   DEFAULT_DASHBOARD_CONFIG,
-  QUICK_ACTION_DEFS,
-  WIDGET_DEFS,
+  getQuickActionDefs,
+  getWidgetDefs,
   loadDashboardConfig,
   moveItem,
   saveDashboardConfig,
   toggleHidden,
   type DashboardConfig
 } from '../dashboard/dashboardConfig'
-import { erp } from '../theme/appTheme'
+
 import type { RootStackParamList } from '../navigation/types'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DashboardCustomize'>
 
 export function DashboardCustomizeScreen({ navigation }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
+  const widgetDefs = useMemo(() => getWidgetDefs(erp), [erp])
+  const quickActionDefs = useMemo(() => getQuickActionDefs(erp), [erp])
   const [config, setConfig] = useState<DashboardConfig>(DEFAULT_DASHBOARD_CONFIG)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -89,7 +96,7 @@ export function DashboardCustomizeScreen({ navigation }: Props) {
 
           <Section title="Quick shortcuts">
             {config.quickActionOrder.map((id, idx) => {
-              const def = QUICK_ACTION_DEFS[id]
+              const def = quickActionDefs[id]
               const enabled = !config.hiddenQuickActions.includes(id)
               return (
                 <ConfigRow
@@ -125,7 +132,7 @@ export function DashboardCustomizeScreen({ navigation }: Props) {
 
           <Section title="Dashboard widgets">
             {config.widgetOrder.map((id, idx) => {
-              const def = WIDGET_DEFS[id]
+              const def = widgetDefs[id]
               const enabled = !config.hiddenWidgets.includes(id)
               return (
                 <ConfigRow
@@ -176,6 +183,7 @@ export function DashboardCustomizeScreen({ navigation }: Props) {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -243,7 +251,8 @@ function ConfigRow({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: erp.space.lg, paddingBottom: 40 },
@@ -302,4 +311,5 @@ const styles = StyleSheet.create({
     ...erp.shadowSm
   },
   doneText: { color: '#fff', fontWeight: '800', fontSize: 16 }
-})
+  })
+}

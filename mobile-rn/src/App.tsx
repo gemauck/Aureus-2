@@ -1,11 +1,13 @@
 import React from 'react'
-import { StatusBar } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { JobCardSyncProvider } from './jobcards/JobCardSyncContext'
 import { AuthProvider } from './state/AuthContext'
+import { ThemeProvider } from './theme/ThemeContext'
 import { RootNavigator } from './navigation/RootNavigator'
 import { AppShellProvider } from './components/shell/AppShellContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { OtaBootstrapGate } from './components/OtaBootstrapGate'
+import { ThemedStatusBar } from './components/ThemedStatusBar'
 import { useOTAUpdates } from './hooks/useOTAUpdates'
 
 function AppShell() {
@@ -21,13 +23,17 @@ function AppShell() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
-      <SafeAreaProvider>
-        <AuthProvider>
-          <AppShell />
-        </AuthProvider>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <ThemedStatusBar />
+        <SafeAreaProvider>
+          <AuthProvider>
+            <JobCardSyncProvider>
+              <AppShell />
+            </JobCardSyncProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    </ThemeProvider>
   )
 }

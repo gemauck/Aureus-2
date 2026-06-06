@@ -57,7 +57,7 @@ After login, open **Job cards (native)** from Home.
 
 ### Offline
 
-If the device is offline (or the server fails), saves are queued in AsyncStorage and synced automatically when you open the list online (or tap **Sync now**).
+If the device is offline (or the server fails), saves are queued in AsyncStorage and synced automatically when you are back online — including in the background while you use other modules, when the app returns to the foreground, or when you tap **Sync now** on the Job cards home screen.
 
 ## Pilot modules (existing shells)
 

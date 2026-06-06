@@ -9,8 +9,9 @@ import {
   View,
   useWindowDimensions
 } from 'react-native'
-import { jc } from '../theme'
 import type { MediaItem } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Props = {
   items: MediaItem[]
@@ -20,6 +21,7 @@ type Props = {
 }
 
 export function MediaGallery({ items, onChange, readOnly, emptyLabel = 'No photos yet' }: Props) {
+  const styles = useThemedStyles(createStyles)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const { width } = useWindowDimensions()
   const thumbSize = Math.min(88, (width - 64) / 3)
@@ -104,7 +106,8 @@ export function MediaGallery({ items, onChange, readOnly, emptyLabel = 'No photo
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   empty: { color: jc.textMuted, fontSize: 14, fontStyle: 'italic' },
   strip: { gap: 10, paddingVertical: 4 },
   thumbWrap: { position: 'relative' },
@@ -170,4 +173,5 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   viewerDoneText: { color: '#fff', fontWeight: '700' }
-})
+  })
+}

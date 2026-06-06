@@ -4,7 +4,10 @@ import { useNavigation } from '@react-navigation/native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppShell } from '../../components/shell/AppShellContext'
-import { erp } from '../../theme/appTheme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
+
 
 type Props = {
   title: string
@@ -14,6 +17,8 @@ type Props = {
 }
 
 export function ModuleHeader({ title, subtitle, showBack, onBack }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const insets = useSafeAreaInsets()
   const { openMenu } = useAppShell()
   const navigation = useNavigation()
@@ -54,7 +59,8 @@ export function ModuleHeader({ title, subtitle, showBack, onBack }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   wrap: {
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
@@ -81,4 +87,5 @@ const styles = StyleSheet.create({
   titleBlock: { flex: 1, alignItems: 'flex-end' },
   title: { fontSize: 17, fontWeight: '800', color: erp.text, textAlign: 'right' },
   subtitle: { fontSize: 12, color: erp.textMuted, marginTop: 2, textAlign: 'right' }
-})
+  })
+}

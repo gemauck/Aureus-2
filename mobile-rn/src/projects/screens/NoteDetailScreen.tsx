@@ -11,15 +11,20 @@ import {
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { projectsApi } from '../api'
 import type { ProjectsStackParamList } from '../navigation'
 import type { ProjectNote } from '../types'
 import { formatDateTime, stripHtml } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'NoteDetail'>
 
 export function NoteDetailScreen({ route, navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { projectId, noteId, projectName } = route.params
   const { accessToken } = useAuth()
   const [note, setNote] = useState<ProjectNote | null>(null)
@@ -120,7 +125,8 @@ export function NoteDetailScreen({ route, navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
@@ -161,4 +167,5 @@ const styles = StyleSheet.create({
   },
   saveText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.6 }
-})
+  })
+}

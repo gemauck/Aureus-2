@@ -4,13 +4,18 @@ import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { AppHeader } from '../components/shell/AppHeader'
 import { ScreenBody } from '../components/shell/ScreenBody'
-import { erp } from '../theme/appTheme'
+
 import type { RootStackParamList } from '../navigation/types'
 import { API_BASE_URL } from '../config'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+import { useTheme } from '../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ServiceMaintenance'>
 
 export function ServiceMaintenanceScreen({ navigation }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={styles.root}>
       <AppHeader title="Service & Maintenance" subtitle="Field service tools" />
@@ -53,7 +58,8 @@ export function ServiceMaintenanceScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   scroll: { padding: erp.space.lg, gap: 12 },
   hero: { marginBottom: 8 },
@@ -79,4 +85,5 @@ const styles = StyleSheet.create({
   },
   featureTitle: { fontSize: 16, fontWeight: '800', color: erp.text },
   featureSub: { fontSize: 13, color: erp.textMuted, marginTop: 2 }
-})
+  })
+}

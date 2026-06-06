@@ -1,14 +1,10 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { jc } from '../theme'
+import { useTheme } from '../../theme/ThemeContext'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Tone = 'info' | 'warning' | 'success'
-
-const tones: Record<Tone, { bg: string; border: string; text: string }> = {
-  info: { bg: jc.primarySoft, border: jc.primaryMuted, text: jc.primaryDark },
-  warning: { bg: jc.warningSoft, border: jc.warning, text: jc.warning },
-  success: { bg: jc.successSoft, border: jc.success, text: jc.success }
-}
 
 export function InfoBanner({
   children,
@@ -17,6 +13,17 @@ export function InfoBanner({
   children: React.ReactNode
   tone?: Tone
 }) {
+  const { jc } = useTheme()
+  const styles = useThemedStyles(createStyles)
+  const tones = useMemo(
+    () =>
+      ({
+        info: { bg: jc.primarySoft, border: jc.primaryMuted, text: jc.primaryDark },
+        warning: { bg: jc.warningSoft, border: jc.warning, text: jc.warning },
+        success: { bg: jc.successSoft, border: jc.success, text: jc.success }
+      }) satisfies Record<Tone, { bg: string; border: string; text: string }>,
+    [jc]
+  )
   const palette = tones[tone]
   return (
     <View style={[styles.box, { backgroundColor: palette.bg, borderColor: palette.border }]}>
@@ -25,14 +32,16 @@ export function InfoBanner({
   )
 }
 
-const styles = StyleSheet.create({
-  box: {
-    borderWidth: 1,
-    borderRadius: jc.radius.md,
-    padding: jc.space.md
-  },
-  text: {
-    fontSize: 13,
-    lineHeight: 19
-  }
-})
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
+    box: {
+      borderWidth: 1,
+      borderRadius: jc.radius.md,
+      padding: jc.space.md
+    },
+    text: {
+      fontSize: 13,
+      lineHeight: 19
+    }
+  })
+}

@@ -11,11 +11,16 @@ import { useJobCardWizard } from '../WizardContext'
 import { DateTimeField, toDatetimeLocal } from '../components/DateTimeField'
 import { SectionCard } from '../components/SectionCard'
 import { SummaryRow } from '../components/SummaryRow'
-import { formStyles } from '../components/formStyles'
-import { jc } from '../theme'
+import { useFormStyles } from '../components/formStyles'
 import { PhotoPickerSection } from '../media/PhotoPickerSection'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function SignoffStep() {
+  const formStyles = useFormStyles()
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const {
     formData,
     setFormData,
@@ -283,7 +288,8 @@ export function SignoffStep() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   scroll: { paddingBottom: 32 },
   arrivalReadout: { fontSize: 14, color: jc.textMuted, marginBottom: 4 },
   arrivalValue: { fontWeight: '700', color: jc.text },
@@ -326,4 +332,5 @@ const styles = StyleSheet.create({
   },
   submitText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.6 }
-})
+  })
+}

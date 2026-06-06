@@ -1,9 +1,12 @@
 import React from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { ProjectTask, ProjectTaskList } from '../types'
 import {
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
   groupTasksByList,
   groupTasksByStatus,
   isTaskOverdue,
@@ -17,6 +20,8 @@ type Props = {
 }
 
 export function TaskKanbanView({ tasks, onTaskPress }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const columns = groupTasksByStatus(tasks)
 
   return (
@@ -106,7 +111,8 @@ export function TaskListGroupedView({
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   board: { paddingBottom: 8, gap: 10 },
   column: {
     width: 260,
@@ -157,4 +163,5 @@ const styles = StyleSheet.create({
   },
   listCardTitle: { fontSize: 14, fontWeight: '700', color: erp.text },
   listCardSub: { fontSize: 12, color: erp.textMuted, marginTop: 4 }
-})
+  })
+}

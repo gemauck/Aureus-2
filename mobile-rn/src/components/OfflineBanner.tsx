@@ -1,8 +1,11 @@
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import { erp } from '../theme/appTheme'
+import { useThemedStyles } from '../theme/useThemedStyles'
+import type { ErpTheme } from '../theme/palettes'
+
 
 export function OfflineBanner({ visible }: { visible: boolean }) {
+  const styles = useThemedStyles(createStyles)
   if (!visible) return null
   return (
     <View style={styles.banner}>
@@ -11,7 +14,8 @@ export function OfflineBanner({ visible }: { visible: boolean }) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   banner: {
     backgroundColor: erp.warningSoft,
     borderBottomColor: erp.warning,
@@ -20,4 +24,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   text: { color: erp.warning, fontSize: 13, fontWeight: '600', textAlign: 'center' }
-})
+  })
+}

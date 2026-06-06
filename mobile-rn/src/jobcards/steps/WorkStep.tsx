@@ -3,13 +3,15 @@ import { StyleSheet, TextInput, View } from 'react-native'
 import { useJobCardWizard } from '../WizardContext'
 import { SectionCard } from '../components/SectionCard'
 import { DateTimeField } from '../components/DateTimeField'
-import { formStyles } from '../components/formStyles'
+import { useFormStyles } from '../components/formStyles'
 import { VoiceNoteField } from '../media/VoiceNoteField'
 import { SectionMediaPicker } from '../media/SectionMediaPicker'
 import { ServiceFormSection } from '../serviceForms/ServiceFormSection'
-import { jc } from '../theme'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function WorkStep() {
+  const { jc } = useTheme()
+  const formStyles = useFormStyles()
   const {
     formData,
     setFormData,

@@ -18,7 +18,8 @@ import { VisitStep } from '../steps/VisitStep'
 import { WorkStep } from '../steps/WorkStep'
 import { StockStep } from '../steps/StockStep'
 import { SignoffStep } from '../steps/SignoffStep'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 const STEP_COMPONENTS = {
   assignment: AssignmentStep,
@@ -29,6 +30,7 @@ const STEP_COMPONENTS = {
 } as const
 
 export function WizardScreen() {
+  const styles = useThemedStyles(createStyles)
   const { isOnline } = useNetwork()
   const {
     currentStep,
@@ -163,7 +165,8 @@ export function WizardScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: jc.bg },
   header: {
     flexDirection: 'row',
@@ -248,4 +251,5 @@ const styles = StyleSheet.create({
     marginTop: jc.space.sm
   },
   modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 }
-})
+  })
+}

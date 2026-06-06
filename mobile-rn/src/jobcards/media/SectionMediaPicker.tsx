@@ -3,8 +3,10 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import * as ImagePicker from 'expo-image-picker'
 import * as ImageManipulator from 'expo-image-manipulator'
 import { MediaGallery } from './MediaGallery'
-import { jc } from '../theme'
 import type { MediaItem } from '../types'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   section: string
@@ -13,6 +15,8 @@ type Props = {
 }
 
 export function SectionMediaPicker({ section, items, onChange }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const [busy, setBusy] = useState(false)
 
   async function capture() {
@@ -104,7 +108,8 @@ export function SectionMediaPicker({ section, items, onChange }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: { gap: 8 },
   row: { flexDirection: 'row', gap: 8 },
   btn: {
@@ -116,4 +121,5 @@ const styles = StyleSheet.create({
   },
   gallery: { backgroundColor: jc.accentTeal },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 13 }
-})
+  })
+}

@@ -14,7 +14,7 @@ import {
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import { projectsApi } from '../api'
 import { DocumentCollectionSummary } from '../components/DocumentCollectionSummary'
 import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
@@ -32,6 +32,9 @@ import type {
   TaskViewMode
 } from '../types'
 import {
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
   activityIcon,
   enabledProcesses,
   formatDate,
@@ -62,6 +65,7 @@ const DETAIL_TABS: { key: ProjectDetailTab; label: string; icon: string }[] = [
 ]
 
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  const styles = useThemedStyles(createStyles)
   if (!value) return null
   return (
     <View style={styles.infoRow}>
@@ -72,6 +76,8 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 }
 
 export function ProjectDetailScreen({ route, navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const { projectId, initialTab } = route.params
   const { accessToken } = useAuth()
   const [project, setProject] = useState<ProjectDetail | null>(null)
@@ -701,7 +707,8 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
@@ -986,4 +993,5 @@ const styles = StyleSheet.create({
   },
   modalSaveText: { fontWeight: '800', color: '#fff' },
   disabled: { opacity: 0.6 }
-})
+  })
+}

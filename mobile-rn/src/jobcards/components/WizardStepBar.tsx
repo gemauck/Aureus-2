@@ -1,7 +1,8 @@
 import React from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { STEP_IDS, STEP_META } from '../WizardContext'
-import { jc } from '../theme'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { JcTheme } from '../../theme/palettes'
 
 type Props = {
   currentStep: number
@@ -9,6 +10,7 @@ type Props = {
 }
 
 export function WizardStepBar({ currentStep, onSelect }: Props) {
+  const styles = useThemedStyles(createStyles)
   const progress = ((currentStep + 1) / STEP_IDS.length) * 100
 
   return (
@@ -61,7 +63,8 @@ export function WizardStepBar({ currentStep, onSelect }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
   wrap: {
     backgroundColor: jc.surface,
     borderBottomWidth: 1,
@@ -119,4 +122,5 @@ const styles = StyleSheet.create({
     lineHeight: 13
   },
   labelActive: { color: jc.primary, fontWeight: '700' }
-})
+  })
+}

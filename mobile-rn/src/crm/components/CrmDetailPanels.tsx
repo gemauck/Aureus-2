@@ -9,7 +9,7 @@ import {
   View
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import { CrmStatusBadge } from './CrmStatusBadge'
 import type {
   CrmClientNote,
@@ -35,8 +35,12 @@ import {
   formatDate,
   formatMoney
 } from '../utils'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 export function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  const styles = useThemedStyles(createStyles)
   if (!value) return null
   return (
     <View style={styles.infoRow}>
@@ -47,6 +51,8 @@ export function InfoRow({ label, value }: { label: string; value?: string | null
 }
 
 function EmptyState({ icon, title }: { icon: string; title: string }) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   return (
     <View style={styles.emptyWrap}>
       <FontAwesome5 name={icon} size={28} color={erp.textSubtle} />
@@ -71,6 +77,7 @@ type PanelProps = {
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
+  const styles = useThemedStyles(createStyles)
   const {
     tab,
     entity,
@@ -510,7 +517,8 @@ export function CrmDetailPanelContent(props: PanelProps) {
   return null
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   section: { gap: 10 },
   highlightCard: {
     backgroundColor: erp.primarySoft,
@@ -634,4 +642,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22
   }
-})
+  })
+}

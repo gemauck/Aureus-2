@@ -1,10 +1,13 @@
 import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import { erp } from '../../theme/appTheme'
+
 import type { ProjectSummary } from '../types'
 import { formatDateRange, progressPercent } from '../utils'
 import { ProjectStatusBadge } from './ProjectStatusBadge'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   project: ProjectSummary
@@ -14,6 +17,8 @@ type Props = {
 }
 
 export function ProjectRow({ project, starred, onPress, onToggleStar }: Props) {
+  const { erp } = useTheme()
+  const styles = useThemedStyles(createStyles)
   const pct = progressPercent(project)
   const taskCount = project.tasksCount
 
@@ -75,7 +80,8 @@ export function ProjectRow({ project, starred, onPress, onToggleStar }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   card: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.lg,
@@ -111,4 +117,5 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: erp.primary, borderRadius: 999 },
   progressLabel: { fontSize: 11, fontWeight: '800', color: erp.textMuted, minWidth: 32 },
   dates: { fontSize: 12, color: erp.textSubtle, marginTop: 8 }
-})
+  })
+}

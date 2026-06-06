@@ -17,13 +17,16 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
 import { useAuth } from '../../state/AuthContext'
-import { erp } from '../../theme/appTheme'
+
 import type { RootStackParamList } from '../../navigation/types'
 import { crmApi } from '../api'
 import { CrmEntityRow } from '../components/CrmEntityRow'
 import type { CrmClient, CrmFilterKey, CrmLead, CrmTab } from '../types'
 import { filterEntities, tabCounts, uniqueIndustries } from '../utils'
 import type { CrmStackParamList } from '../navigation'
+import { useThemedStyles } from '../../theme/useThemedStyles'
+import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<CrmStackParamList, 'CrmHome'>
 
@@ -34,6 +37,8 @@ const FILTERS: { key: CrmFilterKey; label: string; icon: string }[] = [
 ]
 
 export function CrmHomeScreen({ navigation }: Props) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { accessToken } = useAuth()
   const [tab, setTab] = useState<CrmTab>('clients')
@@ -251,7 +256,8 @@ export function CrmHomeScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+function createStyles({ erp }: { erp: ErpTheme }) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   hero: {
     marginHorizontal: erp.space.lg,
@@ -344,4 +350,5 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: 'center', padding: 40, gap: 8 },
   emptyTitle: { fontSize: 17, fontWeight: '800', color: erp.text },
   emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' }
-})
+  })
+}
