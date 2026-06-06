@@ -29,6 +29,26 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshInFlight
 }
 
+/** Raw fetch with one 401 → refresh → retry (for job card sync engine). */
+export async function fetchWithTokenRefresh(
+  url: string,
+  options: RequestInit & { token?: string | null } = {}
+): Promise<Response> {
+  const { token, ...fetchOptions } = options
+  const headers = new Headers(fetchOptions.headers || {})
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  let response = await fetch(url, { ...fetchOptions, headers })
+  if (response.status === 401 && token && authRefreshHandler) {
+    const newToken = await refreshAccessToken()
+    if (newToken) {
+      headers.set('Authorization', `Bearer ${newToken}`)
+      response = await fetch(url, { ...fetchOptions, headers })
+    }
+  }
+  return response
+}
+
 export async function request<T>(
   path: string,
   options: RequestOptions = {},

@@ -4841,6 +4841,17 @@ const JobCardFormPublic = () => {
     };
   }, [isOnline, localDraftsTick, runAutoSyncPendingJobCards]);
 
+  useEffect(() => {
+    const onVis = () => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+      if (!isOnline || !getJobCardAuthToken()) return;
+      if (listUnsyncedLocalPendingJobCards().length === 0) return;
+      void runAutoSyncPendingJobCards({ silent: true });
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [isOnline, runAutoSyncPendingJobCards]);
+
   const closePhotoLightbox = useCallback(() => {
     setPhotoLightboxUrl('');
   }, []);

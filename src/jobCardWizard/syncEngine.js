@@ -10,14 +10,16 @@ import {
  * @param {object} deps
  * @param {() => string|null} deps.getToken
  * @param {() => boolean} deps.isOnline
- * @param {(id: string) => void} deps.removeLocalPending
+ * @param {(id: string) => void|Promise<void>} deps.removeLocalPending
  * @param {(id: string) => void} [deps.rememberPriorId]
  * @param {(serverId: string, events: Array) => Promise<void>} [deps.flushActivity]
  * @param {() => void} [deps.onSaved]
  * @param {string} [deps.apiBase] e.g. '' for relative or 'https://host'
+ * @param {object} [deps.fetchRetryConfig] passed to fetchWithRetry (e.g. fetchFn for auth refresh)
  */
 export function createSyncEngine(deps) {
   const apiBase = deps.apiBase || '';
+  const fetchRetryConfig = deps.fetchRetryConfig || {};
 
   async function flushJobCardActivityQueue(serverJobCardId, events) {
     if (deps.flushActivity) {
@@ -98,7 +100,8 @@ export function createSyncEngine(deps) {
               'Content-Type': 'application/json'
             },
             body: payloadJson
-          }
+          },
+          fetchRetryConfig
         );
         if (patchRes.ok) {
           synced = true;
@@ -127,14 +130,18 @@ export function createSyncEngine(deps) {
         };
       }
       try {
-        const createRes = await fetchWithRetry(`${apiBase}/api/jobcards`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        const createRes = await fetchWithRetry(
+          `${apiBase}/api/jobcards`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(createPayload)
           },
-          body: JSON.stringify(createPayload)
-        });
+          fetchRetryConfig
+        );
         if (createRes.ok) {
           synced = true;
           const createText = await createRes.text().catch(() => '');
@@ -169,7 +176,10 @@ export function createSyncEngine(deps) {
     ) {
       await flushJobCardActivityQueue(resolvedServerId, draftCard.activityQueue);
     }
-    deps.removeLocalPending(localId);
+    const removeResult = deps.removeLocalPending(localId);
+    if (removeResult != null && typeof removeResult.then === 'function') {
+      await removeResult;
+    }
     deps.onSaved?.(resolvedServerId);
     return { ok: true, serverId: resolvedServerId, errorText: '' };
   }

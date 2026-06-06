@@ -108,13 +108,14 @@ export async function fetchWithRetry(url, options = {}, config = {}) {
   const attempts = Number(config.attempts || JOB_CARD_SYNC_RETRY_ATTEMPTS);
   const timeoutMs = Number(config.timeoutMs || JOB_CARD_SYNC_REQUEST_TIMEOUT_MS);
   const baseDelayMs = Number(config.baseDelayMs || 700);
+  const fetchFn = typeof config.fetchFn === 'function' ? config.fetchFn : fetch;
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
+      const response = await fetchFn(url, {
         ...options,
         signal: controller.signal
       });

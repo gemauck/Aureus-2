@@ -106,8 +106,16 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       await refreshUnsyncedCount()
       return batch
     })
-    if (!result) return { synced: 0, failed: 0 }
+    if (!result) {
+      // Another sync (e.g. immediate save) holds the lock — retry shortly.
+      setTimeout(() => bumpLocalDrafts(), 2000)
+      return { synced: 0, failed: 0 }
+    }
     if (result.synced > 0) bumpLocalDrafts()
+    else if (result.failed > 0) {
+      // Transient failures (network blip, expired token): retry after a pause.
+      setTimeout(() => bumpLocalDrafts(), 8000)
+    }
     return result
   }, [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts])
 
