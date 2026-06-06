@@ -2,4 +2,4 @@
 export { darkJc as jc, type JcTheme } from '../theme/palettes'
 
 export const APP_VERSION = '0.3.4'
-export const APP_VERSION_CODE = 8
+export const APP_VERSION_CODE = 9

@@ -21,7 +21,8 @@ export function SettingsScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp, mode, setMode } = useTheme()
   const { user, signOut } = useAuth()
-  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId } = useOTAUpdates(false)
+  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId, isEmbeddedLaunch } =
+    useOTAUpdates(false)
   const { checkForUpdate: checkApkUpdate } = useAppUpdateCheck(false)
   const [checking, setChecking] = useState<'ota' | 'apk' | null>(null)
 
@@ -29,8 +30,22 @@ export function SettingsScreen({ navigation }: Props) {
     setChecking('ota')
     try {
       const result = await checkForOTAUpdate(true)
-      if (result.status === 'current' || result.status === 'dev' || result.status === 'disabled') {
-        Alert.alert('Up to date', 'No new JS update available.')
+      if (result.status === 'dev') {
+        Alert.alert(
+          'Development build',
+          'OTA updates do not apply in debug/dev builds. Install the release APK from abcoafrica.co.za.'
+        )
+      } else if (result.status === 'disabled') {
+        Alert.alert(
+          'OTA disabled',
+          'This build has JS updates turned off. Install the release APK from abcoafrica.co.za.'
+        )
+      } else if (result.status === 'current') {
+        const rv = runtimeVersion || OTA_RUNTIME_VERSION
+        const hint = isEmbeddedLaunch
+          ? '\n\nStill on the factory bundle — fully close the app (swipe away), reopen, wait a few seconds, then open Settings again.'
+          : ''
+        Alert.alert('Up to date', `Server has no newer JS bundle for runtime ${rv}.${hint}`)
       } else if (result.status === 'unsupported') {
         Alert.alert('Not supported', 'OTA updates are Android-only in this build.')
       } else if (result.status === 'error') {

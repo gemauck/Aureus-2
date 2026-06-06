@@ -40,6 +40,16 @@ npx expo export --platform android --output-dir "$TMP/export"
 
 echo "Writing expoConfig.json…"
 npx expo config --type public --json 2>/dev/null > "$TMP/export/expoConfig.json"
+# When publishing to a legacy runtime folder, expo config must match that runtime or clients reject the update.
+node -e "
+const fs = require('fs');
+const cfgPath = process.argv[1];
+const rv = process.argv[2];
+const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+cfg.runtimeVersion = rv;
+cfg.extra = { ...(cfg.extra || {}), runtimeVersion: rv };
+fs.writeFileSync(cfgPath, JSON.stringify(cfg));
+" "$TMP/export/expoConfig.json" "$RUNTIME"
 
 mkdir -p "$DEST"
 cp -R "$TMP/export/." "$DEST/"

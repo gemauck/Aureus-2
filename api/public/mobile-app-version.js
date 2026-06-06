@@ -5,10 +5,11 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 8,
+  versionCode: 9,
   versionName: '0.3.4',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
-  releaseNotes: 'Self-hosted OTA on abcoafrica.co.za — no Expo account needed.',
+  releaseNotes:
+    'Runtime erp-mobile-2 shell — required for latest OTA (light/dark theme toggle). Install once; JS updates stay automatic.',
   /** Set true only when native modules/permissions change and users must install a new APK once. */
   forceApkInstall: false
 }
