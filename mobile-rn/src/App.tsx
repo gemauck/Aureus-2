@@ -1,4 +1,5 @@
 import React from 'react'
+import { StatusBar } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider } from './state/AuthContext'
 import { RootNavigator } from './navigation/RootNavigator'
@@ -21,6 +22,7 @@ function AppShell() {
 export default function App() {
   return (
     <ErrorBoundary>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
       <SafeAreaProvider>
         <AuthProvider>
           <AppShell />

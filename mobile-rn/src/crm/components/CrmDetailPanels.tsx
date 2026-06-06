@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     borderRadius: erp.radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#bae6fd'
+    borderColor: erp.primaryMuted
   },
   highlightLabel: { fontSize: 11, fontWeight: '700', color: erp.primary, textTransform: 'uppercase' },
   highlightValue: { fontSize: 24, fontWeight: '800', color: erp.text, marginTop: 4 },

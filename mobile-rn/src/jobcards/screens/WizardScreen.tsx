@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: jc.radius.md,
     padding: jc.space.sm,
     borderWidth: 1,
-    borderColor: '#fecaca'
+    borderColor: jc.danger
   },
   error: { color: jc.danger, fontWeight: '600', fontSize: 14 },
   nav: {

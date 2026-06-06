@@ -88,8 +88,8 @@ const styles = StyleSheet.create({
     borderColor: erp.border,
     marginBottom: 8
   },
-  cardOverdue: { borderColor: '#fecaca', backgroundColor: '#fffbfb' },
-  cardDueSoon: { borderColor: '#fde68a' },
+  cardOverdue: { borderColor: erp.danger, backgroundColor: erp.dangerSoft },
+  cardDueSoon: { borderColor: erp.warning },
   pressed: { opacity: 0.92 },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { flex: 1, fontSize: 15, fontWeight: '800', color: erp.text, lineHeight: 20 },

@@ -479,7 +479,7 @@ export function ChatScreen({ route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#e8edf2' },
+  root: { flex: 1, backgroundColor: erp.bg },
   loader: { marginTop: 40 },
   list: { padding: 12, paddingBottom: 8 },
   bubbleWrap: { marginVertical: 3, maxWidth: '85%' },

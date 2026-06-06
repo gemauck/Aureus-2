@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: erp.primaryMuted,
     justifyContent: 'center',
     minWidth: 110
   },

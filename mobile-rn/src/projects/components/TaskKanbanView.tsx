@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     borderColor: erp.border,
     ...erp.shadowSm
   },
-  cardOverdue: { borderColor: '#fecaca', backgroundColor: '#fffbfb' },
+  cardOverdue: { borderColor: erp.danger, backgroundColor: erp.dangerSoft },
   cardTitle: { fontSize: 14, fontWeight: '700', color: erp.text, lineHeight: 19 },
   cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   priBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },

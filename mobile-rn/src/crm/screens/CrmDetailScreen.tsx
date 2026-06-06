@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  backText: { color: '#bae6fd', fontWeight: '700', fontSize: 15 },
+  backText: { color: erp.primaryLight, fontWeight: '700', fontSize: 15 },
   heroBody: { gap: 8 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   title: { flex: 1, fontSize: 22, fontWeight: '800', color: '#fff', lineHeight: 28 },

@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     color: jc.text
   },
   scanBtn: {
-    backgroundColor: jc.primaryDark,
+    backgroundColor: jc.primary,
     padding: 12,
     borderRadius: jc.radius.md,
     alignItems: 'center'
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: jc.radius.sm,
-    backgroundColor: '#eef6ff',
+    backgroundColor: jc.primarySoft,
     borderWidth: 1,
     borderColor: jc.primary
   },
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   lineHighlighted: {
     borderColor: jc.primary,
     borderWidth: 2,
-    backgroundColor: '#eef6ff'
+    backgroundColor: jc.primarySoft
   },
   lineName: { fontWeight: '600', color: jc.text },
   lineSku: { fontSize: 12, color: jc.textMuted },

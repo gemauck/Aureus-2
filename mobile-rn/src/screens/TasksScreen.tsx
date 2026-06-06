@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react'
 import { FlatList, SafeAreaView, StyleSheet, Text, TouchableOpacity } from 'react-native'
 import { apiClient } from '../services/apiClient'
 import { useAuth } from '../state/AuthContext'
+import { erp } from '../theme/appTheme'
 
 export function TasksScreen() {
   const { accessToken } = useAuth()
@@ -28,8 +29,13 @@ export function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff', padding: 16 },
-  button: { backgroundColor: '#9333ea', borderRadius: 8, padding: 10, marginBottom: 12 },
+  container: { flex: 1, backgroundColor: erp.bg, padding: 16 },
+  button: { backgroundColor: erp.primary, borderRadius: 8, padding: 10, marginBottom: 12 },
   buttonText: { color: '#ffffff', fontWeight: '600', textAlign: 'center' },
-  item: { borderBottomWidth: 1, borderBottomColor: '#e5e7eb', paddingVertical: 10 }
+  item: {
+    borderBottomWidth: 1,
+    borderBottomColor: erp.border,
+    paddingVertical: 10,
+    color: erp.text
+  }
 })

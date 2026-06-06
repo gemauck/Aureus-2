@@ -6,8 +6,8 @@ type Tone = 'info' | 'warning' | 'success'
 
 const tones: Record<Tone, { bg: string; border: string; text: string }> = {
   info: { bg: jc.primarySoft, border: jc.primaryMuted, text: jc.primaryDark },
-  warning: { bg: jc.warningSoft, border: '#fde68a', text: '#92400e' },
-  success: { bg: jc.successSoft, border: '#bbf7d0', text: '#166534' }
+  warning: { bg: jc.warningSoft, border: jc.warning, text: jc.warning },
+  success: { bg: jc.successSoft, border: jc.success, text: jc.success }
 }
 
 export function InfoBanner({

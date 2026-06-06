@@ -38,7 +38,7 @@ export function ServiceMaintenanceScreen({ navigation }: Props) {
             style={styles.featureCard}
             onPress={() => void Linking.openURL(`${API_BASE_URL}/service-maintenance`)}
           >
-            <View style={[styles.featureIcon, { backgroundColor: '#fef3c7' }]}>
+            <View style={[styles.featureIcon, { backgroundColor: erp.warningSoft }]}>
               <FontAwesome5 name="wrench" size={22} color={erp.warning} />
             </View>
             <View style={{ flex: 1 }}>

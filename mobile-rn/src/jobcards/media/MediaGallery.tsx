@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     borderRadius: jc.radius.md,
     backgroundColor: jc.surfaceMuted
   },
-  videoThumb: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#dbeafe' },
+  videoThumb: { alignItems: 'center', justifyContent: 'center', backgroundColor: jc.primarySoft },
   videoIcon: { fontSize: 22, color: jc.primary },
   videoLabel: { fontSize: 10, color: jc.primaryDark, marginTop: 2, fontWeight: '600' },
   removeBadge: {
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: jc.radius.md,
-    backgroundColor: '#fef2f2',
+    backgroundColor: jc.dangerSoft,
     alignItems: 'center'
   },
   viewerDeleteText: { color: jc.danger, fontWeight: '700' },

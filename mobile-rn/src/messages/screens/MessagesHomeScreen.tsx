@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  avatarGroup: { backgroundColor: '#ede9fe' },
+  avatarGroup: { backgroundColor: erp.primarySoft },
   avatarText: { fontWeight: '700', color: erp.primary, fontSize: 16 },
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },

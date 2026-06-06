@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Alert, Button, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useAuth } from '../state/AuthContext'
+import { erp } from '../theme/appTheme'
 
 export function AttachmentsScreen() {
   const { accessToken } = useAuth()
@@ -26,8 +27,16 @@ export function AttachmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff', padding: 16 },
-  card: { backgroundColor: '#f9fafb', borderRadius: 10, padding: 12, gap: 10 },
-  title: { fontSize: 18, fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }
+  container: { flex: 1, backgroundColor: erp.bg, padding: 16 },
+  card: { backgroundColor: erp.surface, borderRadius: 10, padding: 12, gap: 10 },
+  title: { fontSize: 18, fontWeight: '700', color: erp.text },
+  input: {
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: erp.text,
+    backgroundColor: erp.surfaceMuted
+  }
 })

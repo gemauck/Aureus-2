@@ -49,7 +49,7 @@ function buildMapHtml(): string {
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; }
-    body { background: #e2e8f0; }
+    body { background: #334155; }
   </style>
 </head>
 <body>
@@ -369,7 +369,7 @@ export function LocationPickerModal({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1, backgroundColor: jc.surface },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: jc.border,
-    backgroundColor: '#f8fafc'
+    backgroundColor: jc.bg
   },
   searchRow: { flexDirection: 'row', gap: 8 },
   searchInput: {
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: jc.text,
-    backgroundColor: '#fff'
+    backgroundColor: jc.surfaceMuted
   },
   searchBtn: {
     backgroundColor: '#334155',
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   locationBtn: {
     backgroundColor: jc.primarySoft,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: jc.primaryMuted,
     borderRadius: jc.radius.md,
     paddingVertical: 12,
     alignItems: 'center'
@@ -431,21 +431,21 @@ const styles = StyleSheet.create({
   locationBtnText: { color: jc.primaryDark, fontWeight: '700' },
   hint: {
     fontSize: 13,
-    color: '#b45309',
-    backgroundColor: '#fffbeb',
+    color: jc.warning,
+    backgroundColor: jc.warningSoft,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: jc.warning,
     borderRadius: jc.radius.md,
     paddingHorizontal: 10,
     paddingVertical: 8
   },
-  mapWrap: { flex: 1, backgroundColor: '#e2e8f0' },
+  mapWrap: { flex: 1, backgroundColor: jc.surfaceMuted },
   map: { flex: 1 },
   mapLoading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: jc.surfaceMuted,
     zIndex: 2
   },
   mapLoadingText: { marginTop: 10, color: jc.textMuted, fontWeight: '600' },
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: jc.border,
-    backgroundColor: '#fff',
+    backgroundColor: jc.surface,
     gap: 12
   },
   selectedBox: {
