@@ -135,6 +135,7 @@ function ScannerCamera({
   onCameraReady: () => void
   cameraReady: boolean
 }) {
+  const styles = useThemedStyles(createStyles)
   const cameraRef = useRef<CameraView>(null)
   const lastScan = useRef({ text: '', t: 0 })
   const scanningRef = useRef(false)

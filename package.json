@@ -120,6 +120,8 @@
     "mobile:start": "cd mobile-rn && npm run start",
     "mobile:android": "cd mobile-rn && npm run android",
     "mobile:apk": "bash scripts/build-mobile-rn-apk.sh",
+    "mobile:adb:install": "bash scripts/install-mobile-rn-apk.sh",
+    "mobile:apk:install": "bash scripts/build-mobile-rn-apk.sh && bash scripts/install-mobile-rn-apk.sh",
     "mobile:ota:publish": "bash scripts/publish-mobile-ota-selfhosted.sh",
     "setup:local-prod": "bash scripts/setup-local-production.sh",
     "start:local-prod": "bash scripts/start-local-production.sh",

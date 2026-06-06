@@ -230,7 +230,7 @@ export function MessagesHomeScreen({ navigation }: Props) {
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>New message</Text>
             <TextInput
-              style={styles.search}
+              style={styles.modalSearch}
               placeholder="Search people…"
               placeholderTextColor={erp.textSubtle}
               value={userSearch}
@@ -312,6 +312,18 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     paddingVertical: 10,
     color: erp.text,
     fontSize: 15
+  },
+  modalSearch: {
+    backgroundColor: erp.surface,
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 44,
+    color: erp.text,
+    fontSize: 15,
+    marginBottom: 12
   },
   newBtn: {
     backgroundColor: erp.primary,

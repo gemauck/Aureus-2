@@ -73,6 +73,13 @@ npm run mobile:apk
 
 Output: `~/Desktop/Abcotronics-ERP-Mobile.apk` (release build with embedded JS bundle).
 
+Install to a connected phone or emulator (no manual download):
+
+```bash
+npm run mobile:adb:install          # install existing Desktop APK via adb
+npm run mobile:apk:install          # build release APK, then adb install
+```
+
 ## OTA updates (JS bundle — self-hosted on abcoafrica.co.za)
 
 No Expo account required. The server hosts JS bundles; the app checks on launch via `expo-updates`.

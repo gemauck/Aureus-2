@@ -105,6 +105,7 @@ function MenuButton({
   tint: string
   onPress: () => void
 }) {
+  const styles = useThemedStyles(createStyles)
   return (
     <Pressable
       style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}

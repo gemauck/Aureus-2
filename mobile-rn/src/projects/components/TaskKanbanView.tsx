@@ -86,6 +86,7 @@ export function TaskListGroupedView({
   taskLists: ProjectTaskList[]
   onTaskPress: (task: ProjectTask) => void
 }) {
+  const styles = useThemedStyles(createStyles)
   const groups = groupTasksByList(tasks, taskLists)
 
   return (

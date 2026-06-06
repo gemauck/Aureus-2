@@ -204,6 +204,8 @@ function PriorRow({
   onOpen: () => void
   onSync: () => void
 }) {
+  const styles = useThemedStyles(createStyles)
+  const { jc } = useTheme()
   const title = row.heading || row.jobCardNumber || row.clientName || 'Draft'
   const status = row.synced ? (row.status === 'submitted' ? 'Submitted' : 'Synced') : 'Draft'
 
