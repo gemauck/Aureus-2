@@ -185,10 +185,19 @@ echo "  ✓ Vite projects bundle present"
 if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh" ]; then
   echo
   echo "-> Publishing mobile JS OTA bundle (automatic in-app updates)..."
-  if bash "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh"; then
-    echo "  ✓ Mobile OTA bundle published on server"
-  else
-    echo "  ⚠ Mobile OTA publish failed — devices may stay on the previous JS bundle until the next deploy"
+  OTA_RUNTIMES="${MOBILE_OTA_RUNTIMES:-erp-mobile-2 erp-mobile-3}"
+  ota_ok=1
+  for rv in ${OTA_RUNTIMES}; do
+    echo "   Runtime: ${rv}"
+    if MOBILE_OTA_RUNTIME="${rv}" bash "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh"; then
+      echo "  ✓ Mobile OTA bundle published (${rv})"
+    else
+      echo "  ⚠ Mobile OTA publish failed for ${rv}"
+      ota_ok=0
+    fi
+  done
+  if [ "${ota_ok}" -eq 0 ]; then
+    echo "  ⚠ Some OTA publishes failed — affected devices may stay on the previous JS bundle until the next deploy"
   fi
 fi
 

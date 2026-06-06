@@ -1,8 +1,8 @@
 const fs = require('fs')
 const path = require('path')
 
-/** Bump when native modules / permissions change — foreground-only location (no background). */
-const RUNTIME_VERSION = 'erp-mobile-3'
+/** Bump when native modules / permissions change — must match native APK expo_runtime_version. */
+const RUNTIME_VERSION = 'erp-mobile-2'
 
 const OTA_BASE =
   process.env.MOBILE_OTA_PUBLIC_URL ||
