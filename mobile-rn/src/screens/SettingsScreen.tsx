@@ -46,6 +46,20 @@ export function SettingsScreen({ navigation }: Props) {
           ? '\n\nStill on the factory bundle — fully close the app (swipe away), reopen, wait a few seconds, then open Settings again.'
           : ''
         Alert.alert('Up to date', `Server has no newer JS bundle for runtime ${rv}.${hint}`)
+      } else if (result.status === 'downloaded' && !result.willReload) {
+        Alert.alert(
+          'Update downloaded',
+          'Fully close the app and reopen it to apply the update.',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Restart now',
+              onPress: () => {
+                void import('expo-updates').then(({ reloadAsync }) => reloadAsync())
+              }
+            }
+          ]
+        )
       } else if (result.status === 'unsupported') {
         Alert.alert('Not supported', 'OTA updates are Android-only in this build.')
       } else if (result.status === 'error') {

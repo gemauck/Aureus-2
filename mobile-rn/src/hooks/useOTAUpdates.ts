@@ -10,7 +10,9 @@ export type OtaCheckResult =
   | { status: 'downloaded'; willReload: boolean }
   | { status: 'error'; message: string }
 
-export async function applyOtaUpdate(options: { silent?: boolean } = {}): Promise<OtaCheckResult> {
+export async function applyOtaUpdate(
+  options: { silent?: boolean; reload?: boolean } = {}
+): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
   if (!Updates.isEnabled) return { status: 'disabled' }
@@ -20,6 +22,11 @@ export async function applyOtaUpdate(options: { silent?: boolean } = {}): Promis
     if (!check.isAvailable) return { status: 'current' }
 
     await Updates.fetchUpdateAsync()
+
+    const shouldReload = options.reload ?? !options.silent
+    if (!shouldReload) {
+      return { status: 'downloaded', willReload: false }
+    }
 
     if (options.silent) {
       await Updates.reloadAsync()
@@ -71,7 +78,10 @@ export function useOTAUpdates(enabled = true) {
     inFlightRef.current = true
     lastCheckRef.current = now
     try {
-      return await applyOtaUpdate({ silent: opts.silent !== false })
+      return await applyOtaUpdate({
+        silent: opts.silent !== false,
+        reload: opts.force && opts.silent === false
+      })
     } finally {
       inFlightRef.current = false
     }
