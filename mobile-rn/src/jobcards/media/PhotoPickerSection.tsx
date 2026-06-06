@@ -26,13 +26,13 @@ export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
   const [busy, setBusy] = useState(false)
 
   async function pick() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Photos', 'Allow photo library access.')
-      return
-    }
     setBusy(true)
     try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Photos', 'Allow photo library access.')
+        return
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
@@ -43,32 +43,37 @@ export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
       for (const asset of res.assets) {
         if (asset.type === 'video') {
           next.push({ url: asset.uri, name: asset.fileName || 'Video', mediaType: 'video' })
-        } else {
+        } else if (asset.uri) {
           const dataUrl = await compressUri(asset.uri)
           next.push({ url: dataUrl, name: asset.fileName || 'Photo' })
         }
       }
       onChange(next)
+    } catch (err) {
+      Alert.alert('Photos', err instanceof Error ? err.message : 'Could not open the photo library.')
     } finally {
       setBusy(false)
     }
   }
 
   async function capture() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Camera', 'Allow camera access to take photos.')
-      return
-    }
     setBusy(true)
     try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Camera', 'Allow camera access to take photos.')
+        return
+      }
       const res = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85
+        quality: 0.85,
+        allowsEditing: false
       })
-      if (res.canceled) return
+      if (res.canceled || !res.assets[0]?.uri) return
       const dataUrl = await compressUri(res.assets[0].uri)
       onChange([...photos, { url: dataUrl, name: 'Camera photo' }])
+    } catch (err) {
+      Alert.alert('Camera', err instanceof Error ? err.message : 'Could not open the camera.')
     } finally {
       setBusy(false)
     }

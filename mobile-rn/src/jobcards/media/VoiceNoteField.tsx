@@ -24,54 +24,67 @@ export function VoiceNoteField({ section, voiceClips, onVoiceSaved, onRemove }: 
   }, [])
 
   async function toggleRecord() {
-    if (recording) {
-      await recording.stopAndUnloadAsync()
-      const uri = recording.getURI()
-      setRecording(null)
-      if (!uri) return
-      onVoiceSaved({
-        id: `voice_${Date.now()}`,
-        section,
-        dataUrl: uri,
-        name: `Voice note ${sectionClips.length + 1}`
+    try {
+      if (recording) {
+        await recording.stopAndUnloadAsync()
+        const uri = recording.getURI()
+        setRecording(null)
+        if (!uri) return
+        onVoiceSaved({
+          id: `voice_${Date.now()}`,
+          section,
+          dataUrl: uri,
+          name: `Voice note ${sectionClips.length + 1}`
+        })
+        return
+      }
+      const perm = await Audio.requestPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Microphone', 'Allow microphone access to record voice notes.')
+        return
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false
       })
-      return
+      const rec = new Audio.Recording()
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
+      await rec.startAsync()
+      setRecording(rec)
+    } catch (err) {
+      setRecording(null)
+      Alert.alert(
+        'Voice note',
+        err instanceof Error ? err.message : 'Could not start recording. Try again.'
+      )
     }
-    const perm = await Audio.requestPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Microphone', 'Allow microphone access to record voice notes.')
-      return
-    }
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false
-    })
-    const rec = new Audio.Recording()
-    await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
-    await rec.startAsync()
-    setRecording(rec)
   }
 
   async function playClip(clip: VoiceClip) {
-    if (playingId === clip.id) {
-      await soundRef.current?.stopAsync()
-      await soundRef.current?.unloadAsync()
-      soundRef.current = null
-      setPlayingId(null)
-      return
-    }
-    await soundRef.current?.unloadAsync()
-    const { sound } = await Audio.Sound.createAsync({ uri: clip.dataUrl })
-    soundRef.current = sound
-    setPlayingId(clip.id)
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
+    try {
+      if (playingId === clip.id) {
+        await soundRef.current?.stopAsync()
+        await soundRef.current?.unloadAsync()
+        soundRef.current = null
         setPlayingId(null)
+        return
       }
-    })
-    await sound.playAsync()
+      await soundRef.current?.unloadAsync()
+      const { sound } = await Audio.Sound.createAsync({ uri: clip.dataUrl })
+      soundRef.current = sound
+      setPlayingId(clip.id)
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setPlayingId(null)
+        }
+      })
+      await sound.playAsync()
+    } catch {
+      setPlayingId(null)
+      Alert.alert('Voice note', 'Could not play this recording.')
+    }
   }
 
   return (

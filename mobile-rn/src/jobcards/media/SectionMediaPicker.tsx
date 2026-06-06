@@ -16,57 +16,73 @@ export function SectionMediaPicker({ section, items, onChange }: Props) {
   const [busy, setBusy] = useState(false)
 
   async function capture() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) {
-      Alert.alert('Camera', 'Allow camera access.')
-      return
-    }
     setBusy(true)
     try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Camera', 'Allow camera access to take job card photos.')
+        return
+      }
       const res = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85
+        quality: 0.85,
+        allowsEditing: false
       })
-      if (res.canceled) return
+      if (res.canceled || !res.assets[0]?.uri) return
       const manipulated = await ImageManipulator.manipulateAsync(
         res.assets[0].uri,
         [{ resize: { width: 1280 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       )
+      if (!manipulated.base64) {
+        Alert.alert('Photo', 'Could not process the photo. Try again.')
+        return
+      }
       onChange([
         ...items,
         {
-          url: `data:image/jpeg;base64,${manipulated.base64 || ''}`,
+          url: `data:image/jpeg;base64,${manipulated.base64}`,
           name: `${section} photo`
         }
       ])
+    } catch (err) {
+      Alert.alert('Camera', err instanceof Error ? err.message : 'Could not open the camera.')
     } finally {
       setBusy(false)
     }
   }
 
   async function pickGallery() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) return
     setBusy(true)
     try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Photos', 'Allow photo library access to attach images.')
+        return
+      }
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85
       })
-      if (res.canceled) return
+      if (res.canceled || !res.assets[0]?.uri) return
       const manipulated = await ImageManipulator.manipulateAsync(
         res.assets[0].uri,
         [{ resize: { width: 1280 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       )
+      if (!manipulated.base64) {
+        Alert.alert('Photo', 'Could not process the photo. Try again.')
+        return
+      }
       onChange([
         ...items,
         {
-          url: `data:image/jpeg;base64,${manipulated.base64 || ''}`,
+          url: `data:image/jpeg;base64,${manipulated.base64}`,
           name: `${section} photo`
         }
       ])
+    } catch (err) {
+      Alert.alert('Photos', err instanceof Error ? err.message : 'Could not open the photo library.')
     } finally {
       setBusy(false)
     }

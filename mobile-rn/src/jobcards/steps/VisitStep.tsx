@@ -163,6 +163,9 @@ export function VisitStep() {
 
       <LocationPickerModal
         visible={mapOpen}
+        initialLatitude={formData.latitude}
+        initialLongitude={formData.longitude}
+        initialLabel={formData.location}
         onClose={() => setMapOpen(false)}
         onConfirm={({ latitude, longitude, label }) => {
           setFormData((f) => ({
