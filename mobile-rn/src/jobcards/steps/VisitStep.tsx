@@ -22,6 +22,7 @@ type LocationPickerProps = React.ComponentProps<
 
 function DeferredLocationPickerModal(props: LocationPickerProps) {
   const { jc } = useTheme()
+  const deferredStyles = useThemedStyles(createDeferredStyles)
   const [Picker, setPicker] = React.useState<React.ComponentType<LocationPickerProps> | null>(null)
 
   React.useEffect(() => {
@@ -218,16 +219,18 @@ export function VisitStep() {
   )
 }
 
-const deferredStyles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: jc.surface,
-    gap: 12
-  },
-  loadingText: { color: jc.textMuted, fontWeight: '600' }
-})
+function createDeferredStyles({ jc }: { jc: JcTheme }) {
+  return StyleSheet.create({
+    loading: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: jc.surface,
+      gap: 12
+    },
+    loadingText: { color: jc.textMuted, fontWeight: '600' }
+  })
+}
 
 function createStyles({ jc }: { jc: JcTheme }) {
   return StyleSheet.create({
