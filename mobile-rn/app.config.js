@@ -22,8 +22,9 @@ module.exports = {
     runtimeVersion: RUNTIME_VERSION,
     plugins,
     updates: {
-      enabled: false,
+      enabled: true,
       url: `${OTA_BASE.replace(/\/$/, '')}/api/public/mobile-ota/manifest`,
+      // Safeguards: native never checks/applies on cold start — JS hook prefetches after login (no auto-reload).
       checkAutomatically: 'NEVER',
       fallbackToCacheTimeout: 0
     },

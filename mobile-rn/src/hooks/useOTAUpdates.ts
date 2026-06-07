@@ -126,7 +126,7 @@ export function useOTAUpdates(enabled = true) {
 
   const check = useCallback(
     async (opts: { silent?: boolean; force?: boolean } = {}) => {
-      if (!enabled && !opts.force) return applyOtaUpdate(opts)
+      if (!enabled && !opts.force) return { status: 'current' as const }
 
       const now = Date.now()
       if (!opts.force && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {

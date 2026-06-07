@@ -69,7 +69,9 @@ export function SettingsScreen({ navigation }: Props) {
   const [remoteError, setRemoteError] = useState<string | null>(null)
   const [lastOtaCheck, setLastOtaCheck] = useState<string | null>(null)
   const [lastApkCheck, setLastApkCheck] = useState<string | null>(null)
-  const [otaStatus, setOtaStatus] = useState<string>('Automatic checks run on launch and in the background.')
+  const [otaStatus, setOtaStatus] = useState<string>(
+    'After login, JS updates download in the background (no auto-restart). Apply from Settings or on next app open.'
+  )
 
   const refreshRemoteVersion = useCallback(async () => {
     try {

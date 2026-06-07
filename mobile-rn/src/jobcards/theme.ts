@@ -1,5 +1,5 @@
 /** @deprecated Use useTheme().jc — kept for version constants. */
 export { darkJc as jc, type JcTheme } from '../theme/palettes'
 
-export const APP_VERSION = '0.3.6'
-export const APP_VERSION_CODE = 11
+export const APP_VERSION = '0.3.7'
+export const APP_VERSION_CODE = 12

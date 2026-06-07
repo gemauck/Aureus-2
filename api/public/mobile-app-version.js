@@ -5,13 +5,13 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 11,
-  versionName: '0.3.6',
+  versionCode: 12,
+  versionName: '0.3.7',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes:
-    'Stability fix: disables OTA auto-load, uses embedded app only. Uninstall the old app first, then install this APK once.',
-  /** Required — clears bad OTA cache and ships a verified embedded bundle. */
-  forceApkInstall: true
+    'Fixes Teams and Tools closing the app — sub-screens now load on demand instead of at module open. Safe OTA: background download after login, apply from Settings.',
+  /** Set true only when native shell must be replaced (permissions, SDK, runtime bump). */
+  forceApkInstall: false
 }
 
 async function handler(req, res) {
