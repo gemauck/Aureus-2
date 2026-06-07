@@ -358,13 +358,51 @@ const DataProvider = ({ children }) => {
         return cache[key]?.data || null;
     }, [cache]);
 
+    // Seed in-memory cache from localStorage so the shell can render immediately.
+    const seedCacheFromLocalStorage = useCallback(() => {
+        const role = window.storage?.getUser?.()?.role;
+        const canViewLeads =
+            typeof window.isAdminRole === 'function' && window.isAdminRole(role);
+
+        const allClients = window.storage?.getClients?.() || [];
+        const clients = allClients.filter((c) => c.type === 'client' || !c.type);
+        const storedLeads = window.storage?.getLeads?.();
+        const leadsRaw =
+            Array.isArray(storedLeads) && storedLeads.length > 0
+                ? storedLeads
+                : allClients.filter((c) => c.type === 'lead');
+        const leads = canViewLeads ? leadsRaw : [];
+        const projects = window.storage?.getProjects?.() || [];
+        const users = window.storage?.getUsers?.() || [];
+        const now = Date.now();
+
+        setCache((prev) => {
+            const next = { ...prev };
+            const seed = (key, data) => {
+                if (!Array.isArray(data) || data.length === 0) return;
+                next[key] = {
+                    ...prev[key],
+                    data,
+                    timestamp: now,
+                    loading: false,
+                    error: null
+                };
+            };
+            seed('clients', clients);
+            seed('leads', leads);
+            seed('projects', projects);
+            seed('users', users);
+            return next;
+        });
+
+        return clients.length > 0 || projects.length > 0 || leads.length > 0;
+    }, []);
+
     // Initial data load on mount
     useEffect(() => {
         const INITIAL_LOAD_SAFETY_MS = 25000; // 25s max - then show app even if a request is stuck
 
         const initialLoad = async () => {
-            setGlobalLoading(true);
-
             // Safety: force completion after max time so app never stays on loading forever
             const safetyTimer = setTimeout(() => {
                 setGlobalLoading(false);
@@ -384,8 +422,11 @@ const DataProvider = ({ children }) => {
                     return;
                 }
 
-                // Load essential data in parallel. Server allows 450 req/min per IP (apiLimiter);
-                // four reads are far below that — the old 600ms stagger added ~1.8s artificial delay.
+                // Show workspace immediately using localStorage; refresh in background.
+                seedCacheFromLocalStorage();
+                setInitialLoadComplete(true);
+                setGlobalLoading(false);
+
                 const dataTypes = [
                     { key: 'clients' },
                     { key: 'leads' },
@@ -409,8 +450,6 @@ const DataProvider = ({ children }) => {
                         if (window.storage?.removeToken) {
                             window.storage.removeToken();
                         }
-                        setInitialLoadComplete(true);
-                        setGlobalLoading(false);
                         return null;
                     }
 
@@ -431,11 +470,11 @@ const DataProvider = ({ children }) => {
                 const isUnauthorized = error?.status === 401 || errorMessage.includes('401') ||
                                       errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
 
-                // If unauthorized, stop loading immediately
                 if (isUnauthorized) {
                     console.warn('⚠️ Unauthorized during initial load - stopping');
-                    setInitialLoadComplete(true);
-                    setGlobalLoading(false);
+                    if (window.storage?.removeToken) {
+                        window.storage.removeToken();
+                    }
                     return;
                 }
 
