@@ -214,6 +214,7 @@ const Messenger = () => {
   const [emailPrefLoading, setEmailPrefLoading] = useState(true);
   const [emailPrefSaving, setEmailPrefSaving] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
+  const [reactionPickerId, setReactionPickerId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
