@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -70,6 +71,27 @@ export function NoteDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  const confirmDelete = () => {
+    Alert.alert('Delete note', 'This note will be permanently removed.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void deleteNote() }
+    ])
+  }
+
+  const deleteNote = async () => {
+    if (!accessToken) return
+    setSaving(true)
+    setError('')
+    try {
+      await projectsApi.deleteNote(accessToken, projectId, noteId)
+      navigation.goBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete note')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -120,6 +142,13 @@ export function NoteDetailScreen({ route, navigation }: Props) {
             <Text style={styles.saveText}>Save note</Text>
           )}
         </Pressable>
+        <Pressable
+          style={[styles.deleteBtn, saving && styles.disabled]}
+          disabled={saving}
+          onPress={confirmDelete}
+        >
+          <Text style={styles.deleteText}>Delete note</Text>
+        </Pressable>
       </ScrollView>
     </View>
   )
@@ -166,6 +195,15 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     alignItems: 'center'
   },
   saveText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  deleteBtn: {
+    borderRadius: erp.radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: erp.danger,
+    backgroundColor: erp.dangerSoft
+  },
+  deleteText: { color: erp.danger, fontWeight: '800', fontSize: 16 },
   disabled: { opacity: 0.6 }
   })
 }

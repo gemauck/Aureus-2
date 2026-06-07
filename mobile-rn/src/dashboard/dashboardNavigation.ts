@@ -1,8 +1,8 @@
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { DashboardNotification, DashboardTask } from '../services/erpApi'
 import type { RootStackParamList } from '../navigation/types'
 
-type Nav = NativeStackNavigationProp<RootStackParamList>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NavLike = { navigate: (...args: any[]) => void }
 
 function parseConversationId(item: DashboardNotification): string | null {
   const link = item.link || ''
@@ -11,7 +11,7 @@ function parseConversationId(item: DashboardNotification): string | null {
   return null
 }
 
-export function openNotification(navigation: Nav, item: DashboardNotification) {
+export function openNotification(navigation: NavLike, item: DashboardNotification) {
   const conversationId = parseConversationId(item)
   if (conversationId) {
     navigation.navigate('Messages', {
@@ -27,7 +27,7 @@ export function openNotification(navigation: Nav, item: DashboardNotification) {
   navigation.navigate('Notifications')
 }
 
-export function openTask(navigation: Nav, task: DashboardTask) {
+export function openTask(navigation: NavLike, task: DashboardTask) {
   if (task.projectId) {
     navigation.navigate('Projects', {
       screen: 'TaskDetail',
@@ -42,6 +42,17 @@ export function openTask(navigation: Nav, task: DashboardTask) {
   navigation.navigate('MyTasks')
 }
 
-export function openModule(navigation: Nav, screen: keyof RootStackParamList) {
+export function openProject(
+  navigation: NavLike,
+  projectId: string,
+  opts?: { initialTab?: string }
+) {
+  navigation.navigate('Projects', {
+    screen: 'ProjectDetail',
+    params: { projectId, initialTab: opts?.initialTab }
+  } as never)
+}
+
+export function openModule(navigation: NavLike, screen: keyof RootStackParamList) {
   navigation.navigate(screen as never)
 }

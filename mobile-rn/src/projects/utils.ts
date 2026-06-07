@@ -155,6 +155,19 @@ export function uniqueClients(projects: ProjectSummary[]): Array<{ id: string; n
   return ['all', ...Array.from(map.entries()).map(([id, name]) => ({ id, name }))]
 }
 
+export function uniqueTaskProjects(tasks: ProjectTask[]): Array<{ id: string; name: string }> {
+  const map = new Map<string, string>()
+  for (const t of tasks) {
+    const id = t.projectId || t.project?.id
+    if (!id) continue
+    const name = String(t.project?.name || t.projectName || id).trim()
+    map.set(id, name || id)
+  }
+  return Array.from(map.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 export function sortProjects(items: ProjectSummary[], sortKey: ProjectSortKey) {
   const copy = [...items]
   copy.sort((a, b) => {

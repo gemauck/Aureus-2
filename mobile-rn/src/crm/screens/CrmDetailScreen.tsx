@@ -12,7 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
+
+import { openProject } from '../../dashboard/dashboardNavigation'
+import type { RootStackParamList } from '../../navigation/types'
 
 import { crmApi } from '../api'
 import { CrmDetailPanelContent } from '../components/CrmDetailPanels'
@@ -48,6 +53,7 @@ type Props = NativeStackScreenProps<CrmStackParamList, 'CrmDetail'>
 export function CrmDetailScreen({ route, navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { entityType, entityId } = route.params
   const { accessToken, user } = useAuth()
   const [entity, setEntity] = useState<CrmEntityBase | null>(null)
@@ -418,6 +424,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
               const memberType = member.type === 'lead' ? 'lead' : 'client'
               navigation.push('CrmDetail', { entityType: memberType, entityId: member.id })
             }}
+            onOpenProject={(projectId) => openProject(rootNavigation, projectId)}
           />
         </ScrollView>
 

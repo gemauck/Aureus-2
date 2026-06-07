@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +14,11 @@ import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
 
+import {
+  DateTimeField,
+  parseFieldDate,
+  toDateLocal
+} from '../../jobcards/components/DateTimeField'
 import { projectsApi } from '../api'
 import { AssigneePickerModal } from '../components/AssigneePickerModal'
 import { ProjectStatusBadge } from '../components/ProjectStatusBadge'
@@ -30,6 +36,11 @@ import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<ProjectsStackParamList, 'TaskDetail'>
+
+function dueDateFieldValue(iso?: string | null): string {
+  if (!iso) return ''
+  return toDateLocal(parseFieldDate(iso, 'date'))
+}
 
 export function TaskDetailScreen({ route, navigation }: Props) {
   const styles = useThemedStyles(createStyles)
@@ -49,6 +60,8 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const [showSubtask, setShowSubtask] = useState(false)
   const [subtaskTitle, setSubtaskTitle] = useState('')
   const [creatingSubtask, setCreatingSubtask] = useState(false)
+  const [newChecklistText, setNewChecklistText] = useState('')
+  const [addingChecklist, setAddingChecklist] = useState(false)
 
   const load = useCallback(async () => {
     if (!accessToken) return
@@ -127,6 +140,52 @@ export function TaskDetailScreen({ route, navigation }: Props) {
     await patchTask({ checklist: next })
   }
 
+  const addChecklistItem = async () => {
+    if (!task || !newChecklistText.trim()) return
+    setAddingChecklist(true)
+    try {
+      const next: ChecklistItem[] = [
+        ...(task.checklist || []),
+        { id: `cl-${Date.now()}`, text: newChecklistText.trim(), done: false }
+      ]
+      await patchTask({ checklist: next })
+      setNewChecklistText('')
+    } finally {
+      setAddingChecklist(false)
+    }
+  }
+
+  const removeChecklistItem = async (idx: number) => {
+    if (!task?.checklist) return
+    const next = task.checklist.filter((_, i) => i !== idx)
+    await patchTask({ checklist: next })
+  }
+
+  const confirmDeleteTask = () => {
+    Alert.alert(
+      'Delete task',
+      'This will also delete subtasks and comments. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => void deleteTask() }
+      ]
+    )
+  }
+
+  const deleteTask = async () => {
+    if (!accessToken) return
+    setSaving(true)
+    setError('')
+    try {
+      await projectsApi.deleteTask(accessToken, taskId)
+      navigation.goBack()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete task')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const createSubtask = async () => {
     if (!accessToken || !subtaskTitle.trim()) return
     setCreatingSubtask(true)
@@ -199,6 +258,9 @@ export function TaskDetailScreen({ route, navigation }: Props) {
         <View style={styles.headerMeta}>
           {task.status ? <ProjectStatusBadge label={task.status} /> : null}
           {overdue ? <Text style={styles.overduePill}>Overdue</Text> : null}
+          <Pressable style={styles.deleteBtn} onPress={confirmDeleteTask} disabled={saving}>
+            <FontAwesome5 name="trash-alt" size={14} color={erp.danger} />
+          </Pressable>
         </View>
       </View>
 
@@ -250,17 +312,26 @@ export function TaskDetailScreen({ route, navigation }: Props) {
               <Text style={styles.infoValue}>{task.assignee}</Text>
             </View>
           ) : null}
-          {task.dueDate ? (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoLabel}>Due</Text>
-              <Text style={styles.infoValue}>{formatDate(task.dueDate)}</Text>
-            </View>
-          ) : null}
           {task.startDate ? (
             <View style={styles.infoBox}>
               <Text style={styles.infoLabel}>Start</Text>
               <Text style={styles.infoValue}>{formatDate(task.startDate)}</Text>
             </View>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Due date</Text>
+          <DateTimeField
+            label="Due"
+            mode="date"
+            value={dueDateFieldValue(task.dueDate)}
+            onChange={(v) => void patchTask({ dueDate: v || null })}
+          />
+          {task.dueDate ? (
+            <Pressable onPress={() => void patchTask({ dueDate: null })}>
+              <Text style={styles.clearLink}>Clear due date</Text>
+            </Pressable>
           ) : null}
         </View>
 
@@ -286,25 +357,50 @@ export function TaskDetailScreen({ route, navigation }: Props) {
           />
         </View>
 
-        {checklist.length > 0 ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Checklist</Text>
-            {checklist.map((item, idx) => (
-              <Pressable
-                key={item.id || idx}
-                style={styles.checkItem}
-                onPress={() => void toggleChecklistItem(idx)}
-              >
-                <FontAwesome5
-                  name={item.done ? 'check-square' : 'square'}
-                  size={16}
-                  color={item.done ? erp.success : erp.textSubtle}
-                />
-                <Text style={[styles.checkText, item.done && styles.checkDone]}>{item.text}</Text>
-              </Pressable>
-            ))}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Checklist ({checklist.length})</Text>
+          {checklist.length === 0 ? (
+            <Text style={styles.emptyComments}>No checklist items yet.</Text>
+          ) : (
+            checklist.map((item, idx) => (
+              <View key={item.id || idx} style={styles.checkItem}>
+                <Pressable style={styles.checkToggle} onPress={() => void toggleChecklistItem(idx)}>
+                  <FontAwesome5
+                    name={item.done ? 'check-square' : 'square'}
+                    size={16}
+                    color={item.done ? erp.success : erp.textSubtle}
+                  />
+                  <Text style={[styles.checkText, item.done && styles.checkDone]}>{item.text}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.checkRemove}
+                  onPress={() => void removeChecklistItem(idx)}
+                  disabled={saving}
+                >
+                  <FontAwesome5 name="times" size={14} color={erp.textSubtle} />
+                </Pressable>
+              </View>
+            ))
+          )}
+          <View style={styles.checkAddRow}>
+            <TextInput
+              style={styles.checkAddInput}
+              placeholder="Add checklist item…"
+              placeholderTextColor={erp.textSubtle}
+              value={newChecklistText}
+              onChangeText={setNewChecklistText}
+              onSubmitEditing={() => void addChecklistItem()}
+              returnKeyType="done"
+            />
+            <Pressable
+              style={[styles.checkAddBtn, (addingChecklist || !newChecklistText.trim()) && styles.disabled]}
+              disabled={addingChecklist || !newChecklistText.trim()}
+              onPress={() => void addChecklistItem()}
+            >
+              <Text style={styles.checkAddBtnText}>Add</Text>
+            </Pressable>
           </View>
-        ) : null}
+        </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
@@ -441,6 +537,12 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     paddingVertical: 4
   },
   headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deleteBtn: {
+    marginLeft: 'auto',
+    padding: 8,
+    borderRadius: erp.radius.md,
+    backgroundColor: erp.dangerSoft
+  },
   overduePill: {
     fontSize: 11,
     fontWeight: '800',
@@ -541,7 +643,29 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     backgroundColor: erp.primary
   },
   modalSaveText: { fontWeight: '800', color: '#fff' },
-  checkItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  clearLink: { color: erp.primary, fontWeight: '600', fontSize: 13, alignSelf: 'flex-start' },
+  checkItem: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  checkToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  checkRemove: { padding: 8 },
+  checkAddRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  checkAddInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: erp.border,
+    borderRadius: erp.radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: erp.surface,
+    color: erp.text,
+    fontSize: 14
+  },
+  checkAddBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: erp.radius.md,
+    backgroundColor: erp.primary
+  },
+  checkAddBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   checkText: { fontSize: 14, color: erp.text, flex: 1 },
   checkDone: { textDecorationLine: 'line-through', color: erp.textMuted },
   subtaskCard: {

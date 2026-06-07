@@ -79,6 +79,7 @@ export type ProjectTask = {
   dueDate?: string
   startDate?: string
   projectId?: string
+  projectName?: string
   order?: number
   checklist?: ChecklistItem[]
   subtasks?: ProjectTask[]

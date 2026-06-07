@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ModuleListScreen } from '../components/shell/ModuleListScreen'
-import { erpApi } from '../services/erpApi'
+import { openTask } from '../dashboard/dashboardNavigation'
+import { erpApi, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
 import type { RootStackParamList } from '../navigation/types'
 
@@ -25,6 +26,13 @@ export function MyTasksScreen({ navigation }: Props) {
     return merged
   }, [accessToken])
 
+  const onTaskPress = useCallback(
+    (task: DashboardTask) => {
+      openTask(navigation, task)
+    },
+    [navigation]
+  )
+
   return (
     <ModuleListScreen
       title="My Tasks"
@@ -38,6 +46,7 @@ export function MyTasksScreen({ navigation }: Props) {
         `${item.title || ''} ${item.name || ''} ${item.projectName || ''}`.toLowerCase().includes(q)
       }
       emptyLabel="No tasks assigned to you."
+      onItemPress={onTaskPress}
     />
   )
 }

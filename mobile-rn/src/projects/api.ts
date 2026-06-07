@@ -81,6 +81,13 @@ export const projectsApi = {
     }).then((d) => d.task)
   },
 
+  deleteTask(token: string, taskId: string) {
+    return request<{ deletedTaskId?: string }>(
+      `/api/tasks?id=${encodeURIComponent(taskId)}`,
+      { method: 'DELETE', token }
+    )
+  },
+
   listNotes(token: string, projectId: string) {
     return request<{ notes: ProjectNote[] }>(
       `/api/projects/${encodeURIComponent(projectId)}/notes`,
@@ -112,6 +119,13 @@ export const projectsApi = {
       `/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`,
       { method: 'PUT', token, body }
     ).then((d) => d.note)
+  },
+
+  deleteNote(token: string, projectId: string, noteId: string) {
+    return request<{ deleted?: boolean }>(
+      `/api/projects/${encodeURIComponent(projectId)}/notes/${encodeURIComponent(noteId)}`,
+      { method: 'DELETE', token }
+    )
   },
 
   listActivity(token: string, projectId: string) {

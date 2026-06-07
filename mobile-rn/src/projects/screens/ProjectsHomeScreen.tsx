@@ -44,7 +44,8 @@ import {
   PROJECT_STATUSES,
   sortProjects,
   toggleStarred,
-  uniqueClients
+  uniqueClients,
+  uniqueTaskProjects
 } from '../utils'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -146,6 +147,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
     () => computeInsights(projects, allTasks, starredIds, user?.id),
     [projects, allTasks, starredIds, user?.id]
   )
+  const taskProjects = useMemo(() => uniqueTaskProjects(allTasks), [allTasks])
 
   const handleToggleStar = async (projectId: string) => {
     const next = await toggleStarred(projectId)
@@ -367,6 +369,38 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 </Pressable>
               )
             })}
+            {taskProjects.length > 0 ? (
+              <>
+                <View style={styles.chipDivider} />
+                <Pressable
+                  style={[styles.chip, taskProjectFilter === 'all' && styles.chipActive]}
+                  onPress={() => setTaskProjectFilter('all')}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      taskProjectFilter === 'all' && styles.chipTextActive
+                    ]}
+                  >
+                    All projects
+                  </Text>
+                </Pressable>
+                {taskProjects.slice(0, 10).map((p) => {
+                  const active = taskProjectFilter === p.id
+                  return (
+                    <Pressable
+                      key={p.id}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => setTaskProjectFilter(active ? 'all' : p.id)}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </>
+            ) : null}
           </ScrollView>
         )}
 

@@ -85,6 +85,7 @@ type PanelProps = {
   onPatchEntity: (body: Record<string, unknown>) => Promise<void>
   onCreateOpportunity?: (body: { title: string; value?: number }) => Promise<void>
   onOpenMember?: (member: CrmGroupMember) => void
+  onOpenProject?: (projectId: string, projectName?: string) => void
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
@@ -107,7 +108,8 @@ export function CrmDetailPanelContent(props: PanelProps) {
     onNewNoteDraftChange,
     onPatchEntity,
     onCreateOpportunity,
-    onOpenMember
+    onOpenMember,
+    onOpenProject
   } = props
 
   const isLead = entityType === 'lead'
@@ -485,10 +487,22 @@ export function CrmDetailPanelContent(props: PanelProps) {
     return (
       <View style={styles.section}>
         {projects.map((p) => (
-          <View key={p.id} style={styles.miniCard}>
-            <Text style={styles.miniTitle}>{p.name || p.id}</Text>
-            {p.status ? <CrmStatusBadge label={p.status} compact /> : null}
-          </View>
+          <Pressable
+            key={p.id}
+            style={styles.miniCard}
+            disabled={!onOpenProject}
+            onPress={onOpenProject ? () => onOpenProject(p.id, p.name) : undefined}
+          >
+            <View style={styles.miniCardRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.miniTitle}>{p.name || p.id}</Text>
+                {p.status ? <CrmStatusBadge label={p.status} compact /> : null}
+              </View>
+              {onOpenProject ? (
+                <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
+              ) : null}
+            </View>
+          </Pressable>
         ))}
       </View>
     )
@@ -757,6 +771,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     gap: 4,
     ...erp.shadowSm
   },
+  miniCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   panelCard: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.lg,
