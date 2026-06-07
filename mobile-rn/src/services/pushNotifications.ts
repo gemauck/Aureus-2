@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { request } from './apiClient'
+import type { PushNotificationData } from '../notifications/notificationNavigation'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -9,6 +10,22 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true
   })
 })
+
+async function ensureAndroidChannels() {
+  if (Platform.OS !== 'android') return
+  await Notifications.setNotificationChannelAsync('chat', {
+    name: 'Chat messages',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    sound: 'default'
+  })
+  await Notifications.setNotificationChannelAsync('erp', {
+    name: 'ERP updates',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 200, 100, 200],
+    sound: 'default'
+  })
+}
 
 export async function registerPushToken(accessToken: string): Promise<string | null> {
   const { status: existing } = await Notifications.getPermissionsAsync()
@@ -19,14 +36,7 @@ export async function registerPushToken(accessToken: string): Promise<string | n
   }
   if (final !== 'granted') return null
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('chat', {
-      name: 'Chat messages',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      sound: 'default'
-    })
-  }
+  await ensureAndroidChannels()
 
   const tokenData = await Notifications.getExpoPushTokenAsync()
   const token = tokenData.data
@@ -52,12 +62,10 @@ export async function unregisterPushToken(accessToken: string, pushToken?: strin
   }
 }
 
-export function addNotificationResponseListener(
-  handler: (data: { conversationId?: string }) => void
-) {
+export function addNotificationResponseListener(handler: (data: PushNotificationData) => void) {
   const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-    const data = response.notification.request.content.data as { conversationId?: string }
-    handler(data || {})
+    const data = (response.notification.request.content.data || {}) as PushNotificationData
+    handler(data)
   })
   return () => sub.remove()
 }

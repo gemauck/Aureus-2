@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react'
+import * as Notifications from 'expo-notifications'
 import { useAuth } from '../state/AuthContext'
 import { addNotificationResponseListener, registerPushToken, unregisterPushToken } from '../services/pushNotifications'
+import type { PushNotificationData } from '../notifications/notificationNavigation'
 
-/** Registers Expo push token after login and handles notification taps → chat. */
-export function usePushNotifications(onOpenConversation?: (conversationId: string) => void) {
+/** Registers Expo push token after login and handles notification taps. */
+export function usePushNotifications(onOpenNotification?: (data: PushNotificationData) => void) {
   const { accessToken } = useAuth()
   const pushTokenRef = useRef<string | null>(null)
 
@@ -21,11 +23,14 @@ export function usePushNotifications(onOpenConversation?: (conversationId: strin
   }, [accessToken])
 
   useEffect(() => {
-    if (!onOpenConversation) return
-    return addNotificationResponseListener((data) => {
-      if (data.conversationId) onOpenConversation(data.conversationId)
+    if (!onOpenNotification) return
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return
+      const data = (response.notification.request.content.data || {}) as PushNotificationData
+      onOpenNotification(data)
     })
-  }, [onOpenConversation])
+    return addNotificationResponseListener(onOpenNotification)
+  }, [onOpenNotification])
 
   useEffect(() => {
     return () => {

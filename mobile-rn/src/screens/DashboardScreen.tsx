@@ -27,6 +27,7 @@ import {
 import { openJobCard, openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
 import { erpApi, mergeDashboardTasks, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
+import { useNotificationUnread } from '../notifications/NotificationUnreadContext'
 
 import type { RootStackParamList } from '../navigation/types'
 import { useThemedStyles } from '../theme/useThemedStyles'
@@ -207,6 +208,8 @@ export function DashboardScreen({ navigation }: Props) {
   const widgetDefs = useMemo(() => getWidgetDefs(erp), [erp])
   const quickActionDefs = useMemo(() => getQuickActionDefs(erp), [erp])
   const { user, accessToken } = useAuth()
+  const { unreadCount: notificationUnread, refresh: refreshNotificationUnread, decrementUnread } =
+    useNotificationUnread()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
@@ -265,9 +268,29 @@ export function DashboardScreen({ navigation }: Props) {
     void load()
   }, [load])
 
+  useFocusEffect(
+    useCallback(() => {
+      void load(true)
+      void refreshNotificationUnread()
+    }, [load, refreshNotificationUnread])
+  )
+
+  const handleNotificationPress = useCallback(
+    (n: DashboardNotification) => {
+      if (accessToken && n.id && !n.read) {
+        void erpApi.markNotificationsRead(accessToken, [n.id]).then(() => {
+          decrementUnread(1)
+          void refreshNotificationUnread()
+        })
+      }
+      openNotification(navigation, n)
+    },
+    [accessToken, decrementUnread, navigation, refreshNotificationUnread]
+  )
+
   const combinedTasks = mergeDashboardTasks(userTasks, projectTasks).slice(0, 8)
   const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const widgetUnreadCount = notifications.filter((n) => !n.read).length
   const quickActions = visibleQuickActions(dashConfig)
   const widgets = visibleWidgets(dashConfig)
 
@@ -303,7 +326,11 @@ export function DashboardScreen({ navigation }: Props) {
         <WidgetCard
           key={id}
           title={def.title}
-          subtitle={unreadCount ? `${unreadCount} unread` : def.subtitle}
+          subtitle={
+            notificationUnread || widgetUnreadCount
+              ? `${notificationUnread || widgetUnreadCount} unread`
+              : def.subtitle
+          }
           icon={def.icon}
           iconColor={def.iconColor}
           actionLabel="Open"
@@ -315,7 +342,7 @@ export function DashboardScreen({ navigation }: Props) {
               <NotificationRow
                 key={n.id}
                 item={n}
-                onPress={() => openNotification(navigation, n)}
+                onPress={() => handleNotificationPress(n)}
               />
             ))
           ) : (
@@ -352,6 +379,7 @@ export function DashboardScreen({ navigation }: Props) {
       <AppHeader
         title="Dashboard"
         subtitle="Here's what's happening today"
+        notificationBadgeCount={notificationUnread}
         onNotificationsPress={() => navigation.navigate('Notifications')}
         onSettingsPress={() => navigation.navigate('Settings')}
       />

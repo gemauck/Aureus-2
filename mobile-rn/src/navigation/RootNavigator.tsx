@@ -13,6 +13,9 @@ import { useAuth } from '../state/AuthContext'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
+import { NotificationUnreadProvider, useNotificationUnread } from '../notifications/NotificationUnreadContext'
+import { navigateFromPushData } from '../notifications/notificationNavigation'
+import { erpApi } from '../services/erpApi'
 
 import type { RootStackParamList } from './types'
 import { useThemedStyles } from '../theme/useThemedStyles'
@@ -110,11 +113,7 @@ function lazyPlaceholderScreen(opts: {
   })
 }
 
-const UsersScreen = lazyPlaceholderScreen({
-  webPath: '/users',
-  description: 'User management and permissions — admin access on the web ERP.',
-  icon: 'user-cog'
-})
+const UsersScreen = lazyScreenComponent(() => require('../screens/UsersScreen').UsersScreen)
 const ManufacturingScreen = lazyPlaceholderScreen({
   webPath: '/manufacturing',
   description: 'Inventory, stock movements, and production — full module on the web ERP.',
@@ -146,19 +145,26 @@ function LoadingScreen() {
   )
 }
 
-function AuthenticatedApp() {
+function AuthenticatedAppInner() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>()
   const [currentRoute, setCurrentRoute] = React.useState('Dashboard')
+  const { accessToken } = useAuth()
+  const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
 
   // OTA: prefetch only after login — native never auto-checks on cold start (checkAutomatically NEVER).
   useOTAUpdates(true)
   useAppUpdateCheck(true)
 
-  usePushNotifications((conversationId) => {
-    navigationRef.current?.navigate('Messages', {
-      screen: 'Chat',
-      params: { conversationId, title: 'Chat' }
-    } as never)
+  usePushNotifications((data) => {
+    if (data.notificationId && accessToken) {
+      void erpApi.markNotificationsRead(accessToken, [data.notificationId]).then(() => {
+        decrementUnread(1)
+        void refreshNotificationUnread()
+      })
+    }
+    if (navigationRef.current) {
+      navigateFromPushData(navigationRef.current, data)
+    }
   })
 
   return (
@@ -200,6 +206,14 @@ function AuthenticatedApp() {
       </NavigationContainer>
       <DrawerMenu navigationRef={navigationRef} currentRoute={currentRoute} />
     </JobCardSyncProvider>
+  )
+}
+
+function AuthenticatedApp() {
+  return (
+    <NotificationUnreadProvider>
+      <AuthenticatedAppInner />
+    </NotificationUnreadProvider>
   )
 }
 

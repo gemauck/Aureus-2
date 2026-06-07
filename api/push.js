@@ -1,4 +1,4 @@
-// Register Expo push tokens for mobile chat notifications
+// Register Expo push tokens for mobile ERP notifications
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, ok, serverError } from './_lib/response.js'

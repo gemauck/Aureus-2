@@ -20,6 +20,7 @@ import { erpApi } from '../../services/erpApi'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
+import { useNotificationUnread } from '../../notifications/NotificationUnreadContext'
 
 type Props = {
   navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList>>
@@ -44,6 +45,7 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
   const { menuOpen, closeMenu } = useAppShell()
   const { user, signOut, accessToken } = useAuth()
   const [chatUnread, setChatUnread] = useState(0)
+  const { unreadCount: notificationUnread } = useNotificationUnread()
   const items = getVisibleMenuItems(user)
   const mainItems = items.filter((i) => i.section !== 'footer')
   const footerItems = items.filter((i) => i.section === 'footer')
@@ -93,6 +95,13 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
         {item.id === 'messages' && chatUnread > 0 ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{chatUnread > 99 ? '99+' : chatUnread}</Text>
+          </View>
+        ) : null}
+        {item.id === 'notifications' && notificationUnread > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {notificationUnread > 99 ? '99+' : notificationUnread}
+            </Text>
           </View>
         ) : null}
       </Pressable>

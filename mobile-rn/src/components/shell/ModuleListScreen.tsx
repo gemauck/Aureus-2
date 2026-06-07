@@ -17,6 +17,7 @@ import type { RootStackParamList } from '../../navigation/types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
+import { useNotificationUnread } from '../../notifications/NotificationUnreadContext'
 
 type Props<T> = {
   title: string
@@ -49,6 +50,7 @@ export function ModuleListScreen<T>({
 }: Props<T>) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
+  const { unreadCount: notificationBadgeCount } = useNotificationUnread()
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -86,6 +88,7 @@ export function ModuleListScreen<T>({
         title={title}
         subtitle={subtitle}
         showNotifications={showNotifications}
+        notificationBadgeCount={showNotifications ? notificationBadgeCount : 0}
         onNotificationsPress={navigation ? () => navigation.navigate('Notifications') : undefined}
       />
       <ScreenBody padded={false}>

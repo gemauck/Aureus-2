@@ -12,6 +12,7 @@ import {
     emailTrackerSectionLabel,
     isWeeklyTrackerMetadata
 } from './_lib/projectTrackerDeepLink.js'
+import { sendPushToUsers } from './_lib/expoPush.js'
 
 // Helper function to escape HTML
 function escapeHtml(text) {
@@ -211,6 +212,28 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         } catch (e) {
             console.error('Failed to create in-app notification for user', targetUserId, e);
         }
+    }
+
+    if (notification) {
+        const pushData = {
+            notificationId: notification.id,
+            type,
+            link: validLink || '/dashboard'
+        };
+        if (metadataObj.conversationId) pushData.conversationId = String(metadataObj.conversationId);
+        if (metadataObj.messageId) pushData.messageId = String(metadataObj.messageId);
+        if (metadataObj.projectId) pushData.projectId = String(metadataObj.projectId);
+        if (metadataObj.taskId) pushData.taskId = String(metadataObj.taskId);
+        if (metadataObj.clientId) pushData.clientId = String(metadataObj.clientId);
+        if (metadataObj.leadId) pushData.leadId = String(metadataObj.leadId);
+        if (metadataObj.teamId) pushData.teamId = String(metadataObj.teamId);
+        if (metadataObj.discussionId) pushData.discussionId = String(metadataObj.discussionId);
+        void sendPushToUsers([id], {
+            title,
+            body: String(message || '').slice(0, 200),
+            data: pushData,
+            channelId: isChatMessage ? 'chat' : 'erp'
+        }).catch((err) => console.warn('Notification push failed:', err?.message));
     }
 
     const shouldSendEmail = isChatMessage ? settings.emailMessages : (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||

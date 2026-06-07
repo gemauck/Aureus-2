@@ -1,30 +1,14 @@
 import type { DashboardJobCard, DashboardNotification, DashboardTask } from '../services/erpApi'
 import type { RootStackParamList } from '../navigation/types'
+import { navigateFromNotification } from '../notifications/notificationNavigation'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NavLike = { navigate: (...args: any[]) => void }
 
-function parseConversationId(item: DashboardNotification): string | null {
-  const link = item.link || ''
-  const match = link.match(/conversation=([^&]+)/)
-  if (match?.[1]) return decodeURIComponent(match[1])
-  return null
-}
-
 export function openNotification(navigation: NavLike, item: DashboardNotification) {
-  const conversationId = parseConversationId(item)
-  if (conversationId) {
-    navigation.navigate('Messages', {
-      screen: 'Chat',
-      params: { conversationId, title: item.title || 'Chat' }
-    } as never)
-    return
+  if (!navigateFromNotification(navigation, item)) {
+    navigation.navigate('Notifications')
   }
-  if (item.link?.includes('/messages') || item.link?.includes('#/messages')) {
-    navigation.navigate('Messages')
-    return
-  }
-  navigation.navigate('Notifications')
 }
 
 export function openTask(navigation: NavLike, task: DashboardTask) {

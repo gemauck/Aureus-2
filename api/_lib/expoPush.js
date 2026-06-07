@@ -5,9 +5,9 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 
 /**
  * @param {string[]} userIds
- * @param {{ title: string, body: string, data?: Record<string, unknown> }}
+ * @param {{ title: string, body: string, data?: Record<string, unknown>, channelId?: string }}
  */
-export async function sendPushToUsers(userIds, { title, body, data = {} }) {
+export async function sendPushToUsers(userIds, { title, body, data = {}, channelId = 'erp' }) {
   const ids = [...new Set((userIds || []).map(String).filter(Boolean))]
   if (!ids.length) return
 
@@ -25,7 +25,7 @@ export async function sendPushToUsers(userIds, { title, body, data = {} }) {
     data,
     sound: 'default',
     priority: 'high',
-    channelId: 'chat'
+    channelId: channelId || 'erp'
   }))
 
   try {

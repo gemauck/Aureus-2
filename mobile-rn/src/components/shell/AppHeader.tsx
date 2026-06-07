@@ -12,6 +12,7 @@ type Props = {
   title: string
   subtitle?: string
   showNotifications?: boolean
+  notificationBadgeCount?: number
   onNotificationsPress?: () => void
   onSettingsPress?: () => void
   rightSlot?: React.ReactNode
@@ -21,6 +22,7 @@ export function AppHeader({
   title,
   subtitle,
   showNotifications = true,
+  notificationBadgeCount = 0,
   onNotificationsPress,
   onSettingsPress,
   rightSlot
@@ -51,6 +53,13 @@ export function AppHeader({
           {showNotifications ? (
             <Pressable style={styles.iconBtn} onPress={onNotificationsPress} hitSlop={8}>
               <FontAwesome5 name="bell" size={17} color={erp.textMuted} />
+              {notificationBadgeCount > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {notificationBadgeCount > 99 ? '99+' : notificationBadgeCount}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
           ) : null}
           {onSettingsPress ? (
@@ -97,6 +106,23 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     borderRadius: erp.radius.md,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  badge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: erp.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800'
   }
   })
 }

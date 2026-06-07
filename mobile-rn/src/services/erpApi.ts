@@ -101,12 +101,27 @@ export const erpApi = {
   },
 
   getNotifications(token: string, limit = 8) {
-    return request<{ notifications?: DashboardNotification[] } | DashboardNotification[]>(
+    return request<{ notifications?: DashboardNotification[]; unreadCount?: number } | DashboardNotification[]>(
       `/api/notifications?limit=${limit}`,
       { token }
     ).then((data) => {
       if (Array.isArray(data)) return data
       return data.notifications || []
+    })
+  },
+
+  getNotificationUnreadCount(token: string) {
+    return request<{ unreadCount?: number }>('/api/notifications?limit=1', { token }).then(
+      (d) => d.unreadCount ?? 0
+    )
+  },
+
+  markNotificationsRead(token: string, notificationIds: string[]) {
+    if (!notificationIds.length) return Promise.resolve()
+    return request('/api/notifications', {
+      method: 'PATCH',
+      token,
+      body: { read: true, notificationIds }
     })
   },
 

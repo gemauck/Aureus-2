@@ -1,7 +1,6 @@
 // Notify chat participants of new messages (in-app + optional email + push + SSE)
 import { prisma } from './prisma.js'
 import { createNotificationForUser } from '../notifications.js'
-import { sendPushToUsers } from './expoPush.js'
 
 const PREVIEW_MAX = 120
 
@@ -50,11 +49,8 @@ export async function notifyChatMessageParticipants({
     senderId
   }
 
-  const recipients = []
-
   for (const p of conversation.participants) {
     if (p.userId === senderId || p.muted) continue
-    recipients.push(p.userId)
     void createNotificationForUser(
       p.userId,
       'message',
@@ -65,13 +61,5 @@ export async function notifyChatMessageParticipants({
     ).catch((err) => {
       console.error('notifyChatMessageParticipants failed for user', p.userId, err)
     })
-  }
-
-  if (recipients.length) {
-    void sendPushToUsers(recipients, {
-      title,
-      body: preview,
-      data: { conversationId, messageId, type: 'chat_message' }
-    }).catch((err) => console.warn('Push notify failed:', err.message))
   }
 }
