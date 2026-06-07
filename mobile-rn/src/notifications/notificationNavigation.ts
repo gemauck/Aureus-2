@@ -1,6 +1,7 @@
 import type { TeamTabId } from '../teams/types'
 import type { CrmDetailTab } from '../crm/types'
 import type { ProjectDetailTab } from '../projects/types'
+import { parseManufacturingLink } from '../manufacturing/constants'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type NavLike = { navigate: (...args: any[]) => void }
@@ -251,8 +252,16 @@ export function navigateFromNotification(navigation: NavLike, item: Notification
     navigation.navigate('JobCards')
     return true
   }
-  if (path.includes('/manufacturing')) {
-    navigation.navigate('Manufacturing')
+  if (path.includes('/manufacturing') || link.includes('manufacturing')) {
+    const { tab, query } = parseManufacturingLink(link || path)
+    const title =
+      tab === 'dashboard'
+        ? 'Dashboard'
+        : tab.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    navigation.navigate('Manufacturing', {
+      screen: 'ManufacturingWeb',
+      params: { tab, title, query: Object.keys(query).length ? query : undefined }
+    } as never)
     return true
   }
   if (path.includes('/my-tasks') || path.includes('/tasks')) {

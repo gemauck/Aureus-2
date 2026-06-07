@@ -28,8 +28,9 @@ function JobCardsFlowRouter() {
 
 export function JobCardsRootScreen({ route }: Props) {
   const jobCardId = route.params?.jobCardId
+  const initialFlow = route.params?.initialFlow
   return (
-    <JobCardWizardProvider initialJobCardId={jobCardId}>
+    <JobCardWizardProvider initialJobCardId={jobCardId} initialFlow={initialFlow}>
       <JobCardsFlowRouter />
     </JobCardWizardProvider>
   )

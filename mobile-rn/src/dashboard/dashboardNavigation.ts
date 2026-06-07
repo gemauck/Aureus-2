@@ -55,3 +55,19 @@ export function openJobCard(navigation: NavLike, card: DashboardJobCard) {
   }
   navigation.navigate('JobCards', { jobCardId: card.id } as never)
 }
+
+export function openManufacturingTab(
+  navigation: NavLike,
+  tab: import('../manufacturing/constants').ManufacturingTabId,
+  opts?: { title?: string; query?: Record<string, string> }
+) {
+  const title =
+    opts?.title ||
+    (tab === 'dashboard'
+      ? 'Dashboard'
+      : tab.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
+  navigation.navigate('Manufacturing', {
+    screen: 'ManufacturingWeb',
+    params: { tab, title, query: opts?.query }
+  } as never)
+}

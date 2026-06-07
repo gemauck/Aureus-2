@@ -122,10 +122,12 @@ function activeTechnicianUsers(list: UserOption[]) {
 
 export function JobCardWizardProvider({
   children,
-  initialJobCardId
+  initialJobCardId,
+  initialFlow
 }: {
   children: React.ReactNode
   initialJobCardId?: string
+  initialFlow?: WizardFlow
 }) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
@@ -140,7 +142,7 @@ export function JobCardWizardProvider({
 
   const [loading, setLoading] = useState(true)
   const [referenceRefreshing, setReferenceRefreshing] = useState(false)
-  const [wizardFlow, setWizardFlow] = useState<WizardFlow>('landing')
+  const [wizardFlow, setWizardFlow] = useState<WizardFlow>(initialFlow || 'landing')
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<JobCardFormData>(createEmptyFormData())
   const [editingMeta, setEditingMeta] = useState<EditingMeta | null>(null)
@@ -357,6 +359,18 @@ export function JobCardWizardProvider({
     setWizardFlow('stock_take')
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
+
+  const initialFlowBootstrappedRef = useRef(false)
+  useEffect(() => {
+    if (initialFlowBootstrappedRef.current || initialJobCardId) return
+    if (initialFlow === 'stock_take') {
+      initialFlowBootstrappedRef.current = true
+      openStockTake()
+    } else if (initialFlow === 'prior_list') {
+      initialFlowBootstrappedRef.current = true
+      openPriorList()
+    }
+  }, [initialFlow, initialJobCardId, openStockTake, openPriorList])
 
   const priorAutoSyncRefreshRef = useRef(false)
   useEffect(() => {

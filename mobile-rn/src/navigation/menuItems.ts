@@ -17,7 +17,7 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
   { id: 'projects', label: 'Projects', icon: 'project-diagram', screen: 'Projects', permission: 'ACCESS_PROJECTS', section: 'main' },
   { id: 'teams', label: 'Teams', icon: 'user-friends', screen: 'Teams', permission: 'ACCESS_TEAM', section: 'main' },
   { id: 'users', label: 'Users', icon: 'user-cog', screen: 'Users', permission: 'ACCESS_USERS', section: 'main' },
-  { id: 'manufacturing', label: 'Manufacturing', icon: 'industry', screen: 'Manufacturing', permission: 'ACCESS_MANUFACTURING', section: 'main', webPath: '/manufacturing' },
+  { id: 'manufacturing', label: 'Manufacturing', icon: 'industry', screen: 'Manufacturing', permission: 'ACCESS_MANUFACTURING', section: 'main' },
   {
     id: 'service-maintenance',
     label: 'Service & Maintenance',

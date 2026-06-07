@@ -1,7 +1,7 @@
 export type RootStackParamList = {
   Login: undefined
   Dashboard: undefined
-  JobCards: { jobCardId?: string } | undefined
+  JobCards: { jobCardId?: string; initialFlow?: 'landing' | 'prior_list' | 'form' | 'stock_take' } | undefined
   Clients:
     | {
         screen?: keyof import('../crm/navigation').CrmStackParamList
@@ -38,7 +38,12 @@ export type RootStackParamList = {
         params?: import('../users/navigation').UsersStackParamList[keyof import('../users/navigation').UsersStackParamList]
       }
     | undefined
-  Manufacturing: undefined
+  Manufacturing:
+    | {
+        screen?: keyof import('../manufacturing/navigation').ManufacturingStackParamList
+        params?: import('../manufacturing/navigation').ManufacturingStackParamList[keyof import('../manufacturing/navigation').ManufacturingStackParamList]
+      }
+    | undefined
   ServiceMaintenance: undefined
   Helpdesk: undefined
   Tools:

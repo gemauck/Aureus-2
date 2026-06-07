@@ -114,11 +114,9 @@ function lazyPlaceholderScreen(opts: {
 }
 
 const UsersScreen = lazyScreenComponent(() => require('../screens/UsersScreen').UsersScreen)
-const ManufacturingScreen = lazyPlaceholderScreen({
-  webPath: '/manufacturing',
-  description: 'Inventory, stock movements, and production — full module on the web ERP.',
-  icon: 'industry'
-})
+const ManufacturingScreen = lazyScreenComponent(
+  () => require('../screens/ManufacturingScreen').ManufacturingScreen
+)
 const HelpdeskScreen = lazyPlaceholderScreen({
   webPath: '/helpdesk',
   description: 'Tickets and support workflows on the web ERP.',
