@@ -184,58 +184,64 @@ export function UsersHomeScreen({ navigation }: Props) {
     )
   }
 
+  const openUserActions = (item: ErpUserRecord) => {
+    const canDelete = item.id !== currentUser?.id
+    const buttons: Array<{ text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }> = [
+      { text: 'Edit', onPress: () => navigation.navigate('UserForm', { userId: item.id }) },
+      {
+        text: item.status === 'Active' ? 'Deactivate' : 'Activate',
+        onPress: () => void toggleStatus(item)
+      }
+    ]
+    if (canDelete) {
+      buttons.push({ text: 'Delete', style: 'destructive', onPress: () => deleteUser(item) })
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' })
+    Alert.alert(item.name || item.email, item.email, buttons)
+  }
+
   const renderUser = ({ item }: { item: ErpUserRecord }) => {
     const online = isUserOnline(item)
     const color = roleColor(item.role)
+    const metaParts = [
+      roleLabel(item.role),
+      item.department || null,
+      online ? 'Online' : formatLastSeen(item)
+    ].filter(Boolean)
+
     return (
       <Pressable
-        style={({ pressed }) => [styles.userCard, pressed && styles.cardPressed]}
+        style={({ pressed }) => [styles.userRow, pressed && styles.cardPressed]}
         onPress={() => navigation.navigate('UserForm', { userId: item.id })}
+        onLongPress={() => openUserActions(item)}
       >
-        <View style={styles.userTop}>
-          <View style={styles.avatarWrap}>
-            <View style={[styles.avatar, { backgroundColor: `${color}22` }]}>
-              <Text style={[styles.avatarText, { color }]}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
-            </View>
-            {online ? <View style={styles.onlineDot} /> : null}
+        <View style={styles.avatarWrap}>
+          <View style={[styles.avatar, { backgroundColor: `${color}22` }]}>
+            <Text style={[styles.avatarText, { color }]}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
           </View>
-          <View style={styles.userBody}>
-            <View style={styles.nameRow}>
-              <Text style={styles.userName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              {online ? <Text style={styles.onlineLabel}>Online</Text> : null}
-            </View>
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {item.email}
-            </Text>
-            <Text style={styles.lastSeen}>{formatLastSeen(item)}</Text>
-          </View>
-          <Pressable
-            style={[styles.statusPill, item.status === 'Active' ? styles.statusActive : styles.statusInactive]}
-            onPress={() => void toggleStatus(item)}
-          >
-            <Text style={styles.statusText}>{item.status}</Text>
-          </Pressable>
+          {online ? <View style={styles.onlineDot} /> : null}
         </View>
-        <View style={styles.metaRow}>
-          <View style={[styles.rolePill, { backgroundColor: `${color}18` }]}>
-            <Text style={[styles.roleText, { color }]}>{roleLabel(item.role)}</Text>
-          </View>
-          {item.department ? <Text style={styles.dept}>{item.department}</Text> : null}
+        <View style={styles.userBody}>
+          <Text style={styles.userName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={styles.userSubline} numberOfLines={1}>
+            {item.email}
+          </Text>
+          <Text style={styles.userMeta} numberOfLines={1}>
+            {metaParts.join(' · ')}
+          </Text>
         </View>
-        <View style={styles.actions}>
-          <Pressable style={styles.actionBtn} onPress={() => navigation.navigate('UserForm', { userId: item.id })}>
-            <FontAwesome5 name="edit" size={12} color={erp.primary} />
-            <Text style={styles.actionText}>Edit</Text>
-          </Pressable>
-          {item.id !== currentUser?.id ? (
-            <Pressable style={[styles.actionBtn, styles.deleteBtn]} onPress={() => deleteUser(item)}>
-              <FontAwesome5 name="trash" size={12} color="#ef4444" />
-              <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <Pressable
+          style={[styles.statusPill, item.status === 'Active' ? styles.statusActive : styles.statusInactive]}
+          onPress={(e) => {
+            e.stopPropagation?.()
+            void toggleStatus(item)
+          }}
+        >
+          <Text style={styles.statusText}>{item.status === 'Active' ? 'On' : 'Off'}</Text>
+        </Pressable>
+        <FontAwesome5 name="chevron-right" size={10} color={erp.textSubtle} style={styles.chevron} />
       </Pressable>
     )
   }
@@ -414,7 +420,7 @@ const createStyles = ({ erp }: { erp: ErpTheme }) =>
     error: { color: '#ef4444', textAlign: 'center' },
     retryBtn: { backgroundColor: erp.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
     retryText: { color: '#fff', fontWeight: '600' },
-    list: { padding: 16, paddingBottom: 32, gap: 12 },
+    list: { padding: 16, paddingBottom: 32, gap: 6 },
     headerBlock: { gap: 12, marginBottom: 8 },
     actionsRow: { flexDirection: 'row', gap: 10 },
     headerBtn: {
@@ -499,55 +505,47 @@ const createStyles = ({ erp }: { erp: ErpTheme }) =>
     inviteActionText: { fontSize: 12, fontWeight: '600', color: '#1d4ed8' },
     inviteDeleteText: { color: '#b91c1c' },
     sectionTitle: { fontSize: 15, fontWeight: '600', color: erp.text, marginTop: 4 },
-    userCard: {
+    userRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
       backgroundColor: erp.surface,
       borderWidth: 1,
       borderColor: erp.border,
-      borderRadius: 12,
-      padding: 12,
-      gap: 10
+      borderRadius: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 10
     },
     cardPressed: { opacity: 0.92 },
-    userTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
     avatarWrap: { position: 'relative' },
     avatar: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center'
     },
-    avatarText: { fontSize: 16, fontWeight: '700' },
+    avatarText: { fontSize: 13, fontWeight: '700' },
     onlineDot: {
       position: 'absolute',
-      right: 0,
-      bottom: 0,
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+      right: -1,
+      bottom: -1,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
       backgroundColor: '#22c55e',
-      borderWidth: 2,
+      borderWidth: 1.5,
       borderColor: erp.surface
     },
-    userBody: { flex: 1, minWidth: 0 },
-    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    userName: { fontSize: 15, fontWeight: '600', color: erp.text, flexShrink: 1 },
-    onlineLabel: { fontSize: 10, color: '#16a34a', fontWeight: '600' },
-    userEmail: { fontSize: 12, color: erp.textMuted, marginTop: 2 },
-    lastSeen: { fontSize: 11, color: erp.textSubtle, marginTop: 2 },
-    statusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    userBody: { flex: 1, minWidth: 0, gap: 1 },
+    userName: { fontSize: 14, fontWeight: '600', color: erp.text },
+    userSubline: { fontSize: 11, color: erp.textMuted },
+    userMeta: { fontSize: 10, color: erp.textSubtle },
+    statusPill: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, minWidth: 28, alignItems: 'center' },
     statusActive: { backgroundColor: '#dcfce7' },
     statusInactive: { backgroundColor: erp.border },
-    statusText: { fontSize: 10, fontWeight: '700', color: erp.text },
-    metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-    rolePill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-    roleText: { fontSize: 11, fontWeight: '600' },
-    dept: { fontSize: 12, color: erp.textMuted },
-    actions: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: erp.border, paddingTop: 10 },
-    actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingHorizontal: 8 },
-    actionText: { fontSize: 12, fontWeight: '600', color: erp.primary },
-    deleteBtn: {},
-    deleteText: { color: '#ef4444' },
+    statusText: { fontSize: 9, fontWeight: '700', color: erp.text },
+    chevron: { marginLeft: 2 }
     emptyWrap: { alignItems: 'center', paddingVertical: 32, gap: 12 },
     empty: { color: erp.textMuted, fontSize: 14 },
     denied: { alignItems: 'center', paddingVertical: 48, gap: 12 },
