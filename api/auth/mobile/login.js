@@ -19,7 +19,16 @@ async function handler(req, res) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, name: true, passwordHash: true, role: true, status: true, mustChangePassword: true }
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        passwordHash: true,
+        role: true,
+        status: true,
+        mustChangePassword: true,
+        permissions: true
+      }
     })
 
     if (!user || !user.passwordHash) {
@@ -53,7 +62,13 @@ async function handler(req, res) {
     return ok(res, {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        permissions: user.permissions || '[]'
+      },
       mustChangePassword: user.mustChangePassword || false
     })
   } catch (error) {

@@ -28,7 +28,7 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
   },
   { id: 'helpdesk', label: 'Helpdesk', icon: 'headset', screen: 'Helpdesk', permission: 'ACCESS_HELPDESK', section: 'main', webPath: '/helpdesk' },
   { id: 'tools', label: 'Tools', icon: 'toolbox', screen: 'Tools', permission: 'ACCESS_TOOL', section: 'main', webPath: '/tools' },
-  { id: 'documents', label: 'Documents', icon: 'folder-open', screen: 'Documents', permission: null, section: 'main', webPath: '/documents' },
+  { id: 'documents', label: 'Documents', icon: 'folder-open', screen: 'Documents', permission: 'ACCESS_DOCUMENTS', section: 'main', webPath: '/documents' },
   { id: 'messages', label: 'Messages', icon: 'comments', screen: 'Messages', permission: null, section: 'main' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', screen: 'Notifications', permission: null, section: 'main' },
   { id: 'reports', label: 'Reports', icon: 'chart-bar', screen: 'Reports', permission: 'ACCESS_REPORTS', section: 'main', webPath: '/reports' },

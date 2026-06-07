@@ -17,6 +17,7 @@ This document captures backend work required for Android parity.
   - `POST /api/auth/mobile/login`
   - `POST /api/auth/mobile/refresh`
   - `POST /api/auth/mobile/logout`
+  - `POST /api/auth/mobile/embed-token` — short-lived WebView token (15 min)
 - Refresh token rotation for mobile device sessions.
 - Device-scoped session records (device id, platform, last seen, revoke flag).
 - Support both web-cookie and mobile-bearer flows without regression.

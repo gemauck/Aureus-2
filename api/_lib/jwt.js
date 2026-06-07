@@ -99,3 +99,19 @@ export function verifyQuickBooksOAuthState(token) {
   }
 }
 
+const MOBILE_EMBED_PURPOSE = 'mobile-embed'
+
+/** Short-lived token for ERP WebView embeds (no refresh token issued). */
+export function signMobileEmbedToken(payload) {
+  if (!process.env.JWT_SECRET || !payload?.sub) return null
+  return jwt.sign(
+    { ...payload, purpose: MOBILE_EMBED_PURPOSE, platform: 'mobile-embed' },
+    process.env.JWT_SECRET,
+    { expiresIn: '15m' }
+  )
+}
+
+export function isMobileEmbedTokenPayload(payload) {
+  return payload?.purpose === MOBILE_EMBED_PURPOSE
+}
+

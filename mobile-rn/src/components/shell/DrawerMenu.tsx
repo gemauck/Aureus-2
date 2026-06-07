@@ -14,7 +14,9 @@ import { ALL_MENU_ITEMS } from '../../navigation/menuItems'
 import type { RootStackParamList } from '../../navigation/types'
 import { COMPANY_NAME } from '../../theme/appTheme'
 import { useAuth } from '../../state/AuthContext'
+import { navigateRoot } from '../../navigation/navigationHelpers'
 import { getVisibleMenuItems } from '../../utils/menuAccess'
+import { canAccessScreen } from '../../utils/screenAccess'
 import { useAppShell } from './AppShellContext'
 import { erpApi } from '../../services/erpApi'
 import { useThemedStyles } from '../../theme/useThemedStyles'
@@ -71,7 +73,10 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
 
   function navigateTo(screen: keyof RootStackParamList) {
     closeMenu()
-    navigationRef.current?.navigate(screen as never)
+    const personalScreens: Array<keyof RootStackParamList> = ['Settings', 'DashboardCustomize']
+    if (!personalScreens.includes(screen) && (!user || !canAccessScreen(user, screen))) return
+    if (screen === 'Settings' && !accessToken) return
+    if (navigationRef.current) navigateRoot(navigationRef.current, screen)
   }
 
   function renderItem(item: (typeof ALL_MENU_ITEMS)[number]) {
@@ -155,9 +160,19 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
             ) : null}
 
             <View style={styles.divider} />
-            <Pressable style={styles.item} onPress={() => navigateTo('Settings')}>
-              <FontAwesome5 name="cog" size={16} color={erp.sidebarTextMuted} style={styles.itemIcon} />
-              <Text style={styles.itemLabel}>Settings</Text>
+            <Pressable
+              style={[styles.item, currentRoute === 'Settings' && styles.itemActive]}
+              onPress={() => navigateTo('Settings')}
+            >
+              <FontAwesome5
+                name="cog"
+                size={16}
+                color={currentRoute === 'Settings' ? '#fff' : erp.sidebarTextMuted}
+                style={styles.itemIcon}
+              />
+              <Text style={[styles.itemLabel, currentRoute === 'Settings' && styles.itemLabelActive]}>
+                Settings
+              </Text>
             </Pressable>
             <Pressable style={[styles.item, styles.signOutItem]} onPress={() => void signOut()}>
               <FontAwesome5 name="sign-out-alt" size={16} color="#fca5a5" style={styles.itemIcon} />

@@ -2,6 +2,8 @@ import { describe, test, expect, beforeEach } from '@jest/globals';
 import {
   signAccessToken,
   signRefreshToken,
+  signMobileEmbedToken,
+  isMobileEmbedTokenPayload,
   verifyToken,
   verifyRefreshToken,
 } from '../../../../api/_lib/jwt.js';
@@ -132,6 +134,22 @@ describe('JWT Utilities', () => {
       const verified = verifyRefreshToken(invalidToken);
       
       expect(verified).toBeNull();
+    });
+  });
+
+  describe('signMobileEmbedToken', () => {
+    test('should sign a short-lived mobile embed token', () => {
+      const token = signMobileEmbedToken({
+        sub: 'user123',
+        email: 'tech@example.com',
+        role: 'user',
+        name: 'Tech'
+      });
+      expect(token).toBeDefined();
+      const verified = verifyToken(token);
+      expect(verified.sub).toBe('user123');
+      expect(isMobileEmbedTokenPayload(verified)).toBe(true);
+      expect(verified.platform).toBe('mobile-embed');
     });
   });
 

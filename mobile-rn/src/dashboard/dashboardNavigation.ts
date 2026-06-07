@@ -1,36 +1,40 @@
 import type { DashboardJobCard, DashboardNotification, DashboardTask } from '../services/erpApi'
 import type { RootStackParamList } from '../navigation/types'
+import {
+  navigateJobCards,
+  navigateManufacturingWeb,
+  navigateMyTasks,
+  navigateProjects,
+  navigateRoot,
+  type RootNavigation
+} from '../navigation/navigationHelpers'
 import { navigateFromNotification } from '../notifications/notificationNavigation'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type NavLike = { navigate: (...args: any[]) => void }
+type NavLike = Pick<RootNavigation, 'navigate'>
 
 export function openNotification(navigation: NavLike, item: DashboardNotification) {
   if (!navigateFromNotification(navigation, item)) {
-    navigation.navigate('Notifications')
+    navigateRoot(navigation, 'Notifications')
   }
 }
 
 export function openTask(navigation: NavLike, task: DashboardTask) {
   if (task.taskType === 'user') {
-    navigation.navigate('MyTasks', {
-      screen: 'UserTaskDetail',
-      params: { taskId: task.id }
-    } as never)
+    navigateMyTasks(navigation, 'UserTaskDetail', { taskId: task.id })
     return
   }
   if (task.projectId) {
-    navigation.navigate('Projects', {
+    navigateRoot(navigation, 'Projects', {
       screen: 'TaskDetail',
       params: {
         taskId: task.id,
         projectId: task.projectId,
         projectName: task.projectName
       }
-    } as never)
+    })
     return
   }
-  navigation.navigate('MyTasks')
+  navigateRoot(navigation, 'MyTasks')
 }
 
 export function openProject(
@@ -38,22 +42,19 @@ export function openProject(
   projectId: string,
   opts?: { initialTab?: string }
 ) {
-  navigation.navigate('Projects', {
-    screen: 'ProjectDetail',
-    params: { projectId, initialTab: opts?.initialTab }
-  } as never)
+  navigateProjects(navigation, 'ProjectDetail', { projectId, initialTab: opts?.initialTab })
 }
 
 export function openModule(navigation: NavLike, screen: keyof RootStackParamList) {
-  navigation.navigate(screen as never)
+  navigateRoot(navigation, screen)
 }
 
 export function openJobCard(navigation: NavLike, card: DashboardJobCard) {
   if (!card?.id) {
-    navigation.navigate('JobCards')
+    navigateJobCards(navigation)
     return
   }
-  navigation.navigate('JobCards', { jobCardId: card.id } as never)
+  navigateJobCards(navigation, { jobCardId: card.id })
 }
 
 export function openManufacturingTab(
@@ -61,13 +62,5 @@ export function openManufacturingTab(
   tab: import('../manufacturing/constants').ManufacturingTabId,
   opts?: { title?: string; query?: Record<string, string> }
 ) {
-  const title =
-    opts?.title ||
-    (tab === 'dashboard'
-      ? 'Dashboard'
-      : tab.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
-  navigation.navigate('Manufacturing', {
-    screen: 'ManufacturingWeb',
-    params: { tab, title, query: opts?.query }
-  } as never)
+  navigateManufacturingWeb(navigation, tab, opts)
 }

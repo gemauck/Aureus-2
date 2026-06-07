@@ -36,6 +36,7 @@
     "test:prod:crm": "node scripts/test-production-crm.js",
     "test:crm": "node tests/crm/run-all-crm-tests.js",
     "test:mobile-crm-pipeline": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/mobile-crm/pipeline-utils.test.js",
+    "test:mobile-rn": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/mobile-rn",
     "test:crm:break": "node tests/crm/crm-break-tests.js",
     "test:crm:persistence": "node tests/crm/crm-persistence-tests.js",
     "test:crm:functionality": "node tests/crm/crm-functionality-tests.js",

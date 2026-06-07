@@ -18,6 +18,12 @@ import { navigateFromPushData } from '../notifications/notificationNavigation'
 import { erpApi } from '../services/erpApi'
 
 import type { RootStackParamList } from './types'
+import { linking } from './linking'
+import {
+  ALWAYS_ACCESSIBLE_ROOT_SCREENS,
+  getActiveRootRouteName
+} from './navigationHelpers'
+import { canAccessScreen } from '../utils/screenAccess'
 import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
 import { useTheme } from '../theme/ThemeContext'
@@ -102,14 +108,14 @@ const MessagesNavigator = lazyScreenComponent(
   () => require('../messages/MessagesNavigator').MessagesNavigator
 )
 
-function lazyPlaceholderScreen(opts: {
+function lazyWebModuleScreen(opts: {
   webPath: string
-  description: string
-  icon: string
+  screen: keyof RootStackParamList
+  title?: string
 }) {
   return lazyScreenComponent(() => {
-    const { createPlaceholderScreen } = require('../screens/ModulePlaceholderScreen')
-    return createPlaceholderScreen(opts)
+    const { createWebModuleScreen } = require('../screens/WebModuleScreen')
+    return createWebModuleScreen(opts)
   })
 }
 
@@ -117,20 +123,17 @@ const UsersScreen = lazyScreenComponent(() => require('../screens/UsersScreen').
 const ManufacturingScreen = lazyScreenComponent(
   () => require('../screens/ManufacturingScreen').ManufacturingScreen
 )
-const HelpdeskScreen = lazyPlaceholderScreen({
+const HelpdeskScreen = lazyWebModuleScreen({
   webPath: '/helpdesk',
-  description: 'Tickets and support workflows on the web ERP.',
-  icon: 'headset'
+  screen: 'Helpdesk'
 })
-const DocumentsScreen = lazyPlaceholderScreen({
+const DocumentsScreen = lazyWebModuleScreen({
   webPath: '/documents',
-  description: 'Document library — available on the web ERP.',
-  icon: 'folder-open'
+  screen: 'Documents'
 })
-const ReportsScreen = lazyPlaceholderScreen({
+const ReportsScreen = lazyWebModuleScreen({
   webPath: '/reports',
-  description: 'Reports and analytics on the web ERP.',
-  icon: 'chart-bar'
+  screen: 'Reports'
 })
 
 function LoadingScreen() {
@@ -146,7 +149,7 @@ function LoadingScreen() {
 function AuthenticatedAppInner() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>()
   const [currentRoute, setCurrentRoute] = React.useState('Dashboard')
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
 
   // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
@@ -161,7 +164,7 @@ function AuthenticatedAppInner() {
       })
     }
     if (navigationRef.current) {
-      navigateFromPushData(navigationRef.current, data)
+      navigateFromPushData(navigationRef.current, data, user)
     }
   })
 
@@ -169,13 +172,19 @@ function AuthenticatedAppInner() {
     <JobCardSyncProvider>
       <NavigationContainer
         ref={navigationRef}
+        linking={linking}
         onReady={() => {
-          const route = navigationRef.getCurrentRoute()
-          if (route?.name) setCurrentRoute(route.name)
+          const root = getActiveRootRouteName(navigationRef.getRootState())
+          if (root) setCurrentRoute(root)
         }}
-        onStateChange={() => {
-          const route = navigationRef.getCurrentRoute()
-          if (route?.name) setCurrentRoute(route.name)
+        onStateChange={(state) => {
+          const rootScreen = getActiveRootRouteName(state)
+          if (!rootScreen) return
+          setCurrentRoute(rootScreen)
+          if (!user || ALWAYS_ACCESSIBLE_ROOT_SCREENS.has(rootScreen)) return
+          if (!canAccessScreen(user, rootScreen)) {
+            navigationRef.navigate('Dashboard')
+          }
         }}
       >
         <Stack.Navigator

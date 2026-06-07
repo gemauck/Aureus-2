@@ -27,13 +27,16 @@ From repo root: `npm run mobile:android` (same as above).
 
 ## Authentication
 
-Uses existing mobile auth endpoints:
+Mobile auth endpoints:
 
-- `POST /api/auth/mobile/login`
+- `POST /api/auth/mobile/login` — returns access + refresh tokens and `user.permissions`
 - `POST /api/auth/mobile/refresh`
 - `POST /api/auth/mobile/logout`
+- `POST /api/auth/mobile/embed-token` — short-lived (15 min) token for in-app WebView modules
 
-Sign in with your ERP user email and password (active users only).
+Sign in with your ERP user email and password (active users only). Menu visibility follows the same permission rules as the web ERP.
+
+WebView modules (Manufacturing tabs, Helpdesk, Documents, Reports) receive an **embed token** instead of the long-lived access token.
 
 ## Job cards (native module)
 
@@ -73,6 +76,18 @@ npm run mobile:apk
 
 Output: `~/Desktop/Abcotronics-ERP-Mobile.apk` (release build with embedded JS bundle).
 
+### Release signing (production)
+
+1. Copy `android/keystore.properties.example` → `android/keystore.properties` (gitignored).
+2. Point `ERP_RELEASE_STORE_FILE` at your release keystore and set passwords/alias.
+3. Rebuild with `npm run mobile:apk`.
+
+Without `keystore.properties`, release builds fall back to the debug keystore (not suitable for production rollout).
+
+### Optional: Sentry
+
+Set `EXPO_PUBLIC_SENTRY_DSN` in `.env` (see `.env.example`), then rebuild the native APK so `@sentry/react-native` is linked.
+
 Install to a connected phone or emulator (no manual download):
 
 ```bash
@@ -92,13 +107,13 @@ After changing code under `mobile-rn/src/` (no native module changes):
 npm run mobile:ota:publish
 ```
 
-This exports the bundle to `public/mobile-ota/updates/erp-mobile-1/{timestamp}/`. **Deploy the server** (git pull + restart) so devices receive it.
+This exports the bundle to `public/mobile-ota/updates/erp-mobile-2/{timestamp}/`. **Deploy the server** (git pull + restart) so devices receive it.
 
 ### When you need a new APK
 
-- New native modules or permissions (camera, etc.)
+- New native modules or permissions (camera, Sentry, etc.)
 - Expo SDK upgrade
-- Bump **`erp-mobile-1`** → **`erp-mobile-2`** in `app.config.js` and `src/constants/ota.ts`, then `npm run mobile:apk`
+- Bump runtime version in `app.config.js` and `src/constants/ota.ts`, then `npm run mobile:apk`
 
 ### Two update layers
 

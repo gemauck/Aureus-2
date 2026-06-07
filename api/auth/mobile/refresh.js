@@ -1,4 +1,9 @@
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../_lib/jwt.js'
+import {
+  isMobileEmbedTokenPayload,
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken
+} from '../../_lib/jwt.js'
 import { badRequest, ok, serverError, unauthorized } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
@@ -13,6 +18,7 @@ async function handler(req, res) {
 
     const payload = verifyRefreshToken(refreshToken)
     if (!payload || !payload.sub) return unauthorized(res, 'Invalid refresh token')
+    if (isMobileEmbedTokenPayload(payload)) return unauthorized(res, 'Invalid refresh token')
 
     const nextPayload = { sub: payload.sub, email: payload.email, role: payload.role, name: payload.name, platform: 'mobile' }
     const accessToken = signAccessToken(nextPayload)

@@ -2,9 +2,27 @@ import type { TeamTabId } from '../teams/types'
 import type { CrmDetailTab } from '../crm/types'
 import type { ProjectDetailTab } from '../projects/types'
 import { parseManufacturingLink } from '../manufacturing/constants'
+import { navigateRoot } from '../navigation/navigationHelpers'
+import type { RootStackParamList } from '../navigation/types'
+import type { User } from '../types'
+import { canAccessScreen } from '../utils/screenAccess'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type NavLike = { navigate: (...args: any[]) => void }
+
+function safeNavigate(
+  navigation: NavLike,
+  user: User | null | undefined,
+  screen: keyof RootStackParamList,
+  params?: RootStackParamList[keyof RootStackParamList]
+) {
+  if (user && !canAccessScreen(user, screen)) {
+    navigateRoot(navigation, 'Dashboard')
+    return false
+  }
+  navigateRoot(navigation, screen, params)
+  return true
+}
 
 export type NotificationNavItem = {
   id?: string
@@ -147,7 +165,11 @@ function navigateTeams(navigation: NavLike, teams: TeamsDeepLink) {
 }
 
 /** Navigate from an ERP notification row. Returns true when a destination was opened. */
-export function navigateFromNotification(navigation: NavLike, item: NotificationNavItem): boolean {
+export function navigateFromNotification(
+  navigation: NavLike,
+  item: NotificationNavItem,
+  user?: User | null
+): boolean {
   const meta = parseMetadata(item)
   const link = item.link || (meta.link as string) || ''
   const type = item.type || (meta.type as string)
@@ -241,16 +263,13 @@ export function navigateFromNotification(navigation: NavLike, item: Notification
   }
 
   if (path.includes('/helpdesk') || link.includes('helpdesk')) {
-    navigation.navigate('Helpdesk')
-    return true
+    return safeNavigate(navigation, user, 'Helpdesk')
   }
   if (path.includes('/reports') || link.includes('reports')) {
-    navigation.navigate('Reports')
-    return true
+    return safeNavigate(navigation, user, 'Reports')
   }
   if (path.includes('/jobcards') || path.includes('/service-maintenance')) {
-    navigation.navigate('JobCards')
-    return true
+    return safeNavigate(navigation, user, 'JobCards')
   }
   if (path.includes('/manufacturing') || link.includes('manufacturing')) {
     const { tab, query } = parseManufacturingLink(link || path)
@@ -277,7 +296,11 @@ export function navigateFromNotification(navigation: NavLike, item: Notification
 }
 
 /** Navigate when the user taps a push notification banner. */
-export function navigateFromPushData(navigation: NavLike, data: PushNotificationData) {
+export function navigateFromPushData(
+  navigation: NavLike,
+  data: PushNotificationData,
+  user?: User | null
+) {
   const item: NotificationNavItem = {
     id: data.notificationId,
     link: data.link,
@@ -292,7 +315,7 @@ export function navigateFromPushData(navigation: NavLike, data: PushNotification
       discussionId: data.discussionId
     }
   }
-  if (!navigateFromNotification(navigation, item)) {
-    navigation.navigate('Notifications')
+  if (!navigateFromNotification(navigation, item, user)) {
+    navigateRoot(navigation, 'Notifications')
   }
 }

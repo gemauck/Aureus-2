@@ -10,6 +10,7 @@ import {
 import { WebView, type WebViewNavigation } from 'react-native-webview'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { API_BASE_URL } from '../config'
+import { useEmbedToken } from '../hooks/useEmbedToken'
 import { useAuth } from '../state/AuthContext'
 import type { User } from '../types'
 import { useThemedStyles } from '../theme/useThemedStyles'
@@ -22,11 +23,11 @@ type Props = {
   onBack?: () => void
 }
 
-function buildAuthInjectionScript(accessToken: string, user: User | null): string {
+function buildAuthInjectionScript(webToken: string, user: User | null): string {
   return `
     (function() {
       try {
-        localStorage.setItem('abcotronics_token', ${JSON.stringify(accessToken)});
+        localStorage.setItem('abcotronics_token', ${JSON.stringify(webToken)});
         localStorage.setItem('abcotronics_user', ${JSON.stringify(JSON.stringify(user))});
         window.__ERP_MOBILE_EMBED__ = true;
       } catch (e) {}
@@ -38,43 +39,77 @@ function buildAuthInjectionScript(accessToken: string, user: User | null): strin
 export function ErpModuleWebView({ webPath, title, onBack }: Props) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
-  const { accessToken, user, refreshAuth } = useAuth()
+  const { accessToken, user } = useAuth()
+  const { embedToken, embedUser, embedLoading } = useEmbedToken(accessToken)
   const webRef = useRef<WebView>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reloadNonce, setReloadNonce] = useState(0)
+
+  const webToken = embedToken || accessToken
+  const webUser = embedUser || user
 
   const uri = useMemo(() => {
     const path = webPath.startsWith('/') ? webPath : `/${webPath}`
     return `${API_BASE_URL}${path}`
   }, [webPath])
 
+  const allowedOrigin = useMemo(() => {
+    try {
+      return new URL(API_BASE_URL).origin
+    } catch {
+      return API_BASE_URL
+    }
+  }, [])
+
+  const isAllowedUrl = useCallback(
+    (url: string) => {
+      if (!url || url === 'about:blank') return true
+      try {
+        const origin = new URL(url).origin
+        return origin === allowedOrigin
+      } catch {
+        return false
+      }
+    },
+    [allowedOrigin]
+  )
+
+  const handleShouldStartLoad = useCallback(
+    (request: { url: string }) => {
+      if (isAllowedUrl(request.url)) return true
+      void Linking.openURL(request.url)
+      return false
+    },
+    [isAllowedUrl]
+  )
+
   const authScript = useMemo(
-    () => (accessToken ? buildAuthInjectionScript(accessToken, user) : 'true;'),
-    [accessToken, user]
+    () => (webToken ? buildAuthInjectionScript(webToken, webUser) : 'true;'),
+    [webToken, webUser]
   )
 
   const injectAuth = useCallback(() => {
-    if (!accessToken || !webRef.current) return
-    webRef.current.injectJavaScript(buildAuthInjectionScript(accessToken, user))
-  }, [accessToken, user])
+    if (!webToken || !webRef.current) return
+    webRef.current.injectJavaScript(buildAuthInjectionScript(webToken, webUser))
+  }, [webToken, webUser])
 
   useEffect(() => {
     injectAuth()
-  }, [accessToken, user, injectAuth])
-
-  useEffect(() => {
-    if (!accessToken) return
-    const timer = setInterval(() => {
-      void refreshAuth().catch(() => {})
-    }, 10 * 60 * 1000)
-    return () => clearInterval(timer)
-  }, [accessToken, refreshAuth])
+  }, [webToken, webUser, injectAuth])
 
   if (!accessToken) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>Sign in to open this module.</Text>
+      </View>
+    )
+  }
+
+  if (embedLoading && !webToken) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={erp.primary} />
       </View>
     )
   }
@@ -109,7 +144,7 @@ export function ErpModuleWebView({ webPath, title, onBack }: Props) {
       ) : (
         <View style={styles.webWrap}>
           <WebView
-            key={`${uri}-${reloadNonce}`}
+            key={`${uri}-${reloadNonce}-${webToken}`}
             ref={webRef}
             source={{ uri }}
             injectedJavaScriptBeforeContentLoaded={authScript}
@@ -128,8 +163,10 @@ export function ErpModuleWebView({ webPath, title, onBack }: Props) {
                 <ActivityIndicator size="large" color={erp.primary} />
               </View>
             )}
+            originWhitelist={[allowedOrigin, 'about:blank']}
+            onShouldStartLoadWithRequest={handleShouldStartLoad}
             sharedCookiesEnabled
-            thirdPartyCookiesEnabled
+            thirdPartyCookiesEnabled={false}
             domStorageEnabled
             javaScriptEnabled
             allowsBackForwardNavigationGestures

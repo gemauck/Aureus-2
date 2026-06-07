@@ -32,7 +32,9 @@ module.exports = {
       ...(base.extra || {}),
       runtimeVersion: RUNTIME_VERSION,
       otaChannel: 'production',
-      otaServer: 'self-hosted'
+      otaServer: 'self-hosted',
+      apiBaseUrl: OTA_BASE.replace(/\/$/, ''),
+      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || ''
     }
   }
 }

@@ -8,18 +8,15 @@ import React, {
   useState
 } from 'react'
 import { Alert } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   STEP_IDS,
   NO_CLIENT_ID,
-  REFERENCE_CACHE_KEYS,
   buildNewJobCardEditingMeta,
   createEmptyFormData,
   createStockEntryRow,
   emptySectionWorkMedia,
   buildJobCardSavePayload,
   validateWizardStep,
-  buildMergedWizardJobCardRows,
   toDatetimeLocalInput
 } from '../../../src/jobCardWizard/index.js'
 import { useNetwork } from '../hooks/useNetwork'
@@ -27,6 +24,8 @@ import { useAuth } from '../state/AuthContext'
 import { API_BASE_URL } from '../config'
 import { isAdmin } from '../utils/menuAccess'
 import { jobcardsApi } from './api'
+import { useWizardPriorList } from './hooks/useWizardPriorList'
+import { useWizardReferenceData } from './hooks/useWizardReferenceData'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { voiceClipToPayloadUrl } from './media/mediaUri'
 import { getOfflineStore } from './offlineStore'
@@ -113,13 +112,6 @@ type WizardContextValue = {
 
 const WizardContext = createContext<WizardContextValue | undefined>(undefined)
 
-function activeTechnicianUsers(list: UserOption[]) {
-  return list.filter((x) => {
-    const status = (x.status || 'active').toLowerCase()
-    return status !== 'inactive' && status !== 'suspended'
-  })
-}
-
 export function JobCardWizardProvider({
   children,
   initialJobCardId,
@@ -140,22 +132,25 @@ export function JobCardWizardProvider({
     syncOnePendingCard
   } = useJobCardSync()
 
-  const [loading, setLoading] = useState(true)
-  const [referenceRefreshing, setReferenceRefreshing] = useState(false)
+  const {
+    loading,
+    referenceRefreshing,
+    clients,
+    users,
+    projects,
+    inventory,
+    inventoryLoading,
+    stockLocations,
+    formTemplates,
+    ensureReferenceDataLoaded,
+    ensureInventoryLoaded
+  } = useWizardReferenceData(accessToken)
   const [wizardFlow, setWizardFlow] = useState<WizardFlow>(initialFlow || 'landing')
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<JobCardFormData>(createEmptyFormData())
   const [editingMeta, setEditingMeta] = useState<EditingMeta | null>(null)
   const [stepError, setStepError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [clients, setClients] = useState<ClientOption[]>([])
-  const [users, setUsers] = useState<UserOption[]>([])
-  const [projects, setProjects] = useState<ProjectOption[]>([])
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [inventoryLoading, setInventoryLoading] = useState(false)
-  const inventoryLoadedRef = useRef(false)
-  const [stockLocations, setStockLocations] = useState<StockLocation[]>([])
-  const [formTemplates, setFormTemplates] = useState<ServiceFormTemplate[]>([])
   const [stockEntryRows, setStockEntryRows] = useState<StockEntryRow[]>([createStockEntryRow()])
   const [sectionWorkMedia, setSectionWorkMedia] = useState<SectionWorkMedia>({
     diagnosis: [],
@@ -165,143 +160,20 @@ export function JobCardWizardProvider({
   const [voiceAttachments, setVoiceAttachments] = useState<VoiceClip[]>([])
   const [selectedPhotos, setSelectedPhotos] = useState<MediaItem[]>([])
   const [signatureLocked, setSignatureLocked] = useState(false)
-  const [priorRows, setPriorRows] = useState<PriorListRow[]>([])
-  const [priorLoading, setPriorLoading] = useState(false)
-  const [priorSearch, setPriorSearch] = useState('')
-  const [priorClientId, setPriorClientId] = useState('')
+  const {
+    priorRows,
+    priorLoading,
+    priorSearch,
+    setPriorSearch,
+    priorClientId,
+    setPriorClientId,
+    refreshPriorList
+  } = useWizardPriorList({ accessToken, isOnline, wizardFlow, pendingAutoSync })
   const [openingCardId, setOpeningCardId] = useState<string | null>(null)
   const [deletingJobCardId, setDeletingJobCardId] = useState<string | null>(null)
   const [photosLoading, setPhotosLoading] = useState(false)
   const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false)
   const [departureConfirmOpen, setDepartureConfirmOpen] = useState(false)
-
-  const loadReferenceData = useCallback(
-    async (opts: { silent?: boolean } = {}) => {
-      const silent = Boolean(opts.silent)
-      if (!silent) setLoading(true)
-      else setReferenceRefreshing(true)
-
-      try {
-        const [cachedClientsRaw, cachedProjectsRaw, cachedUsersRaw] = await Promise.all([
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.clients),
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.projects),
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.users)
-        ])
-        const cachedClients = JSON.parse(cachedClientsRaw || '[]')
-        if (Array.isArray(cachedClients) && cachedClients.length) setClients(cachedClients)
-        const cachedUsers = JSON.parse(cachedUsersRaw || '[]')
-        if (Array.isArray(cachedUsers) && cachedUsers.length) {
-          setUsers(activeTechnicianUsers(cachedUsers))
-        }
-        const cachedProjects = JSON.parse(cachedProjectsRaw || '[]')
-        if (Array.isArray(cachedProjects) && cachedProjects.length) {
-          setProjects(
-            cachedProjects.map(
-              (p: { id: string; name?: string; clientId?: string; clientName?: string; status?: string }) => ({
-                id: String(p.id),
-                name: p.name || String(p.id),
-                clientId: p.clientId ? String(p.clientId) : undefined,
-                clientName: p.clientName,
-                status: p.status
-              })
-            )
-          )
-        }
-
-        if (!isOnline) return
-
-        const [c, u, proj] = await Promise.all([
-          jobcardsApi.loadClients(accessToken || undefined),
-          jobcardsApi.getUsers(accessToken || undefined),
-          accessToken ? jobcardsApi.getProjects(accessToken) : Promise.resolve([])
-        ])
-
-        if (Array.isArray(c)) {
-          setClients(c)
-          if (c.length) {
-            await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.clients, JSON.stringify(c))
-          }
-        }
-
-        const technicians = activeTechnicianUsers(Array.isArray(u) ? u : [])
-        setUsers(technicians)
-        if (technicians.length) {
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.users, JSON.stringify(technicians))
-        }
-
-        if (Array.isArray(proj)) {
-          const normalized = proj.map((p) => ({
-            id: String(p.id),
-            name: p.name || String(p.id),
-            clientId: p.clientId ? String(p.clientId) : undefined,
-            clientName: p.clientName,
-            status: p.status
-          }))
-          setProjects(normalized)
-          if (normalized.length) {
-            await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.projects, JSON.stringify(normalized))
-          }
-        }
-      } catch {
-        /* cache / network optional */
-      } finally {
-        if (!silent) setLoading(false)
-        else setReferenceRefreshing(false)
-      }
-    },
-    [accessToken, isOnline]
-  )
-
-  const ensureReferenceDataLoaded = useCallback(async () => {
-    if (users.length && clients.length) return
-    await loadReferenceData({ silent: true })
-  }, [users.length, clients.length, loadReferenceData])
-
-  const ensureInventoryLoaded = useCallback(async () => {
-    if (inventoryLoadedRef.current && inventory.length) return
-    setInventoryLoading(true)
-    try {
-      if (isOnline) {
-        const inv = await jobcardsApi.getPublicInventory().catch(() => [])
-        const locs = await jobcardsApi.getPublicLocations().catch(() => [])
-        const tpl = await jobcardsApi.getServiceFormTemplates().catch(() => [])
-        if (inv.length) {
-          setInventory(inv)
-          inventoryLoadedRef.current = true
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.inventory, JSON.stringify(inv))
-        }
-        if (locs.length) {
-          setStockLocations(locs)
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.locations, JSON.stringify(locs))
-        }
-        if (tpl.length) {
-          setFormTemplates(tpl)
-          await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.serviceFormTemplates, JSON.stringify(tpl))
-        }
-      } else {
-        const [invRaw, locsRaw, tplRaw] = await Promise.all([
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.inventory),
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.locations),
-          AsyncStorage.getItem(REFERENCE_CACHE_KEYS.serviceFormTemplates)
-        ])
-        const inv = JSON.parse(invRaw || '[]')
-        const locs = JSON.parse(locsRaw || '[]')
-        const tpl = JSON.parse(tplRaw || '[]')
-        if (Array.isArray(inv) && inv.length) {
-          setInventory(inv)
-          inventoryLoadedRef.current = true
-        }
-        if (Array.isArray(locs)) setStockLocations(locs)
-        if (Array.isArray(tpl)) setFormTemplates(tpl)
-      }
-    } finally {
-      setInventoryLoading(false)
-    }
-  }, [isOnline, inventory.length])
-
-  useEffect(() => {
-    loadReferenceData()
-  }, [loadReferenceData])
 
   const startNewJobCard = useCallback(() => {
     void ensureReferenceDataLoaded()
@@ -326,29 +198,6 @@ export function JobCardWizardProvider({
     setWizardFlow('form')
   }, [user, ensureReferenceDataLoaded])
 
-  const refreshPriorList = useCallback(async () => {
-    setPriorLoading(true)
-    try {
-      let serverList: PriorListRow[] = []
-      if (accessToken && isOnline) {
-        const res = await jobcardsApi.list(accessToken, {
-          search: priorSearch || undefined,
-          clientId: priorClientId || undefined
-        })
-        serverList = res.jobCards || []
-      }
-      const offlineStore = await getOfflineStore()
-      const local = await offlineStore.readLocalPendingJobCardsAsync()
-      setPriorRows(buildMergedWizardJobCardRows(serverList, local, Boolean(accessToken)))
-    } catch {
-      const offlineStore = await getOfflineStore()
-      const local = await offlineStore.readLocalPendingJobCardsAsync()
-      setPriorRows(buildMergedWizardJobCardRows([], local, Boolean(accessToken)))
-    } finally {
-      setPriorLoading(false)
-    }
-  }, [accessToken, isOnline, priorSearch, priorClientId])
-
   const openPriorList = useCallback(() => {
     void ensureReferenceDataLoaded()
     setWizardFlow('prior_list')
@@ -371,18 +220,6 @@ export function JobCardWizardProvider({
       openPriorList()
     }
   }, [initialFlow, initialJobCardId, openStockTake, openPriorList])
-
-  const priorAutoSyncRefreshRef = useRef(false)
-  useEffect(() => {
-    if (pendingAutoSync) {
-      priorAutoSyncRefreshRef.current = true
-      return
-    }
-    if (priorAutoSyncRefreshRef.current && wizardFlow === 'prior_list') {
-      priorAutoSyncRefreshRef.current = false
-      void refreshPriorList()
-    }
-  }, [pendingAutoSync, wizardFlow, refreshPriorList])
 
   const validateStep = useCallback(
     (stepIndex: number) =>

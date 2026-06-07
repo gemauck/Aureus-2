@@ -104,7 +104,7 @@ export const apiClient = {
     return request<{
       accessToken: string
       refreshToken: string
-      user: { id: string; email: string; role?: string; name?: string }
+      user: { id: string; email: string; role?: string; name?: string; permissions?: string | string[] }
     }>('/api/auth/mobile/login', {
       method: 'POST',
       body: { email, password, platform: Platform.OS }
@@ -114,6 +114,16 @@ export const apiClient = {
     return request<{ accessToken: string; refreshToken: string }>('/api/auth/mobile/refresh', {
       method: 'POST',
       body: { refreshToken }
+    })
+  },
+  async mobileEmbedToken(token: string) {
+    return request<{
+      embedToken: string
+      expiresIn: number
+      user: { id: string; email: string; role?: string; name?: string; permissions?: string | string[] }
+    }>('/api/auth/mobile/embed-token', {
+      method: 'POST',
+      token
     })
   },
   async mobileLogout(refreshToken?: string, token?: string) {

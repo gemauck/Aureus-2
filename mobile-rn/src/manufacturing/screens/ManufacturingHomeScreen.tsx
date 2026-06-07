@@ -9,6 +9,7 @@ import { useAuth } from '../../state/AuthContext'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
+import { navigateJobCards } from '../../navigation/navigationHelpers'
 import { isAdmin } from '../../utils/menuAccess'
 import { getManufacturingEntries, type ManufacturingEntry } from '../constants'
 import type { ManufacturingStackParamList } from '../navigation'
@@ -24,12 +25,13 @@ export function ManufacturingHomeScreen({ navigation }: Props) {
   const openEntry = (entry: ManufacturingEntry) => {
     if (entry.kind === 'native') {
       const parent = navigation.getParent()
+      if (!parent) return
       if (entry.id === 'job-cards') {
-        parent?.navigate('JobCards' as never)
+        navigateJobCards(parent, undefined)
         return
       }
       if (entry.id === 'field-stock-take') {
-        parent?.navigate('JobCards', { initialFlow: 'stock_take' } as never)
+        navigateJobCards(parent, { initialFlow: 'stock_take' })
       }
       return
     }

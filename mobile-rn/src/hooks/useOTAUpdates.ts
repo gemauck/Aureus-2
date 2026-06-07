@@ -75,9 +75,14 @@ export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
     await Updates.fetchUpdateAsync()
     return scheduleBackgroundOtaApply()
   } catch (error) {
+    const raw = error instanceof Error ? error.message : 'OTA prefetch failed'
+    const message =
+      /404|unsupported runtime|no ota bundles|no update/i.test(raw)
+        ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
+        : raw
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'OTA prefetch failed'
+      message
     }
   }
 }
@@ -116,9 +121,14 @@ export async function applyOtaUpdate(
 
     return promptApplyUpdate(updateId)
   } catch (error) {
+    const raw = error instanceof Error ? error.message : 'OTA check failed'
+    const message =
+      /404|unsupported runtime|no ota bundles|no update/i.test(raw)
+        ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
+        : raw
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'OTA check failed'
+      message
     }
   }
 }
