@@ -70,7 +70,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [lastOtaCheck, setLastOtaCheck] = useState<string | null>(null)
   const [lastApkCheck, setLastApkCheck] = useState<string | null>(null)
   const [otaStatus, setOtaStatus] = useState<string>(
-    'After login, JS updates download in the background (no auto-restart). Apply from Settings or on next app open.'
+    'JS updates download automatically after login and apply when you leave the app (home button or app switcher). APK install is only needed for rare native shell changes.'
   )
 
   const refreshRemoteVersion = useCallback(async () => {
@@ -106,7 +106,7 @@ export function SettingsScreen({ navigation }: Props) {
       setOtaStatus(
         result.willReload
           ? 'Update downloaded — restarting to apply.'
-          : 'Update downloaded — tap Apply update to restart.'
+          : 'Update downloaded — will apply when you leave the app, or tap Apply update now.'
       )
     } else if (result.status === 'error') {
       setOtaStatus(`Last check failed: ${result.message}`)

@@ -5,7 +5,7 @@ import * as Updates from 'expo-updates'
 const FOREGROUND_DEBOUNCE_MS = 45_000
 const BACKGROUND_POLL_MS = 5 * 60_000
 /** Wait until login/dashboard can render before background OTA work. */
-const LAUNCH_PREFETCH_DELAY_MS = 12_000
+const LAUNCH_PREFETCH_DELAY_MS = 4_000
 
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
@@ -13,6 +13,8 @@ export type OtaCheckResult =
   | { status: 'error'; message: string }
 
 let lastPromptedUpdateId: string | null = null
+/** Set after a silent background download; applied when the app leaves the foreground. */
+let pendingOtaReload = false
 
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   if (updateId && lastPromptedUpdateId === updateId) {
@@ -23,7 +25,7 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   return new Promise((resolve) => {
     Alert.alert(
       'Update ready',
-      'A new version was downloaded. Tap Restart to apply it — no need to clear cache or force-stop the app.',
+      'A new version was downloaded. Tap Restart to apply it now.',
       [
         {
           text: 'Later',
@@ -42,7 +44,25 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   })
 }
 
-/** Download a newer bundle in the background — never reloads or prompts. */
+/** Apply a downloaded OTA bundle as soon as it is safe (background), not while the user is active. */
+function scheduleBackgroundOtaApply(): OtaCheckResult {
+  pendingOtaReload = true
+  const state = AppState.currentState
+  if (state === 'background' || state === 'inactive') {
+    pendingOtaReload = false
+    void Updates.reloadAsync()
+    return { status: 'downloaded', willReload: true }
+  }
+  return { status: 'downloaded', willReload: false }
+}
+
+function tryApplyPendingOtaOnBackground() {
+  if (!pendingOtaReload) return
+  pendingOtaReload = false
+  void Updates.reloadAsync()
+}
+
+/** Download a newer bundle in the background — applies when the app is backgrounded. */
 export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
@@ -53,7 +73,7 @@ export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
     if (!check.isAvailable) return { status: 'current' }
 
     await Updates.fetchUpdateAsync()
-    return { status: 'downloaded', willReload: false }
+    return scheduleBackgroundOtaApply()
   } catch (error) {
     return {
       status: 'error',
@@ -86,7 +106,7 @@ export async function applyOtaUpdate(
       if (options.prompt) {
         return promptApplyUpdate(updateId)
       }
-      return { status: 'downloaded', willReload: false }
+      return scheduleBackgroundOtaApply()
     }
 
     if (options.silent) {
@@ -118,11 +138,7 @@ export function useOTAUpdates(enabled = true) {
     inFlightRef.current = true
     lastCheckRef.current = now
     try {
-      const result = await prefetchOtaUpdate()
-      if (result.status === 'downloaded') {
-        void promptApplyUpdate(null)
-      }
-      return result
+      return await prefetchOtaUpdate()
     } finally {
       inFlightRef.current = false
     }
@@ -160,10 +176,14 @@ export function useOTAUpdates(enabled = true) {
       void prefetch({ force: true })
     }, LAUNCH_PREFETCH_DELAY_MS)
 
-    const onActive = (state: string) => {
+    const onAppStateChange = (state: string) => {
+      if (state === 'background' || state === 'inactive') {
+        tryApplyPendingOtaOnBackground()
+        return
+      }
       if (state === 'active') void prefetch()
     }
-    const sub = AppState.addEventListener('change', onActive)
+    const sub = AppState.addEventListener('change', onAppStateChange)
 
     const poll = setInterval(() => {
       if (AppState.currentState === 'active') void prefetch()

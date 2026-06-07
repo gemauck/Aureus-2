@@ -151,7 +151,7 @@ function AuthenticatedAppInner() {
   const { accessToken } = useAuth()
   const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
 
-  // OTA: prefetch only after login — native never auto-checks on cold start (checkAutomatically NEVER).
+  // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
   useOTAUpdates(true)
   useAppUpdateCheck(true)
 
