@@ -108,14 +108,14 @@ const MessagesNavigator = lazyScreenComponent(
   () => require('../messages/MessagesNavigator').MessagesNavigator
 )
 
-function lazyWebModuleScreen(opts: {
+function lazyPlaceholderScreen(opts: {
   webPath: string
-  screen: keyof RootStackParamList
-  title?: string
+  description: string
+  icon: string
 }) {
   return lazyScreenComponent(() => {
-    const { createWebModuleScreen } = require('../screens/WebModuleScreen')
-    return createWebModuleScreen(opts)
+    const { createPlaceholderScreen } = require('../screens/ModulePlaceholderScreen')
+    return createPlaceholderScreen(opts)
   })
 }
 
@@ -123,17 +123,20 @@ const UsersScreen = lazyScreenComponent(() => require('../screens/UsersScreen').
 const ManufacturingScreen = lazyScreenComponent(
   () => require('../screens/ManufacturingScreen').ManufacturingScreen
 )
-const HelpdeskScreen = lazyWebModuleScreen({
+const HelpdeskScreen = lazyPlaceholderScreen({
   webPath: '/helpdesk',
-  screen: 'Helpdesk'
+  description: 'Tickets and support workflows on the web ERP.',
+  icon: 'headset'
 })
-const DocumentsScreen = lazyWebModuleScreen({
+const DocumentsScreen = lazyPlaceholderScreen({
   webPath: '/documents',
-  screen: 'Documents'
+  description: 'Document library — available on the web ERP.',
+  icon: 'folder-open'
 })
-const ReportsScreen = lazyWebModuleScreen({
+const ReportsScreen = lazyPlaceholderScreen({
   webPath: '/reports',
-  screen: 'Reports'
+  description: 'Reports and analytics on the web ERP.',
+  icon: 'chart-bar'
 })
 
 function LoadingScreen() {
@@ -164,7 +167,7 @@ function AuthenticatedAppInner() {
       })
     }
     if (navigationRef.current) {
-      navigateFromPushData(navigationRef.current, data, user)
+      navigateFromPushData(navigationRef.current, data)
     }
   })
 
