@@ -4,8 +4,18 @@ export type RootStackParamList = {
   JobCards: undefined
   Clients: undefined
   Projects: undefined
-  MyTasks: undefined
-  MyNotes: undefined
+  MyTasks:
+    | {
+        screen?: 'MyTasksHome' | 'UserTaskDetail'
+        params?: { taskId: string; isNew?: boolean }
+      }
+    | undefined
+  MyNotes:
+    | {
+        screen?: 'MyNotesHome' | 'MyNoteDetail'
+        params?: { noteId: string; isNew?: boolean }
+      }
+    | undefined
   Teams: undefined
   Users: undefined
   Manufacturing: undefined

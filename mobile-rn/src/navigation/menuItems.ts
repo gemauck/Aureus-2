@@ -33,7 +33,7 @@ export const ALL_MENU_ITEMS: MenuItem[] = [
   { id: 'notifications', label: 'Notifications', icon: 'bell', screen: 'Notifications', permission: null, section: 'main' },
   { id: 'reports', label: 'Reports', icon: 'chart-bar', screen: 'Reports', permission: 'ACCESS_REPORTS', section: 'main', webPath: '/reports' },
   { id: 'my-tasks', label: 'My Tasks', icon: 'check-square', screen: 'MyTasks', permission: null, section: 'footer' },
-  { id: 'my-notes', label: 'My Notes', icon: 'sticky-note', screen: 'MyNotes', permission: null, section: 'footer', webPath: '/my-notes' }
+  { id: 'my-notes', label: 'My Notes', icon: 'sticky-note', screen: 'MyNotes', permission: null, section: 'footer' }
 ]
 
 export const SCREEN_TITLES: Partial<Record<keyof RootStackParamList, string>> = {

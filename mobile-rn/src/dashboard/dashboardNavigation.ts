@@ -28,6 +28,13 @@ export function openNotification(navigation: NavLike, item: DashboardNotificatio
 }
 
 export function openTask(navigation: NavLike, task: DashboardTask) {
+  if (task.taskType === 'user') {
+    navigation.navigate('MyTasks', {
+      screen: 'UserTaskDetail',
+      params: { taskId: task.id }
+    } as never)
+    return
+  }
   if (task.projectId) {
     navigation.navigate('Projects', {
       screen: 'TaskDetail',

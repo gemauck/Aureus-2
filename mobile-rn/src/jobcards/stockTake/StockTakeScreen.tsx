@@ -57,12 +57,17 @@ export function StockTakeScreen() {
   const applySessionLines = useCallback((lines: Array<{ sku?: string; countedQty?: number }>) => {
     setCounts((prev) => {
       const next = { ...prev }
+      let changed = false
       for (const line of lines || []) {
         const sku = String(line.sku || '').trim()
         if (!sku || editingSkusRef.current.has(sku)) continue
-        next[sku] = String(Number(line.countedQty ?? 0))
+        const val = String(Number(line.countedQty ?? 0))
+        if (next[sku] !== val) {
+          next[sku] = val
+          changed = true
+        }
       }
-      return next
+      return changed ? next : prev
     })
   }, [])
 
@@ -103,6 +108,7 @@ export function StockTakeScreen() {
     }
     void loadSession(sessionId, { silent: true })
     pollRef.current = setInterval(() => {
+      if (editingSkusRef.current.size > 0) return
       void loadSession(sessionId, { silent: true })
     }, 3000)
     return () => {
@@ -137,14 +143,21 @@ export function StockTakeScreen() {
     if (!rows.length) return
     setCounts((prev) => {
       const next = { ...prev }
+      let changed = false
       for (const r of rows) {
         if (!r.sku) continue
-        if (!(r.sku in next)) next[r.sku] = ''
+        if (!(r.sku in next)) {
+          next[r.sku] = ''
+          changed = true
+        }
       }
       for (const sku of Object.keys(next)) {
-        if (!rows.some((r) => r.sku === sku)) delete next[sku]
+        if (!rows.some((r) => r.sku === sku)) {
+          delete next[sku]
+          changed = true
+        }
       }
-      return next
+      return changed ? next : prev
     })
   }, [locationId, rows])
 
@@ -325,6 +338,8 @@ export function StockTakeScreen() {
           data={filtered}
           keyExtractor={(item: { sku: string }) => item.sku}
           contentContainerStyle={{ padding: 16 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="none"
           onScrollToIndexFailed={(info) => {
             listRef.current?.scrollToOffset({
               offset: Math.max(0, info.averageItemLength * info.index),
@@ -346,12 +361,17 @@ export function StockTakeScreen() {
                 style={styles.qtyInput}
                 keyboardType="decimal-pad"
                 value={counts[item.sku] ?? ''}
+                onFocus={() => {
+                  editingSkusRef.current.add(item.sku)
+                }}
                 onChangeText={(v) => {
                   editingSkusRef.current.add(item.sku)
                   setCounts((c) => ({ ...c, [item.sku]: v }))
                 }}
                 onBlur={() => {
-                  editingSkusRef.current.delete(item.sku)
+                  setTimeout(() => {
+                    editingSkusRef.current.delete(item.sku)
+                  }, 400)
                 }}
                 placeholder="Count"
               />

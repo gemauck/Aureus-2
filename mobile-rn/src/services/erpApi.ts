@@ -9,6 +9,8 @@ export type DashboardTask = {
   projectId?: string
   dueDate?: string
   priority?: string
+  category?: string
+  taskType?: 'project' | 'user'
 }
 
 export type DashboardNotification = {
@@ -30,22 +32,70 @@ export type DashboardJobCard = {
   agentName?: string
 }
 
+function normalizeProjectTask(raw: Record<string, unknown>): DashboardTask {
+  const project = raw.project as { name?: string } | undefined
+  return {
+    id: String(raw.id),
+    title: (raw.title as string) || (raw.name as string),
+    name: raw.name as string | undefined,
+    status: raw.status as string | undefined,
+    projectId: raw.projectId as string | undefined,
+    projectName: (raw.projectName as string) || project?.name,
+    dueDate: raw.dueDate as string | undefined,
+    priority: raw.priority as string | undefined,
+    taskType: 'project'
+  }
+}
+
+function normalizeUserTask(raw: Record<string, unknown>): DashboardTask {
+  const project = raw.project as { name?: string } | undefined
+  return {
+    id: String(raw.id),
+    title: raw.title as string | undefined,
+    status: raw.status as string | undefined,
+    projectId: raw.projectId as string | undefined,
+    projectName: project?.name,
+    dueDate: raw.dueDate as string | undefined,
+    priority: raw.priority as string | undefined,
+    category: raw.category as string | undefined,
+    taskType: 'user'
+  }
+}
+
+export function mergeDashboardTasks(userTasks: unknown[], projectTasks: unknown[]): DashboardTask[] {
+  const seen = new Set<string>()
+  const merged: DashboardTask[] = []
+  for (const raw of userTasks) {
+    const t = normalizeUserTask(raw as Record<string, unknown>)
+    if (!t.id || seen.has(t.id)) continue
+    seen.add(t.id)
+    merged.push(t)
+  }
+  for (const raw of projectTasks) {
+    const t = normalizeProjectTask(raw as Record<string, unknown>)
+    if (!t.id || seen.has(t.id)) continue
+    seen.add(t.id)
+    merged.push(t)
+  }
+  return merged
+}
+
 export const erpApi = {
   getProjectTasks(token: string) {
-    return request<{ tasks?: DashboardTask[] } | DashboardTask[]>('/api/tasks?lightweight=true', {
+    return request<{ tasks?: unknown[] } | unknown[]>('/api/tasks?lightweight=true', {
       token
     }).then((data) => {
-      if (Array.isArray(data)) return data
-      return data.tasks || []
+      const list = Array.isArray(data) ? data : data.tasks || []
+      return list.map((raw) => normalizeProjectTask(raw as Record<string, unknown>))
     })
   },
 
   getUserTasks(token: string) {
-    return request<{ tasks?: DashboardTask[] } | DashboardTask[]>('/api/user-tasks?lightweight=true', {
+    return request<{ tasks?: unknown[] } | unknown[]>('/api/user-tasks?lightweight=true', {
       token
     }).then((data) => {
-      if (Array.isArray(data)) return data
-      return data.tasks || []
+      const list = Array.isArray(data) ? data : data.tasks || []
+      return list.map((raw) => normalizeUserTask(raw as Record<string, unknown>))
     })
   },
 

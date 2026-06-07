@@ -25,7 +25,7 @@ import {
   type DashboardWidgetId
 } from '../dashboard/dashboardConfig'
 import { openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
-import { erpApi, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
+import { erpApi, mergeDashboardTasks, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
 
 import type { RootStackParamList } from '../navigation/types'
@@ -150,10 +150,13 @@ function TaskRow({
   onPress: () => void
 }) {
   const title = task.title || task.name || 'Untitled task'
+  const meta = [task.taskType === 'user' ? 'Personal' : task.projectName, task.status]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <ListRow
       title={title}
-      meta={task.projectName}
+      meta={meta || undefined}
       badge={task.status}
       onPress={onPress}
     />
@@ -262,7 +265,7 @@ export function DashboardScreen({ navigation }: Props) {
     void load()
   }, [load])
 
-  const combinedTasks = [...userTasks, ...projectTasks].slice(0, 8)
+  const combinedTasks = mergeDashboardTasks(userTasks, projectTasks).slice(0, 8)
   const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'
   const unreadCount = notifications.filter((n) => !n.read).length
   const quickActions = visibleQuickActions(dashConfig)

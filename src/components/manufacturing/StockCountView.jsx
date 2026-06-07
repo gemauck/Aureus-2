@@ -780,14 +780,19 @@
             const skip = stLocalEditSkusRef.current;
             setStCounts((prev) => {
               const next = { ...prev };
+              let changed = false;
               for (const line of submission.lines || []) {
                 const meta = parseLineMeta(line);
                 if (meta.isNewItem) continue;
                 const sku = String(line.sku || '').trim();
                 if (!sku || skip.has(sku)) continue;
-                next[sku] = String(Number(line.countedQty));
+                const val = String(Number(line.countedQty));
+                if (next[sku] !== val) {
+                  next[sku] = val;
+                  changed = true;
+                }
               }
-              return next;
+              return changed ? next : prev;
             });
           }
           return submission;
@@ -893,6 +898,7 @@
         return;
       }
       stPollRef.current = window.setInterval(() => {
+        if (stLocalEditSkusRef.current.size > 0) return;
         void loadStockTakeSession(stSessionId, { silent: true });
       }, 3000);
       return () => {

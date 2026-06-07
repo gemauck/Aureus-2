@@ -10,6 +10,7 @@ import { DashboardScreen } from '../screens/DashboardScreen'
 import { ClientsScreen } from '../screens/ClientsScreen'
 import { ProjectsScreen } from '../screens/ProjectsScreen'
 import { MyTasksScreen } from '../screens/MyTasksScreen'
+import { MyNotesScreen } from '../screens/MyNotesScreen'
 import { NotificationsScreen } from '../screens/NotificationsScreen'
 import { ServiceMaintenanceScreen } from '../screens/ServiceMaintenanceScreen'
 import { SettingsScreen } from '../screens/SettingsScreen'
@@ -63,12 +64,6 @@ const ReportsScreen = createPlaceholderScreen({
   description: 'Reports and analytics on the web ERP.',
   icon: 'chart-bar'
 })
-const MyNotesScreen = createPlaceholderScreen({
-  webPath: '/my-notes',
-  description: 'Personal notes on the web ERP.',
-  icon: 'sticky-note'
-})
-
 function LoadingScreen() {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
