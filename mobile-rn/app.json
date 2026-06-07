@@ -2,7 +2,7 @@
   "expo": {
     "name": "Abcotronics ERP",
     "slug": "abcotronics-erp-mobile",
-    "version": "0.3.7",
+    "version": "0.3.8",
     "orientation": "portrait",
     "scheme": "abcotronics",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     ],
     "android": {
       "package": "com.abcotronics.erp.mobile",
-      "versionCode": 12,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1d4ed8"

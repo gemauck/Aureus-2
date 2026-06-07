@@ -5,11 +5,11 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 12,
-  versionName: '0.3.7',
+  versionCode: 13,
+  versionName: '0.3.8',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes:
-    'Fixes Teams and Tools closing the app — sub-screens now load on demand instead of at module open. Safe OTA: background download after login, apply from Settings.',
+    'Fixes Expense Capture closing the app — native camera/document modules load only when used. Includes document-picker plugin and safer lazy screen loading.',
   /** Set true only when native shell must be replaced (permissions, SDK, runtime bump). */
   forceApkInstall: false
 }
