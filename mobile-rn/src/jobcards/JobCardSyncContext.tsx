@@ -10,10 +10,9 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { useAuth } from '../state/AuthContext'
-import { offlineStore, migrateLegacyOfflineQueue } from './offlineStore'
-import { createMobileSyncEngine } from './sync'
+import { getOfflineStore, migrateLegacyOfflineQueue } from './offlineStore'
 
-type SyncEngine = ReturnType<typeof createMobileSyncEngine>
+type SyncEngine = Awaited<ReturnType<typeof getSyncEngine>>
 
 type SyncOneResult = Awaited<ReturnType<SyncEngine['syncOneLocalPendingJobCardToServer']>>
 
@@ -27,6 +26,14 @@ type JobCardSyncContextValue = {
 }
 
 const JobCardSyncContext = createContext<JobCardSyncContextValue | undefined>(undefined)
+
+async function getSyncEngine(
+  getToken: () => string | null,
+  isOnline: () => boolean
+) {
+  const { createMobileSyncEngine } = await import('./sync')
+  return createMobileSyncEngine(getToken, isOnline)
+}
 
 export function JobCardSyncProvider({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuth()
@@ -46,14 +53,20 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
     isOnlineRef.current = isOnline
   }, [isOnline])
 
-  const syncEngineRef = useRef<SyncEngine>(
-    createMobileSyncEngine(
-      () => accessTokenRef.current,
-      () => isOnlineRef.current
-    )
-  )
+  const syncEngineRef = useRef<SyncEngine | null>(null)
+
+  const ensureSyncEngine = useCallback(async () => {
+    if (!syncEngineRef.current) {
+      syncEngineRef.current = await getSyncEngine(
+        () => accessTokenRef.current,
+        () => isOnlineRef.current
+      )
+    }
+    return syncEngineRef.current
+  }, [])
 
   const refreshUnsyncedCount = useCallback(async () => {
+    const offlineStore = await getOfflineStore()
     const list = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
     setUnsyncedCount(list.length)
   }, [])
@@ -82,8 +95,9 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       if (!accessTokenRef.current || !isOnlineRef.current) {
         return { ok: false, serverId: null, errorText: 'Offline' }
       }
+      const engine = await ensureSyncEngine()
       const result = await withSyncLock(() =>
-        syncEngineRef.current.syncOneLocalPendingJobCardToServer(card as never)
+        engine.syncOneLocalPendingJobCardToServer(card as never)
       )
       if (result === null) {
         return { ok: false, serverId: null, errorText: 'Sync already in progress' }
@@ -92,17 +106,19 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       if (result.ok) bumpLocalDrafts()
       return result
     },
-    [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts]
+    [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts, ensureSyncEngine]
   )
 
   const runAutoSyncPendingJobCards = useCallback(async () => {
     if (!accessTokenRef.current || !isOnlineRef.current) return { synced: 0, failed: 0 }
 
+    const offlineStore = await getOfflineStore()
     const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
     if (!pending.length) return { synced: 0, failed: 0 }
 
+    const engine = await ensureSyncEngine()
     const result = await withSyncLock(async () => {
-      const batch = await syncEngineRef.current.runAutoSyncPendingJobCards(pending)
+      const batch = await engine.runAutoSyncPendingJobCards(pending)
       await refreshUnsyncedCount()
       return batch
     })
@@ -117,7 +133,7 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       setTimeout(() => bumpLocalDrafts(), 8000)
     }
     return result
-  }, [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts])
+  }, [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts, ensureSyncEngine])
 
   useEffect(() => {
     migrateLegacyOfflineQueue().then(() => refreshUnsyncedCount())
@@ -129,6 +145,7 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
     const timer = setTimeout(() => {
       if (cancelled) return
       void (async () => {
+        const offlineStore = await getOfflineStore()
         const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
         if (!pending.length || cancelled) return
         await runAutoSyncPendingJobCards()

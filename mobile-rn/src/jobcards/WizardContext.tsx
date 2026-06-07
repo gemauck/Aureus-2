@@ -29,7 +29,7 @@ import { isAdmin } from '../utils/menuAccess'
 import { jobcardsApi } from './api'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { voiceClipToPayloadUrl } from './media/mediaUri'
-import { offlineStore } from './offlineStore'
+import { getOfflineStore } from './offlineStore'
 import { useJobCardSync } from './JobCardSyncContext'
 import type {
   ProjectOption,
@@ -335,9 +335,11 @@ export function JobCardWizardProvider({
         })
         serverList = res.jobCards || []
       }
+      const offlineStore = await getOfflineStore()
       const local = await offlineStore.readLocalPendingJobCardsAsync()
       setPriorRows(buildMergedWizardJobCardRows(serverList, local, Boolean(accessToken)))
     } catch {
+      const offlineStore = await getOfflineStore()
       const local = await offlineStore.readLocalPendingJobCardsAsync()
       setPriorRows(buildMergedWizardJobCardRows([], local, Boolean(accessToken)))
     } finally {
@@ -427,6 +429,7 @@ export function JobCardWizardProvider({
   const persistLocal = useCallback(
     async (payload: Record<string, unknown>, opts: { scheduleAutoSync?: boolean } = {}) => {
       const scheduleAutoSync = opts.scheduleAutoSync !== false
+      const offlineStore = await getOfflineStore()
       await offlineStore.upsertLocalPendingJobCardAsync({ ...payload, synced: false })
       await refreshUnsyncedCount()
       if (scheduleAutoSync) bumpLocalDrafts()
@@ -623,6 +626,7 @@ export function JobCardWizardProvider({
       const rowId = String(jobCardId)
       if (!rowId) return
 
+      const offlineStore = await getOfflineStore()
       const localRows = await offlineStore.readLocalPendingJobCardsAsync()
       const localMatch = localRows.find(
         (row) =>
@@ -703,6 +707,7 @@ export function JobCardWizardProvider({
       try {
         setDeletingJobCardId(rowId)
         if (isLocal) {
+          const offlineStore = await getOfflineStore()
           await offlineStore.removeLocalPendingJobCardAsync(rowId)
           void refreshUnsyncedCount()
         } else {

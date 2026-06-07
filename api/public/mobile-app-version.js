@@ -5,14 +5,13 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  /** Match JS APP_VERSION_CODE in older OTA bundles until devices refresh (avoids APK re-download loop). */
-  versionCode: 10,
-  versionName: '0.3.5',
+  versionCode: 11,
+  versionName: '0.3.6',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes:
-    'OTA updates apply with one tap — tap Restart when prompted (no force-stop or cache clear). JS updates stay automatic.',
-  /** Set true only when native modules/permissions change and users must install a new APK once. */
-  forceApkInstall: false
+    'Stability fix: disables OTA auto-load, uses embedded app only. Uninstall the old app first, then install this APK once.',
+  /** Required — clears bad OTA cache and ships a verified embedded bundle. */
+  forceApkInstall: true
 }
 
 async function handler(req, res) {

@@ -7,20 +7,8 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { LoginScreen } from '../screens/LoginScreen'
 import { DashboardScreen } from '../screens/DashboardScreen'
-import { ClientsScreen } from '../screens/ClientsScreen'
-import { ProjectsScreen } from '../screens/ProjectsScreen'
-import { MyTasksScreen } from '../screens/MyTasksScreen'
-import { MyNotesScreen } from '../screens/MyNotesScreen'
-import { NotificationsScreen } from '../screens/NotificationsScreen'
-import { ServiceMaintenanceScreen } from '../screens/ServiceMaintenanceScreen'
-import { SettingsScreen } from '../screens/SettingsScreen'
-import { DashboardCustomizeScreen } from '../screens/DashboardCustomizeScreen'
-import { createPlaceholderScreen } from '../screens/ModulePlaceholderScreen'
-import { TeamsScreen } from '../screens/TeamsScreen'
-import { ToolsScreen } from '../screens/ToolsScreen'
-import { JobCardsRootScreen } from '../jobcards/screens/JobCardsRootScreen'
-import { MessagesNavigator } from '../messages/MessagesNavigator'
 import { DrawerMenu } from '../components/shell/DrawerMenu'
+import { JobCardSyncProvider } from '../jobcards/JobCardSyncContext'
 import { useAuth } from '../state/AuthContext'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 
@@ -31,31 +19,73 @@ import { useTheme } from '../theme/ThemeContext'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
-const UsersScreen = createPlaceholderScreen({
+/** Defer heavy module trees until the user navigates to them (faster, safer cold start). */
+function lazyScreen<T extends React.ComponentType<unknown>>(
+  loader: () => T
+): () => T {
+  let cached: T | null = null
+  return () => {
+    if (!cached) cached = loader()
+    return cached
+  }
+}
+
+const ClientsScreen = lazyScreen(() => require('../screens/ClientsScreen').ClientsScreen)
+const ProjectsScreen = lazyScreen(() => require('../screens/ProjectsScreen').ProjectsScreen)
+const MyTasksScreen = lazyScreen(() => require('../screens/MyTasksScreen').MyTasksScreen)
+const MyNotesScreen = lazyScreen(() => require('../screens/MyNotesScreen').MyNotesScreen)
+const NotificationsScreen = lazyScreen(() => require('../screens/NotificationsScreen').NotificationsScreen)
+const ServiceMaintenanceScreen = lazyScreen(
+  () => require('../screens/ServiceMaintenanceScreen').ServiceMaintenanceScreen
+)
+const SettingsScreen = lazyScreen(() => require('../screens/SettingsScreen').SettingsScreen)
+const DashboardCustomizeScreen = lazyScreen(
+  () => require('../screens/DashboardCustomizeScreen').DashboardCustomizeScreen
+)
+const JobCardsRootScreen = lazyScreen(
+  () => require('../jobcards/screens/JobCardsRootScreen').JobCardsRootScreen
+)
+const TeamsScreen = lazyScreen(() => require('../screens/TeamsScreen').TeamsScreen)
+const ToolsScreen = lazyScreen(() => require('../screens/ToolsScreen').ToolsScreen)
+const MessagesNavigator = lazyScreen(() => require('../messages/MessagesNavigator').MessagesNavigator)
+
+function lazyPlaceholderScreen(opts: {
+  webPath: string
+  description: string
+  icon: string
+}) {
+  return lazyScreen(() => {
+    const { createPlaceholderScreen } = require('../screens/ModulePlaceholderScreen')
+    return createPlaceholderScreen(opts)
+  })
+}
+
+const UsersScreen = lazyPlaceholderScreen({
   webPath: '/users',
   description: 'User management and permissions — admin access on the web ERP.',
   icon: 'user-cog'
 })
-const ManufacturingScreen = createPlaceholderScreen({
+const ManufacturingScreen = lazyPlaceholderScreen({
   webPath: '/manufacturing',
   description: 'Inventory, stock movements, and production — full module on the web ERP.',
   icon: 'industry'
 })
-const HelpdeskScreen = createPlaceholderScreen({
+const HelpdeskScreen = lazyPlaceholderScreen({
   webPath: '/helpdesk',
   description: 'Tickets and support workflows on the web ERP.',
   icon: 'headset'
 })
-const DocumentsScreen = createPlaceholderScreen({
+const DocumentsScreen = lazyPlaceholderScreen({
   webPath: '/documents',
   description: 'Document library — available on the web ERP.',
   icon: 'folder-open'
 })
-const ReportsScreen = createPlaceholderScreen({
+const ReportsScreen = lazyPlaceholderScreen({
   webPath: '/reports',
   description: 'Reports and analytics on the web ERP.',
   icon: 'chart-bar'
 })
+
 function LoadingScreen() {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
@@ -78,7 +108,7 @@ function AuthenticatedApp() {
   })
 
   return (
-    <>
+    <JobCardSyncProvider>
       <NavigationContainer
         ref={navigationRef}
         onReady={() => {
@@ -95,27 +125,27 @@ function AuthenticatedApp() {
           screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
         >
           <Stack.Screen name="Dashboard" component={DashboardScreen} />
-          <Stack.Screen name="Clients" component={ClientsScreen} />
-          <Stack.Screen name="Projects" component={ProjectsScreen} />
-          <Stack.Screen name="MyTasks" component={MyTasksScreen} />
-          <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          <Stack.Screen name="ServiceMaintenance" component={ServiceMaintenanceScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="DashboardCustomize" component={DashboardCustomizeScreen} />
-          <Stack.Screen name="JobCards" component={JobCardsRootScreen} />
-          <Stack.Screen name="Teams" component={TeamsScreen} />
-          <Stack.Screen name="Users" component={UsersScreen} />
-          <Stack.Screen name="Manufacturing" component={ManufacturingScreen} />
-          <Stack.Screen name="Helpdesk" component={HelpdeskScreen} />
-          <Stack.Screen name="Tools" component={ToolsScreen} />
-          <Stack.Screen name="Documents" component={DocumentsScreen} />
-          <Stack.Screen name="Messages" component={MessagesNavigator} />
-          <Stack.Screen name="Reports" component={ReportsScreen} />
-          <Stack.Screen name="MyNotes" component={MyNotesScreen} />
+          <Stack.Screen name="Clients" getComponent={ClientsScreen} />
+          <Stack.Screen name="Projects" getComponent={ProjectsScreen} />
+          <Stack.Screen name="MyTasks" getComponent={MyTasksScreen} />
+          <Stack.Screen name="Notifications" getComponent={NotificationsScreen} />
+          <Stack.Screen name="ServiceMaintenance" getComponent={ServiceMaintenanceScreen} />
+          <Stack.Screen name="Settings" getComponent={SettingsScreen} />
+          <Stack.Screen name="DashboardCustomize" getComponent={DashboardCustomizeScreen} />
+          <Stack.Screen name="JobCards" getComponent={JobCardsRootScreen} />
+          <Stack.Screen name="Teams" getComponent={TeamsScreen} />
+          <Stack.Screen name="Users" getComponent={UsersScreen} />
+          <Stack.Screen name="Manufacturing" getComponent={ManufacturingScreen} />
+          <Stack.Screen name="Helpdesk" getComponent={HelpdeskScreen} />
+          <Stack.Screen name="Tools" getComponent={ToolsScreen} />
+          <Stack.Screen name="Documents" getComponent={DocumentsScreen} />
+          <Stack.Screen name="Messages" getComponent={MessagesNavigator} />
+          <Stack.Screen name="Reports" getComponent={ReportsScreen} />
+          <Stack.Screen name="MyNotes" getComponent={MyNotesScreen} />
         </Stack.Navigator>
       </NavigationContainer>
       <DrawerMenu navigationRef={navigationRef} currentRoute={currentRoute} />
-    </>
+    </JobCardSyncProvider>
   )
 }
 
@@ -140,6 +170,6 @@ export function RootNavigator() {
 
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: erp.bg }
+    loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: erp.bg }
   })
 }

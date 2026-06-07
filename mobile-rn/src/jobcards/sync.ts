@@ -1,7 +1,7 @@
 import { API_BASE_URL } from '../config'
 import { createSyncEngine } from '../../../src/jobCardWizard/syncEngine.js'
 import { fetchWithTokenRefresh } from '../services/apiClient'
-import { offlineStore } from './offlineStore'
+import { getOfflineStore } from './offlineStore'
 
 export function createMobileSyncEngine(getToken: () => string | null, isOnline: () => boolean) {
   const authedFetch: typeof fetch = (url, options = {}) => {
@@ -14,8 +14,14 @@ export function createMobileSyncEngine(getToken: () => string | null, isOnline: 
     getToken,
     isOnline,
     fetchRetryConfig: { fetchFn: authedFetch },
-    removeLocalPending: (id) => offlineStore.removeLocalPendingJobCardAsync(id),
-    rememberPriorId: (id) => offlineStore.rememberPublicPriorJobCardId(id),
+    removeLocalPending: async (id) => {
+      const offlineStore = await getOfflineStore()
+      return offlineStore.removeLocalPendingJobCardAsync(id)
+    },
+    rememberPriorId: async (id) => {
+      const offlineStore = await getOfflineStore()
+      return offlineStore.rememberPublicPriorJobCardId(id)
+    },
     flushActivity: async (serverId, events) => {
       const token = getToken()
       if (!token) return

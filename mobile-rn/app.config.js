@@ -22,9 +22,8 @@ module.exports = {
     runtimeVersion: RUNTIME_VERSION,
     plugins,
     updates: {
-      enabled: true,
+      enabled: false,
       url: `${OTA_BASE.replace(/\/$/, '')}/api/public/mobile-ota/manifest`,
-      // JS hook controls check/download/apply — avoids native auto-loading a bad cached bundle on cold start.
       checkAutomatically: 'NEVER',
       fallbackToCacheTimeout: 0
     },
