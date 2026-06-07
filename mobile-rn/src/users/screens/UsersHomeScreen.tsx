@@ -545,7 +545,7 @@ const createStyles = ({ erp }: { erp: ErpTheme }) =>
     statusActive: { backgroundColor: '#dcfce7' },
     statusInactive: { backgroundColor: erp.border },
     statusText: { fontSize: 9, fontWeight: '700', color: erp.text },
-    chevron: { marginLeft: 2 }
+    chevron: { marginLeft: 2 },
     emptyWrap: { alignItems: 'center', paddingVertical: 32, gap: 12 },
     empty: { color: erp.textMuted, fontSize: 14 },
     denied: { alignItems: 'center', paddingVertical: 48, gap: 12 },
