@@ -14,8 +14,6 @@ import {
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { FontAwesome5 } from '@expo/vector-icons'
-import * as DocumentPicker from 'expo-document-picker'
-import * as ImagePicker from 'expo-image-picker'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ModuleHeader } from '../../components/shell/ModuleHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
@@ -203,6 +201,7 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
   }
 
   const takePhoto = async () => {
+    const ImagePicker = await import('expo-image-picker')
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
       Alert.alert('Camera', 'Allow camera access to photograph receipts.')
@@ -226,6 +225,7 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
   }
 
   const pickGallery = async () => {
+    const ImagePicker = await import('expo-image-picker')
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) {
       Alert.alert('Photos', 'Allow photo library access.')
@@ -249,6 +249,7 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
   }
 
   const pickDocument = async () => {
+    const DocumentPicker = await import('expo-document-picker')
     const picked = await DocumentPicker.getDocumentAsync({
       type: ['application/pdf', 'image/*'],
       copyToCacheDirectory: true

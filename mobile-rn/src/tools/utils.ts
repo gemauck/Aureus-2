@@ -1,5 +1,4 @@
 import * as FileSystem from 'expo-file-system'
-import * as ImageManipulator from 'expo-image-manipulator'
 import { Alert, Linking, Share } from 'react-native'
 import { API_BASE_URL } from '../config'
 import type { ReceiptAccount, ReceiptCostCenter, ReceiptDocument } from './types'
@@ -23,6 +22,7 @@ export function isPdfUrl(url: string): boolean {
 }
 
 export async function compressImageUri(uri: string): Promise<string> {
+  const ImageManipulator = await import('expo-image-manipulator')
   const result = await ImageManipulator.manipulateAsync(
     uri,
     [{ resize: { width: MAX_IMAGE_DIMENSION } }],

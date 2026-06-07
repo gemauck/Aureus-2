@@ -42,9 +42,11 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow photo library access for job card attachments."
+          "photosPermission": "Allow photo library access for job card attachments and expense receipts.",
+          "cameraPermission": "Allow camera access to photograph expense receipts."
         }
       ],
+      "expo-document-picker",
       [
         "expo-notifications",
         {
