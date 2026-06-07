@@ -31,13 +31,26 @@ function serializeDocument(row) {
     accountId: row.accountId,
     costCenterId: row.costCenterId,
     notes: row.notes,
+    qboPurchaseId: row.qboPurchaseId || null,
+    qboSyncedAt: row.qboSyncedAt || null,
+    qboSyncError: row.qboSyncError || '',
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     account: row.account
-      ? { id: row.account.id, name: row.account.name, code: row.account.code }
+      ? {
+          id: row.account.id,
+          name: row.account.name,
+          code: row.account.code,
+          qboAccountId: row.account.qboAccountId || ''
+        }
       : null,
     costCenter: row.costCenter
-      ? { id: row.costCenter.id, name: row.costCenter.name, code: row.costCenter.code }
+      ? {
+          id: row.costCenter.id,
+          name: row.costCenter.name,
+          code: row.costCenter.code,
+          qboClassId: row.costCenter.qboClassId || ''
+        }
       : null
   }
 }

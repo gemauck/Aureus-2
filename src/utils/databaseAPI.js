@@ -2554,6 +2554,44 @@ const DatabaseAPI = {
         return this.makeRequest(`/receipt-documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
     },
 
+    async pushReceiptDocumentsToQuickBooks(payload = {}) {
+        return this.makeRequest('/receipt-documents/push-qbo', {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async getQuickBooksConnection() {
+        return this.makeRequest('/quickbooks/connection', { method: 'GET', forceRefresh: true });
+    },
+
+    async getQuickBooksAuthUrl() {
+        return this.makeRequest('/quickbooks/auth-url', { method: 'GET', forceRefresh: true });
+    },
+
+    async updateQuickBooksConnection(payload) {
+        return this.makeRequest('/quickbooks/connection', {
+            method: 'PATCH',
+            body: JSON.stringify(payload || {})
+        });
+    },
+
+    async disconnectQuickBooks() {
+        return this.makeRequest('/quickbooks/connection', { method: 'DELETE' });
+    },
+
+    async getQuickBooksExpenseAccounts() {
+        return this.makeRequest('/quickbooks/accounts', { method: 'GET', forceRefresh: true });
+    },
+
+    async getQuickBooksPaymentAccounts() {
+        return this.makeRequest('/quickbooks/payment-accounts', { method: 'GET', forceRefresh: true });
+    },
+
+    async getQuickBooksClasses() {
+        return this.makeRequest('/quickbooks/classes', { method: 'GET', forceRefresh: true });
+    },
+
     async updatePurchaseOrder(id, purchaseOrderData) {
         const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'PATCH',

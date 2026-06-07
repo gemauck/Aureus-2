@@ -12,6 +12,7 @@ function serializeAccount(row) {
     id: row.id,
     name: row.name,
     code: row.code,
+    qboAccountId: row.qboAccountId || '',
     active: row.active,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,

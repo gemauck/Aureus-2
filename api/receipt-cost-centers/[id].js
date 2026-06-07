@@ -12,6 +12,7 @@ function serialize(row) {
     id: row.id,
     name: row.name,
     code: row.code,
+    qboClassId: row.qboClassId || '',
     active: row.active,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
@@ -50,6 +51,9 @@ async function handler(req, res) {
       if (body.sortOrder !== undefined) {
         const n = parseInt(body.sortOrder, 10)
         if (Number.isFinite(n)) data.sortOrder = n
+      }
+      if (body.qboClassId !== undefined) {
+        data.qboClassId = String(body.qboClassId || '').trim().slice(0, 64)
       }
       try {
         const row = await prisma.receiptCostCenter.update({

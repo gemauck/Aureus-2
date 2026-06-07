@@ -3270,7 +3270,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes', 'receipt-capture']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }

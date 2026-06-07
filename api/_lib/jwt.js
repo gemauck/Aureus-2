@@ -78,3 +78,24 @@ export function verifyErpCalendarOAuthState(token) {
   }
 }
 
+const QBO_OAUTH_PURPOSE = 'qbo-oauth'
+
+/** Short-lived state token for QuickBooks Online OAuth (admin receipt capture). */
+export function signQuickBooksOAuthState(userId) {
+  if (!process.env.JWT_SECRET || !userId) return null
+  return jwt.sign({ purpose: QBO_OAUTH_PURPOSE, sub: userId }, process.env.JWT_SECRET, {
+    expiresIn: '15m'
+  })
+}
+
+export function verifyQuickBooksOAuthState(token) {
+  try {
+    if (!process.env.JWT_SECRET || !token) return null
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    if (payload.purpose !== QBO_OAUTH_PURPOSE || !payload.sub) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+

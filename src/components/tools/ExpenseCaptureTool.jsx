@@ -82,6 +82,14 @@ function ExpenseCaptureTool() {
   const [newCcName, setNewCcName] = useState('');
   const [newCcCode, setNewCcCode] = useState('');
 
+  const [qboConnection, setQboConnection] = useState({ connected: false, configured: false });
+  const [qboExpenseAccounts, setQboExpenseAccounts] = useState([]);
+  const [qboPaymentAccounts, setQboPaymentAccounts] = useState([]);
+  const [qboClasses, setQboClasses] = useState([]);
+  const [qboPaymentAccountId, setQboPaymentAccountId] = useState('');
+  const [qboPushing, setQboPushing] = useState(false);
+  const [qboConnecting, setQboConnecting] = useState(false);
+
   /** null = follow viewport; 'app' | 'classic' = user override */
   const [userLayout, setUserLayout] = useState(null);
   const [narrowViewport, setNarrowViewport] = useState(
@@ -116,12 +124,45 @@ function ExpenseCaptureTool() {
     setDocuments(Array.isArray(list) ? list : []);
   }, [api, isAdmin]);
 
+  const loadQboConnection = useCallback(async () => {
+    if (!api || !isAdmin) return;
+    try {
+      const res = await api.getQuickBooksConnection();
+      const data = res?.data !== undefined ? res.data : res;
+      setQboConnection(data || { connected: false });
+      if (data?.defaultPaymentAccountId) {
+        setQboPaymentAccountId(data.defaultPaymentAccountId);
+      }
+    } catch (_) {
+      setQboConnection({ connected: false, configured: false });
+    }
+  }, [api, isAdmin]);
+
+  const loadQboLookups = useCallback(async () => {
+    if (!api || !isAdmin || !qboConnection.connected) return;
+    try {
+      const [exp, pay, cls] = await Promise.all([
+        api.getQuickBooksExpenseAccounts(),
+        api.getQuickBooksPaymentAccounts(),
+        api.getQuickBooksClasses()
+      ]);
+      const expData = exp?.data !== undefined ? exp.data : exp;
+      const payData = pay?.data !== undefined ? pay.data : pay;
+      const clsData = cls?.data !== undefined ? cls.data : cls;
+      setQboExpenseAccounts(expData?.accounts || []);
+      setQboPaymentAccounts(payData?.accounts || []);
+      setQboClasses(clsData?.classes || []);
+    } catch (e) {
+      setMsg(e?.message || 'Could not load QuickBooks lists');
+    }
+  }, [api, isAdmin, qboConnection.connected]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        await Promise.all([loadLookups(), loadDocuments()]);
+        await Promise.all([loadLookups(), loadDocuments(), loadQboConnection()]);
       } catch (e) {
         if (!cancelled) setMsg(e?.message || 'Failed to load');
       } finally {
@@ -131,7 +172,28 @@ function ExpenseCaptureTool() {
     return () => {
       cancelled = true;
     };
-  }, [loadLookups, loadDocuments]);
+  }, [loadLookups, loadDocuments, loadQboConnection]);
+
+  useEffect(() => {
+    void loadQboLookups();
+  }, [loadQboLookups]);
+
+  useEffect(() => {
+    const onMsg = (ev) => {
+      if (ev.origin !== window.location.origin) return;
+      if (ev.data?.type === 'QBO_OAUTH_OK') {
+        setQboConnecting(false);
+        void loadQboConnection().then(() => loadQboLookups());
+        setMsg('QuickBooks connected.');
+      }
+      if (ev.data?.type === 'QBO_OAUTH_ERR') {
+        setQboConnecting(false);
+        setMsg(ev.data.message || 'QuickBooks connection failed');
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [loadQboConnection, loadQboLookups]);
 
   const resetCaptureForm = () => {
     setCapturePreview('');
@@ -328,6 +390,101 @@ function ExpenseCaptureTool() {
     }
   };
 
+  const connectQuickBooks = async () => {
+    if (!api) return;
+    setQboConnecting(true);
+    setMsg('');
+    try {
+      const res = await api.getQuickBooksAuthUrl();
+      const data = res?.data !== undefined ? res.data : res;
+      const url = data?.authUrl;
+      if (!url) throw new Error('No auth URL returned');
+      window.open(url, 'qbo_oauth', 'width=600,height=700');
+    } catch (e) {
+      setQboConnecting(false);
+      alert(e?.message || 'Could not start QuickBooks connection');
+    }
+  };
+
+  const disconnectQuickBooks = async () => {
+    if (!api || !confirm('Disconnect QuickBooks Online?')) return;
+    try {
+      await api.disconnectQuickBooks();
+      setQboConnection({ connected: false, configured: qboConnection.configured });
+      setQboExpenseAccounts([]);
+      setQboPaymentAccounts([]);
+      setQboClasses([]);
+      setMsg('QuickBooks disconnected.');
+    } catch (e) {
+      alert(e?.message || 'Disconnect failed');
+    }
+  };
+
+  const saveQboPaymentAccount = async () => {
+    if (!api || !qboPaymentAccountId) return;
+    try {
+      await api.updateQuickBooksConnection({ defaultPaymentAccountId: qboPaymentAccountId });
+      await loadQboConnection();
+      setMsg('QuickBooks payment account saved.');
+    } catch (e) {
+      alert(e?.message || 'Save failed');
+    }
+  };
+
+  const mapAccountToQbo = async (accountId, qboAccountId) => {
+    if (!api) return;
+    try {
+      await api.updateReceiptAccount(accountId, { qboAccountId: qboAccountId || '' });
+      await loadLookups();
+    } catch (e) {
+      alert(e?.message || 'Mapping failed');
+    }
+  };
+
+  const mapCostCenterToQbo = async (costCenterId, qboClassId) => {
+    if (!api) return;
+    try {
+      await api.updateReceiptCostCenter(costCenterId, { qboClassId: qboClassId || '' });
+      await loadLookups();
+    } catch (e) {
+      alert(e?.message || 'Mapping failed');
+    }
+  };
+
+  const pushToQuickBooks = async () => {
+    if (!api) return;
+    const eligible = documents.filter((d) => (d.status === 'reviewed' || d.status === 'draft') && d.accountId);
+    if (!eligible.length) {
+      alert('No allocated expenses to push. Mark as reviewed and assign accounts first.');
+      return;
+    }
+    if (!qboConnection.connected) {
+      alert('Connect QuickBooks in Setup first.');
+      return;
+    }
+    if (!qboPaymentAccountId && !qboConnection.defaultPaymentAccountId) {
+      alert('Select a default QuickBooks payment account in Setup.');
+      return;
+    }
+    if (!confirm(`Push ${eligible.length} expense(s) to QuickBooks Online?`)) return;
+    setQboPushing(true);
+    setMsg('');
+    try {
+      const res = await api.pushReceiptDocumentsToQuickBooks({
+        documentIds: eligible.map((d) => d.id)
+      });
+      const data = res?.data !== undefined ? res.data : res;
+      setMsg(
+        `QuickBooks: ${data?.pushed || 0} pushed, ${data?.failed || 0} failed, ${data?.skipped || 0} skipped.`
+      );
+      await loadDocuments();
+    } catch (e) {
+      setMsg(e?.message || 'QuickBooks push failed');
+    } finally {
+      setQboPushing(false);
+    }
+  };
+
   const exportCsv = () => {
     const rows = documents.filter((d) => d.status === 'reviewed' || d.status === 'exported' || d.status === 'draft');
     if (!rows.length) {
@@ -476,6 +633,7 @@ function ExpenseCaptureTool() {
                 </p>
                 <span className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   {d.status}
+                  {d.qboPurchaseId ? ' · QBO' : ''}
                 </span>
               </div>
             </div>
@@ -690,6 +848,63 @@ function ExpenseCaptureTool() {
 
   const settingsPanel = isAdmin && (
     <div className={appStyle ? 'space-y-4 px-1 pb-24' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}>
+      <div className={`${appStyle ? appCard + ' p-4' : cardClass} ${!appStyle ? 'md:col-span-2' : ''}`}>
+        <h3 className="text-sm font-semibold mb-2">QuickBooks Online</h3>
+        {!qboConnection.configured ? (
+          <p className={`text-xs mb-2 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+            Server missing INTUIT_CLIENT_ID / INTUIT_CLIENT_SECRET. CSV export still works.
+          </p>
+        ) : null}
+        {qboConnection.connected ? (
+          <div className="space-y-2 text-sm">
+            <p className={isDark ? 'text-green-300' : 'text-green-800'}>
+              Connected{qboConnection.companyName ? `: ${qboConnection.companyName}` : ''}
+              {qboConnection.environment ? ` (${qboConnection.environment})` : ''}
+            </p>
+            <label className="block text-xs">
+              <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>Payment account (bank/card)</span>
+              <select
+                className="mt-1 w-full px-2 py-2 rounded-xl border border-gray-500/30 bg-transparent text-sm"
+                value={qboPaymentAccountId || qboConnection.defaultPaymentAccountId || ''}
+                onChange={(e) => setQboPaymentAccountId(e.target.value)}
+              >
+                <option value="">— select —</option>
+                {qboPaymentAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                    {a.accountType ? ` (${a.accountType})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void saveQboPaymentAccount()} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs">
+                Save payment account
+              </button>
+              <button type="button" onClick={() => void disconnectQuickBooks()} className="px-3 py-1.5 border border-red-500/50 text-red-500 rounded-lg text-xs">
+                Disconnect
+              </button>
+              <button
+                type="button"
+                disabled={qboPushing}
+                onClick={() => void pushToQuickBooks()}
+                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs disabled:opacity-50"
+              >
+                {qboPushing ? 'Pushing…' : 'Push reviewed to QBO'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={qboConnecting || !qboConnection.configured}
+            onClick={() => void connectQuickBooks()}
+            className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+          >
+            {qboConnecting ? 'Connecting…' : 'Connect QuickBooks'}
+          </button>
+        )}
+      </div>
       <div className={appStyle ? appCard + ' p-4' : cardClass}>
         <h3 className="text-sm font-semibold mb-2">Accounts (admin)</h3>
         <div className="flex gap-2 mb-2 flex-wrap">
@@ -709,16 +924,33 @@ function ExpenseCaptureTool() {
             Add
           </button>
         </div>
-        <ul className="text-sm space-y-1 max-h-56 overflow-y-auto">
+        <ul className="text-sm space-y-2 max-h-56 overflow-y-auto">
           {accounts.map((a) => (
-            <li key={a.id} className="flex justify-between items-center py-2 border-b border-gray-600/20">
-              <span>
-                {a.code ? `${a.code} — ` : ''}
-                {a.name}
-              </span>
-              <button type="button" className="text-red-500 text-xs" onClick={() => removeAccount(a.id)}>
-                Remove
-              </button>
+            <li key={a.id} className="py-2 border-b border-gray-600/20 space-y-1">
+              <div className="flex justify-between items-center gap-2">
+                <span>
+                  {a.code ? `${a.code} — ` : ''}
+                  {a.name}
+                </span>
+                <button type="button" className="text-red-500 text-xs shrink-0" onClick={() => removeAccount(a.id)}>
+                  Remove
+                </button>
+              </div>
+              {qboConnection.connected ? (
+                <select
+                  className="w-full px-2 py-1 rounded-lg border border-gray-500/30 bg-transparent text-xs"
+                  value={a.qboAccountId || ''}
+                  onChange={(e) => void mapAccountToQbo(a.id, e.target.value)}
+                >
+                  <option value="">QBO expense account —</option>
+                  {qboExpenseAccounts.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.name}
+                      {q.acctNum ? ` (${q.acctNum})` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -742,22 +974,38 @@ function ExpenseCaptureTool() {
             Add
           </button>
         </div>
-        <ul className="text-sm space-y-1 max-h-56 overflow-y-auto">
+        <ul className="text-sm space-y-2 max-h-56 overflow-y-auto">
           {costCenters.map((c) => (
-            <li key={c.id} className="flex justify-between items-center py-2 border-b border-gray-600/20">
-              <span>
-                {c.code ? `${c.code} — ` : ''}
-                {c.name}
-              </span>
-              <button type="button" className="text-red-500 text-xs" onClick={() => removeCc(c.id)}>
-                Remove
-              </button>
+            <li key={c.id} className="py-2 border-b border-gray-600/20 space-y-1">
+              <div className="flex justify-between items-center gap-2">
+                <span>
+                  {c.code ? `${c.code} — ` : ''}
+                  {c.name}
+                </span>
+                <button type="button" className="text-red-500 text-xs shrink-0" onClick={() => removeCc(c.id)}>
+                  Remove
+                </button>
+              </div>
+              {qboConnection.connected ? (
+                <select
+                  className="w-full px-2 py-1 rounded-lg border border-gray-500/30 bg-transparent text-xs"
+                  value={c.qboClassId || ''}
+                  onChange={(e) => void mapCostCenterToQbo(c.id, e.target.value)}
+                >
+                  <option value="">QBO class —</option>
+                  {qboClasses.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
             </li>
           ))}
         </ul>
       </div>
       <p className={`text-xs ${appStyle ? '' : 'md:col-span-2'} ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-        These lists are for allocating expenses in the ERP. QuickBooks Online sync is a future phase — see docs.
+        Map ERP accounts to QBO expense accounts and cost centres to QBO classes, then push from Setup or export CSV.
       </p>
     </div>
   );
@@ -804,13 +1052,25 @@ function ExpenseCaptureTool() {
               <h1 className="text-xl font-bold tracking-tight">Expense Capture</h1>
               <p className="text-xs text-white/80 mt-0.5">Snap a slip · allocate · submit</p>
             </div>
-            <button
-              type="button"
-              onClick={exportCsv}
-              className="text-xs px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25"
-            >
-              Export CSV
-            </button>
+            <div className="flex gap-1">
+              {isAdmin && qboConnection.connected ? (
+                <button
+                  type="button"
+                  disabled={qboPushing}
+                  onClick={() => void pushToQuickBooks()}
+                  className="text-xs px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 disabled:opacity-50"
+                >
+                  {qboPushing ? 'QBO…' : 'Push QBO'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={exportCsv}
+                className="text-xs px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25"
+              >
+                Export CSV
+              </button>
+            </div>
           </div>
           {layoutToggle}
         </header>
@@ -873,6 +1133,16 @@ function ExpenseCaptureTool() {
             {t === 'inbox' ? 'Inbox' : t === 'capture' ? 'Capture' : 'Setup'}
           </button>
         ))}
+        {isAdmin && qboConnection.connected ? (
+          <button
+            type="button"
+            disabled={qboPushing}
+            onClick={() => void pushToQuickBooks()}
+            className={`px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 ${isDark ? 'bg-green-900 text-green-100' : 'bg-green-600 text-white'}`}
+          >
+            {qboPushing ? 'Pushing QBO…' : 'Push QBO'}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={exportCsv}
