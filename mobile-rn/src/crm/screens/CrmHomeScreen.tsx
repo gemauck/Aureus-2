@@ -141,43 +141,53 @@ export function CrmHomeScreen({ navigation }: Props) {
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
       <ScreenBody padded={false}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRowScroll}
-        >
-          {homeTabs.map((key) => {
-            const active = tab === key
-            const meta = tabMeta(key)
-            return (
-              <Pressable
-                key={key}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
-                onPress={() => switchTab(key)}
-              >
-                <FontAwesome5
-                  name={meta.icon}
-                  size={13}
-                  color={active ? '#fff' : erp.textMuted}
-                  style={styles.tabIcon}
-                />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{meta.label}</Text>
-                {meta.count != null ? (
-                  <View style={[styles.tabCount, active && styles.tabCountActive]}>
-                    <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
-                      {meta.count}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            )
-          })}
-        </ScrollView>
+        <View style={styles.tabBarWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabRowScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            {homeTabs.map((key) => {
+              const active = tab === key
+              const meta = tabMeta(key)
+              return (
+                <Pressable
+                  key={key}
+                  style={[styles.tabBtn, active && styles.tabBtnActive]}
+                  onPress={() => switchTab(key)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                >
+                  <FontAwesome5
+                    name={meta.icon}
+                    size={12}
+                    color={active ? '#fff' : erp.textMuted}
+                    solid={active}
+                  />
+                  <Text
+                    style={[styles.tabText, active && styles.tabTextActive]}
+                    numberOfLines={1}
+                  >
+                    {meta.label}
+                  </Text>
+                  {meta.count != null ? (
+                    <View style={[styles.tabCount, active && styles.tabCountActive]}>
+                      <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
+                        {meta.count}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        </View>
 
         {tab === 'pipeline' ? (
           <CrmPipelineView accessToken={accessToken} active={tab === 'pipeline'} />
         ) : (
-          <>
+          <View style={styles.listPane}>
         <View style={styles.searchWrap}>
           <View style={styles.searchField}>
             <FontAwesome5 name="search" size={14} color={erp.textSubtle} style={styles.searchIcon} />
@@ -255,6 +265,7 @@ export function CrmHomeScreen({ navigation }: Props) {
           </View>
         ) : (
           <FlatList
+            style={styles.listFlex}
             data={filtered}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
@@ -290,7 +301,7 @@ export function CrmHomeScreen({ navigation }: Props) {
             )}
           />
         )}
-          </>
+          </View>
         )}
       </ScreenBody>
 
@@ -334,34 +345,36 @@ export function CrmHomeScreen({ navigation }: Props) {
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: erp.bg },
+    tabBarWrap: {
+      flexGrow: 0,
+      flexShrink: 0,
+      borderBottomWidth: 1,
+      borderBottomColor: erp.borderLight,
+      backgroundColor: erp.bg
+    },
     tabRowScroll: {
       flexDirection: 'row',
+      alignItems: 'center',
       gap: 8,
       paddingHorizontal: erp.space.lg,
-      paddingTop: 10,
-      paddingBottom: 4
-    },
-    tabRow: {
-      flexDirection: 'row',
-      gap: 8,
-      paddingHorizontal: erp.space.lg,
-      paddingTop: 10,
-      paddingBottom: 4
+      paddingVertical: 10
     },
     tabBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 10,
+      gap: 6,
+      paddingVertical: 8,
       paddingHorizontal: 12,
-      borderRadius: erp.radius.md,
+      minHeight: 38,
+      borderRadius: 999,
       backgroundColor: erp.surface,
       borderWidth: 1,
-      borderColor: erp.border
+      borderColor: erp.border,
+      flexShrink: 0
     },
     tabBtnActive: { backgroundColor: erp.primary, borderColor: erp.primary },
-    tabIcon: { marginRight: 6 },
-    tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 13 },
+    tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 13, flexShrink: 0 },
     tabTextActive: { color: '#fff' },
     tabCount: {
       minWidth: 22,
@@ -375,6 +388,8 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     tabCountActive: { backgroundColor: 'rgba(255,255,255,0.22)' },
     tabCountText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
     tabCountTextActive: { color: '#fff' },
+    listPane: { flex: 1 },
+    listFlex: { flex: 1 },
     searchWrap: { paddingHorizontal: erp.space.lg, paddingTop: 10, paddingBottom: 8 },
     searchField: { position: 'relative', justifyContent: 'center' },
     searchIcon: { position: 'absolute', left: 14, zIndex: 1 },

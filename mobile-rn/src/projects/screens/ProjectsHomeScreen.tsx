@@ -163,29 +163,6 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
       <ScreenBody padded={false}>
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Delivery hub</Text>
-          <Text style={styles.heroSub}>
-            Client projects, tasks, and compliance trackers in one place
-          </Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{insights.totalProjects}</Text>
-              <Text style={styles.statLbl}>Projects</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{insights.activeProjects}</Text>
-              <Text style={styles.statLbl}>Active</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statNum}>{insights.myOpenTasks}</Text>
-              <Text style={styles.statLbl}>My tasks</Text>
-            </View>
-          </View>
-        </View>
-
         {tab === 'tasks' ? (
           <ProjectInsightsBar
             insights={insights}
@@ -540,22 +517,6 @@ export function ProjectsHomeScreen({ navigation }: Props) {
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
-  hero: {
-    marginHorizontal: erp.space.lg,
-    marginTop: 8,
-    marginBottom: 4,
-    backgroundColor: erp.sidebar,
-    borderRadius: erp.radius.lg,
-    padding: 16,
-    ...erp.shadowSm
-  },
-  heroTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  heroSub: { fontSize: 12, color: erp.sidebarTextMuted, marginBottom: 14, lineHeight: 17 },
-  statsRow: { flexDirection: 'row', alignItems: 'center' },
-  statBox: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  statLbl: { fontSize: 12, color: erp.sidebarTextMuted, marginTop: 2, fontWeight: '600' },
-  statDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.12)' },
   tabRow: {
     flexDirection: 'row',
     gap: 8,

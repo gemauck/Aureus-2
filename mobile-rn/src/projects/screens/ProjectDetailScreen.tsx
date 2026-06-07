@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Linking,
@@ -100,6 +100,13 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   const [creatingNote, setCreatingNote] = useState(false)
   const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>('list')
   const [activityFilter, setActivityFilter] = useState('all')
+  const tabScrollRef = useRef<ScrollView>(null)
+  const tabIndex = DETAIL_TABS.findIndex((t) => t.key === tab)
+
+  useEffect(() => {
+    if (tabIndex < 0 || !tabScrollRef.current) return
+    tabScrollRef.current.scrollTo({ x: Math.max(0, tabIndex * 108 - 24), animated: true })
+  }, [tabIndex])
 
   const load = useCallback(
     async (silent = false) => {
@@ -266,7 +273,14 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar}>
+      <ScrollView
+        ref={tabScrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabBar}
+        contentContainerStyle={styles.tabBarContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {DETAIL_TABS.map((t) => {
           const active = tab === t.key
           const badge =
@@ -282,9 +296,14 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
               key={t.key}
               style={[styles.detailTab, active && styles.detailTabActive]}
               onPress={() => setTab(t.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
             >
               <FontAwesome5 name={t.icon} size={12} color={active ? erp.primary : erp.textMuted} />
-              <Text style={[styles.detailTabText, active && styles.detailTabTextActive]}>
+              <Text
+                style={[styles.detailTabText, active && styles.detailTabTextActive]}
+                numberOfLines={1}
+              >
                 {t.label}
               </Text>
               {badge > 0 ? (
@@ -327,7 +346,11 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
             </View>
 
             <Text style={styles.sectionLabel}>Project status</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipRow}
+            >
               {PROJECT_STATUS_EDIT.map((st) => {
                 const active = project.status === st
                 return (
@@ -431,7 +454,12 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
                 <FontAwesome5 name="plus" size={14} color="#fff" />
               </Pressable>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.taskChips}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.taskChips}
+              contentContainerStyle={styles.chipRow}
+            >
               {(['all', ...TASK_STATUSES] as TaskFilterStatus[]).map((st) => {
                 const active = taskStatus === st
                 return (
@@ -505,7 +533,12 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'activity' ? (
           <View style={styles.section}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.taskChips}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.taskChips}
+              contentContainerStyle={styles.chipRow}
+            >
               {['all', 'tasks', 'trackers', 'notes'].map((f) => {
                 const active = activityFilter === f
                 return (
@@ -744,15 +777,21 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   },
   webBtnText: { fontSize: 12, fontWeight: '700', color: erp.primary },
   tabBar: {
+    flexGrow: 0,
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
-    borderBottomColor: erp.border,
-    maxHeight: 48
+    borderBottomColor: erp.border
+  },
+  tabBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: erp.space.lg
   },
   detailTab: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingVertical: 12
   },
@@ -854,15 +893,21 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     alignItems: 'center',
     justifyContent: 'center'
   },
-  taskChips: { marginBottom: 4, maxHeight: 40 },
+  taskChips: { flexGrow: 0, marginBottom: 4, minHeight: 40 },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: erp.space.sm
+  },
   chip: {
+    flexShrink: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: erp.surface,
     borderWidth: 1,
-    borderColor: erp.border,
-    marginRight: 8
+    borderColor: erp.border
   },
   chipActive: { backgroundColor: erp.primarySoft, borderColor: erp.primary },
   chipText: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
