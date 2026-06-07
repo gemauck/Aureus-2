@@ -84,6 +84,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   const [notes, setNotes] = useState<ProjectNote[]>([])
   const [activity, setActivity] = useState<ProjectActivityEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<ProjectDetailTab>(
@@ -108,6 +109,31 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
     tabScrollRef.current.scrollTo({ x: Math.max(0, tabIndex * 108 - 24), animated: true })
   }, [tabIndex])
 
+  const loadDetails = useCallback(
+    async (silent = false) => {
+      if (!accessToken) return
+      if (!silent) setDetailsLoading(true)
+      try {
+        const full = await projectsApi.getProjectFull(accessToken, projectId)
+        setProject((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...full,
+                tasks: full.tasks?.length ? full.tasks : prev.tasks,
+                tasksList: full.tasksList?.length ? full.tasksList : prev.tasksList
+              }
+            : full
+        )
+      } catch {
+        // Non-fatal: overview/tasks still work from summary payload
+      } finally {
+        setDetailsLoading(false)
+      }
+    },
+    [accessToken, projectId]
+  )
+
   const load = useCallback(
     async (silent = false) => {
       if (!accessToken) return
@@ -115,13 +141,14 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
       setError('')
       try {
         const [proj, noteList, act] = await Promise.all([
-          projectsApi.getProjectFull(accessToken, projectId),
+          projectsApi.getProjectSummary(accessToken, projectId),
           projectsApi.listNotes(accessToken, projectId).catch(() => []),
           projectsApi.listActivity(accessToken, projectId).catch(() => [])
         ])
         setProject(proj)
         setNotes(noteList)
         setActivity(act)
+        void loadDetails(true)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load project')
       } finally {
@@ -129,7 +156,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
         setRefreshing(false)
       }
     },
-    [accessToken, projectId]
+    [accessToken, projectId, loadDetails]
   )
 
   useEffect(() => {
@@ -580,7 +607,9 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'documents' ? (
           <View style={styles.section}>
-            {documents.length === 0 ? (
+            {detailsLoading && documents.length === 0 ? (
+              <ActivityIndicator size="small" color={erp.primary} style={{ marginVertical: 16 }} />
+            ) : documents.length === 0 ? (
               <Text style={styles.empty}>No documents uploaded.</Text>
             ) : (
               documents.map((doc) => (
@@ -613,7 +642,9 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'team' ? (
           <View style={styles.section}>
-            {team.length === 0 ? (
+            {detailsLoading && team.length === 0 ? (
+              <ActivityIndicator size="small" color={erp.primary} style={{ marginVertical: 16 }} />
+            ) : team.length === 0 ? (
               <Text style={styles.empty}>No team members assigned.</Text>
             ) : (
               team.map((member) => (

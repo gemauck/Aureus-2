@@ -78,7 +78,9 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [allTasks, setAllTasks] = useState<ProjectTask[]>([])
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+  const [projectsLoading, setProjectsLoading] = useState(true)
+  const [tasksLoading, setTasksLoading] = useState(false)
+  const [tasksLoaded, setTasksLoaded] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -89,37 +91,73 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   const [taskProjectFilter, setTaskProjectFilter] = useState('all')
   const [taskScope, setTaskScope] = useState<TaskScopeFilter>('all')
 
-  const load = useCallback(
+  const loadProjects = useCallback(
     async (silent = false) => {
       if (!accessToken) {
         setError('Please sign in again.')
-        setLoading(false)
+        setProjectsLoading(false)
         return
       }
-      if (!silent) setLoading(true)
+      if (!silent) setProjectsLoading(true)
       setError('')
       try {
-        const [p, t, starred] = await Promise.all([
-          projectsApi.listProjects(accessToken, { includeTaskCount: true }),
-          projectsApi.listAllTasks(accessToken),
+        const [p, starred] = await Promise.all([
+          projectsApi.listProjects(accessToken),
           loadStarredIds()
         ])
         setProjects(p)
-        setAllTasks(t)
         setStarredIds(starred)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load projects')
       } finally {
-        setLoading(false)
-        setRefreshing(false)
+        setProjectsLoading(false)
       }
     },
     [accessToken]
   )
 
+  const loadTasks = useCallback(
+    async (silent = false) => {
+      if (!accessToken) return
+      if (!silent) setTasksLoading(true)
+      try {
+        const t = await projectsApi.listAllTasks(accessToken)
+        setAllTasks(t)
+        setTasksLoaded(true)
+      } catch (e) {
+        if (!silent) {
+          setError(e instanceof Error ? e.message : 'Could not load tasks')
+        }
+      } finally {
+        setTasksLoading(false)
+      }
+    },
+    [accessToken]
+  )
+
+  const refreshAll = useCallback(
+    async (silent = false) => {
+      try {
+        await Promise.all([
+          loadProjects(silent),
+          ...(tasksLoaded || tab === 'tasks' ? [loadTasks(silent)] : [])
+        ])
+      } finally {
+        setRefreshing(false)
+      }
+    },
+    [loadProjects, loadTasks, tasksLoaded, tab]
+  )
+
   useEffect(() => {
-    void load()
-  }, [load])
+    void loadProjects()
+  }, [loadProjects])
+
+  useEffect(() => {
+    if (tab === 'tasks' && !tasksLoaded && !tasksLoading) {
+      void loadTasks()
+    }
+  }, [tab, tasksLoaded, tasksLoading, loadTasks])
 
   const clients = useMemo(() => uniqueClients(projects), [projects])
   const filteredProjects = useMemo(
@@ -193,7 +231,11 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 </Text>
                 <View style={[styles.tabCount, active && styles.tabCountActive]}>
                   <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
-                    {key === 'projects' ? projects.length : allTasks.length}
+                    {key === 'projects'
+                      ? projects.length
+                      : tasksLoaded
+                        ? allTasks.length
+                        : '…'}
                   </Text>
                 </View>
               </Pressable>
@@ -383,16 +425,18 @@ export function ProjectsHomeScreen({ navigation }: Props) {
           </ScrollView>
         )}
 
-        {loading && !refreshing ? (
+        {(tab === 'projects' ? projectsLoading : projectsLoading || tasksLoading) && !refreshing ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={erp.primary} />
-            <Text style={styles.loadingText}>Loading…</Text>
+            <Text style={styles.loadingText}>
+              {tab === 'projects' ? 'Loading projects…' : 'Loading tasks…'}
+            </Text>
           </View>
-        ) : error ? (
+        ) : error && (tab === 'projects' ? projects.length === 0 : allTasks.length === 0) ? (
           <View style={styles.center}>
             <FontAwesome5 name="exclamation-circle" size={28} color={erp.danger} />
             <Text style={styles.error}>{error}</Text>
-            <Pressable style={styles.retryBtn} onPress={() => void load()}>
+            <Pressable style={styles.retryBtn} onPress={() => void refreshAll()}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
@@ -408,11 +452,15 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                   refreshing={refreshing}
                   onRefresh={() => {
                     setRefreshing(true)
-                    void load(true)
+                    void refreshAll(true)
                   }}
                   tintColor={erp.primary}
                 />
               }
+              initialNumToRender={16}
+              maxToRenderPerBatch={12}
+              windowSize={8}
+              removeClippedSubviews
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
                   <FontAwesome5 name="folder-open" size={32} color={erp.textSubtle} />
@@ -449,11 +497,15 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 refreshing={refreshing}
                 onRefresh={() => {
                   setRefreshing(true)
-                  void load(true)
+                  void refreshAll(true)
                 }}
                 tintColor={erp.primary}
               />
             }
+            initialNumToRender={20}
+            maxToRenderPerBatch={16}
+            windowSize={8}
+            removeClippedSubviews
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <FontAwesome5 name="folder-open" size={32} color={erp.textSubtle} />
@@ -482,11 +534,15 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 refreshing={refreshing}
                 onRefresh={() => {
                   setRefreshing(true)
-                  void load(true)
+                  void refreshAll(true)
                 }}
                 tintColor={erp.primary}
               />
             }
+            initialNumToRender={20}
+            maxToRenderPerBatch={16}
+            windowSize={8}
+            removeClippedSubviews
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <FontAwesome5 name="check-square" size={32} color={erp.textSubtle} />
