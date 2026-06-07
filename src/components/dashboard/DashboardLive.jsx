@@ -3092,6 +3092,17 @@ const DashboardLive = () => {
         }
     }, [widgetRegistry, isDashboardAdmin, isErpSuperUser]);
 
+    // Desktop-site / tablet bucket: merge in permission-gated widgets (e.g. recent job cards) when the bucket activates.
+    React.useEffect(() => {
+        if (layoutBucket !== 'desktop') return;
+        setSelectedWidgets((prev) => {
+            const merged = mergeSavedWidgetsWithRegistry(prev);
+            if (merged.length === prev.length && merged.every((id, idx) => id === prev[idx])) return prev;
+            persistWidgets(merged);
+            return merged;
+        });
+    }, [layoutBucket, widgetRegistry, isDashboardAdmin, isErpSuperUser]);
+
     const handleToggleWidget = (id) => {
         setSelectedWidgets(prev => {
             const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
@@ -3235,7 +3246,7 @@ const DashboardLive = () => {
                         defaultLayoutForWidget(isResizing.widgetId, idx === -1 ? 0 : idx, bucket);
                     let newW = resizeStart.w;
                     let newH = resizeStart.h;
-                    const cols = getDashboardGridColumnCount(window.innerWidth);
+                    const cols = syncDashboardGridColumnCount();
                     if (cols > 1 && isResizing.direction.includes('e')) {
                         newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
                     } else {

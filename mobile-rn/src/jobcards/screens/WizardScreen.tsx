@@ -45,7 +45,10 @@ export function WizardScreen() {
     setFormData,
     formData,
     editingMeta,
-    isSubmitting
+    isSubmitting,
+    canDeleteJobCards,
+    deletingJobCardId,
+    deleteJobCard
   } = useJobCardWizard()
 
   const stepId = STEP_IDS[currentStep] as keyof typeof STEP_COMPONENTS
@@ -60,6 +63,15 @@ export function WizardScreen() {
   }, [isSignoff, StepComponent])
 
   const statusLabel = formData.status === 'submitted' ? 'Submitted' : 'Draft'
+  const cardRowForDelete = editingMeta
+    ? {
+        id: editingMeta.localId,
+        jobCardNumber: editingMeta.jobCardNumber,
+        heading: formData.heading,
+        synced: editingMeta.synced,
+        source: editingMeta.synced ? 'server' : 'local'
+      }
+    : null
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -80,6 +92,18 @@ export function WizardScreen() {
           ) : null}
         </View>
         <View style={styles.headerRight}>
+          {canDeleteJobCards && cardRowForDelete ? (
+            <Pressable
+              style={[styles.deleteHeaderBtn, deletingJobCardId ? styles.disabled : null]}
+              disabled={Boolean(deletingJobCardId)}
+              onPress={() => void deleteJobCard(cardRowForDelete as never)}
+              hitSlop={8}
+            >
+              <Text style={styles.deleteHeaderText}>
+                {deletingJobCardId ? '…' : 'Delete'}
+              </Text>
+            </Pressable>
+          ) : null}
           <View style={styles.statusChip}>
             <Text style={styles.statusChipText}>{statusLabel}</Text>
           </View>
@@ -185,6 +209,14 @@ function createStyles({ jc }: { jc: JcTheme }) {
   headerSub: { fontSize: 12, color: jc.textMuted, marginTop: 2 },
   headerContext: { fontSize: 12, color: jc.primaryDark, fontWeight: '600', marginTop: 2 },
   headerRight: { alignItems: 'flex-end', gap: 4 },
+  deleteHeaderBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: jc.danger
+  },
+  deleteHeaderText: { fontSize: 11, fontWeight: '700', color: jc.danger },
   statusChip: {
     backgroundColor: jc.primarySoft,
     paddingHorizontal: 8,

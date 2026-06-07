@@ -668,6 +668,8 @@ html.dark .crm-leads-table-dark-body > tr + tr > td {
  *   `display:inline-flex; align-items:center; justify-content:center` — that centers
  *   every flex-col stack horizontally. Reset per button role below.
  * - Calendar hacks target `div[class*="rounded-xl"]`; keep `rounded-2xl` / avoid `rounded-xl` in class strings.
+ * - Android "desktop layout" (html.erp-desktop-site): layout viewport is wide but the device is still
+ *   phone-sized — apply the same left-aligned row fixes as narrow viewports.
  */
 .dashboard-jobcards-widget {
     text-align: left !important;
@@ -720,6 +722,48 @@ html.dark .crm-leads-table-dark-body > tr + tr > td {
         flex-wrap: nowrap !important;
         width: 100% !important;
     }
+}
+
+/* Phone in desktop-site mode: wide layout viewport — same widget fixes as mobile shell */
+html.erp-desktop-site body.erp-app .dashboard-jobcards-widget button.djw-row-btn[type='button'] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+html.erp-desktop-site body.erp-app .dashboard-jobcards-widget button.djw-footer-btn[type='button'] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+html.erp-desktop-site body.erp-app .dashboard-jobcards-widget button.djw-icon-btn[type='button'] {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+html.erp-desktop-site body.erp-app .dashboard-jobcards-widget .djw-norowrap {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-wrap: nowrap !important;
+}
+
+html.erp-desktop-site body.erp-app .dashboard-jobcards-widget > .djw-toolbar {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
 }
 
 /* Shared stack helper for module roots (flex children need min-w-0 to allow inner overflow-x) */

@@ -19,13 +19,20 @@ export function LandingScreen() {
     startNewJobCard,
     openPriorList,
     openStockTake,
-    runSyncNow
+    runSyncNow,
+    openingCardId
   } = useJobCardWizard()
 
   return (
     <View style={styles.root}>
       <ModuleHeader title="Job cards" subtitle="Service & Maintenance" />
       <OfflineBanner visible={!isOnline} />
+      {openingCardId ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={jc.primary} />
+          <Text style={styles.loadingText}>Opening job card…</Text>
+        </View>
+      ) : null}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
           <View style={styles.heroIcon}>

@@ -33,7 +33,10 @@ export function PriorListScreen() {
     openJobCard,
     syncOneCard,
     setWizardFlow,
-    openingCardId
+    openingCardId,
+    canDeleteJobCards,
+    deletingJobCardId,
+    deleteJobCard
   } = useJobCardWizard()
 
   const [priorSiteName, setPriorSiteName] = useState('')
@@ -183,8 +186,11 @@ export function PriorListScreen() {
             <PriorRow
               row={item}
               opening={openingCardId === String(item.id)}
+              deleting={deletingJobCardId === String(item.id)}
+              canDelete={canDeleteJobCards}
               onOpen={() => void openJobCard(item)}
               onSync={() => void syncOneCard(item)}
+              onDelete={() => void deleteJobCard(item)}
             />
           )}
         />
@@ -196,13 +202,19 @@ export function PriorListScreen() {
 function PriorRow({
   row,
   opening,
+  deleting,
+  canDelete,
   onOpen,
-  onSync
+  onSync,
+  onDelete
 }: {
   row: PriorListRow
   opening: boolean
+  deleting: boolean
+  canDelete: boolean
   onOpen: () => void
   onSync: () => void
+  onDelete: () => void
 }) {
   const styles = useThemedStyles(createStyles)
   const { jc } = useTheme()
@@ -210,47 +222,62 @@ function PriorRow({
   const status = row.synced ? (row.status === 'submitted' ? 'Submitted' : 'Synced') : 'Draft'
 
   return (
-    <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={onOpen}>
-      <View style={{ flex: 1 }}>
-        <View style={styles.rowTop}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          <View
-            style={[
-              styles.statusBadge,
-              row.synced ? styles.statusSynced : styles.statusDraft
-            ]}
-          >
-            <Text
+    <View style={styles.row}>
+      <Pressable
+        style={({ pressed }) => [styles.rowMain, pressed && styles.rowPressed]}
+        onPress={onOpen}
+      >
+        <View style={{ flex: 1 }}>
+          <View style={styles.rowTop}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            <View
               style={[
-                styles.statusText,
-                row.synced ? styles.statusTextSynced : styles.statusTextDraft
+                styles.statusBadge,
+                row.synced ? styles.statusSynced : styles.statusDraft
               ]}
             >
-              {status}
-            </Text>
+              <Text
+                style={[
+                  styles.statusText,
+                  row.synced ? styles.statusTextSynced : styles.statusTextDraft
+                ]}
+              >
+                {status}
+              </Text>
+            </View>
           </View>
-        </View>
-        {row.projectName ? (
-          <Text style={styles.project} numberOfLines={1}>
-            {row.projectName}
+          {row.projectName ? (
+            <Text style={styles.project} numberOfLines={1}>
+              {row.projectName}
+            </Text>
+          ) : null}
+          <Text style={styles.rowSub} numberOfLines={2}>
+            {row.agentName || '—'} · {row.clientName || '—'} · {row.siteName || row.location || '—'}
           </Text>
-        ) : null}
-        <Text style={styles.rowSub} numberOfLines={2}>
-          {row.agentName || '—'} · {row.clientName || '—'} · {row.siteName || row.location || '—'}
-        </Text>
-      </View>
-      {opening ? (
-        <ActivityIndicator color={jc.primary} />
-      ) : !row.synced ? (
-        <Pressable style={styles.syncChip} onPress={onSync} hitSlop={6}>
-          <Text style={styles.syncChipText}>Sync</Text>
+        </View>
+        {opening ? (
+          <ActivityIndicator color={jc.primary} />
+        ) : !row.synced ? (
+          <Pressable style={styles.syncChip} onPress={onSync} hitSlop={6}>
+            <Text style={styles.syncChipText}>Sync</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.openChevron}>›</Text>
+        )}
+      </Pressable>
+      {canDelete ? (
+        <Pressable
+          style={({ pressed }) => [styles.deleteBtn, pressed && styles.deleteBtnPressed]}
+          onPress={onDelete}
+          disabled={deleting}
+          hitSlop={6}
+        >
+          <Text style={styles.deleteBtnText}>{deleting ? 'Deleting…' : 'Delete'}</Text>
         </Pressable>
-      ) : (
-        <Text style={styles.openChevron}>›</Text>
-      )}
-    </Pressable>
+      ) : null}
+    </View>
   )
 }
 
@@ -277,8 +304,6 @@ function createStyles({ jc }: { jc: JcTheme }) {
   emptyTitle: { fontSize: 17, fontWeight: '700', color: jc.text },
   emptySub: { color: jc.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 20 },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: jc.surface,
     borderRadius: jc.radius.xl,
     padding: jc.space.md,
@@ -287,6 +312,11 @@ function createStyles({ jc }: { jc: JcTheme }) {
     borderColor: jc.border,
     gap: jc.space.sm,
     ...jc.shadowSm
+  },
+  rowMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: jc.space.sm
   },
   rowPressed: { opacity: 0.95 },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -299,6 +329,16 @@ function createStyles({ jc }: { jc: JcTheme }) {
   statusTextDraft: { color: jc.warning },
   statusTextSynced: { color: jc.primaryDark },
   rowSub: { color: jc.textMuted, marginTop: 4, fontSize: 13, lineHeight: 18 },
+  deleteBtn: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: jc.danger
+  },
+  deleteBtnPressed: { opacity: 0.85 },
+  deleteBtnText: { color: jc.danger, fontWeight: '700', fontSize: 12 },
   syncChip: {
     backgroundColor: jc.primary,
     paddingHorizontal: 12,
