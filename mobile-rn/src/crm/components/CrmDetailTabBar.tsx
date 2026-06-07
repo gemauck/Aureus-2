@@ -13,7 +13,7 @@ type Props = {
   active: CrmDetailTab
   entity: CrmEntityBase
   onSelect: (tab: CrmDetailTab) => void
-  extras?: { opportunities?: number; jobCards?: number; clientNotes?: number }
+  extras?: { opportunities?: number; jobCards?: number; clientNotes?: number; groupMembers?: number }
 }
 
 export function CrmDetailTabBar({ tabs, active, entity, onSelect, extras }: Props) {

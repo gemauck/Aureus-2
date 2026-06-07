@@ -195,14 +195,25 @@ export type CrmEntityBase = {
 }
 
 export type CrmClient = CrmEntityBase & {
-  type?: 'client' | 'group' | string
+  type?: 'client' | string
 }
 
 export type CrmLead = CrmEntityBase & {
   type?: 'lead'
 }
 
-export type CrmTab = 'clients' | 'leads'
+export type CrmGroup = CrmEntityBase & {
+  type?: 'group'
+  _count?: { groupChildren?: number; childCompanies?: number }
+}
+
+export type CrmGroupMember = CrmEntityBase & {
+  relationship?: string
+  membershipId?: string
+  role?: string
+}
+
+export type CrmTab = 'clients' | 'leads' | 'groups'
 
 export type CrmFilterKey = 'all' | 'starred' | 'active'
 
@@ -210,6 +221,7 @@ export type CrmDetailTab =
   | 'overview'
   | 'contacts'
   | 'sites'
+  | 'members'
   | 'opportunities'
   | 'projects'
   | 'calendar'
@@ -226,4 +238,5 @@ export type CrmDetailTabConfig = {
   icon: string
   clientOnly?: boolean
   leadOnly?: boolean
+  groupOnly?: boolean
 }

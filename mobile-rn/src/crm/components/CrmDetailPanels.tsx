@@ -16,6 +16,8 @@ import type {
   CrmClientNote,
   CrmDetailTab,
   CrmEntityBase,
+  CrmGroup,
+  CrmGroupMember,
   CrmJobCard,
   CrmLead,
   CrmOpportunity,
@@ -35,6 +37,8 @@ import {
   formatCommentAuthor,
   formatDate,
   formatMoney,
+  groupMemberCount,
+  isCrmLead,
   newLocalId
 } from '../utils'
 import { useThemedStyles } from '../../theme/useThemedStyles'
@@ -66,11 +70,12 @@ function EmptyState({ icon, title }: { icon: string; title: string }) {
 type PanelProps = {
   tab: CrmDetailTab
   entity: CrmEntityBase
-  entityType: 'client' | 'lead'
+  entityType: 'client' | 'lead' | 'group'
   tags: CrmTag[]
   opportunities: CrmOpportunity[]
   jobCards: CrmJobCard[]
   clientNotes: CrmClientNote[]
+  groupMembers?: CrmGroupMember[]
   notesDraft: string
   newNoteDraft: string
   loadingExtras: boolean
@@ -79,6 +84,7 @@ type PanelProps = {
   onNewNoteDraftChange: (v: string) => void
   onPatchEntity: (body: Record<string, unknown>) => Promise<void>
   onCreateOpportunity?: (body: { title: string; value?: number }) => Promise<void>
+  onOpenMember?: (member: CrmGroupMember) => void
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
@@ -92,6 +98,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
     opportunities,
     jobCards,
     clientNotes,
+    groupMembers = [],
     notesDraft,
     newNoteDraft,
     loadingExtras,
@@ -99,14 +106,20 @@ export function CrmDetailPanelContent(props: PanelProps) {
     onNotesDraftChange,
     onNewNoteDraftChange,
     onPatchEntity,
-    onCreateOpportunity
+    onCreateOpportunity,
+    onOpenMember
   } = props
+
+  const isLead = entityType === 'lead'
+  const isClient = entityType === 'client'
+  const isGroup = entityType === 'group'
+  const hasStructuredNotes = isClient || isGroup
 
   const clientStatus = displayClientStatus(entity)
   const leadStage = displayLeadStage(entity)
 
   if (tab === 'overview') {
-    const lead = entityType === 'lead' ? (entity as CrmLead) : null
+    const lead = isLead ? (entity as CrmLead) : null
     return (
       <View style={styles.section}>
         {lead && (lead.value ?? 0) > 0 ? (
@@ -118,7 +131,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
             ) : null}
           </View>
         ) : null}
-        {(entity.revenue ?? 0) > 0 ? (
+        {(entity.revenue ?? 0) > 0 && !isGroup ? (
           <View style={styles.highlightCard}>
             <Text style={styles.highlightLabel}>Revenue</Text>
             <Text style={styles.highlightValue}>{formatMoney(entity.revenue)}</Text>
@@ -133,7 +146,16 @@ export function CrmDetailPanelContent(props: PanelProps) {
             ))}
           </View>
         ) : null}
-        {entityType === 'client' ? (
+        {isGroup ? (
+          <>
+            <InfoRow label="Industry" value={entity.industry} />
+            <InfoRow
+              label="Members"
+              value={String(groupMembers.length || groupMemberCount(entity as CrmGroup))}
+            />
+            <InfoRow label="Created" value={formatDate(entity.createdAt)} />
+          </>
+        ) : isClient ? (
           <>
             <InfoRow label="Industry" value={entity.industry} />
             <InfoRow label="Status" value={clientStatus} />
@@ -163,7 +185,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
         {entity.externalAgent?.name ? (
           <InfoRow label="External agent" value={entity.externalAgent.name} />
         ) : null}
-        {entity.groupMemberships?.length ? (
+        {entity.groupMemberships?.length && !isGroup ? (
           <View style={styles.groupCard}>
             <Text style={styles.groupTitle}>Company groups</Text>
             {entity.groupMemberships.map((m, i) => (
@@ -173,6 +195,38 @@ export function CrmDetailPanelContent(props: PanelProps) {
             ))}
           </View>
         ) : null}
+      </View>
+    )
+  }
+
+  if (tab === 'members') {
+    if (loadingExtras && !groupMembers.length) {
+      return <ActivityIndicator color={erp.primary} style={{ marginTop: 24 }} />
+    }
+    if (!groupMembers.length) {
+      return <EmptyState icon="users" title="No members in this group" />
+    }
+    return (
+      <View style={styles.section}>
+        {groupMembers.map((member) => {
+          const memberIsLead = isCrmLead(member)
+          return (
+            <Pressable
+              key={member.id}
+              style={styles.miniCard}
+              onPress={() => onOpenMember?.(member)}
+            >
+              <View style={styles.rowBetween}>
+                <Text style={styles.miniTitle}>{member.name || 'Unnamed'}</Text>
+                <FontAwesome5 name="chevron-right" size={11} color={erp.textSubtle} />
+              </View>
+              <View style={styles.badgeRow}>
+                <CrmStatusBadge label={memberIsLead ? 'Lead' : 'Client'} compact />
+                {member.industry ? <CrmStatusBadge label={member.industry} compact /> : null}
+              </View>
+            </Pressable>
+          )
+        })}
       </View>
     )
   }
@@ -257,7 +311,8 @@ export function CrmDetailPanelContent(props: PanelProps) {
                   address: values.address || undefined,
                   contactPerson: values.contactPerson || undefined,
                   contactPhone: values.contactPhone || undefined,
-                  aidaStatus: entityType === 'lead' ? 'Awareness' : undefined
+                  aidaStatus: isLead ? 'Awareness' : undefined,
+                  engagementStage: isLead ? 'Potential' : undefined
                 }
               ]
             })
@@ -281,7 +336,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
                   <Text style={styles.link}>{s.contactEmail}</Text>
                 </Pressable>
               ) : null}
-              {entityType === 'lead' ? (
+              {isLead ? (
                 <View style={styles.badgeRow}>
                   {s.engagementStage ? <CrmStatusBadge label={s.engagementStage} compact /> : null}
                   {s.aidaStatus ? <CrmStatusBadge label={s.aidaStatus} compact /> : null}
@@ -551,12 +606,14 @@ export function CrmDetailPanelContent(props: PanelProps) {
           />
         </View>
 
-        {entityType === 'client' ? (
+        {hasStructuredNotes ? (
           <>
             <View style={styles.panelCard}>
               <View style={styles.panelHeader}>
                 <FontAwesome5 name="list-alt" size={14} color={erp.primary} />
-                <Text style={styles.panelTitle}>Client notes</Text>
+                <Text style={styles.panelTitle}>
+                  {isGroup ? 'Group notes' : 'Client notes'}
+                </Text>
                 {clientNotes.length > 0 ? (
                   <View style={styles.countPill}>
                     <Text style={styles.countPillText}>{clientNotes.length}</Text>
@@ -583,7 +640,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
                 multiline
                 value={newNoteDraft}
                 onChangeText={onNewNoteDraftChange}
-                placeholder="Add a new client note…"
+                placeholder={isGroup ? 'Add a new group note…' : 'Add a new client note…'}
                 placeholderTextColor={erp.textSubtle}
                 textAlignVertical="top"
               />
@@ -596,7 +653,7 @@ export function CrmDetailPanelContent(props: PanelProps) {
           <View style={styles.panelCard}>
             <View style={styles.panelHeader}>
               <FontAwesome5 name="comments" size={14} color={erp.primary} />
-              <Text style={styles.panelTitle}>Discussion</Text>
+              <Text style={styles.panelTitle}>Lead notes</Text>
             </View>
             {comments.length ? (
               comments.map((c, idx) => (
@@ -610,10 +667,20 @@ export function CrmDetailPanelContent(props: PanelProps) {
                 </View>
               ))
             ) : (
-              <Text style={styles.miniSub}>
-                No discussion comments yet. Use summary notes above for lead notes — they sync with the web CRM.
-              </Text>
+              <Text style={styles.miniSub}>No lead notes yet — add one below.</Text>
             )}
+            <TextInput
+              style={[styles.notesInput, { marginTop: 12 }]}
+              multiline
+              value={newNoteDraft}
+              onChangeText={onNewNoteDraftChange}
+              placeholder="Add a new lead note…"
+              placeholderTextColor={erp.textSubtle}
+              textAlignVertical="top"
+            />
+            {newNoteDraft.trim() ? (
+              <Text style={styles.panelHint}>Tap Add note in the bottom bar when ready.</Text>
+            ) : null}
           </View>
         )}
       </View>

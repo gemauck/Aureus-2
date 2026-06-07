@@ -24,11 +24,21 @@ import type {
   CrmClientNote,
   CrmDetailTab,
   CrmEntityBase,
+  CrmGroupMember,
   CrmJobCard,
   CrmOpportunity,
   CrmTag
 } from '../types'
-import { displayStage, normalizeEntity, resolveStarredState } from '../utils'
+import {
+  detailEntityKindLabel,
+  displayClientStatus,
+  displayLeadStage,
+  entityComments,
+  isClientAccountInactive,
+  newLocalId,
+  normalizeEntity,
+  resolveStarredState
+} from '../utils'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -39,8 +49,9 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
   const { entityType, entityId } = route.params
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const [entity, setEntity] = useState<CrmEntityBase | null>(null)
+  const [groupMembers, setGroupMembers] = useState<CrmGroupMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<CrmDetailTab>('overview')
@@ -69,23 +80,36 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     setOpportunities([])
     setJobCards([])
     setClientNotes([])
+    setGroupMembers([])
     try {
       const data =
-        entityType === 'client'
-          ? await crmApi.getClient(accessToken, entityId)
-          : await crmApi.getLead(accessToken, entityId)
+        entityType === 'lead'
+          ? await crmApi.getLead(accessToken, entityId)
+          : await crmApi.getClient(accessToken, entityId)
       setEntity(normalizeEntity(data))
       setNotesDraft(String(data.notes || ''))
 
-      if (entityType === 'client') {
-        const [clientTags, notes] = await Promise.all([
-          crmApi.getClientTags(accessToken, entityId).catch(() => [] as CrmTag[]),
-          crmApi.getClientNotes(accessToken, entityId).catch(() => [] as CrmClientNote[])
-        ])
-        setTags(clientTags)
-        setClientNotes(notes)
-        loadedExtrasRef.current.add('tags')
+      if (entityType === 'client' || entityType === 'group') {
+        const notePromise = crmApi.getClientNotes(accessToken, entityId).catch(() => [] as CrmClientNote[])
+        if (entityType === 'client') {
+          const [clientTags, notes] = await Promise.all([
+            crmApi.getClientTags(accessToken, entityId).catch(() => [] as CrmTag[]),
+            notePromise
+          ])
+          setTags(clientTags)
+          setClientNotes(notes)
+          loadedExtrasRef.current.add('tags')
+        } else {
+          const notes = await notePromise
+          setClientNotes(notes)
+        }
         loadedExtrasRef.current.add('notes')
+      }
+
+      if (entityType === 'group') {
+        const members = await crmApi.getGroupMembers(accessToken, entityId).catch(() => [] as CrmGroupMember[])
+        setGroupMembers(members)
+        loadedExtrasRef.current.add('members')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load record')
@@ -114,9 +138,13 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           const cards = await crmApi.getJobCardsForClient(accessToken, entityId)
           setJobCards(cards)
         }
-        if (activeTab === 'notes' && entityType === 'client') {
+        if (activeTab === 'notes' && (entityType === 'client' || entityType === 'group')) {
           const notes = await crmApi.getClientNotes(accessToken, entityId)
           setClientNotes(notes)
+        }
+        if (activeTab === 'members' && entityType === 'group') {
+          const members = await crmApi.getGroupMembers(accessToken, entityId)
+          setGroupMembers(members)
         }
         loadedExtrasRef.current.add(key)
       } catch (e) {
@@ -146,9 +174,9 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     setError('')
     try {
       const updated =
-        entityType === 'client'
-          ? await crmApi.patchClient(accessToken, entityId, body)
-          : await crmApi.patchLead(accessToken, entityId, body)
+        entityType === 'lead'
+          ? await crmApi.patchLead(accessToken, entityId, body)
+          : await crmApi.patchClient(accessToken, entityId, body)
       setEntity(normalizeEntity(updated))
       setNotesFeedback('Saved')
     } catch (e) {
@@ -199,9 +227,9 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     setError('')
     try {
       const updated =
-        entityType === 'client'
-          ? await crmApi.patchClient(accessToken, entityId, { notes: notesDraft })
-          : await crmApi.patchLead(accessToken, entityId, { notes: notesDraft })
+        entityType === 'lead'
+          ? await crmApi.patchLead(accessToken, entityId, { notes: notesDraft })
+          : await crmApi.patchClient(accessToken, entityId, { notes: notesDraft })
       setEntity(normalizeEntity(updated))
       setNotesFeedback('Summary saved')
     } catch (e) {
@@ -212,10 +240,37 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }
 
   const saveNewNote = async () => {
-    if (!accessToken || entityType !== 'client' || !newNoteDraft.trim()) return
+    if (!accessToken || !newNoteDraft.trim()) return
     setSavingNewNote(true)
     setError('')
     try {
+      if (entityType === 'lead') {
+        if (!entity) return
+        const comments = entityComments(entity)
+        const authorName = user?.name || user?.email || 'Mobile user'
+        const note = await crmApi.patchLead(accessToken, entityId, {
+          comments: [
+            ...comments,
+            {
+              id: newLocalId('comment'),
+              text: newNoteDraft.trim(),
+              content: newNoteDraft.trim(),
+              createdAt: new Date().toISOString(),
+              author: authorName,
+              userName: authorName,
+              createdBy: authorName,
+              createdByEmail: user?.email,
+              createdById: user?.id
+            }
+          ]
+        })
+        setEntity(normalizeEntity(note))
+        setNewNoteDraft('')
+        setNotesFeedback('Note added')
+        return
+      }
+
+      if (entityType !== 'client' && entityType !== 'group') return
       const note = await crmApi.createClientNote(accessToken, entityId, {
         content: newNoteDraft.trim(),
         title: newNoteDraft.trim().slice(0, 60)
@@ -252,7 +307,12 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
   if (!entity) return null
 
-  const stage = displayStage(entity, entityType)
+  const stage =
+    entityType === 'lead'
+      ? displayLeadStage(entity)
+      : entityType === 'client' && isClientAccountInactive(entity)
+        ? displayClientStatus(entity)
+        : ''
   const starred = resolveStarredState(entity)
   const onNotesTab = tab === 'notes'
 
@@ -283,7 +343,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
           <View style={styles.heroMeta}>
-            <Text style={styles.entityKind}>{entityType === 'client' ? 'Client' : 'Lead'}</Text>
+            <Text style={styles.entityKind}>{detailEntityKindLabel(entityType)}</Text>
             {entity.industry ? <Text style={styles.industry}>{entity.industry}</Text> : null}
           </View>
           {stage ? (
@@ -305,7 +365,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
         extras={{
           opportunities: opportunities.length,
           jobCards: jobCards.length,
-          clientNotes: clientNotes.length
+          clientNotes: clientNotes.length,
+          groupMembers: groupMembers.length
         }}
       />
 
@@ -344,6 +405,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             opportunities={opportunities}
             jobCards={jobCards}
             clientNotes={clientNotes}
+            groupMembers={groupMembers}
             notesDraft={notesDraft}
             newNoteDraft={newNoteDraft}
             loadingExtras={loadingExtras}
@@ -352,6 +414,10 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             onNewNoteDraftChange={setNewNoteDraft}
             onPatchEntity={patchEntity}
             onCreateOpportunity={entityType === 'client' ? createOpportunity : undefined}
+            onOpenMember={(member) => {
+              const memberType = member.type === 'lead' ? 'lead' : 'client'
+              navigation.push('CrmDetail', { entityType: memberType, entityId: member.id })
+            }}
           />
         </ScrollView>
 
@@ -371,7 +437,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
                 </>
               )}
             </Pressable>
-            {entityType === 'client' && newNoteDraft.trim() ? (
+            {entityType === 'client' || entityType === 'group' || entityType === 'lead' ? (
+              newNoteDraft.trim() ? (
               <Pressable
                 style={[styles.footerBtn, styles.footerBtnSecondary, savingNewNote && styles.footerBtnDisabled]}
                 disabled={savingNewNote}
@@ -386,6 +453,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
                   </>
                 )}
               </Pressable>
+              ) : null
             ) : null}
           </View>
         ) : null}

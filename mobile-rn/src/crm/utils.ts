@@ -5,6 +5,7 @@ import type {
   CrmEntityBase,
   CrmFilterKey,
   CrmFollowUp,
+  CrmGroup,
   CrmLead,
   CrmProject,
   CrmProposal,
@@ -53,10 +54,11 @@ export function entityActivityLog(entity: CrmEntityBase): CrmActivityItem[] {
 export function formatCommentAuthor(c: {
   author?: string | { name?: string; email?: string }
   userName?: string
+  createdBy?: string
 }) {
   if (typeof c.author === 'string') return c.author
   if (c.author && typeof c.author === 'object') return c.author.name || c.author.email || ''
-  return c.userName || ''
+  return c.createdBy || c.userName || ''
 }
 
 function normalizeFlag(value: unknown): boolean {
@@ -81,21 +83,56 @@ export function normalizeEntity<T extends CrmEntityBase>(entity: T): T {
   return { ...entity, isStarred: resolveStarredState(entity) }
 }
 
+/** Match web CRM: only type client or legacy null/undefined/empty — not group or lead. */
+export function isCrmClient(entity: Pick<CrmEntityBase, 'type'>): boolean {
+  const t = entity.type
+  return t === 'client' || t === null || t === undefined || t === ''
+}
+
+export function isCrmGroup(entity: Pick<CrmEntityBase, 'type'>): boolean {
+  return entity.type === 'group'
+}
+
+export function isCrmLead(entity: Pick<CrmEntityBase, 'type'>): boolean {
+  return entity.type === 'lead'
+}
+
+/** Clients list — exclude groups and leads (matches web Clients.jsx filteredClients). */
+export function filterClientsList(clients: CrmClient[]): CrmClient[] {
+  return clients.filter((c) => isCrmClient(c) && !isCrmGroup(c))
+}
+
+export function groupMemberCount(group: CrmGroup): number {
+  const count = group._count
+  if (!count) return 0
+  return (count.groupChildren ?? 0) + (count.childCompanies ?? 0)
+}
+
+/** Client account status (Active/Inactive) — not lead pipeline stages. */
+export function normalizeClientAccountStatus(statusOrStage?: string | null): string {
+  const s = String(statusOrStage ?? 'Active').trim().toLowerCase()
+  return s === 'inactive' ? 'Inactive' : 'Active'
+}
+
+export function isClientAccountInactive(entity: CrmEntityBase): boolean {
+  const raw = entity.status ?? entity.engagementStage ?? 'Active'
+  return String(raw).trim().toLowerCase() === 'inactive'
+}
+
 export function displayClientStatus(entity: CrmEntityBase): string {
-  const raw = String(entity.status || entity.engagementStage || '').trim()
-  if (!raw) return 'Active'
-  const lower = raw.toLowerCase()
-  if (lower === 'inactive') return 'Inactive'
-  if (lower === 'active') return 'Active'
-  return raw
+  return normalizeClientAccountStatus(entity.status ?? entity.engagementStage)
 }
 
 export function displayLeadStage(entity: CrmEntityBase): string {
-  return String(entity.engagementStage || entity.stage || entity.status || 'Potential').trim()
+  return String(entity.engagementStage ?? entity.stage ?? entity.status ?? 'Potential').trim()
 }
 
-export function displayStage(entity: CrmEntityBase, kind?: CrmTab | 'client' | 'lead'): string {
-  const isLead = kind === 'leads' || kind === 'lead' || entity.type === 'lead'
+export function displayStage(
+  entity: CrmEntityBase,
+  kind?: CrmTab | 'client' | 'lead' | 'group'
+): string {
+  if (kind === 'groups' || kind === 'group' || isCrmGroup(entity)) return ''
+  const isLead = kind === 'leads' || kind === 'lead' || isCrmLead(entity)
   return isLead ? displayLeadStage(entity) : displayClientStatus(entity)
 }
 
@@ -130,15 +167,32 @@ export function filterEntities<T extends CrmEntityBase>(
   items: T[],
   query: string,
   filter: CrmFilterKey,
-  industry: string
+  industry: string,
+  kind?: CrmTab
 ) {
   const q = query.trim().toLowerCase()
+  const isClientList = kind === 'clients'
+  const isGroupList = kind === 'groups'
   return items.filter((item) => {
+    if (isGroupList) {
+      // Groups tab: search + industry only (no starred/active lead filters)
+      if (industry && industry !== 'all') {
+        if (String(item.industry || '').toLowerCase() !== industry.toLowerCase()) return false
+      }
+      if (!q) return true
+      const hay = [item.name, item.industry].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    }
+
     const starred = resolveStarredState(item)
     if (filter === 'starred' && !starred) return false
     if (filter === 'active') {
-      const st = String(item.status || item.engagementStage || '').toLowerCase()
-      if (st && st !== 'active' && !st.includes('potential')) return false
+      if (isClientList) {
+        if (isClientAccountInactive(item)) return false
+      } else {
+        const st = String(item.engagementStage ?? item.stage ?? item.status ?? '').toLowerCase()
+        if (st === 'disinterested' || st === 'inactive') return false
+      }
     }
     if (industry && industry !== 'all') {
       if (String(item.industry || '').toLowerCase() !== industry.toLowerCase()) return false
@@ -147,8 +201,7 @@ export function filterEntities<T extends CrmEntityBase>(
     const hay = [
       item.name,
       item.industry,
-      item.status,
-      displayStage(item),
+      isClientList ? displayClientStatus(item) : displayLeadStage(item),
       item.address,
       item.website
     ]
@@ -159,7 +212,7 @@ export function filterEntities<T extends CrmEntityBase>(
   })
 }
 
-export function uniqueIndustries(items: Array<CrmClient | CrmLead>) {
+export function uniqueIndustries(items: Array<CrmClient | CrmLead | CrmGroup>) {
   const set = new Set<string>()
   for (const item of items) {
     const ind = String(item.industry || '').trim()
@@ -168,15 +221,22 @@ export function uniqueIndustries(items: Array<CrmClient | CrmLead>) {
   return ['all', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
 }
 
-export function tabCounts(clients: CrmClient[], leads: CrmLead[]) {
+export function tabCounts(clients: CrmClient[], leads: CrmLead[], groups: CrmGroup[] = []) {
   return {
     clients: clients.length,
-    leads: leads.length
+    leads: leads.length,
+    groups: groups.length
   }
 }
 
 export function entityKindLabel(tab: CrmTab) {
+  if (tab === 'groups') return 'Group'
   return tab === 'clients' ? 'Client' : 'Lead'
+}
+
+export function detailEntityKindLabel(entityType: 'client' | 'lead' | 'group') {
+  if (entityType === 'group') return 'Group'
+  return entityType === 'client' ? 'Client' : 'Lead'
 }
 
 export function newLocalId(prefix: string) {

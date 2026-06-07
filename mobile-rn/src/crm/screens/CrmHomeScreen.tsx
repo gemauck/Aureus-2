@@ -21,8 +21,16 @@ import { useAuth } from '../../state/AuthContext'
 import type { RootStackParamList } from '../../navigation/types'
 import { crmApi } from '../api'
 import { CrmEntityRow } from '../components/CrmEntityRow'
-import type { CrmClient, CrmFilterKey, CrmLead, CrmTab } from '../types'
-import { filterEntities, normalizeEntity, sortByName, tabCounts, uniqueIndustries } from '../utils'
+import type { CrmClient, CrmFilterKey, CrmGroup, CrmLead, CrmTab } from '../types'
+import {
+  entityKindLabel,
+  filterClientsList,
+  filterEntities,
+  normalizeEntity,
+  sortByName,
+  tabCounts,
+  uniqueIndustries
+} from '../utils'
 import type { CrmStackParamList } from '../navigation'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -44,6 +52,7 @@ export function CrmHomeScreen({ navigation }: Props) {
   const [tab, setTab] = useState<CrmTab>('clients')
   const [clients, setClients] = useState<CrmClient[]>([])
   const [leads, setLeads] = useState<CrmLead[]>([])
+  const [groups, setGroups] = useState<CrmGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
@@ -62,12 +71,14 @@ export function CrmHomeScreen({ navigation }: Props) {
       if (!silent) setLoading(true)
       setError('')
       try {
-        const [c, l] = await Promise.all([
+        const [c, l, g] = await Promise.all([
           crmApi.listClients(accessToken),
-          crmApi.listLeads(accessToken)
+          crmApi.listLeads(accessToken),
+          crmApi.listGroups(accessToken)
         ])
-        setClients(c.map(normalizeEntity))
+        setClients(filterClientsList(c.map(normalizeEntity)))
         setLeads(l.map(normalizeEntity))
+        setGroups(g.map(normalizeEntity))
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load CRM data')
       } finally {
@@ -82,16 +93,17 @@ export function CrmHomeScreen({ navigation }: Props) {
     void load()
   }, [load])
 
-  const counts = useMemo(() => tabCounts(clients, leads), [clients, leads])
-  const source = tab === 'clients' ? clients : leads
+  const counts = useMemo(() => tabCounts(clients, leads, groups), [clients, leads, groups])
+  const source =
+    tab === 'clients' ? clients : tab === 'leads' ? leads : groups
   const industries = useMemo(() => uniqueIndustries(source), [source])
   const showIndustryFilter = industries.length > 2
   const industryLabel =
     industry === 'all' ? 'All industries' : industry
 
   const filtered = useMemo(
-    () => sortByName(filterEntities(source, query, filter, industry)),
-    [source, query, filter, industry]
+    () => sortByName(filterEntities(source, query, filter, industry, tab)),
+    [source, query, filter, industry, tab]
   )
 
   const switchTab = (key: CrmTab) => {
@@ -105,15 +117,19 @@ export function CrmHomeScreen({ navigation }: Props) {
     <View style={styles.root}>
       <AppHeader
         title="CRM"
-        subtitle={`${counts.clients} clients · ${counts.leads} leads`}
+        subtitle={`${counts.clients} clients · ${counts.leads} leads · ${counts.groups} groups`}
         showNotifications
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
       <ScreenBody padded={false}>
         <View style={styles.tabRow}>
-          {(['clients', 'leads'] as CrmTab[]).map((key) => {
+          {(['clients', 'leads', 'groups'] as CrmTab[]).map((key) => {
             const active = tab === key
-            const count = key === 'clients' ? counts.clients : counts.leads
+            const count =
+              key === 'clients' ? counts.clients : key === 'leads' ? counts.leads : counts.groups
+            const icon =
+              key === 'clients' ? 'building' : key === 'leads' ? 'user-plus' : 'layer-group'
+            const label = key === 'clients' ? 'Clients' : key === 'leads' ? 'Leads' : 'Groups'
             return (
               <Pressable
                 key={key}
@@ -121,14 +137,12 @@ export function CrmHomeScreen({ navigation }: Props) {
                 onPress={() => switchTab(key)}
               >
                 <FontAwesome5
-                  name={key === 'clients' ? 'building' : 'user-plus'}
+                  name={icon}
                   size={13}
                   color={active ? '#fff' : erp.textMuted}
                   style={styles.tabIcon}
                 />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                  {key === 'clients' ? 'Clients' : 'Leads'}
-                </Text>
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
                 <View style={[styles.tabCount, active && styles.tabCountActive]}>
                   <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
                     {count}
@@ -153,27 +167,29 @@ export function CrmHomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <View style={styles.filterBar}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key
-            return (
-              <Pressable
-                key={f.key}
-                style={[styles.filterBtn, active && styles.filterBtnActive]}
-                onPress={() => setFilter(f.key)}
-              >
-                <FontAwesome5
-                  name={f.icon}
-                  size={11}
-                  color={active ? erp.primary : erp.textMuted}
-                  solid={f.key === 'starred' && active}
-                  style={styles.filterIcon}
-                />
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
-              </Pressable>
-            )
-          })}
-        </View>
+        {tab !== 'groups' ? (
+          <View style={styles.filterBar}>
+            {FILTERS.map((f) => {
+              const active = filter === f.key
+              return (
+                <Pressable
+                  key={f.key}
+                  style={[styles.filterBtn, active && styles.filterBtnActive]}
+                  onPress={() => setFilter(f.key)}
+                >
+                  <FontAwesome5
+                    name={f.icon}
+                    size={11}
+                    color={active ? erp.primary : erp.textMuted}
+                    solid={f.key === 'starred' && active}
+                    style={styles.filterIcon}
+                  />
+                  <Text style={[styles.filterText, active && styles.filterTextActive]}>{f.label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
 
         {showIndustryFilter ? (
           <Pressable
@@ -190,9 +206,12 @@ export function CrmHomeScreen({ navigation }: Props) {
 
         <View style={styles.resultsMeta}>
           <Text style={styles.resultsMetaText}>
-            {filtered.length} {tab === 'clients' ? 'client' : 'lead'}
+            {filtered.length} {entityKindLabel(tab).toLowerCase()}
             {filtered.length === 1 ? '' : 's'}
-            {filter !== 'all' || industry !== 'all' || query.trim() ? ' matching filters' : ''}
+            {(tab !== 'groups' && (filter !== 'all' || industry !== 'all' || query.trim())) ||
+            (tab === 'groups' && (industry !== 'all' || query.trim()))
+              ? ' matching filters'
+              : ''}
           </Text>
         </View>
 
@@ -237,7 +256,8 @@ export function CrmHomeScreen({ navigation }: Props) {
                 tab={tab}
                 onPress={() =>
                   navigation.navigate('CrmDetail', {
-                    entityType: tab === 'clients' ? 'client' : 'lead',
+                    entityType:
+                      tab === 'clients' ? 'client' : tab === 'leads' ? 'lead' : 'group',
                     entityId: item.id
                   })
                 }
@@ -299,7 +319,8 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 11,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
       borderRadius: erp.radius.md,
       backgroundColor: erp.surface,
       borderWidth: 1,
@@ -307,7 +328,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     },
     tabBtnActive: { backgroundColor: erp.primary, borderColor: erp.primary },
     tabIcon: { marginRight: 6 },
-    tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 14 },
+    tabText: { fontWeight: '700', color: erp.textMuted, fontSize: 13 },
     tabTextActive: { color: '#fff' },
     tabCount: {
       minWidth: 22,

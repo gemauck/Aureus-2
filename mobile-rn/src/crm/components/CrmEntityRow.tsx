@@ -2,13 +2,16 @@ import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 
-import type { CrmEntityBase, CrmTab } from '../types'
+import type { CrmEntityBase, CrmGroup, CrmTab } from '../types'
 import {
-  displayStage,
+  displayClientStatus,
+  displayLeadStage,
   entityContacts,
   entitySites,
   formatDate,
   formatMoney,
+  groupMemberCount,
+  isClientAccountInactive,
   resolveStarredState
 } from '../utils'
 import { CrmStatusBadge } from './CrmStatusBadge'
@@ -36,9 +39,18 @@ function avatarTint(name: string, erp: ErpTheme): { bg: string; fg: string } {
 export function CrmEntityRow({ entity, tab, onPress }: Props) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
-  const stage = displayStage(entity, tab)
+  const isClient = tab === 'clients'
+  const isGroup = tab === 'groups'
+  const stage = isClient
+    ? isClientAccountInactive(entity)
+      ? displayClientStatus(entity)
+      : ''
+    : isGroup
+      ? ''
+      : displayLeadStage(entity)
   const contacts = entityContacts(entity)
   const sites = entitySites(entity)
+  const members = isGroup ? groupMemberCount(entity as CrmGroup) : 0
   const value = tab === 'leads' ? (entity as { value?: number }).value : undefined
   const tint = avatarTint(entity.name || '', erp)
   const starred = resolveStarredState(entity)
@@ -63,15 +75,22 @@ export function CrmEntityRow({ entity, tab, onPress }: Props) {
               {entity.industry}
             </Text>
           ) : null}
-          {stage ? <CrmStatusBadge label={stage} compact /> : null}
+          {isGroup ? (
+            <Text style={styles.metaChip}>
+              <FontAwesome5 name="users" size={9} color={erp.textMuted} /> {members} member
+              {members === 1 ? '' : 's'}
+            </Text>
+          ) : stage ? (
+            <CrmStatusBadge label={stage} compact />
+          ) : null}
         </View>
         <View style={styles.metaRow}>
-          {contacts.length ? (
+          {!isGroup && contacts.length ? (
             <Text style={styles.metaChip}>
               <FontAwesome5 name="user" size={9} color={erp.textMuted} /> {contacts.length}
             </Text>
           ) : null}
-          {sites.length ? (
+          {!isGroup && sites.length ? (
             <Text style={styles.metaChip}>
               <FontAwesome5 name="map-marker-alt" size={9} color={erp.textMuted} /> {sites.length}
             </Text>

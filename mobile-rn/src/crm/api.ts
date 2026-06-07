@@ -2,6 +2,8 @@ import { request } from '../services/apiClient'
 import type {
   CrmClient,
   CrmClientNote,
+  CrmGroup,
+  CrmGroupMember,
   CrmJobCard,
   CrmLead,
   CrmOpportunity,
@@ -15,6 +17,17 @@ export const crmApi = {
 
   listLeads(token: string) {
     return request<{ leads: CrmLead[] }>('/api/leads', { token }).then((d) => d.leads || [])
+  },
+
+  listGroups(token: string) {
+    return request<{ groups: CrmGroup[] }>('/api/clients/groups', { token }).then((d) => d.groups || [])
+  },
+
+  getGroupMembers(token: string, groupId: string) {
+    return request<{ members: CrmGroupMember[] }>(
+      `/api/clients/groups/${encodeURIComponent(groupId)}/members`,
+      { token }
+    ).then((d) => d.members || [])
   },
 
   getClient(token: string, id: string) {
