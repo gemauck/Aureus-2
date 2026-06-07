@@ -118,7 +118,11 @@ export function useOTAUpdates(enabled = true) {
     inFlightRef.current = true
     lastCheckRef.current = now
     try {
-      return await prefetchOtaUpdate()
+      const result = await prefetchOtaUpdate()
+      if (result.status === 'downloaded') {
+        void promptApplyUpdate(null)
+      }
+      return result
     } finally {
       inFlightRef.current = false
     }

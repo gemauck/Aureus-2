@@ -5,11 +5,11 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 13,
-  versionName: '0.3.8',
+  versionCode: 14,
+  versionName: '0.3.9',
   apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
   releaseNotes:
-    'Fixes Expense Capture closing the app — native camera/document modules load only when used. Includes document-picker plugin and safer lazy screen loading.',
+    'Mobile Users module (admin user management, invites, permissions), improved notification deep links and unread badges. Install this APK or apply the JS update from Settings.',
   /** Set true only when native shell must be replaced (permissions, SDK, runtime bump). */
   forceApkInstall: false
 }
