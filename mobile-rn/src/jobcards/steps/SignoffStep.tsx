@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native'
 import SignatureCanvas from 'react-native-signature-canvas'
 import {
   formatTravelDurationMinutes,
@@ -36,9 +46,19 @@ export function SignoffStep() {
     projects,
     editingMeta
   } = useJobCardWizard()
-  const sigRef = useRef<{ clearSignature?: () => void } | null>(null)
+  const sigRef = useRef<{ clearSignature?: () => void; readSignature?: () => void } | null>(null)
   const endTimeInitialized = useRef(false)
   const [scrollEnabled, setScrollEnabled] = useState(true)
+  const [hasSignature, setHasSignature] = useState(false)
+  const [savingSignature, setSavingSignature] = useState(false)
+
+  const signatureWebStyle = useMemo(
+    () =>
+      `.m-signature-pad { box-shadow: none; border: 1px solid ${jc.border}; border-radius: 12px; height: 100%; }` +
+      `.m-signature-pad--body { border: none; position: absolute; left: 0; right: 0; top: 0; bottom: 0; height: auto; }` +
+      `.m-signature-pad--footer { display: none; }`,
+    [jc.border]
+  )
 
   useEffect(() => {
     if (endTimeInitialized.current) return
@@ -84,6 +104,13 @@ export function SignoffStep() {
     formData.clientName || clients.find((c) => c.id === formData.clientId)?.name || ''
 
   async function submitCard() {
+    if (!signatureLocked || !formData.customerSignature?.trim()) {
+      Alert.alert(
+        'Signature required',
+        'Ask the customer to sign in the box, then tap Save signature before submitting.'
+      )
+      return
+    }
     let departure = formData.departureFromSite
     if (!departure?.trim()) {
       departure = toDatetimeLocal(new Date())
@@ -91,6 +118,24 @@ export function SignoffStep() {
     }
     await handleSave({ forceSubmitted: true })
     Alert.alert('Submitted', 'Job card saved and queued for sync if needed.')
+  }
+
+  function saveSignature() {
+    setSavingSignature(true)
+    sigRef.current?.readSignature?.()
+  }
+
+  function clearSignature() {
+    setHasSignature(false)
+    setFormData((f) => ({ ...f, customerSignature: '' }))
+    sigRef.current?.clearSignature?.()
+  }
+
+  function startResign() {
+    setSignatureLocked(false)
+    setHasSignature(false)
+    setFormData((f) => ({ ...f, customerSignature: '' }))
+    sigRef.current?.clearSignature?.()
   }
 
   return (
@@ -174,39 +219,80 @@ export function SignoffStep() {
           mode="date"
         />
         {!signatureLocked ? (
-          <View
-            style={styles.sigBox}
-            collapsable={false}
-            onStartShouldSetResponder={() => true}
-            onResponderGrant={() => setScrollEnabled(false)}
-            onResponderRelease={() => setScrollEnabled(true)}
-            onResponderTerminate={() => setScrollEnabled(true)}
-          >
-            <Text style={styles.sigHint}>Sign in the box below</Text>
-            <SignatureCanvas
-              ref={sigRef as React.RefObject<never>}
-              onOK={(sig: string) => {
-                setFormData((f) => ({ ...f, customerSignature: sig }))
-                setSignatureLocked(true)
-              }}
-              descriptionText="Customer signature"
-              webStyle={`.m-signature-pad { box-shadow: none; border: 1px solid ${jc.border}; border-radius: 12px; } .m-signature-pad--body { border: none; }`}
-              style={styles.sigCanvas}
-              autoClear={false}
-            />
-            <Pressable
-              style={formStyles.ghostBtn}
-              onPress={() => sigRef.current?.clearSignature?.()}
-            >
-              <Text style={formStyles.ghostBtnText}>Clear signature</Text>
-            </Pressable>
+          <View style={styles.sigBox} collapsable={false}>
+            <Text style={styles.sigHint}>Sign in the box below, then tap Save signature.</Text>
+            <View style={styles.sigCanvasWrap}>
+              <SignatureCanvas
+                ref={sigRef as React.RefObject<never>}
+                onBegin={() => {
+                  setScrollEnabled(false)
+                  setHasSignature(true)
+                }}
+                onEnd={() => setScrollEnabled(true)}
+                onOK={(sig: string) => {
+                  setFormData((f) => ({ ...f, customerSignature: sig }))
+                  setSignatureLocked(true)
+                  setSavingSignature(false)
+                }}
+                onEmpty={() => {
+                  setSavingSignature(false)
+                  Alert.alert('Empty signature', 'Ask the customer to sign in the box first.')
+                }}
+                onClear={() => setHasSignature(false)}
+                onError={() => {
+                  setSavingSignature(false)
+                  Alert.alert('Signature pad', 'Could not load the signature pad. Try again.')
+                }}
+                descriptionText="Customer signature"
+                confirmText="Save"
+                clearText="Clear"
+                webStyle={signatureWebStyle}
+                style={styles.sigCanvas}
+                nestedScrollEnabled
+                autoClear={false}
+                penColor="#111827"
+                backgroundColor="#ffffff"
+              />
+            </View>
+            <View style={styles.sigActions}>
+              <Pressable
+                style={[
+                  styles.saveSigBtn,
+                  (!hasSignature || savingSignature) && styles.saveSigBtnDisabled
+                ]}
+                disabled={!hasSignature || savingSignature}
+                onPress={saveSignature}
+              >
+                {savingSignature ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.saveSigBtnText}>Save signature</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={formStyles.ghostBtn}
+                disabled={!hasSignature || savingSignature}
+                onPress={clearSignature}
+              >
+                <Text style={formStyles.ghostBtnText}>Clear</Text>
+              </Pressable>
+            </View>
           </View>
         ) : (
-          <View style={styles.lockedRow}>
-            <Text style={styles.locked}>Signature captured</Text>
-            <Pressable onPress={() => setSignatureLocked(false)}>
-              <Text style={formStyles.ghostBtnText}>Re-sign</Text>
-            </Pressable>
+          <View style={styles.lockedBlock}>
+            {formData.customerSignature ? (
+              <Image
+                source={{ uri: formData.customerSignature }}
+                style={styles.sigPreview}
+                resizeMode="contain"
+              />
+            ) : null}
+            <View style={styles.lockedRow}>
+              <Text style={styles.locked}>Signature saved — safe to scroll</Text>
+              <Pressable onPress={startResign}>
+                <Text style={formStyles.ghostBtnText}>Clear and re-sign</Text>
+              </Pressable>
+            </View>
           </View>
         )}
       </SectionCard>
@@ -302,13 +388,43 @@ function createStyles({ jc }: { jc: JcTheme }) {
     marginTop: jc.space.xs
   },
   durationValue: { fontSize: 16, fontWeight: '700', color: jc.text, marginTop: 4 },
-  sigBox: { height: 240, marginTop: 8 },
-  sigHint: { color: jc.textMuted, fontSize: 13, marginBottom: 6 },
+  sigBox: { marginTop: 8, gap: 8 },
+  sigHint: { color: jc.textMuted, fontSize: 13 },
+  sigCanvasWrap: {
+    height: 220,
+    borderRadius: jc.radius.md,
+    overflow: 'hidden',
+    backgroundColor: jc.surfaceMuted
+  },
   sigCanvas: {
     flex: 1,
-    height: 200,
+    height: 220,
+    backgroundColor: '#fff'
+  },
+  sigActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  saveSigBtn: {
+    backgroundColor: jc.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: jc.radius.md,
+    minWidth: 140,
+    alignItems: 'center'
+  },
+  saveSigBtnDisabled: { opacity: 0.5 },
+  saveSigBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  lockedBlock: { gap: 8 },
+  sigPreview: {
+    width: '100%',
+    height: 160,
     backgroundColor: jc.surfaceMuted,
-    borderRadius: jc.radius.md
+    borderRadius: jc.radius.md,
+    borderWidth: 1,
+    borderColor: jc.border
   },
   lockedRow: {
     flexDirection: 'row',

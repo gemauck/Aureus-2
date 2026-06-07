@@ -38,7 +38,12 @@ export function WorkStep() {
         <VoiceNoteField
           section="diagnosis"
           voiceClips={voiceAttachments}
+          fieldValue={formData.diagnosis}
+          onFieldChange={(diagnosis) => setFormData((f) => ({ ...f, diagnosis }))}
           onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onVoiceClipUpdate={(id, patch) =>
+            setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+          }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
         <SectionMediaPicker
@@ -60,7 +65,12 @@ export function WorkStep() {
         <VoiceNoteField
           section="actionsTaken"
           voiceClips={voiceAttachments}
+          fieldValue={formData.actionsTaken}
+          onFieldChange={(actionsTaken) => setFormData((f) => ({ ...f, actionsTaken }))}
           onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onVoiceClipUpdate={(id, patch) =>
+            setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+          }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
         <SectionMediaPicker
@@ -109,7 +119,12 @@ export function WorkStep() {
         <VoiceNoteField
           section="otherComments"
           voiceClips={voiceAttachments}
+          fieldValue={formData.otherComments}
+          onFieldChange={(otherComments) => setFormData((f) => ({ ...f, otherComments }))}
           onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onVoiceClipUpdate={(id, patch) =>
+            setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+          }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
       </SectionCard>

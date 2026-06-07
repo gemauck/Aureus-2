@@ -135,7 +135,12 @@ export function VisitStep() {
         <VoiceNoteField
           section="reasonForVisit"
           voiceClips={voiceAttachments}
+          fieldValue={formData.reasonForVisit}
+          onFieldChange={(reasonForVisit) => setFormData((f) => ({ ...f, reasonForVisit }))}
           onVoiceSaved={(clip) => setVoiceAttachments((v) => [...v, clip])}
+          onVoiceClipUpdate={(id, patch) =>
+            setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+          }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
         />
       </SectionCard>

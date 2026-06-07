@@ -104,6 +104,11 @@ export type VoiceClip = {
   section: string
   dataUrl: string
   name?: string
+  mimeType?: string
+  noteNumber?: number
+  transcribed?: boolean
+  /** Set when recorded in-app; avoids re-transcribing clips loaded from the server. */
+  needsTranscription?: boolean
 }
 
 export type SectionWorkMedia = {
