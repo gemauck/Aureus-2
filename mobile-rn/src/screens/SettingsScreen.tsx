@@ -1,5 +1,15 @@
-import React, { useState } from 'react'
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { useCallback, useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
@@ -17,18 +27,101 @@ import { useTheme } from '../theme/ThemeContext'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>
 
+type RemoteVersion = {
+  versionCode?: number
+  versionName?: string
+  apkUrl?: string
+  releaseNotes?: string
+  forceApkInstall?: boolean
+}
+
+type CheckState = 'ota-check' | 'ota-download' | 'ota-apply' | 'apk-check' | 'apk-download' | null
+
+const OTA_MANIFEST_URL = `${API_BASE_URL}/api/public/mobile-ota/manifest`
+const DEFAULT_APK_URL = `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return 'Not checked yet'
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
 export function SettingsScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp, preference, setPreference } = useTheme()
   const { user, signOut } = useAuth()
-  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId } = useOTAUpdates(false)
+  const {
+    checkForOTAUpdate,
+    downloadOTAUpdate,
+    applyDownloadedUpdate,
+    otaEnabled,
+    otaChannel,
+    runtimeVersion,
+    updateId,
+    isEmbeddedLaunch
+  } = useOTAUpdates(false)
   const { checkForUpdate: checkApkUpdate } = useAppUpdateCheck(false)
-  const [checking, setChecking] = useState<'ota' | 'apk' | null>(null)
+  const [checking, setChecking] = useState<CheckState>(null)
+  const [remoteVersion, setRemoteVersion] = useState<RemoteVersion | null>(null)
+  const [remoteError, setRemoteError] = useState<string | null>(null)
+  const [lastOtaCheck, setLastOtaCheck] = useState<string | null>(null)
+  const [lastApkCheck, setLastApkCheck] = useState<string | null>(null)
+  const [otaStatus, setOtaStatus] = useState<string>('Automatic checks run on launch and in the background.')
+
+  const refreshRemoteVersion = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/public/mobile-app-version`, {
+        headers: { Accept: 'application/json' }
+      })
+      if (!res.ok) {
+        setRemoteError(`Server returned ${res.status}`)
+        return null
+      }
+      const payload = await res.json()
+      const remote = ((payload?.data || payload)?.android || null) as RemoteVersion | null
+      setRemoteVersion(remote)
+      setRemoteError(null)
+      return remote
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not reach server'
+      setRemoteError(message)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshRemoteVersion()
+  }, [refreshRemoteVersion])
+
+  function noteOtaResult(result: Awaited<ReturnType<typeof checkForOTAUpdate>>) {
+    setLastOtaCheck(new Date().toISOString())
+    if (result.status === 'current') {
+      setOtaStatus('Up to date — no newer JS bundle on the server.')
+    } else if (result.status === 'downloaded') {
+      setOtaStatus(
+        result.willReload
+          ? 'Update downloaded — restarting to apply.'
+          : 'Update downloaded — tap Apply update to restart.'
+      )
+    } else if (result.status === 'error') {
+      setOtaStatus(`Last check failed: ${result.message}`)
+    } else if (result.status === 'dev') {
+      setOtaStatus('Development build — OTA updates do not apply.')
+    } else if (result.status === 'disabled') {
+      setOtaStatus('OTA is disabled in this build.')
+    } else if (result.status === 'unsupported') {
+      setOtaStatus('OTA is Android-only in this build.')
+    }
+  }
 
   async function onCheckOta() {
-    setChecking('ota')
+    setChecking('ota-check')
     try {
       const result = await checkForOTAUpdate(true)
+      noteOtaResult(result)
       if (result.status === 'dev') {
         Alert.alert(
           'Development build',
@@ -45,15 +138,10 @@ export function SettingsScreen({ navigation }: Props) {
       } else if (result.status === 'downloaded' && !result.willReload) {
         Alert.alert(
           'Update downloaded',
-          'Tap Restart to apply the update now.',
+          'Tap Apply update below to restart and use the new version.',
           [
             { text: 'Later', style: 'cancel' },
-            {
-              text: 'Restart now',
-              onPress: () => {
-                void import('expo-updates').then(({ reloadAsync }) => reloadAsync())
-              }
-            }
+            { text: 'Apply now', onPress: () => void onApplyOta() }
           ]
         )
       } else if (result.status === 'unsupported') {
@@ -66,145 +154,283 @@ export function SettingsScreen({ navigation }: Props) {
     }
   }
 
-  async function onCheckApk() {
-    setChecking('apk')
+  async function onDownloadOta() {
+    setChecking('ota-download')
     try {
-      if (Platform.OS !== 'android') return
-      const res = await fetch(`${API_BASE_URL}/api/public/mobile-app-version`, {
-        headers: { Accept: 'application/json' }
-      })
-      const payload = res.ok ? await res.json() : null
-      const remote = (payload?.data || payload)?.android
-      if (remote?.forceApkInstall && remote.versionCode > APP_VERSION_CODE) {
+      const result = await downloadOTAUpdate()
+      noteOtaResult(result)
+      if (result.status === 'current') {
+        Alert.alert('Already current', 'The server has no newer JS bundle to download.')
+      } else if (result.status === 'downloaded') {
+        Alert.alert(
+          'Download complete',
+          'The latest JS bundle is ready. Tap Apply update to restart.',
+          [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Apply now', onPress: () => void onApplyOta() }
+          ]
+        )
+      } else if (result.status === 'dev') {
+        Alert.alert('Development build', 'OTA downloads do not apply in debug/dev builds.')
+      } else if (result.status === 'disabled') {
+        Alert.alert('OTA disabled', 'This build has JS updates turned off.')
+      } else if (result.status === 'unsupported') {
+        Alert.alert('Not supported', 'OTA updates are Android-only in this build.')
+      } else if (result.status === 'error') {
+        Alert.alert('Download failed', result.message)
+      }
+    } finally {
+      setChecking(null)
+    }
+  }
+
+  async function onApplyOta() {
+    setChecking('ota-apply')
+    try {
+      await applyDownloadedUpdate()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not restart the app'
+      Alert.alert('Apply failed', message)
+    } finally {
+      setChecking(null)
+    }
+  }
+
+  async function onCheckApk() {
+    setChecking('apk-check')
+    try {
+      const remote = await refreshRemoteVersion()
+      setLastApkCheck(new Date().toISOString())
+      if (Platform.OS !== 'android') {
+        Alert.alert('Android only', 'APK updates apply to the Android app.')
+        return
+      }
+      if (!remote?.versionCode) {
+        Alert.alert('Check failed', remoteError || 'Could not read version from server.')
+        return
+      }
+      if (remote.forceApkInstall && remote.versionCode > APP_VERSION_CODE) {
         await checkApkUpdate()
         return
       }
       Alert.alert(
         'APK up to date',
-        'Your installed app shell is current. UI changes come via JS update — use “Check for JS update (OTA)” above, then tap Restart when prompted.'
+        remote.versionCode > APP_VERSION_CODE
+          ? `Server reports ${remote.versionName || remote.versionCode} but no native reinstall is required yet. UI changes come via JS update — use Check for JS update, then Apply update.`
+          : 'Your installed app shell matches the server. UI changes come via JS update — use Check for JS update above.'
       )
     } finally {
       setChecking(null)
     }
   }
 
+  async function onDownloadApk() {
+    setChecking('apk-download')
+    try {
+      const remote = await refreshRemoteVersion()
+      const url = remote?.apkUrl || DEFAULT_APK_URL
+      await Linking.openURL(url)
+    } catch (error) {
+      const remote = await refreshRemoteVersion()
+      const url = remote?.apkUrl || DEFAULT_APK_URL
+      Alert.alert('Download', `Could not open the link automatically. Open this URL in your browser:\n\n${url}`)
+    } finally {
+      setChecking(null)
+    }
+  }
+
+  const apkNeedsUpdate =
+    Platform.OS === 'android' &&
+    !!remoteVersion?.versionCode &&
+    remoteVersion.versionCode > APP_VERSION_CODE
+  const apkRequiresInstall = apkNeedsUpdate && !!remoteVersion?.forceApkInstall
+
   return (
     <View style={styles.root}>
       <AppHeader title="Settings" />
-      <ScreenBody>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.card}>
-            <Text style={styles.label}>Signed in as</Text>
-            <Text style={styles.value}>{user?.name || user?.email}</Text>
-            {user?.role ? <Text style={styles.meta}>{user.role}</Text> : null}
+      <ScreenBody padded={false}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.card}>
+              <Text style={styles.label}>Signed in as</Text>
+              <Text style={styles.value}>{user?.name || user?.email}</Text>
+              {user?.role ? <Text style={styles.meta}>{user.role}</Text> : null}
+            </View>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
-          <View style={styles.card}>
-            <Text style={styles.label}>Theme</Text>
-            <View style={styles.segmentRow}>
-              <AppearanceOption
-                label="System"
-                icon="mobile-alt"
-                selected={preference === 'system'}
-                onPress={() => setPreference('system')}
-              />
-              <AppearanceOption
-                label="Light"
-                icon="sun"
-                selected={preference === 'light'}
-                onPress={() => setPreference('light')}
-              />
-              <AppearanceOption
-                label="Dark"
-                icon="moon"
-                selected={preference === 'dark'}
-                onPress={() => setPreference('dark')}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Appearance</Text>
+            <View style={styles.card}>
+              <Text style={styles.label}>Theme</Text>
+              <View style={styles.segmentRow}>
+                <AppearanceOption
+                  label="System"
+                  icon="mobile-alt"
+                  selected={preference === 'system'}
+                  onPress={() => setPreference('system')}
+                />
+                <AppearanceOption
+                  label="Light"
+                  icon="sun"
+                  selected={preference === 'light'}
+                  onPress={() => setPreference('light')}
+                />
+                <AppearanceOption
+                  label="Dark"
+                  icon="moon"
+                  selected={preference === 'dark'}
+                  onPress={() => setPreference('dark')}
+                />
+              </View>
+              {preference === 'system' ? (
+                <Text style={styles.themeHint}>Matches your device light or dark setting.</Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Dashboard</Text>
+            <Pressable
+              style={styles.linkBtn}
+              onPress={() => navigation.navigate('DashboardCustomize')}
+            >
+              <FontAwesome5 name="sliders-h" size={16} color={erp.primary} />
+              <Text style={styles.linkBtnText}>Customize dashboard widgets</Text>
+              <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
+            </Pressable>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>App details</Text>
+            <View style={styles.card}>
+              <DetailRow icon="server" label="API server" value={API_BASE_URL} />
+              <DetailRow icon="mobile-alt" label="App version" value={`${APP_VERSION} (build ${APP_VERSION_CODE})`} />
+              <DetailRow icon="android" label="Platform" value={Platform.OS === 'android' ? 'Android' : Platform.OS} />
+              <DetailRow
+                icon="cloud-download-alt"
+                label="Server APK version"
+                value={
+                  remoteVersion?.versionName
+                    ? `${remoteVersion.versionName} (build ${remoteVersion.versionCode ?? '?'})`
+                    : remoteError
+                      ? `Unavailable — ${remoteError}`
+                      : 'Loading…'
+                }
               />
             </View>
-            {preference === 'system' ? (
-              <Text style={styles.themeHint}>Matches your device light or dark setting.</Text>
-            ) : null}
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Dashboard</Text>
-          <Pressable
-            style={styles.linkBtn}
-            onPress={() => navigation.navigate('DashboardCustomize')}
-          >
-            <FontAwesome5 name="sliders-h" size={16} color={erp.primary} />
-            <Text style={styles.linkBtnText}>Customize dashboard widgets</Text>
-            <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
-          </Pressable>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App</Text>
-          <View style={styles.card}>
-            <Row icon="server" label="Server" value={API_BASE_URL} />
-            <Row icon="mobile-alt" label="App version" value={`${APP_VERSION} (${APP_VERSION_CODE})`} />
-            <Row icon="code-branch" label="JS updates (OTA)" value={otaEnabled ? 'Self-hosted' : 'Off'} />
-            {otaEnabled ? (
-              <>
-                <Row icon="layer-group" label="Runtime" value={runtimeVersion || OTA_RUNTIME_VERSION} />
-                {updateId ? (
-                  <Row icon="fingerprint" label="Bundle ID" value={updateId.slice(0, 12) + '…'} />
-                ) : null}
-              </>
-            ) : null}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>JS bundle (OTA)</Text>
+            <View style={styles.card}>
+              <DetailRow
+                icon="code-branch"
+                label="OTA status"
+                value={otaEnabled ? 'Enabled (self-hosted)' : 'Disabled in this build'}
+              />
+              {otaEnabled ? (
+                <>
+                  <DetailRow icon="layer-group" label="Runtime version" value={runtimeVersion || OTA_RUNTIME_VERSION} />
+                  <DetailRow icon="broadcast-tower" label="Channel" value={otaChannel || 'production'} />
+                  <DetailRow
+                    icon="box-open"
+                    label="Launch source"
+                    value={isEmbeddedLaunch ? 'Embedded (shipped with APK)' : 'Downloaded OTA bundle'}
+                  />
+                  <DetailRow
+                    icon="fingerprint"
+                    label="Current bundle ID"
+                    value={updateId || 'Embedded bundle (no OTA id yet)'}
+                    mono
+                  />
+                  <DetailRow icon="link" label="Update manifest" value={OTA_MANIFEST_URL} mono />
+                </>
+              ) : null}
+            </View>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Updates</Text>
-          <Pressable
-            style={[styles.updateBtn, checking === 'ota' && styles.updateBtnBusy]}
-            disabled={checking !== null}
-            onPress={() => void onCheckOta()}
-          >
-            {checking === 'ota' ? (
-              <ActivityIndicator color={erp.primary} />
-            ) : (
-              <>
-                <FontAwesome5 name="sync" size={16} color={erp.primary} />
-                <Text style={styles.updateBtnText}>Check for JS update (OTA)</Text>
-              </>
-            )}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Updates</Text>
+            <View style={styles.card}>
+              <Text style={styles.statusLabel}>Status</Text>
+              <Text style={styles.statusText}>{otaStatus}</Text>
+              {apkRequiresInstall ? (
+                <View style={styles.banner}>
+                  <FontAwesome5 name="exclamation-circle" size={14} color={erp.warning} />
+                  <Text style={styles.bannerText}>
+                    A new APK is required before JS updates can continue (
+                    {remoteVersion?.versionName || remoteVersion?.versionCode}).
+                  </Text>
+                </View>
+              ) : null}
+              {remoteVersion?.releaseNotes ? (
+                <>
+                  <Text style={[styles.statusLabel, styles.statusLabelSpaced]}>Release notes</Text>
+                  <Text style={styles.releaseNotes}>{remoteVersion.releaseNotes}</Text>
+                </>
+              ) : null}
+              <DetailRow icon="history" label="Last JS check" value={formatWhen(lastOtaCheck)} compact />
+              <DetailRow icon="history" label="Last APK check" value={formatWhen(lastApkCheck)} compact />
+            </View>
+
+            <Text style={styles.actionGroupTitle}>JS updates</Text>
+            <Text style={styles.actionGroupHint}>
+              Automatic checks run on launch, when returning to the app, and every few minutes while open.
+            </Text>
+            <UpdateButton
+              icon="sync"
+              label="Check for JS update"
+              busy={checking === 'ota-check'}
+              disabled={checking !== null}
+              onPress={() => void onCheckOta()}
+            />
+            <UpdateButton
+              icon="download"
+              label="Download latest JS bundle"
+              busy={checking === 'ota-download'}
+              disabled={checking !== null || !otaEnabled}
+              onPress={() => void onDownloadOta()}
+            />
+            <UpdateButton
+              icon="redo"
+              label="Apply downloaded update"
+              busy={checking === 'ota-apply'}
+              disabled={checking !== null || !otaEnabled}
+              onPress={() => void onApplyOta()}
+              hint="Restarts the app to load a downloaded bundle."
+            />
+
+            <Text style={styles.actionGroupTitle}>APK (native shell)</Text>
+            <Text style={styles.actionGroupHint}>
+              Only needed when native modules or permissions change — usually rare.
+            </Text>
+            <UpdateButton
+              icon="search"
+              label="Check for new APK"
+              busy={checking === 'apk-check'}
+              disabled={checking !== null}
+              onPress={() => void onCheckApk()}
+            />
+            <UpdateButton
+              icon="file-download"
+              label="Download APK"
+              busy={checking === 'apk-download'}
+              disabled={checking !== null}
+              onPress={() => void onDownloadApk()}
+              hint={remoteVersion?.apkUrl || DEFAULT_APK_URL}
+            />
+          </View>
+
+          <Pressable style={styles.signOutBtn} onPress={() => void signOut()}>
+            <FontAwesome5 name="sign-out-alt" size={16} color={erp.danger} />
+            <Text style={styles.signOutText}>Sign out</Text>
           </Pressable>
-          <Pressable
-            style={[styles.updateBtn, checking === 'apk' && styles.updateBtnBusy]}
-            disabled={checking !== null}
-            onPress={() => void onCheckApk()}
-          >
-            {checking === 'apk' ? (
-              <ActivityIndicator color={erp.primary} />
-            ) : (
-              <>
-                <FontAwesome5 name="download" size={16} color={erp.primary} />
-                <Text style={styles.updateBtnText}>Check for new APK</Text>
-              </>
-            )}
+
+          <Pressable style={styles.backBtn} onPress={() => navigation.navigate('Dashboard')}>
+            <Text style={styles.backText}>Back to dashboard</Text>
           </Pressable>
-          <Text style={styles.updateHint}>
-            JS updates download automatically in the background. When one is ready, tap Restart on
-            the prompt to apply it. Use the buttons above to check manually. A new APK is only needed
-            when native modules change (rare).
-          </Text>
-        </View>
-
-        <Pressable style={styles.signOutBtn} onPress={() => void signOut()}>
-          <FontAwesome5 name="sign-out-alt" size={16} color={erp.danger} />
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
-
-        <Pressable style={styles.backBtn} onPress={() => navigation.navigate('Dashboard')}>
-          <Text style={styles.backText}>Back to dashboard</Text>
-        </Pressable>
+        </ScrollView>
       </ScreenBody>
     </View>
   )
@@ -234,16 +460,68 @@ function AppearanceOption({
   )
 }
 
-function Row({ icon, label, value }: { icon: string; label: string; value: string }) {
+function DetailRow({
+  icon,
+  label,
+  value,
+  mono = false,
+  compact = false
+}: {
+  icon: string
+  label: string
+  value: string
+  mono?: boolean
+  compact?: boolean
+}) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
   return (
-    <View style={styles.row}>
-      <FontAwesome5 name={icon as never} size={14} color={erp.textMuted} style={{ width: 20 }} />
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={1}>
+    <View style={[styles.detailRow, compact && styles.detailRowCompact]}>
+      <View style={styles.detailHeader}>
+        <FontAwesome5 name={icon as never} size={13} color={erp.textMuted} style={{ width: 18 }} />
+        <Text style={styles.detailLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.detailValue, mono && styles.detailValueMono]} selectable>
         {value}
       </Text>
+    </View>
+  )
+}
+
+function UpdateButton({
+  icon,
+  label,
+  hint,
+  busy,
+  disabled,
+  onPress
+}: {
+  icon: string
+  label: string
+  hint?: string
+  busy: boolean
+  disabled: boolean
+  onPress: () => void
+}) {
+  const styles = useThemedStyles(createStyles)
+  const { erp } = useTheme()
+  return (
+    <View style={styles.updateBtnWrap}>
+      <Pressable
+        style={[styles.updateBtn, (busy || disabled) && styles.updateBtnBusy]}
+        disabled={disabled}
+        onPress={onPress}
+      >
+        {busy ? (
+          <ActivityIndicator color={erp.primary} />
+        ) : (
+          <>
+            <FontAwesome5 name={icon as never} size={16} color={erp.primary} />
+            <Text style={styles.updateBtnText}>{label}</Text>
+          </>
+        )}
+      </Pressable>
+      {hint ? <Text style={styles.updateBtnHint}>{hint}</Text> : null}
     </View>
   )
 }
@@ -251,7 +529,12 @@ function Row({ icon, label, value }: { icon: string; label: string; value: strin
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: erp.bg },
-    section: { marginTop: 8, marginBottom: 16 },
+    scroll: {
+      paddingHorizontal: erp.space.lg,
+      paddingTop: 8,
+      paddingBottom: 32
+    },
+    section: { marginBottom: 20 },
     sectionTitle: {
       fontSize: 12,
       fontWeight: '700',
@@ -291,9 +574,41 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     segmentLabel: { fontSize: 13, fontWeight: '600', color: erp.textMuted },
     segmentLabelSelected: { color: erp.primary, fontWeight: '700' },
     themeHint: { fontSize: 12, color: erp.textMuted, marginTop: 10, lineHeight: 18 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-    rowLabel: { flex: 1, color: erp.text, fontWeight: '600' },
-    rowValue: { color: erp.textMuted, fontSize: 13, maxWidth: '50%', textAlign: 'right' },
+    detailRow: {
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: erp.border
+    },
+    detailRowCompact: { paddingVertical: 8 },
+    detailHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+    detailLabel: { fontSize: 12, fontWeight: '600', color: erp.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+    detailValue: { fontSize: 14, color: erp.text, lineHeight: 20 },
+    detailValueMono: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
+    statusLabel: { fontSize: 12, fontWeight: '700', color: erp.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+    statusLabelSpaced: { marginTop: 14 },
+    statusText: { fontSize: 14, color: erp.text, lineHeight: 20, marginTop: 6 },
+    releaseNotes: { fontSize: 13, color: erp.textMuted, lineHeight: 19, marginTop: 6 },
+    banner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      marginTop: 12,
+      padding: 12,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.warningSoft,
+      borderWidth: 1,
+      borderColor: erp.warning
+    },
+    bannerText: { flex: 1, fontSize: 13, color: erp.text, lineHeight: 18 },
+    actionGroupTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: erp.text,
+      marginTop: 16,
+      marginBottom: 4
+    },
+    actionGroupHint: { fontSize: 12, color: erp.textMuted, lineHeight: 18, marginBottom: 10 },
+    updateBtnWrap: { marginBottom: 10 },
     updateBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -304,12 +619,11 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       borderColor: erp.border,
       borderRadius: erp.radius.md,
       padding: 14,
-      marginBottom: 10,
       ...erp.shadowSm
     },
-    updateBtnBusy: { opacity: 0.7 },
+    updateBtnBusy: { opacity: 0.65 },
     updateBtnText: { color: erp.text, fontWeight: '700', fontSize: 15 },
-    updateHint: { fontSize: 12, color: erp.textMuted, lineHeight: 18, marginTop: 4 },
+    updateBtnHint: { fontSize: 11, color: erp.textMuted, marginTop: 4, lineHeight: 16 },
     linkBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -330,7 +644,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       backgroundColor: erp.dangerSoft,
       padding: 14,
       borderRadius: erp.radius.md,
-      marginTop: 8
+      marginTop: 4
     },
     signOutText: { color: erp.danger, fontWeight: '700', fontSize: 16 },
     backBtn: { padding: 16, alignItems: 'center' },

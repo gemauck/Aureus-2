@@ -59,6 +59,26 @@ function scheduleApplyPrompt(updateId?: string | null): Promise<OtaCheckResult> 
   })
 }
 
+/** Fetch a newer JS bundle without reloading — for manual download from Settings. */
+export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
+  if (__DEV__) return { status: 'dev' }
+  if (Platform.OS !== 'android') return { status: 'unsupported' }
+  if (!Updates.isEnabled) return { status: 'disabled' }
+
+  try {
+    const check = await Updates.checkForUpdateAsync()
+    if (!check.isAvailable) return { status: 'current' }
+
+    await Updates.fetchUpdateAsync()
+    return { status: 'downloaded', willReload: false }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'OTA download failed'
+    }
+  }
+}
+
 export async function applyOtaUpdate(
   options: { silent?: boolean; reload?: boolean } = {}
 ): Promise<OtaCheckResult> {
@@ -141,6 +161,8 @@ export function useOTAUpdates(enabled = true) {
   return {
     checkForOTAUpdate: (interactive = true) =>
       check({ silent: !interactive, force: true }),
+    downloadOTAUpdate: () => downloadOtaUpdate(),
+    applyDownloadedUpdate: () => Updates.reloadAsync(),
     otaEnabled: Updates.isEnabled,
     otaChannel: Updates.channel,
     runtimeVersion: Updates.runtimeVersion,
