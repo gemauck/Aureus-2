@@ -40,6 +40,7 @@ async function handler(req, res) {
 
     const asset = await fs.readFile(assetPath)
     res.statusCode = 200
+    res.setHeader('cache-control', 'private, max-age=0, no-store')
     res.setHeader(
       'content-type',
       isLaunchAsset

@@ -4,11 +4,60 @@ import * as Updates from 'expo-updates'
 
 const FOREGROUND_DEBOUNCE_MS = 45_000
 const BACKGROUND_POLL_MS = 5 * 60_000
+const PROMPT_DELAY_MS = 1_500
 
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
   | { status: 'downloaded'; willReload: boolean }
   | { status: 'error'; message: string }
+
+let lastPromptedUpdateId: string | null = null
+let pendingPromptTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearPendingPromptTimer() {
+  if (pendingPromptTimer) {
+    clearTimeout(pendingPromptTimer)
+    pendingPromptTimer = null
+  }
+}
+
+function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
+  if (updateId && lastPromptedUpdateId === updateId) {
+    return Promise.resolve({ status: 'downloaded', willReload: false })
+  }
+  if (updateId) lastPromptedUpdateId = updateId
+
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Update ready',
+      'A new version was downloaded. Tap Restart to apply it — no need to clear cache or force-stop the app.',
+      [
+        {
+          text: 'Later',
+          style: 'cancel',
+          onPress: () => resolve({ status: 'downloaded', willReload: false })
+        },
+        {
+          text: 'Restart',
+          onPress: () => {
+            void Updates.reloadAsync()
+            resolve({ status: 'downloaded', willReload: true })
+          }
+        }
+      ]
+    )
+  })
+}
+
+function scheduleApplyPrompt(updateId?: string | null): Promise<OtaCheckResult> {
+  clearPendingPromptTimer()
+  return new Promise((resolve) => {
+    pendingPromptTimer = setTimeout(() => {
+      pendingPromptTimer = null
+      void promptApplyUpdate(updateId).then(resolve)
+    }, PROMPT_DELAY_MS)
+  })
+}
 
 export async function applyOtaUpdate(
   options: { silent?: boolean; reload?: boolean } = {}
@@ -21,11 +70,12 @@ export async function applyOtaUpdate(
     const check = await Updates.checkForUpdateAsync()
     if (!check.isAvailable) return { status: 'current' }
 
-    await Updates.fetchUpdateAsync()
+    const fetch = await Updates.fetchUpdateAsync()
+    const updateId = fetch.manifest?.id ?? null
 
     const shouldReload = options.reload ?? !options.silent
     if (!shouldReload) {
-      return { status: 'downloaded', willReload: false }
+      return scheduleApplyPrompt(updateId)
     }
 
     if (options.silent) {
@@ -33,26 +83,7 @@ export async function applyOtaUpdate(
       return { status: 'downloaded', willReload: true }
     }
 
-    return new Promise((resolve) => {
-      Alert.alert(
-        'Update ready',
-        'A new version of the app was downloaded. Restart now to apply it?',
-        [
-          {
-            text: 'Later',
-            style: 'cancel',
-            onPress: () => resolve({ status: 'downloaded', willReload: false })
-          },
-          {
-            text: 'Restart',
-            onPress: () => {
-              void Updates.reloadAsync()
-              resolve({ status: 'downloaded', willReload: true })
-            }
-          }
-        ]
-      )
-    })
+    return promptApplyUpdate(updateId)
   } catch (error) {
     return {
       status: 'error',

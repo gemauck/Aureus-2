@@ -21,8 +21,7 @@ export function SettingsScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp, preference, setPreference } = useTheme()
   const { user, signOut } = useAuth()
-  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId, isEmbeddedLaunch } =
-    useOTAUpdates(false)
+  const { checkForOTAUpdate, otaEnabled, runtimeVersion, updateId } = useOTAUpdates(false)
   const { checkForUpdate: checkApkUpdate } = useAppUpdateCheck(false)
   const [checking, setChecking] = useState<'ota' | 'apk' | null>(null)
 
@@ -42,14 +41,11 @@ export function SettingsScreen({ navigation }: Props) {
         )
       } else if (result.status === 'current') {
         const rv = runtimeVersion || OTA_RUNTIME_VERSION
-        const hint = isEmbeddedLaunch
-          ? '\n\nStill on the factory bundle — fully close the app (swipe away), reopen, wait a few seconds, then open Settings again.'
-          : ''
-        Alert.alert('Up to date', `Server has no newer JS bundle for runtime ${rv}.${hint}`)
+        Alert.alert('Up to date', `Server has no newer JS bundle for runtime ${rv}.`)
       } else if (result.status === 'downloaded' && !result.willReload) {
         Alert.alert(
           'Update downloaded',
-          'Fully close the app and reopen it to apply the update.',
+          'Tap Restart to apply the update now.',
           [
             { text: 'Later', style: 'cancel' },
             {
@@ -85,7 +81,7 @@ export function SettingsScreen({ navigation }: Props) {
       }
       Alert.alert(
         'APK up to date',
-        'Your installed app shell is current. UI changes (like the theme toggle) come via JS update — use “Check for JS update (OTA)” above, then fully restart the app.'
+        'Your installed app shell is current. UI changes come via JS update — use “Check for JS update (OTA)” above, then tap Restart when prompted.'
       )
     } finally {
       setChecking(null)
@@ -195,9 +191,9 @@ export function SettingsScreen({ navigation }: Props) {
             )}
           </Pressable>
           <Text style={styles.updateHint}>
-            Updates install automatically when you open the app — no action needed. Use the buttons
-            above only if you want to check manually. A new APK is required only when native modules
-            change (rare).
+            JS updates download automatically in the background. When one is ready, tap Restart on
+            the prompt to apply it. Use the buttons above to check manually. A new APK is only needed
+            when native modules change (rare).
           </Text>
         </View>
 

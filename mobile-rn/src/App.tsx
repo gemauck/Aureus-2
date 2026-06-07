@@ -6,18 +6,15 @@ import { ThemeProvider } from './theme/ThemeContext'
 import { RootNavigator } from './navigation/RootNavigator'
 import { AppShellProvider } from './components/shell/AppShellContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { OtaBootstrapGate } from './components/OtaBootstrapGate'
 import { ThemedStatusBar } from './components/ThemedStatusBar'
 import { useOTAUpdates } from './hooks/useOTAUpdates'
 
 function AppShell() {
   useOTAUpdates(true)
   return (
-    <OtaBootstrapGate>
-      <AppShellProvider>
-        <RootNavigator />
-      </AppShellProvider>
-    </OtaBootstrapGate>
+    <AppShellProvider>
+      <RootNavigator />
+    </AppShellProvider>
   )
 }
 

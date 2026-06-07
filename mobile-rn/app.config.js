@@ -24,7 +24,7 @@ module.exports = {
     updates: {
       enabled: true,
       url: `${OTA_BASE.replace(/\/$/, '')}/api/public/mobile-ota/manifest`,
-      checkAutomatically: 'ON_ERROR_RECOVERY',
+      checkAutomatically: 'ON_LOAD',
       fallbackToCacheTimeout: 0
     },
     extra: {

@@ -104,7 +104,7 @@ This exports the bundle to `public/mobile-ota/updates/erp-mobile-1/{timestamp}/`
 
 | Layer | Command | User action |
 |-------|---------|-------------|
-| **OTA (JS)** | `npm run mobile:ota:publish` + deploy server | None — auto on launch |
+| **OTA (JS)** | `npm run mobile:ota:publish` + deploy server | Tap **Restart** when prompted (or cold-start the app) |
 | **APK (native)** | `npm run mobile:apk` + upload to `/downloads/` | Install when prompted |
 
 Settings → **Check for JS update (OTA)** or **Check for new APK**.
