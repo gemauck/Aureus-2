@@ -30,10 +30,8 @@ DEST="$ROOT/public/mobile-ota/updates/$RUNTIME/$STAMP"
 cd "$RN"
 export EXPO_PUBLIC_API_BASE_URL="${EXPO_PUBLIC_API_BASE_URL:-https://abcoafrica.co.za}"
 
-if [[ ! -d node_modules/expo ]]; then
-  echo "Installing mobile-rn dependencies for OTA export…"
-  npm install --include=dev
-fi
+echo "Installing mobile-rn dependencies for OTA export…"
+npm install --include=dev
 
 echo "Exporting Android JS bundle (runtime: $RUNTIME)…"
 npx expo export --platform android --output-dir "$TMP/export"
