@@ -109,18 +109,31 @@ export function groupMemberCount(group: CrmGroup): number {
 }
 
 /** Client account status (Active/Inactive) — not lead pipeline stages. */
-export function normalizeClientAccountStatus(statusOrStage?: string | null): string {
+export function normalizeClientAccountStatus(statusOrStage?: string | null): 'Active' | 'Inactive' {
   const s = String(statusOrStage ?? 'Active').trim().toLowerCase()
   return s === 'inactive' ? 'Inactive' : 'Active'
 }
 
-export function isClientAccountInactive(entity: CrmEntityBase): boolean {
-  const raw = entity.status ?? entity.engagementStage ?? 'Active'
-  return String(raw).trim().toLowerCase() === 'inactive'
+/** Match web Clients.jsx — engagementStage is authoritative over legacy status. */
+export function resolveClientAccountRawStage(entity: Pick<CrmEntityBase, 'engagementStage' | 'status'>): string {
+  return String(entity.engagementStage ?? entity.status ?? 'Active').trim()
 }
 
-export function displayClientStatus(entity: CrmEntityBase): string {
-  return normalizeClientAccountStatus(entity.status ?? entity.engagementStage)
+/** Match web processClientData client account status derivation. */
+export function displayClientStatus(entity: CrmEntityBase): 'Active' | 'Inactive' {
+  const rawStage = resolveClientAccountRawStage(entity)
+  const rawLower = rawStage.toLowerCase()
+  if (rawLower === 'inactive') return 'Inactive'
+  return 'Active'
+}
+
+export function isClientAccountInactive(entity: CrmEntityBase): boolean {
+  return displayClientStatus(entity) === 'Inactive'
+}
+
+/** Match web clientEngagementStageFromAccountStatus when saving. */
+export function clientEngagementStageFromAccountStatus(statusOrStage?: string | null): string {
+  return normalizeClientAccountStatus(statusOrStage) === 'Inactive' ? 'inactive' : 'Active'
 }
 
 export function displayLeadStage(entity: CrmEntityBase): string {

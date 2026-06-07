@@ -39,7 +39,6 @@ import {
   displayClientStatus,
   displayLeadStage,
   entityComments,
-  isClientAccountInactive,
   newLocalId,
   normalizeEntity,
   resolveStarredState
@@ -316,7 +315,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const stage =
     entityType === 'lead'
       ? displayLeadStage(entity)
-      : entityType === 'client' && isClientAccountInactive(entity)
+      : entityType === 'client'
         ? displayClientStatus(entity)
         : ''
   const starred = resolveStarredState(entity)

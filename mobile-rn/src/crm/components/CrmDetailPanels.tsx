@@ -38,6 +38,7 @@ import {
   formatDate,
   formatMoney,
   groupMemberCount,
+  clientEngagementStageFromAccountStatus,
   isCrmLead,
   newLocalId
 } from '../utils'
@@ -160,7 +161,40 @@ export function CrmDetailPanelContent(props: PanelProps) {
         ) : isClient ? (
           <>
             <InfoRow label="Industry" value={entity.industry} />
-            <InfoRow label="Status" value={clientStatus} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Status</Text>
+              <View style={styles.statusRow}>
+                {(['Active', 'Inactive'] as const).map((option) => {
+                  const selected = clientStatus === option
+                  return (
+                    <Pressable
+                      key={option}
+                      style={[
+                        styles.statusPill,
+                        selected && styles.statusPillSelected,
+                        patchBusy && styles.statusPillDisabled
+                      ]}
+                      disabled={patchBusy || selected}
+                      onPress={() =>
+                        void onPatchEntity({
+                          status: option,
+                          engagementStage: clientEngagementStageFromAccountStatus(option)
+                        })
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          selected && styles.statusPillTextSelected
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
             <InfoRow label="Last contact" value={formatDate(entity.lastContact)} />
             <InfoRow label="Address" value={entity.address} />
           </>
@@ -751,6 +785,23 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     marginBottom: 4
   },
   infoValue: { fontSize: 15, color: erp.text, lineHeight: 21 },
+  statusRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  statusPill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: erp.radius.md,
+    borderWidth: 1,
+    borderColor: erp.border,
+    backgroundColor: erp.surfaceMuted
+  },
+  statusPillSelected: {
+    borderColor: erp.primary,
+    backgroundColor: erp.primarySoft
+  },
+  statusPillDisabled: { opacity: 0.7 },
+  statusPillText: { fontSize: 14, fontWeight: '700', color: erp.textMuted },
+  statusPillTextSelected: { color: erp.primary },
   groupCard: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.md,

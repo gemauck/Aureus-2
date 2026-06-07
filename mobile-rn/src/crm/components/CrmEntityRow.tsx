@@ -11,7 +11,6 @@ import {
   formatDate,
   formatMoney,
   groupMemberCount,
-  isClientAccountInactive,
   resolveStarredState
 } from '../utils'
 import { CrmStatusBadge } from './CrmStatusBadge'
@@ -41,13 +40,8 @@ export function CrmEntityRow({ entity, tab, onPress }: Props) {
   const styles = useThemedStyles(createStyles)
   const isClient = tab === 'clients'
   const isGroup = tab === 'groups'
-  const stage = isClient
-    ? isClientAccountInactive(entity)
-      ? displayClientStatus(entity)
-      : ''
-    : isGroup
-      ? ''
-      : displayLeadStage(entity)
+  const clientStatus = isClient ? displayClientStatus(entity) : ''
+  const stage = isClient ? clientStatus : isGroup ? '' : displayLeadStage(entity)
   const contacts = entityContacts(entity)
   const sites = entitySites(entity)
   const members = isGroup ? groupMemberCount(entity as CrmGroup) : 0
