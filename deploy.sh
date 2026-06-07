@@ -184,6 +184,21 @@ echo "  ✓ Vite projects bundle present"
 
 if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh" ]; then
   echo
+  echo "-> Installing mobile-rn dependencies (required for OTA bundle export)..."
+  if [ -f "${APP_DIR}/mobile-rn/package.json" ]; then
+    (cd "${APP_DIR}/mobile-rn" && npm install --include=dev) || {
+      echo "ERROR: mobile-rn npm install failed — cannot publish OTA updates."
+      exit 1
+    }
+    echo "  ✓ mobile-rn dependencies ready"
+  else
+    echo "  ⚠ mobile-rn/package.json missing — skipping OTA publish"
+    SKIP_MOBILE_OTA=1
+  fi
+fi
+
+if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh" ]; then
+  echo
   echo "-> Publishing mobile JS OTA bundle (automatic in-app updates)..."
   OTA_RUNTIMES="${MOBILE_OTA_RUNTIMES:-erp-mobile-1 erp-mobile-2 erp-mobile-3}"
   ota_ok=1
@@ -197,7 +212,8 @@ if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile
     fi
   done
   if [ "${ota_ok}" -eq 0 ]; then
-    echo "  ⚠ Some OTA publishes failed — affected devices may stay on the previous JS bundle until the next deploy"
+    echo "ERROR: Mobile OTA publish failed — devices will not receive JS updates until this is fixed."
+    exit 1
   fi
 fi
 
