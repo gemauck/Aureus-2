@@ -56,3 +56,10 @@ export function isReceiptCaptureAdmin(user) {
     return false
   }
 }
+
+/** Staff may only submit drafts; admins control reviewed/exported. */
+export function normalizeReceiptDocumentStatus(status, isAdmin) {
+  if (!isAdmin) return 'draft'
+  const raw = String(status || 'draft').trim().toLowerCase()
+  return raw.slice(0, 32) || 'draft'
+}

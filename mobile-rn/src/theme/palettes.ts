@@ -15,6 +15,7 @@ export type ErpTheme = {
   primary: string
   primaryLight: string
   primarySoft: string
+  primaryMuted: string
   accent: string
   success: string
   successSoft: string
@@ -94,6 +95,7 @@ export const lightErp: ErpTheme = {
   primary: '#0284c7',
   primaryLight: '#38bdf8',
   primarySoft: '#e0f2fe',
+  primaryMuted: '#bae6fd',
   accent: '#0ea5e9',
   success: '#16a34a',
   successSoft: '#dcfce7',
@@ -136,6 +138,7 @@ export const darkErp: ErpTheme = {
   primary: '#38bdf8',
   primaryLight: '#7dd3fc',
   primarySoft: '#0c4a6e',
+  primaryMuted: '#1e40af',
   accent: '#0ea5e9',
   success: '#22c55e',
   successSoft: '#14532d',

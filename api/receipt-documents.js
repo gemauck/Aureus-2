@@ -4,7 +4,11 @@ import { badRequest, created, forbidden, ok, serverError } from './_lib/response
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
-import { getUserForReceiptCapture, isReceiptCaptureAdmin } from './_lib/receiptCaptureAccess.js'
+import {
+  getUserForReceiptCapture,
+  isReceiptCaptureAdmin,
+  normalizeReceiptDocumentStatus
+} from './_lib/receiptCaptureAccess.js'
 
 function parseExtractedJson(raw) {
   try {
@@ -67,6 +71,9 @@ async function handler(req, res) {
     const isAdmin = isReceiptCaptureAdmin(user)
 
     if (req.method === 'GET') {
+      if (allOrg && !isAdmin) {
+        return forbidden(res, 'Only administrators can list all expense uploads.')
+      }
       const where =
         isAdmin && allOrg
           ? {}
@@ -107,7 +114,7 @@ async function handler(req, res) {
         data: {
           userId: user.id,
           fileUrl,
-          status: String(body.status || 'draft').slice(0, 32),
+          status: normalizeReceiptDocumentStatus(body.status, isAdmin),
           extractedJson,
           vendor: String(body.vendor !== undefined ? body.vendor : ext.vendor || '').slice(0, 500),
           documentDate: String(body.documentDate !== undefined ? body.documentDate : ext.documentDate || '').slice(

@@ -4,7 +4,11 @@ import { badRequest, forbidden, notFound, ok, serverError } from '../_lib/respon
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { getUserForReceiptCapture, isReceiptCaptureAdmin } from '../_lib/receiptCaptureAccess.js'
+import {
+  getUserForReceiptCapture,
+  isReceiptCaptureAdmin,
+  normalizeReceiptDocumentStatus
+} from '../_lib/receiptCaptureAccess.js'
 
 function parseExtractedJson(raw) {
   try {
@@ -89,10 +93,16 @@ async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      if (!isAdmin && existing.status !== 'draft') {
+        return forbidden(res, 'This expense can no longer be edited.')
+      }
+
       const body = await parseJsonBody(req)
       const data = {}
 
-      if (body.status !== undefined) data.status = String(body.status).slice(0, 32)
+      if (body.status !== undefined && isAdmin) {
+        data.status = normalizeReceiptDocumentStatus(body.status, isAdmin)
+      }
       if (body.vendor !== undefined) data.vendor = String(body.vendor).slice(0, 500)
       if (body.documentDate !== undefined) data.documentDate = String(body.documentDate).slice(0, 32)
       if (body.total !== undefined) data.total = parseFloat(body.total) || 0
@@ -125,6 +135,14 @@ async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
+      if (!isAdmin) {
+        if (existing.userId !== user.id) {
+          return forbidden(res, 'You cannot delete this document.')
+        }
+        if (existing.status !== 'draft') {
+          return forbidden(res, 'This expense can no longer be deleted.')
+        }
+      }
       await prisma.receiptDocument.delete({ where: { id } })
       return ok(res, { deleted: true })
     }

@@ -327,7 +327,7 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
         accountId: accountId || null,
         costCenterId: costCenterId || null,
         notes,
-        status
+        status: isAdminUser ? status : 'draft'
       }
       if (editingId) {
         await toolsApi.updateDocument(accessToken, editingId, payload)
@@ -562,18 +562,22 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
       <Field label="Total" value={total} onChangeText={setTotal} erp={erp} keyboardType="decimal-pad" />
       <Field label="Currency" value={currency} onChangeText={setCurrency} erp={erp} />
       <Field label="Tax (optional)" value={taxAmount} onChangeText={setTaxAmount} erp={erp} keyboardType="decimal-pad" />
-      <Text style={styles.fieldLabel}>Status</Text>
-      <View style={styles.chipRow}>
-        {STATUS_OPTIONS.map((s) => (
-          <Pressable
-            key={s}
-            style={[styles.chip, status === s && styles.chipActive]}
-            onPress={() => setStatus(s)}
-          >
-            <Text style={[styles.chipText, status === s && styles.chipTextActive]}>{s}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {isAdminUser ? (
+        <>
+          <Text style={styles.fieldLabel}>Status</Text>
+          <View style={styles.chipRow}>
+            {STATUS_OPTIONS.map((s) => (
+              <Pressable
+                key={s}
+                style={[styles.chip, status === s && styles.chipActive]}
+                onPress={() => setStatus(s)}
+              >
+                <Text style={[styles.chipText, status === s && styles.chipTextActive]}>{s}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
       <Text style={styles.fieldLabel}>Account</Text>
       <View style={styles.chipRow}>
         <Pressable style={[styles.chip, !accountId && styles.chipActive]} onPress={() => setAccountId('')}>
@@ -630,8 +634,11 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
     </View>
   )
 
+  const staffCanModify = (doc: ReceiptDocument) => isAdminUser || doc.status === 'draft'
+
   const renderInbox = () => (
     <View style={styles.inbox}>
+      <Text style={styles.inboxTitle}>{isAdminUser ? 'All team uploads' : 'My expenses'}</Text>
       {documents.length === 0 ? (
         <Text style={styles.empty}>No expenses yet. Tap Capture to add one.</Text>
       ) : (
@@ -663,29 +670,35 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
               </View>
             </View>
             <View style={styles.docActions}>
-              <Pressable style={styles.docActionBtn} onPress={() => openEdit(d)}>
-                <Text style={styles.docActionText}>Edit</Text>
-              </Pressable>
+              {staffCanModify(d) ? (
+                <Pressable style={styles.docActionBtn} onPress={() => openEdit(d)}>
+                  <Text style={styles.docActionText}>Edit</Text>
+                </Pressable>
+              ) : null}
               {d.fileUrl ? (
                 <>
                   <Pressable style={styles.docActionBtn} onPress={() => void openReceiptFile(d.fileUrl)}>
                     <Text style={styles.docActionText}>View</Text>
                   </Pressable>
-                  <Pressable
-                    style={styles.docActionBtn}
-                    onPress={() => {
-                      void downloadReceiptFile(d.fileUrl, d.vendor || undefined).catch((e) =>
-                        Alert.alert('Download', e instanceof Error ? e.message : 'Download failed')
-                      )
-                    }}
-                  >
-                    <Text style={styles.docActionText}>Download</Text>
-                  </Pressable>
+                  {isAdminUser ? (
+                    <Pressable
+                      style={styles.docActionBtn}
+                      onPress={() => {
+                        void downloadReceiptFile(d.fileUrl, d.vendor || undefined).catch((e) =>
+                          Alert.alert('Download', e instanceof Error ? e.message : 'Download failed')
+                        )
+                      }}
+                    >
+                      <Text style={styles.docActionText}>Download</Text>
+                    </Pressable>
+                  ) : null}
                 </>
               ) : null}
-              <Pressable style={[styles.docActionBtn, styles.docDeleteBtn]} onPress={() => deleteDoc(d.id)}>
-                <Text style={styles.docDeleteText}>Delete</Text>
-              </Pressable>
+              {staffCanModify(d) ? (
+                <Pressable style={[styles.docActionBtn, styles.docDeleteBtn]} onPress={() => deleteDoc(d.id)}>
+                  <Text style={styles.docDeleteText}>Delete</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ))
@@ -900,7 +913,7 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
     <View style={styles.root}>
       <ModuleHeader
         title="Expense Capture"
-        subtitle="Snap · allocate · export"
+        subtitle={isAdminUser ? 'Snap · allocate · export' : 'Snap · allocate · submit'}
         showBack
         onBack={() => navigation.goBack()}
       />
@@ -909,10 +922,12 @@ export function ExpenseCaptureScreen({ navigation }: Props) {
           contentContainerStyle={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void loadAll(true) }} />}
         >
-          <Pressable style={styles.exportBar} onPress={() => void handleExportCsv()}>
-            <FontAwesome5 name="file-csv" size={14} color={erp.primary} />
-            <Text style={styles.exportBarText}>Export CSV for QuickBooks / spreadsheet</Text>
-          </Pressable>
+          {isAdminUser ? (
+            <Pressable style={styles.exportBar} onPress={() => void handleExportCsv()}>
+              <FontAwesome5 name="file-csv" size={14} color={erp.primary} />
+              <Text style={styles.exportBarText}>Export CSV for QuickBooks / spreadsheet</Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.policy}>
             Only upload what you need for expenses; follow your company retention policy. All files are stored on the
             ERP server.
@@ -1015,6 +1030,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     msg: { fontSize: 13, color: '#b45309', marginBottom: 8 },
     empty: { textAlign: 'center', color: erp.textSubtle, paddingVertical: 32, fontSize: 14 },
     inbox: { gap: 12 },
+    inboxTitle: { fontSize: 13, fontWeight: '600', color: erp.text, marginBottom: 4 },
     docCard: {
       borderRadius: 16,
       borderWidth: 1,

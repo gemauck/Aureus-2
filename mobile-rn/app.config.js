@@ -24,7 +24,8 @@ module.exports = {
     updates: {
       enabled: true,
       url: `${OTA_BASE.replace(/\/$/, '')}/api/public/mobile-ota/manifest`,
-      checkAutomatically: 'ON_LOAD',
+      // JS hook controls check/download/apply — avoids native auto-loading a bad cached bundle on cold start.
+      checkAutomatically: 'NEVER',
       fallbackToCacheTimeout: 0
     },
     extra: {

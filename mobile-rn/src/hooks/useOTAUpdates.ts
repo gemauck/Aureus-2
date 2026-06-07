@@ -4,7 +4,8 @@ import * as Updates from 'expo-updates'
 
 const FOREGROUND_DEBOUNCE_MS = 45_000
 const BACKGROUND_POLL_MS = 5 * 60_000
-const PROMPT_DELAY_MS = 1_500
+/** Wait until login/dashboard can render before background OTA work. */
+const LAUNCH_PREFETCH_DELAY_MS = 12_000
 
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
@@ -12,14 +13,6 @@ export type OtaCheckResult =
   | { status: 'error'; message: string }
 
 let lastPromptedUpdateId: string | null = null
-let pendingPromptTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearPendingPromptTimer() {
-  if (pendingPromptTimer) {
-    clearTimeout(pendingPromptTimer)
-    pendingPromptTimer = null
-  }
-}
 
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   if (updateId && lastPromptedUpdateId === updateId) {
@@ -49,18 +42,8 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   })
 }
 
-function scheduleApplyPrompt(updateId?: string | null): Promise<OtaCheckResult> {
-  clearPendingPromptTimer()
-  return new Promise((resolve) => {
-    pendingPromptTimer = setTimeout(() => {
-      pendingPromptTimer = null
-      void promptApplyUpdate(updateId).then(resolve)
-    }, PROMPT_DELAY_MS)
-  })
-}
-
-/** Fetch a newer JS bundle without reloading — for manual download from Settings. */
-export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
+/** Download a newer bundle in the background — never reloads or prompts. */
+export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
   if (!Updates.isEnabled) return { status: 'disabled' }
@@ -74,13 +57,18 @@ export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'OTA download failed'
+      message: error instanceof Error ? error.message : 'OTA prefetch failed'
     }
   }
 }
 
+/** Fetch a newer JS bundle without reloading — for manual download from Settings. */
+export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
+  return prefetchOtaUpdate()
+}
+
 export async function applyOtaUpdate(
-  options: { silent?: boolean; reload?: boolean } = {}
+  options: { silent?: boolean; reload?: boolean; prompt?: boolean } = {}
 ): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
@@ -95,7 +83,10 @@ export async function applyOtaUpdate(
 
     const shouldReload = options.reload ?? !options.silent
     if (!shouldReload) {
-      return scheduleApplyPrompt(updateId)
+      if (options.prompt) {
+        return promptApplyUpdate(updateId)
+      }
+      return { status: 'downloaded', willReload: false }
     }
 
     if (options.silent) {
@@ -112,14 +103,12 @@ export async function applyOtaUpdate(
   }
 }
 
-/** Silent OTA checks on launch, foreground, and periodic poll while the app is open. */
+/** Background OTA prefetch on launch (deferred), foreground, and periodic poll. */
 export function useOTAUpdates(enabled = true) {
   const inFlightRef = useRef(false)
   const lastCheckRef = useRef(0)
 
-  const check = useCallback(async (opts: { silent?: boolean; force?: boolean } = {}) => {
-    if (!enabled && !opts.force) return applyOtaUpdate(opts)
-
+  const prefetch = useCallback(async (opts: { force?: boolean } = {}) => {
     const now = Date.now()
     if (!opts.force && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {
       return { status: 'current' as const }
@@ -129,34 +118,59 @@ export function useOTAUpdates(enabled = true) {
     inFlightRef.current = true
     lastCheckRef.current = now
     try {
-      return await applyOtaUpdate({
-        silent: opts.silent !== false,
-        reload: opts.force && opts.silent === false
-      })
+      return await prefetchOtaUpdate()
     } finally {
       inFlightRef.current = false
     }
-  }, [enabled])
+  }, [])
+
+  const check = useCallback(
+    async (opts: { silent?: boolean; force?: boolean } = {}) => {
+      if (!enabled && !opts.force) return applyOtaUpdate(opts)
+
+      const now = Date.now()
+      if (!opts.force && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {
+        return { status: 'current' as const }
+      }
+      if (inFlightRef.current) return { status: 'current' as const }
+
+      inFlightRef.current = true
+      lastCheckRef.current = now
+      try {
+        return await applyOtaUpdate({
+          silent: opts.silent !== false,
+          reload: opts.force && opts.silent === false,
+          prompt: opts.force && opts.silent === false
+        })
+      } finally {
+        inFlightRef.current = false
+      }
+    },
+    [enabled]
+  )
 
   useEffect(() => {
     if (!enabled) return
 
-    void check({ silent: true, force: true })
+    const launchTimer = setTimeout(() => {
+      void prefetch({ force: true })
+    }, LAUNCH_PREFETCH_DELAY_MS)
 
     const onActive = (state: string) => {
-      if (state === 'active') void check({ silent: true })
+      if (state === 'active') void prefetch()
     }
     const sub = AppState.addEventListener('change', onActive)
 
     const poll = setInterval(() => {
-      if (AppState.currentState === 'active') void check({ silent: true })
+      if (AppState.currentState === 'active') void prefetch()
     }, BACKGROUND_POLL_MS)
 
     return () => {
+      clearTimeout(launchTimer)
       sub.remove()
       clearInterval(poll)
     }
-  }, [enabled, check])
+  }, [enabled, prefetch])
 
   return {
     checkForOTAUpdate: (interactive = true) =>

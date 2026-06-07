@@ -9,7 +9,19 @@ const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admi
 function isErpAdminUser() {
   const u = window.storage?.getUser?.();
   const role = (u?.role || '').toString().trim().toLowerCase();
-  return ADMIN_ROLES.has(role);
+  if (ADMIN_ROLES.has(role)) return true;
+  let perms = u?.permissions;
+  if (typeof perms === 'string') {
+    try {
+      perms = JSON.parse(perms);
+    } catch {
+      perms = perms.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+  if (Array.isArray(perms)) {
+    return perms.some((p) => ADMIN_ROLES.has((p || '').toString().trim().toLowerCase()));
+  }
+  return false;
 }
 
 function escapeCsvCell(val) {
@@ -291,7 +303,7 @@ function ExpenseCaptureTool() {
         accountId: accountId || null,
         costCenterId: costCenterId || null,
         notes,
-        status
+        status: isAdmin ? status : 'draft'
       };
       if (editingId) {
         await api.updateReceiptDocument(editingId, payload);
@@ -564,9 +576,11 @@ function ExpenseCaptureTool() {
     </div>
   );
 
+  const staffCanModify = (doc) => isAdmin || doc.status === 'draft';
+
   const inboxTable = (
     <div className={cardClass}>
-      <h3 className="text-sm font-semibold mb-3">Saved expenses</h3>
+      <h3 className="text-sm font-semibold mb-3">{isAdmin ? 'All team uploads' : 'My expenses'}</h3>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
@@ -594,12 +608,18 @@ function ExpenseCaptureTool() {
                 <td className="py-2 pr-2">{d.account?.name || '—'}</td>
                 <td className="py-2 pr-2">{d.costCenter?.name || '—'}</td>
                 <td className="py-2 text-right whitespace-nowrap">
-                  <button type="button" className="text-blue-500 mr-2" onClick={() => openEdit(d)}>
-                    Edit
-                  </button>
-                  <button type="button" className="text-red-500" onClick={() => deleteDoc(d.id)}>
-                    Delete
-                  </button>
+                  {staffCanModify(d) ? (
+                    <>
+                      <button type="button" className="text-blue-500 mr-2" onClick={() => openEdit(d)}>
+                        Edit
+                      </button>
+                      <button type="button" className="text-red-500" onClick={() => deleteDoc(d.id)}>
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>Submitted</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -647,20 +667,28 @@ function ExpenseCaptureTool() {
               )}
             </div>
             <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
-                onClick={() => openEdit(d)}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2.5 rounded-xl border border-red-500/50 text-red-500 text-sm"
-                onClick={() => deleteDoc(d.id)}
-              >
-                Delete
-              </button>
+              {staffCanModify(d) ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium"
+                    onClick={() => openEdit(d)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2.5 rounded-xl border border-red-500/50 text-red-500 text-sm"
+                    onClick={() => deleteDoc(d.id)}
+                  >
+                    Delete
+                  </button>
+                </>
+              ) : (
+                <p className={`text-xs py-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                  Submitted for review — contact an admin to export.
+                </p>
+              )}
             </div>
           </div>
         ))
@@ -769,18 +797,20 @@ function ExpenseCaptureTool() {
               onChange={(e) => setTaxAmount(e.target.value)}
             />
           </label>
-          <label className="block">
-            <span className={`text-xs uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</span>
-            <select
-              className={`mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-500/30 bg-transparent ${appStyle ? 'text-base' : ''}`}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="draft">draft</option>
-              <option value="reviewed">reviewed</option>
-              <option value="exported">exported</option>
-            </select>
-          </label>
+          {isAdmin ? (
+            <label className="block">
+              <span className={`text-xs uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Status</span>
+              <select
+                className={`mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-500/30 bg-transparent ${appStyle ? 'text-base' : ''}`}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="draft">draft</option>
+                <option value="reviewed">reviewed</option>
+                <option value="exported">exported</option>
+              </select>
+            </label>
+          ) : null}
           <label className="block sm:col-span-2">
             <span className={`text-xs uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Account</span>
             <select
@@ -1063,13 +1093,15 @@ function ExpenseCaptureTool() {
                   {qboPushing ? 'QBO…' : 'Push QBO'}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={exportCsv}
-                className="text-xs px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25"
-              >
-                Export CSV
-              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={exportCsv}
+                  className="text-xs px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25"
+                >
+                  Export CSV
+                </button>
+              ) : null}
             </div>
           </div>
           {layoutToggle}
@@ -1143,13 +1175,15 @@ function ExpenseCaptureTool() {
             {qboPushing ? 'Pushing QBO…' : 'Push QBO'}
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={exportCsv}
-          className={`ml-auto px-3 py-1.5 rounded-lg text-sm ${isDark ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-600 text-white'}`}
-        >
-          Export CSV
-        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={exportCsv}
+            className={`ml-auto px-3 py-1.5 rounded-lg text-sm ${isDark ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-600 text-white'}`}
+          >
+            Export CSV
+          </button>
+        ) : null}
       </div>
       <p className={`text-[11px] leading-snug ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
         Slips may show card or bank details. Only upload what you need for expenses; follow your company retention policy.
