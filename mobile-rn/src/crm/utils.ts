@@ -157,8 +157,17 @@ export function sortByName<T extends CrmEntityBase>(items: T[]): T[] {
 
 export function statusTint(status: string) {
   const s = status.toLowerCase()
+  if (s === 'no engagement') return '#64748b'
+  if (s === 'awareness') return '#6b7280'
+  if (s === 'interest') return '#0284c7'
+  if (s === 'desire') return '#ca8a04'
+  if (s === 'action') return '#16a34a'
+  if (s === 'disinterested') return '#94a3b8'
+  if (s === 'potential') return '#0284c7'
+  if (s === 'proposal') return '#d97706'
+  if (s === 'tender') return '#7c3aed'
   if (s.includes('active') || s.includes('won') || s.includes('customer')) return '#16a34a'
-  if (s.includes('potential') || s.includes('qualified') || s.includes('interest')) return '#0284c7'
+  if (s.includes('qualified') || s.includes('interest')) return '#0284c7'
   if (s.includes('hold') || s.includes('pending') || s.includes('new')) return '#d97706'
   if (s.includes('lost') || s.includes('inactive') || s.includes('closed')) return '#64748b'
   return '#6366f1'

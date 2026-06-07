@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Pressable,
   RefreshControl,
@@ -19,6 +18,7 @@ import { usePipelineData } from '../pipeline/usePipelineData'
 import type { PipelineItem } from '../pipeline/types'
 import { formatMoney } from '../utils'
 import type { CrmStackParamList } from '../navigation'
+import { CrmPipelineFunnel } from './CrmPipelineFunnel'
 import { CrmPipelineCard } from './CrmPipelineCard'
 import { CrmPipelineKanban } from './CrmPipelineKanban'
 import { useThemedStyles } from '../../theme/useThemedStyles'
@@ -28,11 +28,21 @@ import { useTheme } from '../../theme/ThemeContext'
 type Props = {
   accessToken: string | null | undefined
   active: boolean
+  onStats?: (stats: { count: number; value: number }) => void
+}
+
+const DEFAULT_FILTERS = {
+  search: '',
+  industry: 'all',
+  engagementStage: 'all',
+  aidaStatus: 'all',
+  type: 'all',
+  starredOnly: false
 }
 
 type FilterPicker = 'industry' | 'aida' | 'engagement' | 'type' | null
 
-export function CrmPipelineView({ accessToken, active }: Props) {
+export function CrmPipelineView({ accessToken, active, onStats }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<CrmStackParamList>>()
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
@@ -57,6 +67,35 @@ export function CrmPipelineView({ accessToken, active }: Props) {
     saveAidaStage,
     saveEngagementStage
   } = usePipelineData(accessToken, active)
+
+  useEffect(() => {
+    onStats?.({ count: metrics.totalCount, value: metrics.totalValue })
+  }, [metrics.totalCount, metrics.totalValue, onStats])
+
+  const hasActiveFilters = useMemo(
+    () =>
+      Boolean(filters.search.trim()) ||
+      filters.starredOnly ||
+      filters.industry !== 'all' ||
+      filters.aidaStatus !== 'all' ||
+      filters.engagementStage !== 'all' ||
+      filters.type !== 'all',
+    [filters]
+  )
+
+  const clearFilters = () => setFilters(DEFAULT_FILTERS)
+
+  const toggleAidaFilter = (stage: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      aidaStatus: prev.aidaStatus === stage ? 'all' : stage
+    }))
+  }
+
+  const refresh = useCallback(() => {
+    setRefreshing(true)
+    void load(true, true)
+  }, [load, setRefreshing])
 
   const openItem = useCallback(
     (item: PipelineItem) => {
@@ -102,39 +141,28 @@ export function CrmPipelineView({ accessToken, active }: Props) {
     return ''
   }
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={erp.primary} />
-        <Text style={styles.loadingText}>Loading pipeline…</Text>
-      </View>
-    )
-  }
-
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <FontAwesome5 name="exclamation-circle" size={28} color={erp.danger} />
-        <Text style={styles.error}>{error}</Text>
-        <Pressable style={styles.retryBtn} onPress={() => void load()}>
-          <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
-      </View>
-    )
-  }
-
-  return (
-    <View style={styles.root}>
+  const header = (
+    <>
       <View style={styles.metricsRow}>
-        <View style={styles.metricCard}>
+        <View style={[styles.metricCard, styles.metricCardPrimary]}>
+          <FontAwesome5 name="stream" size={14} color={erp.primary} style={styles.metricIcon} />
           <Text style={styles.metricValue}>{metrics.totalCount}</Text>
-          <Text style={styles.metricLabel}>Items</Text>
+          <Text style={styles.metricLabel}>In pipeline</Text>
         </View>
         <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{formatMoney(metrics.totalValue) || 'R 0'}</Text>
-          <Text style={styles.metricLabel}>Pipeline value</Text>
+          <FontAwesome5 name="coins" size={14} color={erp.success} style={styles.metricIcon} />
+          <Text style={[styles.metricValue, styles.metricValueMoney]}>
+            {formatMoney(metrics.totalValue) || 'R 0'}
+          </Text>
+          <Text style={styles.metricLabel}>Total value</Text>
         </View>
       </View>
+
+      <CrmPipelineFunnel
+        byAida={metrics.byAida}
+        activeStage={filters.aidaStatus !== 'all' ? filters.aidaStatus : undefined}
+        onStagePress={toggleAidaFilter}
+      />
 
       <View style={styles.viewToggle}>
         <Pressable
@@ -213,6 +241,7 @@ export function CrmPipelineView({ accessToken, active }: Props) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterScroll}
+        keyboardShouldPersistTaps="handled"
       >
         <Pressable
           style={[styles.filterChip, filters.starredOnly && styles.filterChipActive]}
@@ -238,53 +267,99 @@ export function CrmPipelineView({ accessToken, active }: Props) {
             </Pressable>
           ) : null
         )}
+        {hasActiveFilters ? (
+          <Pressable style={styles.clearChip} onPress={clearFilters}>
+            <FontAwesome5 name="times" size={10} color={erp.danger} />
+            <Text style={styles.clearChipText}>Clear</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       <Text style={styles.resultsMeta}>
         {viewMode === 'list' ? listRows.length : kanbanItems.length} items
+        {hasActiveFilters ? ' · filtered' : ''}
       </Text>
+    </>
+  )
 
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={erp.primary} />
+        <Text style={styles.loadingText}>Loading pipeline…</Text>
+      </View>
+    )
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <FontAwesome5 name="exclamation-circle" size={28} color={erp.danger} />
+        <Text style={styles.error}>{error}</Text>
+        <Pressable style={styles.retryBtn} onPress={() => void load(false, true)}>
+          <Text style={styles.retryText}>Retry</Text>
+        </Pressable>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.root}>
       {viewMode === 'kanban' ? (
-        <CrmPipelineKanban
-          items={kanbanItems}
-          groupBy={kanbanGroupBy}
-          onItemPress={openItem}
-          onAidaChange={(item, stage) => saveAidaStage(item, stage)}
-          onEngagementChange={(item, status) => saveEngagementStage(item, status)}
-        />
+        <>
+          <View style={styles.headerPane}>{header}</View>
+          <CrmPipelineKanban
+            items={kanbanItems}
+            groupBy={kanbanGroupBy}
+            onItemPress={openItem}
+            onAidaChange={(item, stage) => saveAidaStage(item, stage)}
+            onEngagementChange={(item, status) => saveEngagementStage(item, status)}
+            onRefresh={refresh}
+            refreshing={refreshing}
+          />
+        </>
       ) : (
-        <FlatList
-          data={listRows}
-          keyExtractor={(row) => `${row.item.type}-${row.item.id}-${row.isNested ? 'n' : 'p'}`}
-          contentContainerStyle={styles.list}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true)
-                void load(true)
-              }}
-              tintColor={erp.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={erp.primary} />
           }
-          ListEmptyComponent={
+        >
+          {header}
+          {listRows.length === 0 ? (
             <View style={styles.emptyWrap}>
               <FontAwesome5 name="stream" size={32} color={erp.textSubtle} />
               <Text style={styles.emptyTitle}>No pipeline items</Text>
-              <Text style={styles.emptySub}>Try clearing filters or pull to refresh.</Text>
+              <Text style={styles.emptySub}>
+                {hasActiveFilters
+                  ? 'Try clearing filters or pull down to refresh.'
+                  : 'Pull down to refresh or add leads and opportunities in the ERP.'}
+              </Text>
+              {hasActiveFilters ? (
+                <Pressable style={styles.emptyBtn} onPress={clearFilters}>
+                  <Text style={styles.emptyBtnText}>Clear filters</Text>
+                </Pressable>
+              ) : null}
             </View>
-          }
-          renderItem={({ item: row }) => (
-            <CrmPipelineCard
-              item={row.item}
-              isNested={row.isNested}
-              parentLabel={row.parentLabel}
-              onPress={() => openItem(row.item)}
-              onAidaChange={(stage) => saveAidaStage(row.item, stage)}
-              onEngagementChange={(status) => saveEngagementStage(row.item, status)}
-            />
+          ) : (
+            <View style={styles.listPane}>
+              {listRows.map((row) => (
+                <CrmPipelineCard
+                  key={`${row.item.type}-${row.item.id}-${row.isNested ? 'n' : 'p'}`}
+                  item={row.item}
+                  isNested={row.isNested}
+                  parentLabel={row.parentLabel}
+                  onPress={() => openItem(row.item)}
+                  onAidaChange={(stage) => saveAidaStage(row.item, stage)}
+                  onEngagementChange={(status) => saveEngagementStage(row.item, status)}
+                />
+              ))}
+            </View>
           )}
-        />
+        </ScrollView>
       )}
 
       <Modal
@@ -389,6 +464,9 @@ export function CrmPipelineView({ accessToken, active }: Props) {
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
     root: { flex: 1 },
+    headerPane: { flexShrink: 0 },
+    scroll: { flex: 1 },
+    scrollContent: { paddingBottom: 28 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10 },
     loadingText: { color: erp.textMuted, fontWeight: '600' },
     error: { color: erp.danger, fontWeight: '700', textAlign: 'center' },
@@ -415,7 +493,10 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       borderWidth: 1,
       borderColor: erp.border
     },
-    metricValue: { fontSize: 18, fontWeight: '800', color: erp.text },
+    metricCardPrimary: { borderColor: erp.primarySoft, backgroundColor: erp.primarySoft },
+    metricIcon: { marginBottom: 6 },
+    metricValue: { fontSize: 20, fontWeight: '800', color: erp.text },
+    metricValueMoney: { fontSize: 17 },
     metricLabel: { fontSize: 11, fontWeight: '600', color: erp.textMuted, marginTop: 2 },
     viewToggle: {
       flexDirection: 'row',
@@ -499,6 +580,18 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     filterChipActive: { backgroundColor: erp.primarySoft, borderColor: erp.primary },
     filterChipText: { fontSize: 12, fontWeight: '700', color: erp.textMuted, maxWidth: 140 },
     filterChipTextActive: { color: erp.primary },
+    clearChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: '#fef2f2',
+      borderWidth: 1,
+      borderColor: '#fecaca'
+    },
+    clearChipText: { fontSize: 12, fontWeight: '700', color: erp.danger },
     resultsMeta: {
       paddingHorizontal: erp.space.lg,
       paddingBottom: 8,
@@ -506,10 +599,18 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       fontWeight: '600',
       color: erp.textSubtle
     },
-    list: { paddingHorizontal: erp.space.lg, paddingBottom: 28 },
+    listPane: { paddingHorizontal: erp.space.lg },
     emptyWrap: { alignItems: 'center', padding: 40, gap: 8 },
     emptyTitle: { fontSize: 17, fontWeight: '800', color: erp.text },
-    emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center' },
+    emptySub: { fontSize: 14, color: erp.textMuted, textAlign: 'center', paddingHorizontal: 24 },
+    emptyBtn: {
+      marginTop: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: erp.radius.md,
+      backgroundColor: erp.primary
+    },
+    emptyBtnText: { color: '#fff', fontWeight: '800' },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(15, 23, 42, 0.45)',
@@ -521,7 +622,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       borderTopRightRadius: erp.radius.xl,
       paddingTop: 16,
       paddingBottom: 28,
-      maxHeight: '60%'
+      maxHeight: '70%'
     },
     modalTitle: {
       fontSize: 17,

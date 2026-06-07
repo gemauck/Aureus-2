@@ -63,6 +63,7 @@ export function CrmHomeScreen({ navigation }: Props) {
   const [filter, setFilter] = useState<CrmFilterKey>('all')
   const [industry, setIndustry] = useState('all')
   const [industryPickerOpen, setIndustryPickerOpen] = useState(false)
+  const [pipelineCount, setPipelineCount] = useState<number | null>(null)
 
   const load = useCallback(
     async (silent = false) => {
@@ -128,7 +129,7 @@ export function CrmHomeScreen({ navigation }: Props) {
   const tabMeta = (key: CrmTab) => {
     if (key === 'clients') return { icon: 'building', label: 'Clients', count: counts.clients }
     if (key === 'leads') return { icon: 'user-plus', label: 'Leads', count: counts.leads }
-    if (key === 'pipeline') return { icon: 'stream', label: 'Pipeline', count: null }
+    if (key === 'pipeline') return { icon: 'stream', label: 'Pipeline', count: pipelineCount }
     return { icon: 'layer-group', label: 'Groups', count: counts.groups }
   }
 
@@ -185,7 +186,11 @@ export function CrmHomeScreen({ navigation }: Props) {
         </View>
 
         {tab === 'pipeline' ? (
-          <CrmPipelineView accessToken={accessToken} active={tab === 'pipeline'} />
+          <CrmPipelineView
+            accessToken={accessToken}
+            active={tab === 'pipeline'}
+            onStats={({ count }) => setPipelineCount(count)}
+          />
         ) : (
           <View style={styles.listPane}>
         <View style={styles.searchWrap}>

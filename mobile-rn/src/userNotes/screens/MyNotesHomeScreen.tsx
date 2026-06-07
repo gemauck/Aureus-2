@@ -121,6 +121,7 @@ export function MyNotesHomeScreen({ navigation }: Props) {
           </View>
         ) : (
           <FlatList
+            style={styles.listFlex}
             data={filtered}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
@@ -135,8 +136,9 @@ export function MyNotesHomeScreen({ navigation }: Props) {
               />
             }
             ListEmptyComponent={<Text style={styles.empty}>No notes yet. Tap + to create one.</Text>}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => (
-              <NoteCard
+              <NoteListRow
                 note={item}
                 onPress={() => navigation.navigate('MyNoteDetail', { noteId: item.id })}
               />
@@ -161,35 +163,45 @@ function useFocusReload(navigation: Props['navigation'], load: (silent?: boolean
   }, [navigation, load])
 }
 
-function NoteCard({ note, onPress }: { note: UserNote; onPress: () => void }) {
+function NoteListRow({ note, onPress }: { note: UserNote; onPress: () => void }) {
+  const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
   const tags = noteTags(note)
   const shared = note.isOwner === false
+  const preview = notePreview(note)
+  const metaParts = [
+    formatRelative(note.updatedAt || note.createdAt),
+    tags.length ? tags.slice(0, 2).join(' · ') : null
+  ].filter(Boolean)
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.cardTop}>
-        {note.pinned ? <FontAwesome5 name="thumbtack" size={12} color="#f59e0b" /> : null}
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {note.title || 'Untitled note'}
-        </Text>
-        {shared ? (
-          <View style={styles.sharedBadge}>
-            <Text style={styles.sharedText}>Shared</Text>
-          </View>
+    <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={onPress}>
+      <View style={styles.rowBody}>
+        <View style={styles.titleRow}>
+          {note.pinned ? (
+            <FontAwesome5 name="thumbtack" size={10} color="#f59e0b" style={styles.pinIcon} />
+          ) : null}
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {note.title || 'Untitled note'}
+          </Text>
+          {shared ? (
+            <View style={styles.sharedBadge}>
+              <Text style={styles.sharedText}>Shared</Text>
+            </View>
+          ) : null}
+        </View>
+        {preview ? (
+          <Text style={styles.preview} numberOfLines={1}>
+            {preview}
+          </Text>
         ) : null}
-      </View>
-      <Text style={styles.preview} numberOfLines={2}>
-        {notePreview(note)}
-      </Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.meta}>{formatRelative(note.updatedAt || note.createdAt)}</Text>
-        {tags.length ? (
-          <Text style={styles.meta} numberOfLines={1}>
-            {tags.slice(0, 3).join(' · ')}
+        {metaParts.length ? (
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {metaParts.join(' · ')}
           </Text>
         ) : null}
       </View>
+      <FontAwesome5 name="chevron-right" size={10} color={erp.textSubtle} />
     </Pressable>
   )
 }
@@ -220,28 +232,37 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     filterChipActive: { backgroundColor: erp.primary, borderColor: erp.primary },
     filterText: { fontSize: 13, fontWeight: '600', color: erp.textMuted },
     filterTextActive: { color: '#fff' },
-    list: { paddingHorizontal: erp.space.lg, paddingBottom: 88 },
-    card: {
-      backgroundColor: erp.surface,
-      borderRadius: erp.radius.lg,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: erp.border,
-      marginBottom: 10,
-      ...erp.shadowSm
+    listFlex: { flex: 1 },
+    list: { paddingBottom: 88 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: erp.space.lg,
+      backgroundColor: erp.bg,
+      minHeight: 52
     },
-    cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-    cardTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: erp.text },
+    rowPressed: { backgroundColor: erp.surfaceMuted },
+    rowBody: { flex: 1, minWidth: 0 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+    pinIcon: { flexShrink: 0 },
+    rowTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: erp.text },
     sharedBadge: {
       backgroundColor: '#fef3c7',
-      borderRadius: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 2
+      borderRadius: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      flexShrink: 0
     },
-    sharedText: { fontSize: 10, fontWeight: '800', color: '#92400e' },
-    preview: { fontSize: 14, color: erp.textMuted, lineHeight: 20 },
-    cardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 8 },
-    meta: { fontSize: 12, color: erp.textSubtle, fontWeight: '600', flex: 1 },
+    sharedText: { fontSize: 9, fontWeight: '800', color: '#92400e' },
+    preview: { fontSize: 12, color: erp.textMuted, marginTop: 2, fontWeight: '500' },
+    rowMeta: { fontSize: 11, color: erp.textSubtle, marginTop: 2, fontWeight: '500' },
+    separator: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: erp.borderLight,
+      marginLeft: erp.space.lg
+    },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
     error: { color: erp.danger, fontWeight: '600', textAlign: 'center' },
     retry: { color: erp.primary, fontWeight: '700' },

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import { AIDA_STAGES, ENGAGEMENT_STAGES } from '../pipeline/constants'
 import type { PipelineItem } from '../pipeline/types'
@@ -54,11 +54,12 @@ export function CrmPipelineCard({
   const editable = item.type !== 'client'
 
   const pickOption = async (value: string) => {
+    const mode = picker
     setPicker(null)
     setSaving(true)
     try {
-      if (picker === 'aida' && onAidaChange) await onAidaChange(value)
-      if (picker === 'engagement' && onEngagementChange) await onEngagementChange(value)
+      if (mode === 'aida' && onAidaChange) await onAidaChange(value)
+      if (mode === 'engagement' && onEngagementChange) await onEngagementChange(value)
     } catch (e) {
       Alert.alert('Save failed', e instanceof Error ? e.message : 'Could not save change')
     } finally {
@@ -68,49 +69,57 @@ export function CrmPipelineCard({
 
   return (
     <>
-      <Pressable
-        style={({ pressed }) => [
-          styles.card,
-          isNested && styles.nested,
-          compact && styles.compact,
-          pressed && onPress && styles.pressed
-        ]}
-        onPress={onPress}
-        disabled={!onPress}
-      >
-        <View style={styles.header}>
-          <View style={styles.typeIcon}>
-            <FontAwesome5 name={typeIcon(item.type)} size={11} color={erp.primary} />
-          </View>
-          <View style={styles.titleBlock}>
-            {isNested && parentLabel ? (
-              <Text style={styles.parentMeta} numberOfLines={1}>
-                {parentLabel}
+      <View style={[styles.card, isNested && styles.nested, compact && styles.compact]}>
+        <Pressable
+          style={({ pressed }) => [styles.headerPress, pressed && onPress && styles.pressed]}
+          onPress={onPress}
+          disabled={!onPress}
+        >
+          <View style={styles.header}>
+            <View style={styles.typeIcon}>
+              <FontAwesome5 name={typeIcon(item.type)} size={11} color={erp.primary} />
+            </View>
+            <View style={styles.titleBlock}>
+              {isNested && parentLabel ? (
+                <Text style={styles.parentMeta} numberOfLines={1}>
+                  {parentLabel}
+                </Text>
+              ) : null}
+              <Text style={styles.name} numberOfLines={2}>
+                {item.name}
               </Text>
-            ) : null}
-            <Text style={styles.name} numberOfLines={2}>
-              {item.name}
-            </Text>
-            <Text style={styles.typeText}>{typeLabel(item.type, item.itemType)}</Text>
+              <Text style={styles.typeText}>{typeLabel(item.type, item.itemType)}</Text>
+            </View>
+            <View style={styles.headerTrailing}>
+              {item.isStarred ? (
+                <FontAwesome5 name="star" solid size={12} color="#f59e0b" style={styles.star} />
+              ) : null}
+              {onPress ? (
+                <FontAwesome5 name="chevron-right" size={10} color={erp.textSubtle} />
+              ) : null}
+            </View>
           </View>
-          {item.isStarred ? (
-            <FontAwesome5 name="star" solid size={12} color="#f59e0b" style={styles.star} />
-          ) : null}
-        </View>
 
-        {item.clientName && item.type === 'opportunity' ? (
-          <Text style={styles.clientName} numberOfLines={1}>
-            {item.clientName}
-          </Text>
-        ) : null}
+          {item.clientName && item.type === 'opportunity' ? (
+            <Text style={styles.clientName} numberOfLines={1}>
+              {item.clientName}
+            </Text>
+          ) : null}
+
+          {item.value > 0 ? <Text style={styles.value}>{formatMoney(item.value)}</Text> : null}
+          {item.industry ? (
+            <Text style={styles.industry} numberOfLines={1}>
+              {item.industry}
+            </Text>
+          ) : null}
+        </Pressable>
 
         <View style={styles.badges}>
+          {saving ? (
+            <ActivityIndicator size="small" color={erp.primary} style={styles.saving} />
+          ) : null}
           {editable ? (
-            <Pressable
-              style={styles.badgeBtn}
-              onPress={() => setPicker('aida')}
-              disabled={saving}
-            >
+            <Pressable style={styles.badgeBtn} onPress={() => setPicker('aida')} disabled={saving}>
               <CrmStatusBadge label={aida} compact />
               <FontAwesome5 name="chevron-down" size={8} color={erp.textSubtle} />
             </Pressable>
@@ -130,14 +139,7 @@ export function CrmPipelineCard({
             <CrmStatusBadge label={engagement} compact />
           )}
         </View>
-
-        {item.value > 0 ? <Text style={styles.value}>{formatMoney(item.value)}</Text> : null}
-        {item.industry ? (
-          <Text style={styles.industry} numberOfLines={1}>
-            {item.industry}
-          </Text>
-        ) : null}
-      </Pressable>
+      </View>
 
       <Modal visible={picker != null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setPicker(null)}>
@@ -145,6 +147,7 @@ export function CrmPipelineCard({
             <Text style={styles.modalTitle}>
               {picker === 'aida' ? 'AIDA stage' : 'Engagement status'}
             </Text>
+            <Text style={styles.modalSub}>{item.name}</Text>
             {(picker === 'aida' ? AIDA_STAGES : ENGAGEMENT_STAGES).map((option) => {
               const active =
                 picker === 'aida'
@@ -175,15 +178,16 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     card: {
       backgroundColor: erp.surface,
       borderRadius: erp.radius.md,
-      padding: 12,
       borderWidth: 1,
       borderColor: erp.border,
       marginBottom: 8,
+      overflow: 'hidden',
       ...erp.shadowSm
     },
     nested: { marginLeft: 14, borderLeftWidth: 3, borderLeftColor: erp.primarySoft },
-    compact: { padding: 10, marginBottom: 6 },
+    compact: { marginBottom: 6 },
     pressed: { opacity: 0.94 },
+    headerPress: { padding: 12, paddingBottom: 8 },
     header: { flexDirection: 'row', alignItems: 'flex-start' },
     typeIcon: {
       width: 28,
@@ -195,15 +199,27 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       marginRight: 10
     },
     titleBlock: { flex: 1, minWidth: 0 },
+    headerTrailing: { alignItems: 'center', gap: 6, marginLeft: 4 },
     parentMeta: { fontSize: 10, fontWeight: '700', color: erp.textSubtle, marginBottom: 2 },
     name: { fontSize: 14, fontWeight: '800', color: erp.text },
     typeText: { fontSize: 11, fontWeight: '600', color: erp.textMuted, marginTop: 2 },
-    star: { marginLeft: 6, marginTop: 2 },
+    star: {},
     clientName: { fontSize: 12, color: erp.textMuted, marginTop: 6 },
-    badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, alignItems: 'center' },
-    badgeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    value: { marginTop: 8, fontSize: 13, fontWeight: '800', color: erp.success },
+    value: { marginTop: 6, fontSize: 13, fontWeight: '800', color: erp.success },
     industry: { marginTop: 4, fontSize: 11, color: erp.textSubtle },
+    badges: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingBottom: 12,
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: erp.borderLight
+    },
+    badgeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    saving: { marginRight: 4 },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(15, 23, 42, 0.45)',
@@ -215,14 +231,20 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       borderTopRightRadius: erp.radius.xl,
       paddingTop: 16,
       paddingBottom: 28,
-      maxHeight: '60%'
+      maxHeight: '70%'
     },
     modalTitle: {
       fontSize: 17,
       fontWeight: '800',
       color: erp.text,
+      paddingHorizontal: erp.space.lg
+    },
+    modalSub: {
+      fontSize: 13,
+      color: erp.textMuted,
       paddingHorizontal: erp.space.lg,
-      marginBottom: 8
+      marginBottom: 8,
+      marginTop: 4
     },
     modalRow: {
       flexDirection: 'row',

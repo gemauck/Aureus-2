@@ -47,7 +47,7 @@ export function usePipelineData(accessToken: string | null | undefined, active: 
   }, [])
 
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, reloadOpportunities = false) => {
       if (!accessToken) {
         setError('Please sign in again.')
         setLoading(false)
@@ -63,7 +63,7 @@ export function usePipelineData(accessToken: string | null | undefined, active: 
         let nextClients = filterClientsList(rawClients.map(normalizeEntity))
         const nextLeads = rawLeads.map(normalizeEntity)
 
-        if (active && !opportunitiesLoadedRef.current) {
+        if (active && (reloadOpportunities || !opportunitiesLoadedRef.current)) {
           try {
             const opps = await crmApi.listOpportunities(accessToken)
             nextClients = attachOpportunities(nextClients, opps)
@@ -102,12 +102,6 @@ export function usePipelineData(accessToken: string | null | undefined, active: 
   const updateLocalLead = useCallback((leadId: string, patch: Partial<CrmLead>) => {
     setLeads((prev) =>
       prev.map((lead) => (String(lead.id) === String(leadId) ? { ...lead, ...patch } : lead))
-    )
-  }, [])
-
-  const updateLocalClient = useCallback((clientId: string, patch: Partial<CrmClient>) => {
-    setClients((prev) =>
-      prev.map((client) => (String(client.id) === String(clientId) ? { ...client, ...patch } : client))
     )
   }, [])
 
@@ -154,118 +148,128 @@ export function usePipelineData(accessToken: string | null | undefined, active: 
 
   const saveAidaStage = useCallback(
     async (item: PipelineItem, newStage: string | null) => {
-      if (!accessToken) return
+      if (!accessToken) throw new Error('Please sign in again.')
       const normalized = newStage && newStage.trim() ? newStage.trim() : null
-      if (item.type === 'lead') {
-        updateLocalLead(item.id, {
-          aidaStatus: normalized ?? undefined,
-          stage: normalized ?? undefined
-        })
-        await crmApi.patchLead(accessToken, item.id, { aidaStatus: normalized })
-      } else if (item.type === 'site') {
-        const parentLeadId = item.leadId ?? item.lead?.id
-        const parentClientId = item.clientId
-        const siteIndex = item.siteIndex ?? -1
-        if (parentLeadId != null && siteIndex >= 0) {
-          updateLocalSiteOnParent('lead', String(parentLeadId), siteIndex, { aidaStatus: normalized })
-          const lead = leads.find((l) => String(l.id) === String(parentLeadId))
-          if (lead && item.siteId) {
-            await crmApi.patchSite(accessToken, String(parentLeadId), String(item.siteId), {
-              aidaStatus: normalized,
-              engagementStage: item.engagementStage ?? item.status ?? 'Potential'
-            })
-          } else if (lead) {
-            const sites = [...(lead.sites || lead.clientSites || [])]
-            if (siteIndex >= 0 && siteIndex < sites.length) {
-              sites[siteIndex] = { ...sites[siteIndex], aidaStatus: normalized }
-              await crmApi.patchLead(accessToken, String(parentLeadId), { sites })
+      try {
+        if (item.type === 'lead') {
+          updateLocalLead(item.id, {
+            aidaStatus: normalized ?? undefined,
+            stage: normalized ?? undefined
+          })
+          await crmApi.patchLead(accessToken, item.id, { aidaStatus: normalized })
+        } else if (item.type === 'site') {
+          const parentLeadId = item.leadId ?? item.lead?.id
+          const parentClientId = item.clientId
+          const siteIndex = item.siteIndex ?? -1
+          if (parentLeadId != null && siteIndex >= 0) {
+            updateLocalSiteOnParent('lead', String(parentLeadId), siteIndex, { aidaStatus: normalized })
+            const lead = leads.find((l) => String(l.id) === String(parentLeadId))
+            if (lead && item.siteId) {
+              await crmApi.patchSite(accessToken, String(parentLeadId), String(item.siteId), {
+                aidaStatus: normalized,
+                engagementStage: item.engagementStage ?? item.status ?? 'Potential'
+              })
+            } else if (lead) {
+              const sites = [...(lead.sites || lead.clientSites || [])]
+              if (siteIndex >= 0 && siteIndex < sites.length) {
+                sites[siteIndex] = { ...sites[siteIndex], aidaStatus: normalized }
+                await crmApi.patchLead(accessToken, String(parentLeadId), { sites })
+              }
+            }
+          } else if (parentClientId && siteIndex >= 0) {
+            updateLocalSiteOnParent('client', String(parentClientId), siteIndex, { aidaStatus: normalized })
+            if (item.siteId) {
+              await crmApi.patchSite(accessToken, String(parentClientId), String(item.siteId), {
+                aidaStatus: normalized,
+                engagementStage: item.engagementStage ?? item.status ?? 'Potential'
+              })
+            } else {
+              const client = clients.find((c) => String(c.id) === String(parentClientId))
+              const sites = [...(client?.sites || client?.clientSites || [])]
+              if (client && siteIndex >= 0 && siteIndex < sites.length) {
+                sites[siteIndex] = { ...sites[siteIndex], aidaStatus: normalized }
+                await crmApi.patchClient(accessToken, String(parentClientId), { sites })
+              }
             }
           }
-        } else if (parentClientId && siteIndex >= 0) {
-          updateLocalSiteOnParent('client', String(parentClientId), siteIndex, { aidaStatus: normalized })
-          if (item.siteId) {
-            await crmApi.patchSite(accessToken, String(parentClientId), String(item.siteId), {
-              aidaStatus: normalized,
-              engagementStage: item.engagementStage ?? item.status ?? 'Potential'
-            })
-          } else {
-            const client = clients.find((c) => String(c.id) === String(parentClientId))
-            const sites = [...(client?.sites || client?.clientSites || [])]
-            if (client && siteIndex >= 0 && siteIndex < sites.length) {
-              sites[siteIndex] = { ...sites[siteIndex], aidaStatus: normalized }
-              await crmApi.patchClient(accessToken, String(parentClientId), { sites })
-            }
-          }
+        } else if (item.type === 'opportunity' && item.clientId) {
+          updateLocalOpportunity(item.clientId, item.id, {
+            aidaStatus: normalized ?? undefined,
+            stage: normalized ?? undefined
+          })
+          await crmApi.patchOpportunity(accessToken, item.id, { aidaStatus: normalized })
         }
-      } else if (item.type === 'opportunity' && item.clientId) {
-        updateLocalOpportunity(item.clientId, item.id, {
-          aidaStatus: normalized ?? undefined,
-          stage: normalized ?? undefined
-        })
-        await crmApi.patchOpportunity(accessToken, item.id, { aidaStatus: normalized })
+      } catch (e) {
+        await load(true, true)
+        throw e
       }
     },
-    [accessToken, clients, leads, updateLocalClient, updateLocalLead, updateLocalOpportunity, updateLocalSiteOnParent]
+    [accessToken, clients, leads, load, updateLocalLead, updateLocalOpportunity, updateLocalSiteOnParent]
   )
 
   const saveEngagementStage = useCallback(
     async (item: PipelineItem, newStatus: string | null) => {
-      if (!accessToken) return
+      if (!accessToken) throw new Error('Please sign in again.')
       const normalized = newStatus && newStatus.trim() ? newStatus.trim() : null
-      if (item.type === 'lead') {
-        updateLocalLead(item.id, {
-          engagementStage: normalized ?? undefined,
-          status: normalized ?? undefined
-        })
-        await crmApi.patchLead(accessToken, item.id, { engagementStage: normalized })
-      } else if (item.type === 'site') {
-        const parentLeadId = item.leadId ?? item.lead?.id
-        const parentClientId = item.clientId
-        const siteIndex = item.siteIndex ?? -1
-        if (parentLeadId != null && siteIndex >= 0) {
-          updateLocalSiteOnParent('lead', String(parentLeadId), siteIndex, {
-            engagementStage: normalized
+      try {
+        if (item.type === 'lead') {
+          updateLocalLead(item.id, {
+            engagementStage: normalized ?? undefined,
+            status: normalized ?? undefined
           })
-          if (item.siteId) {
-            await crmApi.patchSite(accessToken, String(parentLeadId), String(item.siteId), {
-              engagementStage: normalized,
-              aidaStatus: item.aidaStatus ?? item.stage ?? 'Awareness'
+          await crmApi.patchLead(accessToken, item.id, { engagementStage: normalized })
+        } else if (item.type === 'site') {
+          const parentLeadId = item.leadId ?? item.lead?.id
+          const parentClientId = item.clientId
+          const siteIndex = item.siteIndex ?? -1
+          if (parentLeadId != null && siteIndex >= 0) {
+            updateLocalSiteOnParent('lead', String(parentLeadId), siteIndex, {
+              engagementStage: normalized
             })
-          } else {
-            const lead = leads.find((l) => String(l.id) === String(parentLeadId))
-            const sites = [...(lead?.sites || lead?.clientSites || [])]
-            if (lead && siteIndex >= 0 && siteIndex < sites.length) {
-              sites[siteIndex] = { ...sites[siteIndex], engagementStage: normalized }
-              await crmApi.patchLead(accessToken, String(parentLeadId), { sites })
+            if (item.siteId) {
+              await crmApi.patchSite(accessToken, String(parentLeadId), String(item.siteId), {
+                engagementStage: normalized,
+                aidaStatus: item.aidaStatus ?? item.stage ?? 'Awareness'
+              })
+            } else {
+              const lead = leads.find((l) => String(l.id) === String(parentLeadId))
+              const sites = [...(lead?.sites || lead?.clientSites || [])]
+              if (lead && siteIndex >= 0 && siteIndex < sites.length) {
+                sites[siteIndex] = { ...sites[siteIndex], engagementStage: normalized }
+                await crmApi.patchLead(accessToken, String(parentLeadId), { sites })
+              }
+            }
+          } else if (parentClientId && siteIndex >= 0) {
+            updateLocalSiteOnParent('client', String(parentClientId), siteIndex, {
+              engagementStage: normalized
+            })
+            if (item.siteId) {
+              await crmApi.patchSite(accessToken, String(parentClientId), String(item.siteId), {
+                engagementStage: normalized,
+                aidaStatus: item.aidaStatus ?? item.stage ?? 'Awareness'
+              })
+            } else {
+              const client = clients.find((c) => String(c.id) === String(parentClientId))
+              const sites = [...(client?.sites || client?.clientSites || [])]
+              if (client && siteIndex >= 0 && siteIndex < sites.length) {
+                sites[siteIndex] = { ...sites[siteIndex], engagementStage: normalized }
+                await crmApi.patchClient(accessToken, String(parentClientId), { sites })
+              }
             }
           }
-        } else if (parentClientId && siteIndex >= 0) {
-          updateLocalSiteOnParent('client', String(parentClientId), siteIndex, {
-            engagementStage: normalized
+        } else if (item.type === 'opportunity' && item.clientId) {
+          updateLocalOpportunity(item.clientId, item.id, {
+            engagementStage: normalized ?? undefined,
+            status: normalized ?? undefined
           })
-          if (item.siteId) {
-            await crmApi.patchSite(accessToken, String(parentClientId), String(item.siteId), {
-              engagementStage: normalized,
-              aidaStatus: item.aidaStatus ?? item.stage ?? 'Awareness'
-            })
-          } else {
-            const client = clients.find((c) => String(c.id) === String(parentClientId))
-            const sites = [...(client?.sites || client?.clientSites || [])]
-            if (client && siteIndex >= 0 && siteIndex < sites.length) {
-              sites[siteIndex] = { ...sites[siteIndex], engagementStage: normalized }
-              await crmApi.patchClient(accessToken, String(parentClientId), { sites })
-            }
-          }
+          await crmApi.patchOpportunity(accessToken, item.id, { engagementStage: normalized })
         }
-      } else if (item.type === 'opportunity' && item.clientId) {
-        updateLocalOpportunity(item.clientId, item.id, {
-          engagementStage: normalized ?? undefined,
-          status: normalized ?? undefined
-        })
-        await crmApi.patchOpportunity(accessToken, item.id, { engagementStage: normalized })
+      } catch (e) {
+        await load(true, true)
+        throw e
       }
     },
-    [accessToken, clients, leads, updateLocalLead, updateLocalOpportunity, updateLocalSiteOnParent]
+    [accessToken, clients, leads, load, updateLocalLead, updateLocalOpportunity, updateLocalSiteOnParent]
   )
 
   return {

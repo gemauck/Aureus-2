@@ -1,11 +1,13 @@
 import React from 'react'
-import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { AIDA_STAGES, AIDA_STAGE_COLORS, ENGAGEMENT_STAGES, ENGAGEMENT_STAGE_COLORS } from '../pipeline/constants'
 import type { PipelineItem, PipelineKanbanGroupBy } from '../pipeline/types'
 import { normalizeLifecycleStage, normalizeStageToAida } from '../pipeline/utils'
+import { formatMoney } from '../utils'
 import { CrmPipelineCard } from './CrmPipelineCard'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
+import { useTheme } from '../../theme/ThemeContext'
 
 type Props = {
   items: PipelineItem[]
@@ -13,6 +15,8 @@ type Props = {
   onItemPress: (item: PipelineItem) => void
   onAidaChange: (item: PipelineItem, stage: string) => void | Promise<void>
   onEngagementChange: (item: PipelineItem, status: string) => void | Promise<void>
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
 export function CrmPipelineKanban({
@@ -20,8 +24,11 @@ export function CrmPipelineKanban({
   groupBy,
   onItemPress,
   onAidaChange,
-  onEngagementChange
+  onEngagementChange,
+  onRefresh,
+  refreshing
 }: Props) {
+  const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
   const columns =
     groupBy === 'aidaStatus'
@@ -33,7 +40,17 @@ export function CrmPipelineKanban({
         }))
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.rowScroll}
+      contentContainerStyle={styles.row}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={erp.primary} />
+        ) : undefined
+      }
+    >
       {columns.map((column) => {
         const columnItems = items.filter((item) => {
           if (groupBy === 'aidaStatus') {
@@ -43,6 +60,7 @@ export function CrmPipelineKanban({
             normalizeLifecycleStage(item.engagementStage ?? item.status ?? 'Potential') === column.name
           )
         })
+        const columnValue = columnItems.reduce((sum, item) => sum + (item.value || 0), 0)
         return (
           <View key={column.id} style={styles.column}>
             <View
@@ -54,9 +72,16 @@ export function CrmPipelineKanban({
                 }
               ]}
             >
-              <Text style={[styles.columnTitle, { color: column.colors?.fg || '#374151' }]}>
-                {column.name}
-              </Text>
+              <View style={styles.columnHeaderMain}>
+                <Text style={[styles.columnTitle, { color: column.colors?.fg || '#374151' }]}>
+                  {column.name}
+                </Text>
+                {columnValue > 0 ? (
+                  <Text style={[styles.columnValue, { color: column.colors?.fg || '#374151' }]}>
+                    {formatMoney(columnValue)}
+                  </Text>
+                ) : null}
+              </View>
               <View style={styles.countPill}>
                 <Text style={styles.countText}>{columnItems.length}</Text>
               </View>
@@ -69,7 +94,7 @@ export function CrmPipelineKanban({
               nestedScrollEnabled
               ListEmptyComponent={
                 <View style={styles.emptyCol}>
-                  <Text style={styles.emptyColText}>No items</Text>
+                  <Text style={styles.emptyColText}>Drop items here</Text>
                 </View>
               }
               renderItem={({ item }) => (
@@ -91,9 +116,11 @@ export function CrmPipelineKanban({
 
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
-    row: { paddingHorizontal: erp.space.lg, paddingBottom: 24, gap: 12 },
+    rowScroll: { flex: 1 },
+    row: { paddingHorizontal: erp.space.lg, paddingBottom: 24, gap: 12, alignItems: 'stretch' },
     column: {
-      width: 280,
+      width: 288,
+      flex: 1,
       borderRadius: erp.radius.md,
       backgroundColor: erp.surfaceMuted,
       borderWidth: 1,
@@ -102,13 +129,16 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     },
     columnHeader: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       paddingHorizontal: 12,
       paddingVertical: 10,
-      borderBottomWidth: 1
+      borderBottomWidth: 1,
+      gap: 8
     },
-    columnTitle: { fontSize: 13, fontWeight: '800', flex: 1 },
+    columnHeaderMain: { flex: 1, minWidth: 0 },
+    columnTitle: { fontSize: 13, fontWeight: '800' },
+    columnValue: { fontSize: 11, fontWeight: '700', marginTop: 3, opacity: 0.9 },
     countPill: {
       minWidth: 24,
       paddingHorizontal: 8,
@@ -118,9 +148,9 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       alignItems: 'center'
     },
     countText: { fontSize: 11, fontWeight: '800', color: erp.textMuted },
-    columnList: { maxHeight: 560 },
-    columnContent: { padding: 10, paddingBottom: 16 },
-    emptyCol: { paddingVertical: 24, alignItems: 'center' },
+    columnList: { flex: 1 },
+    columnContent: { padding: 10, paddingBottom: 16, flexGrow: 1 },
+    emptyCol: { paddingVertical: 28, alignItems: 'center' },
     emptyColText: { fontSize: 12, color: erp.textSubtle, fontWeight: '600' }
   })
 }
