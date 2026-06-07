@@ -35,7 +35,6 @@
         '/reset-password': 'Reset Password',
         '/expense-capture': 'Expense Capture',
         '/expense': 'Expense Capture',
-        '/messages': 'Messages',
         '/po-from-document': 'PO from document',
         '/po-document': 'PO from document',
         '/podocument': 'PO from document'

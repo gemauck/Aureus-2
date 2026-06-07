@@ -28,12 +28,6 @@ function writeConversationCache(conversations, totalUnread) {
   } catch (_) { /* quota / private mode */ }
 }
 
-function popOutMessagesWindow() {
-  const features = 'width=440,height=820,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
-  const w = window.open('/messages', 'abcotronics-messages', features);
-  if (!w) window.alert('Allow pop-ups to open Messages in a separate window.');
-}
-
 function chatFetch(path, options = {}) {
   const token = window.storage?.getToken?.();
   const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
@@ -213,7 +207,7 @@ function ReadReceiptsPanel({ messageId, onClose, isDark }) {
   );
 }
 
-const Messenger = ({ standalone = false } = {}) => {
+const Messenger = () => {
   const { isDark } = window.useTheme();
   const currentUser = window.storage?.getUser?.() || {};
   const currentUserId = currentUser.id || currentUser.userId || '';
@@ -837,30 +831,20 @@ const Messenger = ({ standalone = false } = {}) => {
     </div>
   );
 
-  const shellHeight = standalone
-    ? 'h-[calc(100vh-1rem)] min-h-[480px]'
-    : 'h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px]';
-
   return (
-    <div className={`${shellHeight} ${standalone ? '' : 'rounded-2xl shadow-xl border'} overflow-hidden ${shell} ${standalone ? '' : (isDark ? 'border-gray-800' : 'border-gray-200')}`}>
+    <div className={`h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px] rounded-2xl overflow-hidden shadow-xl border ${shell} ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
       <div className="flex h-full">
         {/* Conversation list */}
         <aside className={`w-full sm:w-96 shrink-0 flex flex-col border-r ${panel} ${mobileShowThread ? 'hidden sm:flex' : 'flex'}`}>
           <div className={`p-4 border-b ${isDark ? 'border-gray-800 bg-gradient-to-r from-[#0f172a] to-[#111827]' : 'border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h1 className="messages-header-title text-xl font-bold tracking-tight text-white">Messages</h1>
+                <div className="text-xl font-bold tracking-tight text-white" role="heading" aria-level="1">Messages</div>
                 <p className={`text-xs ${isDark ? 'text-blue-200/80' : 'text-blue-100'}`}>
                   {totalUnread ? `${totalUnread} unread` : 'Team chat & DMs'}
                 </p>
               </div>
               <div className="flex gap-1">
-                {!standalone && (
-                  <button type="button" title="Open in separate window" onClick={popOutMessagesWindow}
-                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
-                    <i className="fas fa-external-link-alt" />
-                  </button>
-                )}
                 <button type="button" title="New group" onClick={() => { setShowNewGroup(true); searchUsers(''); }}
                   className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
                   <i className="fas fa-users" />

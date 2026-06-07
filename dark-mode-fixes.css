@@ -709,11 +709,3 @@ html:not(.dark) select:not([style*="color"]):not([style*="background"]) {
 .dark button:hover .fas.fa-star {
     color: #facc15 !important; /* Brighter yellow on hover */
 }
-
-/* Messages module header on blue gradient — must follow generic h1 light-mode overrides */
-html:not(.dark) body h1.messages-header-title,
-body:not(.dark) h1.messages-header-title.text-white,
-html:not(.dark) h1.messages-header-title.font-bold {
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-}

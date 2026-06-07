@@ -20,9 +20,8 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/clients/ClientsMobileOptimized.jsx',
         './src/components/clients/BulkOperations.jsx',
         './src/components/clients/ClientNewsFeed.jsx',
-        // Messages — early load for fast nav + pop-out window
+        // Messages — early load for fast nav
         './src/components/messages/Messenger.jsx',
-        './src/components/messages/MessagesStandalone.jsx',
     ].concat([
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail (with robust loader), then Projects
         './src/components/projects/CustomFieldModal.jsx',
