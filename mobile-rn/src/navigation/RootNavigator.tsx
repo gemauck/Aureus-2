@@ -16,6 +16,8 @@ import { ServiceMaintenanceScreen } from '../screens/ServiceMaintenanceScreen'
 import { SettingsScreen } from '../screens/SettingsScreen'
 import { DashboardCustomizeScreen } from '../screens/DashboardCustomizeScreen'
 import { createPlaceholderScreen } from '../screens/ModulePlaceholderScreen'
+import { TeamsScreen } from '../screens/TeamsScreen'
+import { ToolsScreen } from '../screens/ToolsScreen'
 import { JobCardsRootScreen } from '../jobcards/screens/JobCardsRootScreen'
 import { MessagesNavigator } from '../messages/MessagesNavigator'
 import { DrawerMenu } from '../components/shell/DrawerMenu'
@@ -29,11 +31,6 @@ import { useTheme } from '../theme/ThemeContext'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 
-const TeamsScreen = createPlaceholderScreen({
-  webPath: '/teams',
-  description: 'Team discussions, documents, and workflows — open on the web ERP.',
-  icon: 'user-friends'
-})
 const UsersScreen = createPlaceholderScreen({
   webPath: '/users',
   description: 'User management and permissions — admin access on the web ERP.',
@@ -48,11 +45,6 @@ const HelpdeskScreen = createPlaceholderScreen({
   webPath: '/helpdesk',
   description: 'Tickets and support workflows on the web ERP.',
   icon: 'headset'
-})
-const ToolsScreen = createPlaceholderScreen({
-  webPath: '/tools',
-  description: 'Internal tools and utilities on the web ERP.',
-  icon: 'toolbox'
 })
 const DocumentsScreen = createPlaceholderScreen({
   webPath: '/documents',

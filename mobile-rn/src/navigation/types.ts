@@ -16,12 +16,22 @@ export type RootStackParamList = {
         params?: { noteId: string; isNew?: boolean }
       }
     | undefined
-  Teams: undefined
+  Teams:
+    | {
+        screen?: keyof import('../teams/navigation').TeamsStackParamList
+        params?: import('../teams/navigation').TeamsStackParamList[keyof import('../teams/navigation').TeamsStackParamList]
+      }
+    | undefined
   Users: undefined
   Manufacturing: undefined
   ServiceMaintenance: undefined
   Helpdesk: undefined
-  Tools: undefined
+  Tools:
+    | {
+        screen?: keyof import('../tools/navigation').ToolsStackParamList
+        params?: import('../tools/navigation').ToolsStackParamList[keyof import('../tools/navigation').ToolsStackParamList]
+      }
+    | undefined
   Documents: undefined
   Messages:
     | {
