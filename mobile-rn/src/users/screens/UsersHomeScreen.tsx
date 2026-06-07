@@ -19,7 +19,6 @@ import { useAuth } from '../../state/AuthContext'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
-import { DEPARTMENTS } from '../constants'
 import { usersApi } from '../api'
 import type { UsersStackParamList } from '../navigation'
 import type { ErpUserRecord, UserInvitation } from '../types'
@@ -98,8 +97,8 @@ export function UsersHomeScreen({ navigation }: Props) {
     () => ({
       total: users.length,
       active: users.filter((u) => u.status === 'Active').length,
-      admins: users.filter((u) => (u.role || '').toLowerCase() === 'admin').length,
-      departments: DEPARTMENTS.length
+      online: users.filter((u) => isUserOnline(u)).length,
+      admins: users.filter((u) => (u.role || '').toLowerCase() === 'admin').length
     }),
     [users]
   )
@@ -203,11 +202,8 @@ export function UsersHomeScreen({ navigation }: Props) {
   const renderUser = ({ item }: { item: ErpUserRecord }) => {
     const online = isUserOnline(item)
     const color = roleColor(item.role)
-    const metaParts = [
-      roleLabel(item.role),
-      item.department || null,
-      online ? 'Online' : formatLastSeen(item)
-    ].filter(Boolean)
+    const metaParts = [roleLabel(item.role), item.department || null].filter(Boolean)
+    const lastSeen = online ? null : formatLastSeen(item)
 
     return (
       <Pressable
@@ -219,17 +215,26 @@ export function UsersHomeScreen({ navigation }: Props) {
           <View style={[styles.avatar, { backgroundColor: `${color}22` }]}>
             <Text style={[styles.avatarText, { color }]}>{(item.name || '?').charAt(0).toUpperCase()}</Text>
           </View>
-          {online ? <View style={styles.onlineDot} /> : null}
+          <View style={[styles.presenceDot, online ? styles.presenceDotOnline : styles.presenceDotOffline]} />
         </View>
         <View style={styles.userBody}>
-          <Text style={styles.userName} numberOfLines={1}>
-            {item.name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {item.name}
+            </Text>
+            <View style={[styles.presencePill, online ? styles.presenceOnline : styles.presenceOffline]}>
+              <Text
+                style={[styles.presenceText, online ? styles.presenceTextOnline : styles.presenceTextOffline]}
+              >
+                {online ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.userSubline} numberOfLines={1}>
             {item.email}
           </Text>
           <Text style={styles.userMeta} numberOfLines={1}>
-            {metaParts.join(' · ')}
+            {[...metaParts, lastSeen].filter(Boolean).join(' · ')}
           </Text>
         </View>
         <Pressable
@@ -263,7 +268,7 @@ export function UsersHomeScreen({ navigation }: Props) {
         <StatCard label="Total" value={stats.total} icon="users" color={erp.primary} styles={styles} erp={erp} />
         <StatCard label="Active" value={stats.active} icon="user-check" color="#22c55e" styles={styles} erp={erp} />
         <StatCard label="Admins" value={stats.admins} icon="user-shield" color="#ef4444" styles={styles} erp={erp} />
-        <StatCard label="Depts" value={stats.departments} icon="building" color="#8b5cf6" styles={styles} erp={erp} />
+        <StatCard label="Online" value={stats.online} icon="circle" color="#16a34a" styles={styles} erp={erp} />
       </View>
 
       <TextInput
@@ -526,19 +531,32 @@ const createStyles = ({ erp }: { erp: ErpTheme }) =>
       justifyContent: 'center'
     },
     avatarText: { fontSize: 13, fontWeight: '700' },
-    onlineDot: {
+    presenceDot: {
       position: 'absolute',
       right: -1,
       bottom: -1,
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: '#22c55e',
       borderWidth: 1.5,
       borderColor: erp.surface
     },
+    presenceDotOnline: { backgroundColor: '#22c55e' },
+    presenceDotOffline: { backgroundColor: '#9ca3af' },
     userBody: { flex: 1, minWidth: 0, gap: 1 },
-    userName: { fontSize: 14, fontWeight: '600', color: erp.text },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+    userName: { fontSize: 14, fontWeight: '600', color: erp.text, flexShrink: 1 },
+    presencePill: {
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 5,
+      flexShrink: 0
+    },
+    presenceOnline: { backgroundColor: '#dcfce7' },
+    presenceOffline: { backgroundColor: erp.border },
+    presenceText: { fontSize: 9, fontWeight: '700' },
+    presenceTextOnline: { color: '#16a34a' },
+    presenceTextOffline: { color: erp.textSubtle },
     userSubline: { fontSize: 11, color: erp.textMuted },
     userMeta: { fontSize: 10, color: erp.textSubtle },
     statusPill: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, minWidth: 28, alignItems: 'center' },
