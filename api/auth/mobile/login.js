@@ -1,9 +1,10 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '../../_lib/prisma.js'
 import { signAccessToken, signRefreshToken } from '../../_lib/jwt.js'
+import { logMobileLogin } from '../../_lib/mobileAuthLog.js'
 import { badRequest, ok, serverError, unauthorized } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
-import { withLogging } from '../../_lib/logger.js'
+import { withLogging, logger } from '../../_lib/logger.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
@@ -21,12 +22,21 @@ async function handler(req, res) {
       select: { id: true, email: true, name: true, passwordHash: true, role: true, status: true, mustChangePassword: true }
     })
 
-    if (!user || !user.passwordHash || user.status !== 'active') {
+    if (!user || !user.passwordHash) {
+      logger.info({ email, platform: req.body?.platform }, 'mobile login failed: user not found')
+      return unauthorized(res, 'Invalid credentials')
+    }
+
+    if (user.status !== 'active') {
+      void logMobileLogin(prisma, req, req.body, user, { success: false, reason: 'account_inactive' })
       return unauthorized(res, 'Invalid credentials')
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) return unauthorized(res, 'Invalid credentials')
+    if (!valid) {
+      void logMobileLogin(prisma, req, req.body, user, { success: false, reason: 'invalid_password' })
+      return unauthorized(res, 'Invalid credentials')
+    }
 
     const payload = { sub: user.id, email: user.email, role: user.role, name: user.name, platform: 'mobile' }
     const accessToken = signAccessToken(payload)
@@ -36,6 +46,9 @@ async function handler(req, res) {
       where: { id: user.id },
       data: { lastLoginAt: new Date(), lastSeenAt: new Date() }
     }).catch(() => null)
+
+    const { platform } = await logMobileLogin(prisma, req, req.body, user, { success: true })
+    logger.info({ email, userId: user.id, platform }, 'mobile login success')
 
     return ok(res, {
       accessToken,

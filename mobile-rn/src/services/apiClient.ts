@@ -1,3 +1,4 @@
+import { Platform } from 'react-native'
 import { apiUrl, API_BASE_URL } from '../config'
 import { trackError } from './telemetry'
 
@@ -104,7 +105,10 @@ export const apiClient = {
       accessToken: string
       refreshToken: string
       user: { id: string; email: string; role?: string; name?: string }
-    }>('/api/auth/mobile/login', { method: 'POST', body: { email, password } })
+    }>('/api/auth/mobile/login', {
+      method: 'POST',
+      body: { email, password, platform: Platform.OS }
+    })
   },
   async mobileRefresh(refreshToken: string) {
     return request<{ accessToken: string; refreshToken: string }>('/api/auth/mobile/refresh', {

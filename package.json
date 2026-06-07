@@ -125,6 +125,7 @@
     "mobile:apk:install": "bash scripts/build-mobile-rn-apk.sh && bash scripts/install-mobile-rn-apk.sh",
     "mobile:apk:upload": "bash scripts/upload-mobile-apk.sh",
     "mobile:ota:publish": "bash scripts/publish-mobile-ota-selfhosted.sh",
+    "report:mobile-app-logins": "node scripts/list-mobile-app-logins.js",
     "setup:local-prod": "bash scripts/setup-local-production.sh",
     "start:local-prod": "bash scripts/start-local-production.sh",
     "start:local-prod:pm2": "bash scripts/start-local-production-pm2.sh",
