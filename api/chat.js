@@ -163,6 +163,38 @@ async function findExistingDirectConversation(userA, userB) {
   })
 }
 
+/** Per-conversation unread counts in one query (avoids N+1 count per conversation). */
+async function getUnreadCountMap(userId) {
+  const rows = await prisma.$queryRaw`
+    SELECT m."conversationId" AS "conversationId", COUNT(*)::int AS count
+    FROM "ChatMessage" m
+    INNER JOIN "ChatParticipant" p
+      ON p."conversationId" = m."conversationId"
+      AND p."userId" = ${userId}
+      AND p."leftAt" IS NULL
+    WHERE m."deletedAt" IS NULL
+      AND m."senderId" <> ${userId}
+      AND m."createdAt" > COALESCE(p."lastReadAt", TIMESTAMP '1970-01-01')
+    GROUP BY m."conversationId"
+  `
+  return Object.fromEntries((rows || []).map((r) => [r.conversationId, Number(r.count) || 0]))
+}
+
+async function getTotalUnreadCount(userId) {
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(*)::int AS total
+    FROM "ChatMessage" m
+    INNER JOIN "ChatParticipant" p
+      ON p."conversationId" = m."conversationId"
+      AND p."userId" = ${userId}
+      AND p."leftAt" IS NULL
+    WHERE m."deletedAt" IS NULL
+      AND m."senderId" <> ${userId}
+      AND m."createdAt" > COALESCE(p."lastReadAt", TIMESTAMP '1970-01-01')
+  `
+  return Number(rows?.[0]?.total) || 0
+}
+
 function formatConversation(conv, currentUserId) {
   const activeParticipants = (conv.participants || []).filter((p) => !p.leftAt)
   const others = activeParticipants.filter((p) => p.userId !== currentUserId)
@@ -210,58 +242,24 @@ function formatConversation(conv, currentUserId) {
 }
 
 async function listConversations(userId) {
-  const rows = await prisma.chatConversation.findMany({
-    where: {
-      participants: { some: { userId, leftAt: null } }
-    },
-    include: {
-      participants: {
-        where: { leftAt: null },
-        include: { user: { select: USER_SELECT } }
+  const [rows, unreadMap] = await Promise.all([
+    prisma.chatConversation.findMany({
+      where: {
+        participants: { some: { userId, leftAt: null } }
       },
-      messages: {
-        where: { deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { createdAt: true, senderId: true }
-      }
-    },
-    orderBy: { lastMessageAt: 'desc' }
-  })
-
-  const participantRows = await prisma.chatParticipant.findMany({
-    where: { userId, leftAt: null, conversationId: { in: rows.map((r) => r.id) } },
-    select: { conversationId: true, lastReadAt: true, muted: true }
-  })
-  const partMap = Object.fromEntries(participantRows.map((p) => [p.conversationId, p]))
-
-  const unreadCounts = await Promise.all(
-    rows.map(async (conv) => {
-      const part = partMap[conv.id]
-      const since = part?.lastReadAt || new Date(0)
-      const count = await prisma.chatMessage.count({
-        where: {
-          conversationId: conv.id,
-          deletedAt: null,
-          senderId: { not: userId },
-          createdAt: { gt: since }
+      include: {
+        participants: {
+          where: { leftAt: null },
+          include: { user: { select: USER_SELECT } }
         }
-      })
-      return [conv.id, count]
-    })
-  )
-  const unreadMap = Object.fromEntries(unreadCounts)
+      },
+      orderBy: { lastMessageAt: 'desc' }
+    }),
+    getUnreadCountMap(userId)
+  ])
 
   return rows.map((conv) => {
     conv.unreadCount = unreadMap[conv.id] || 0
-    const part = partMap[conv.id]
-    if (part) {
-      const myP = conv.participants.find((p) => p.userId === userId)
-      if (myP) {
-        myP.muted = part.muted
-        myP.lastReadAt = part.lastReadAt
-      }
-    }
     return formatConversation(conv, userId)
   })
 }
@@ -567,9 +565,8 @@ async function handler(req, res) {
 
     // GET /api/chat/unread — total unread count for badge
     if (req.method === 'GET' && sub[0] === 'unread' && !sub[1]) {
-      const conversations = await listConversations(userId)
-      const total = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
-      return ok(res, { unreadCount: total })
+      const unreadCount = await getTotalUnreadCount(userId)
+      return ok(res, { unreadCount })
     }
 
     // GET /api/chat/users — search colleagues for new chat
@@ -600,7 +597,8 @@ async function handler(req, res) {
     // GET /api/chat/conversations — list
     if (req.method === 'GET' && sub[0] === 'conversations' && !sub[1]) {
       const conversations = await listConversations(userId)
-      return ok(res, { conversations })
+      const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+      return ok(res, { conversations, totalUnread })
     }
 
     // POST /api/chat/conversations — create DM or group

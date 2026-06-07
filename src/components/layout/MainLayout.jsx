@@ -6,7 +6,7 @@ const { useState } = React;
 const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications', 'messages'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 /** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
-const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense'];
+const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense', 'messages'];
 
 /** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
 const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
@@ -1765,9 +1765,19 @@ const MainLayout = () => {
         };
     }, [currentPage]);
 
+    const preloadMessenger = React.useCallback(() => {
+        if (window.Messenger) return;
+        const v = window.BUILD_VERSION || Date.now();
+        const s = document.createElement('script');
+        s.src = `/dist/src/components/messages/Messenger.js?v=${encodeURIComponent(v)}`;
+        document.head.appendChild(s);
+    }, []);
+
     const renderMenuButton = (item, extraClasses = '') => (
         <button
             key={item.id}
+            onMouseEnter={item.id === 'messages' ? preloadMessenger : undefined}
+            onFocus={item.id === 'messages' ? preloadMessenger : undefined}
             onClick={() => {
                 // Always navigate to base page (no subpath) when clicking a menu item
                 // This ensures clicking "Projects" while viewing a project detail navigates back to projects list

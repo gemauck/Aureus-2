@@ -4,6 +4,35 @@ const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const POLL_ACTIVE_MS = 30000;
 const POLL_LIST_MS = 30000;
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+const CHAT_LIST_CACHE_KEY = 'abcotronics_chat_conversations_v1';
+
+function readConversationCache() {
+  try {
+    const raw = sessionStorage.getItem(CHAT_LIST_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.conversations)) return null;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeConversationCache(conversations, totalUnread) {
+  try {
+    sessionStorage.setItem(CHAT_LIST_CACHE_KEY, JSON.stringify({
+      conversations,
+      totalUnread: totalUnread || 0,
+      at: Date.now()
+    }));
+  } catch (_) { /* quota / private mode */ }
+}
+
+function popOutMessagesWindow() {
+  const features = 'width=440,height=820,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes';
+  const w = window.open('/messages', 'abcotronics-messages', features);
+  if (!w) window.alert('Allow pop-ups to open Messages in a separate window.');
+}
 
 function chatFetch(path, options = {}) {
   const token = window.storage?.getToken?.();
@@ -184,15 +213,16 @@ function ReadReceiptsPanel({ messageId, onClose, isDark }) {
   );
 }
 
-const Messenger = () => {
+const Messenger = ({ standalone = false } = {}) => {
   const { isDark } = window.useTheme();
   const currentUser = window.storage?.getUser?.() || {};
   const currentUserId = currentUser.id || currentUser.userId || '';
+  const initialCache = useMemo(() => readConversationCache(), []);
 
-  const [conversations, setConversations] = useState([]);
+  const [conversations, setConversations] = useState(() => initialCache?.conversations || []);
   const [selectedId, setSelectedId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [loadingList, setLoadingList] = useState(true);
+  const [loadingList, setLoadingList] = useState(() => !initialCache?.conversations?.length);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [compose, setCompose] = useState('');
   const [sending, setSending] = useState(false);
@@ -208,7 +238,7 @@ const Messenger = () => {
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
-  const [totalUnread, setTotalUnread] = useState(0);
+  const [totalUnread, setTotalUnread] = useState(() => initialCache?.totalUnread || 0);
   const [typingUsers, setTypingUsers] = useState([]);
   const [emailMessages, setEmailMessages] = useState(false);
   const [emailPrefLoading, setEmailPrefLoading] = useState(true);
@@ -227,6 +257,7 @@ const Messenger = () => {
   const lastTypingSentRef = useRef(0);
   const selectedIdRef = useRef(null);
   const sseRef = useRef(null);
+  const hasListRef = useRef(!!initialCache?.conversations?.length);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -262,14 +293,17 @@ const Messenger = () => {
   }, []);
 
   const loadConversations = useCallback(async (silent = false) => {
-    if (!silent) setLoadingList(true);
+    if (!silent && !hasListRef.current) setLoadingList(true);
     try {
       const data = await chatFetch('/api/chat/conversations');
-      setConversations(data.conversations || []);
+      const list = data.conversations || [];
+      const unreadTotal = data.totalUnread ?? list.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+      hasListRef.current = list.length > 0;
+      setConversations(list);
       setListError('');
-      const unread = await chatFetch('/api/chat/unread').catch(() => ({ unreadCount: 0 }));
-      setTotalUnread(unread.unreadCount || 0);
-      window.dispatchEvent(new CustomEvent('chat:unread', { detail: { count: unread.unreadCount || 0 } }));
+      setTotalUnread(unreadTotal);
+      writeConversationCache(list, unreadTotal);
+      window.dispatchEvent(new CustomEvent('chat:unread', { detail: { count: unreadTotal } }));
     } catch (e) {
       if (!silent) setListError(e.message || 'Failed to load conversations');
     } finally {
@@ -803,20 +837,30 @@ const Messenger = () => {
     </div>
   );
 
+  const shellHeight = standalone
+    ? 'h-[calc(100vh-1rem)] min-h-[480px]'
+    : 'h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px]';
+
   return (
-    <div className={`h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px] rounded-2xl overflow-hidden shadow-xl border ${shell} ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+    <div className={`${shellHeight} ${standalone ? '' : 'rounded-2xl shadow-xl border'} overflow-hidden ${shell} ${standalone ? '' : (isDark ? 'border-gray-800' : 'border-gray-200')}`}>
       <div className="flex h-full">
         {/* Conversation list */}
         <aside className={`w-full sm:w-96 shrink-0 flex flex-col border-r ${panel} ${mobileShowThread ? 'hidden sm:flex' : 'flex'}`}>
           <div className={`p-4 border-b ${isDark ? 'border-gray-800 bg-gradient-to-r from-[#0f172a] to-[#111827]' : 'border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h1 className={`text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-white'}`}>Messages</h1>
+                <h1 className="messages-header-title text-xl font-bold tracking-tight text-white">Messages</h1>
                 <p className={`text-xs ${isDark ? 'text-blue-200/80' : 'text-blue-100'}`}>
                   {totalUnread ? `${totalUnread} unread` : 'Team chat & DMs'}
                 </p>
               </div>
               <div className="flex gap-1">
+                {!standalone && (
+                  <button type="button" title="Open in separate window" onClick={popOutMessagesWindow}
+                    className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
+                    <i className="fas fa-external-link-alt" />
+                  </button>
+                )}
                 <button type="button" title="New group" onClick={() => { setShowNewGroup(true); searchUsers(''); }}
                   className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
                   <i className="fas fa-users" />

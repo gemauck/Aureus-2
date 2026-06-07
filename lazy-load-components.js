@@ -20,6 +20,9 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/clients/ClientsMobileOptimized.jsx',
         './src/components/clients/BulkOperations.jsx',
         './src/components/clients/ClientNewsFeed.jsx',
+        // Messages — early load for fast nav + pop-out window
+        './src/components/messages/Messenger.jsx',
+        './src/components/messages/MessagesStandalone.jsx',
     ].concat([
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail (with robust loader), then Projects
         './src/components/projects/CustomFieldModal.jsx',
@@ -70,9 +73,6 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/teams/TeamModals.jsx',
         './src/components/teams/Teams.jsx',
         './src/components/teams/TeamsSimple.jsx',
-        
-        // Messages
-        './src/components/messages/Messenger.jsx',
         
         // Users
         './src/components/users/UserModal.jsx',

@@ -24,6 +24,32 @@ function isPoFromDocumentRoute() {
     return false;
 }
 
+/** Authenticated full-screen Messages pop-out at /messages (no ERP sidebar). */
+function isMessagesStandaloneRoute() {
+    const raw = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+    if (raw === '/messages') {
+        return true;
+    }
+    const hash = window.location.hash || '';
+    if (hash.startsWith('#/')) {
+        const first = hash
+            .substring(2)
+            .split('?')[0]
+            .split('/')
+            .filter(Boolean)[0];
+        if (first === 'messages' && hash.includes('standalone=1')) {
+            return true;
+        }
+    }
+    try {
+        if (window.RouteState && typeof window.RouteState.getRoute === 'function') {
+            const p = String(window.RouteState.getRoute()?.page || '').toLowerCase();
+            return p === 'messages' && String(window.location.search || '').includes('standalone=1');
+        }
+    } catch (e) {}
+    return false;
+}
+
 /** Authenticated full-screen Expense Capture (like /job-card URL simplicity, no ERP sidebar). */
 function isExpenseCaptureStandaloneRoute() {
     const raw = (window.location.pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
@@ -72,6 +98,9 @@ const AppContent = () => {
     const [expenseStandaloneReady, setExpenseStandaloneReady] = window.React.useState(
         !!(window.ExpenseCaptureStandalone && (window.ExpenseCaptureTool || window.ReceiptCaptureTool))
     );
+    const [messagesStandaloneReady, setMessagesStandaloneReady] = window.React.useState(
+        !!(window.MessagesStandalone && window.Messenger)
+    );
 
     const isPoFromDocumentPage = (() => {
         void routeTick;
@@ -81,6 +110,11 @@ const AppContent = () => {
     const isExpenseCaptureStandalonePage = (() => {
         void routeTick;
         return isExpenseCaptureStandaloneRoute();
+    })();
+
+    const isMessagesStandalonePage = (() => {
+        void routeTick;
+        return isMessagesStandaloneRoute();
     })();
     
     // Get auth state - always call this hook
@@ -160,10 +194,18 @@ const AppContent = () => {
             }
             return;
         }
+        if (isMessagesStandalonePage) {
+            if (manager?.setPublicTitle) {
+                manager.setPublicTitle('/messages');
+            } else {
+                setDirectTitle('Messages - Abcotronics ERP');
+            }
+            return;
+        }
         if (!user) {
             setDirectTitle('Login - Abcotronics ERP');
         }
-    }, [isInvitationPage, isResetPage, isPublicJobCardPage, isPoFromDocumentPage, isExpenseCaptureStandalonePage, user]);
+    }, [isInvitationPage, isResetPage, isPublicJobCardPage, isPoFromDocumentPage, isExpenseCaptureStandalonePage, isMessagesStandalonePage, user]);
     
     // Call ALL useEffect hooks (must be in same order every render)
     // Safety: after 30s force out of loading so site never stays stuck on "Loading..."
@@ -268,7 +310,49 @@ const AppContent = () => {
             clearTimeout(timeoutId);
         };
     }, [isExpenseCaptureStandalonePage, user]);
-    
+
+    window.React.useEffect(() => {
+        if (!isMessagesStandalonePage) return;
+        const ready = () => window.MessagesStandalone && window.Messenger;
+        if (ready()) {
+            setMessagesStandaloneReady(true);
+            return;
+        }
+        const checkInterval = setInterval(() => {
+            if (ready()) {
+                setMessagesStandaloneReady(true);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+        const tryDirectScriptLoad = () => {
+            if (ready()) return;
+            const base = '/dist/src/components/messages/';
+            const v = (typeof window !== 'undefined' && window.BUILD_VERSION) ? window.BUILD_VERSION : Date.now();
+            const appendScript = (file, onDone) => {
+                const s = document.createElement('script');
+                s.src = `${base}${file}.js?v=${encodeURIComponent(v)}`;
+                s.onload = () => onDone && onDone();
+                s.onerror = () => onDone && onDone();
+                document.head.appendChild(s);
+            };
+            if (!window.Messenger) {
+                appendScript('Messenger', () => {
+                    if (ready()) setMessagesStandaloneReady(true);
+                    else appendScript('MessagesStandalone', () => setMessagesStandaloneReady(true));
+                });
+            } else {
+                appendScript('MessagesStandalone', () => setMessagesStandaloneReady(true));
+            }
+        };
+        const fallbackTimer = setTimeout(tryDirectScriptLoad, 1200);
+        const timeoutId = setTimeout(() => clearInterval(checkInterval), 25000);
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(fallbackTimer);
+            clearTimeout(timeoutId);
+        };
+    }, [isMessagesStandalonePage, user]);
+
     // LoginPage loading effect
     window.React.useEffect(() => {
         if (loginPageReady || user) return; // Already ready or user is logged in
@@ -350,7 +434,7 @@ const AppContent = () => {
     // loadingEscape: after 30s we stop showing loading so the site never stays stuck
     // Direct PO-from-document / expense-capture link: do not wait for full workspace preload.
     const skipFullWorkspacePreload =
-        user && (isPoFromDocumentPage || isExpenseCaptureStandalonePage);
+        user && (isPoFromDocumentPage || isExpenseCaptureStandalonePage || isMessagesStandalonePage);
     if (!loadingEscape && (authLoading || (user && !initialLoadComplete && !skipFullWorkspacePreload))) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -449,6 +533,20 @@ const AppContent = () => {
                 <div className="text-center px-4">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
                     <p className="text-gray-600 dark:text-gray-400 text-sm">Loading Expense Capture…</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (isMessagesStandalonePage) {
+        if (messagesStandaloneReady && window.MessagesStandalone) {
+            return <window.MessagesStandalone />;
+        }
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center px-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Loading Messages…</p>
                 </div>
             </div>
         );
