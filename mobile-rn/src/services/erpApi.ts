@@ -1,3 +1,4 @@
+import { isCrmClient, isCrmGroup } from '../crm/utils'
 import { request } from './apiClient'
 
 export type DashboardTask = {
@@ -134,9 +135,12 @@ export const erpApi = {
   },
 
   getClientsSummary(token: string) {
-    return request<{ clients?: Array<{ id: string }> }>('/api/clients', { token }).then((d) => ({
-      total: d.clients?.length || 0
-    }))
+    return request<{ clients?: Array<{ id: string; type?: string | null }> }>('/api/clients', {
+      token
+    }).then((d) => {
+      const clients = (d.clients || []).filter((c) => isCrmClient(c) && !isCrmGroup(c))
+      return { total: clients.length }
+    })
   },
 
   getChatUnreadCount(token: string) {

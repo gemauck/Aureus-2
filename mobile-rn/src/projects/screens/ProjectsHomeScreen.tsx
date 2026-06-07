@@ -271,6 +271,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
             contentContainerStyle={styles.chipsRow}
           >
             {FILTERS.map((f) => {
@@ -333,6 +334,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
             contentContainerStyle={styles.chipsRow}
           >
             {(
@@ -422,6 +424,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
             <FlatList
               data={clientGroups}
               keyExtractor={(g) => g.clientKey}
+              style={styles.listBody}
               contentContainerStyle={styles.list}
               refreshControl={
                 <RefreshControl
@@ -462,6 +465,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
           <FlatList
             data={filteredProjects}
             keyExtractor={(item) => item.id}
+            style={styles.listBody}
             contentContainerStyle={styles.list}
             refreshControl={
               <RefreshControl
@@ -494,6 +498,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
           <FlatList
             data={filteredTasks}
             keyExtractor={(item) => item.id}
+            style={styles.listBody}
             contentContainerStyle={styles.list}
             refreshControl={
               <RefreshControl
@@ -597,7 +602,9 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     fontSize: 16,
     color: erp.text
   },
+  chipsScroll: { flexGrow: 0, minHeight: 44 },
   chipsRow: { paddingHorizontal: erp.space.lg, paddingBottom: 10, gap: 8, alignItems: 'center' },
+  listBody: { flex: 1 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
