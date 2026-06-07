@@ -53,13 +53,13 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { entityType, entityId } = route.params
+  const { entityType, entityId, initialTab } = route.params
   const { accessToken, user } = useAuth()
   const [entity, setEntity] = useState<CrmEntityBase | null>(null)
   const [groupMembers, setGroupMembers] = useState<CrmGroupMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<CrmDetailTab>('overview')
+  const [tab, setTab] = useState<CrmDetailTab>(initialTab || 'overview')
   const [notesDraft, setNotesDraft] = useState('')
   const [newNoteDraft, setNewNoteDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -75,6 +75,10 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const loadedExtrasRef = useRef<Set<string>>(new Set())
 
   const tabs = useMemo(() => detailTabsFor(entityType), [entityType])
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [initialTab, entityId])
 
   const load = useCallback(async () => {
     if (!accessToken) return

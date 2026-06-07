@@ -1,4 +1,4 @@
-import type { DashboardNotification, DashboardTask } from '../services/erpApi'
+import type { DashboardJobCard, DashboardNotification, DashboardTask } from '../services/erpApi'
 import type { RootStackParamList } from '../navigation/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,4 +62,12 @@ export function openProject(
 
 export function openModule(navigation: NavLike, screen: keyof RootStackParamList) {
   navigation.navigate(screen as never)
+}
+
+export function openJobCard(navigation: NavLike, card: DashboardJobCard) {
+  if (!card?.id) {
+    navigation.navigate('JobCards')
+    return
+  }
+  navigation.navigate('JobCards', { jobCardId: card.id } as never)
 }

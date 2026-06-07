@@ -24,7 +24,7 @@ import {
   type DashboardConfig,
   type DashboardWidgetId
 } from '../dashboard/dashboardConfig'
-import { openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
+import { openJobCard, openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
 import { erpApi, mergeDashboardTasks, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
 
@@ -338,7 +338,7 @@ export function DashboardScreen({ navigation }: Props) {
       >
         {jobCards.length ? (
           jobCards.map((c) => (
-            <JobCardRow key={c.id} card={c} onPress={() => navigation.navigate('JobCards')} />
+            <JobCardRow key={c.id} card={c} onPress={() => openJobCard(navigation, c)} />
           ))
         ) : (
           <Text style={styles.empty}>No job cards yet — start one from Service & Maintenance.</Text>

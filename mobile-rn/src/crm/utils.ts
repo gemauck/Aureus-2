@@ -243,6 +243,7 @@ export function tabCounts(clients: CrmClient[], leads: CrmLead[], groups: CrmGro
 }
 
 export function entityKindLabel(tab: CrmTab) {
+  if (tab === 'pipeline') return 'Pipeline item'
   if (tab === 'groups') return 'Group'
   return tab === 'clients' ? 'Client' : 'Lead'
 }

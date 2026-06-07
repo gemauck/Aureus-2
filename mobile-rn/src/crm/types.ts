@@ -22,7 +22,9 @@ export type CrmSite = {
   siteLead?: string
   engagementStage?: string | null
   aidaStatus?: string | null
+  stage?: string | null
   siteType?: string
+  createdAt?: string
 }
 
 export type CrmComment = {
@@ -92,10 +94,13 @@ export type CrmOpportunity = {
   title?: string
   value?: number
   status?: string
+  stage?: string | null
   engagementStage?: string | null
   aidaStatus?: string | null
   probability?: number
   isStarred?: boolean
+  clientId?: string
+  createdAt?: string
 }
 
 export type CrmProject = {
@@ -200,6 +205,7 @@ export type CrmClient = CrmEntityBase & {
 
 export type CrmLead = CrmEntityBase & {
   type?: 'lead'
+  company?: string
 }
 
 export type CrmGroup = CrmEntityBase & {
@@ -213,7 +219,7 @@ export type CrmGroupMember = CrmEntityBase & {
   role?: string
 }
 
-export type CrmTab = 'clients' | 'leads' | 'groups'
+export type CrmTab = 'clients' | 'leads' | 'pipeline' | 'groups'
 
 export type CrmFilterKey = 'all' | 'starred' | 'active'
 

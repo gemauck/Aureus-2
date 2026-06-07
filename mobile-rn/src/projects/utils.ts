@@ -96,6 +96,18 @@ export function priorityColor(priority?: string) {
   return '#6366f1'
 }
 
+export function normalizeProjectStatus(status?: string) {
+  const s = String(status || '').trim()
+  if (!s) return ''
+  const lower = s.toLowerCase()
+  if (lower === 'active') return 'Active'
+  if (lower === 'in progress' || lower === 'in_progress') return 'In Progress'
+  if (lower === 'completed' || lower === 'complete') return 'Completed'
+  if (lower === 'on hold' || lower === 'on_hold') return 'On Hold'
+  if (lower === 'cancelled' || lower === 'canceled') return 'Cancelled'
+  return s
+}
+
 export function progressPercent(project: ProjectSummary) {
   const raw = project.progress
   if (raw != null && !Number.isNaN(Number(raw))) {
@@ -213,13 +225,13 @@ export function filterProjects(
   return items.filter((item) => {
     if (filter === 'starred' && !starredIds.has(item.id)) return false
     if (filter === 'active') {
-      const st = String(item.status || '').toLowerCase()
+      const st = normalizeProjectStatus(item.status).toLowerCase()
       if (st && st !== 'active' && st !== 'in progress') return false
     }
-    if (status !== 'all' && String(item.status || '') !== status) return false
+    if (status !== 'all' && normalizeProjectStatus(item.status) !== status) return false
     if (clientId && clientId !== 'all') {
-      const cid = item.clientId || item.clientName || ''
-      if (cid !== clientId && item.clientName !== clientId) return false
+      const projectClientKey = item.clientId || String(item.clientName || '').trim()
+      if (projectClientKey !== clientId) return false
     }
     if (!q) return true
     const hay = [item.name, item.clientName, item.status, item.type, item.assignedTo]

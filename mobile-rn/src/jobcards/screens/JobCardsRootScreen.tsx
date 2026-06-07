@@ -1,9 +1,15 @@
 import React from 'react'
+import type { RouteProp } from '@react-navigation/native'
+import type { RootStackParamList } from '../../navigation/types'
 import { JobCardWizardProvider, useJobCardWizard } from '../WizardContext'
 import { LandingScreen } from './LandingScreen'
 import { PriorListScreen } from './PriorListScreen'
 import { WizardScreen } from './WizardScreen'
 import { StockTakeScreen } from '../stockTake/StockTakeScreen'
+
+type Props = {
+  route: RouteProp<RootStackParamList, 'JobCards'>
+}
 
 function JobCardsFlowRouter() {
   const { wizardFlow } = useJobCardWizard()
@@ -20,9 +26,10 @@ function JobCardsFlowRouter() {
   }
 }
 
-export function JobCardsRootScreen() {
+export function JobCardsRootScreen({ route }: Props) {
+  const jobCardId = route.params?.jobCardId
   return (
-    <JobCardWizardProvider>
+    <JobCardWizardProvider initialJobCardId={jobCardId}>
       <JobCardsFlowRouter />
     </JobCardWizardProvider>
   )

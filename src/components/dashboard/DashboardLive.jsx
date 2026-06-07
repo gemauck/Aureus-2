@@ -93,12 +93,31 @@ const isArchivedTask = (task) => {
     return normalizedStatus === 'archived';
 };
 
+/** Keep in sync with MainLayout DESKTOP_SITE_LAYOUT_MIN_PX / html.erp-desktop-site min-width. */
+const DESKTOP_SITE_LAYOUT_MIN_PX = 1330;
+
+function isDesktopSiteLayout() {
+    return typeof document !== 'undefined' && document.documentElement.classList.contains('erp-desktop-site');
+}
+
+/** Layout viewport width for dashboard grid — wide meta viewport on phones in desktop-site mode. */
+function getDashboardLayoutWidthPx() {
+    if (typeof window === 'undefined') return DESKTOP_SITE_LAYOUT_MIN_PX;
+    const inner = window.innerWidth;
+    if (isDesktopSiteLayout()) return Math.max(inner, DESKTOP_SITE_LAYOUT_MIN_PX);
+    return inner;
+}
+
 /** Matches Tailwind grid in this file: `grid-cols-1 md:grid-cols-2 xl:grid-cols-3` */
 function getDashboardGridColumnCount(widthPx) {
     if (typeof widthPx !== 'number' || Number.isNaN(widthPx)) return 1;
     if (widthPx < 768) return 1;
     if (widthPx < 1280) return 2;
     return 3;
+}
+
+function syncDashboardGridColumnCount() {
+    return getDashboardGridColumnCount(getDashboardLayoutWidthPx());
 }
 
 const DASHBOARD_WIDGET_DEFAULT_SIZES = {
@@ -2519,17 +2538,23 @@ const DashboardLive = () => {
     const [resizeStart, setResizeStart] = useState(null); // { x, y, w, h }
     const [editMode, setEditMode] = useState(false);
     const [gridColumnCount, setGridColumnCount] = useState(() =>
-        typeof window !== 'undefined' ? getDashboardGridColumnCount(window.innerWidth) : 3
+        typeof window !== 'undefined' ? syncDashboardGridColumnCount() : 3
     );
-    const layoutBucket = gridColumnCount === 1 ? 'mobile' : 'desktop';
+    const layoutBucket = isDesktopSiteLayout() || gridColumnCount >= 2 ? 'desktop' : 'mobile';
     const layoutBucketRef = React.useRef(layoutBucket);
     layoutBucketRef.current = layoutBucket;
     const widgetLayouts = widgetLayoutsByBreakpoint[layoutBucket] || {};
 
     React.useEffect(() => {
-        const onResize = () => setGridColumnCount(getDashboardGridColumnCount(window.innerWidth));
-        window.addEventListener('resize', onResize);
-        return () => window.removeEventListener('resize', onResize);
+        const onLayoutChange = () => setGridColumnCount(syncDashboardGridColumnCount());
+        onLayoutChange();
+        window.addEventListener('resize', onLayoutChange);
+        const observer = new MutationObserver(onLayoutChange);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => {
+            window.removeEventListener('resize', onLayoutChange);
+            observer.disconnect();
+        };
     }, []);
 
     // Load dashboard from API with forceRefresh so widgets show current data (not stale cache).
@@ -3193,7 +3218,7 @@ const DashboardLive = () => {
                 let cellHeight = 200;
                 if (gridContainer) {
                     const containerWidth = gridContainer.offsetWidth;
-                    const cols = getDashboardGridColumnCount(window.innerWidth);
+                    const cols = syncDashboardGridColumnCount();
                     const gap = 20; /* gap-5 */
                     cellWidth = cols > 0 ? (containerWidth - gap * (cols - 1)) / cols : containerWidth;
                     const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');

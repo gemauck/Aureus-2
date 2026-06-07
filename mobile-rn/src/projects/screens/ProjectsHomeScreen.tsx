@@ -280,7 +280,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 <Pressable
                   key={f.key}
                   style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setFilter(f.key)}
+                  onPress={() => setFilter(active ? 'all' : f.key)}
                 >
                   <FontAwesome5
                     name={f.icon}
@@ -299,7 +299,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 <Pressable
                   key={st}
                   style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setStatusFilter(st)}
+                  onPress={() => setStatusFilter(active ? 'all' : st)}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {st === 'all' ? 'Any status' : st}
@@ -307,7 +307,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                 </Pressable>
               )
             })}
-            {clients.length > 2 ? (
+            {clients.length > 1 ? (
               <>
                 <View style={styles.chipDivider} />
                 {clients.slice(0, 8).map((c) => {
@@ -318,7 +318,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
                     <Pressable
                       key={id}
                       style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => setClientFilter(id)}
+                      onPress={() => setClientFilter(active ? 'all' : id)}
                     >
                       <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
                         {label}
@@ -665,12 +665,12 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     paddingVertical: 8
   },
   sortBtnText: { fontSize: 11, fontWeight: '700', color: erp.textMuted, textTransform: 'capitalize' },
-  clientGroup: { marginBottom: 16 },
+  clientGroup: { marginBottom: 10 },
   clientHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 6,
     paddingVertical: 8,
     paddingHorizontal: 4
   },

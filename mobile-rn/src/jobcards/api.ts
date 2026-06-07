@@ -64,6 +64,13 @@ export const jobcardsApi = {
     })
   },
 
+  delete(token: string, id: string) {
+    return request<{ deleted: boolean; id: string }>(
+      `/api/jobcards/${encodeURIComponent(id)}`,
+      { method: 'DELETE', token }
+    )
+  },
+
   getClients(token: string) {
     return request<unknown>('/api/clients', { token })
       .then((d) => filterActiveClients(unwrapList<ClientOption>(d, 'clients')))

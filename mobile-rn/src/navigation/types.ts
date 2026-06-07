@@ -1,7 +1,7 @@
 export type RootStackParamList = {
   Login: undefined
   Dashboard: undefined
-  JobCards: undefined
+  JobCards: { jobCardId?: string } | undefined
   Clients: undefined
   Projects: undefined
   MyTasks:

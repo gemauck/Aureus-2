@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -32,6 +33,8 @@ import {
   uniqueIndustries
 } from '../utils'
 import type { CrmStackParamList } from '../navigation'
+import { CrmPipelineView } from '../components/CrmPipelineView'
+import { isAdmin } from '../../utils/menuAccess'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -48,7 +51,7 @@ export function CrmHomeScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const [tab, setTab] = useState<CrmTab>('clients')
   const [clients, setClients] = useState<CrmClient[]>([])
   const [leads, setLeads] = useState<CrmLead[]>([])
@@ -106,11 +109,27 @@ export function CrmHomeScreen({ navigation }: Props) {
     [source, query, filter, industry, tab]
   )
 
+  const showPipeline = isAdmin(user)
+
+  const homeTabs = useMemo(() => {
+    const tabs: CrmTab[] = ['clients', 'leads']
+    if (showPipeline) tabs.push('pipeline')
+    tabs.push('groups')
+    return tabs
+  }, [showPipeline])
+
   const switchTab = (key: CrmTab) => {
     setTab(key)
     setIndustry('all')
     setQuery('')
     setFilter('all')
+  }
+
+  const tabMeta = (key: CrmTab) => {
+    if (key === 'clients') return { icon: 'building', label: 'Clients', count: counts.clients }
+    if (key === 'leads') return { icon: 'user-plus', label: 'Leads', count: counts.leads }
+    if (key === 'pipeline') return { icon: 'stream', label: 'Pipeline', count: null }
+    return { icon: 'layer-group', label: 'Groups', count: counts.groups }
   }
 
   return (
@@ -122,14 +141,14 @@ export function CrmHomeScreen({ navigation }: Props) {
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
       <ScreenBody padded={false}>
-        <View style={styles.tabRow}>
-          {(['clients', 'leads', 'groups'] as CrmTab[]).map((key) => {
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabRowScroll}
+        >
+          {homeTabs.map((key) => {
             const active = tab === key
-            const count =
-              key === 'clients' ? counts.clients : key === 'leads' ? counts.leads : counts.groups
-            const icon =
-              key === 'clients' ? 'building' : key === 'leads' ? 'user-plus' : 'layer-group'
-            const label = key === 'clients' ? 'Clients' : key === 'leads' ? 'Leads' : 'Groups'
+            const meta = tabMeta(key)
             return (
               <Pressable
                 key={key}
@@ -137,22 +156,28 @@ export function CrmHomeScreen({ navigation }: Props) {
                 onPress={() => switchTab(key)}
               >
                 <FontAwesome5
-                  name={icon}
+                  name={meta.icon}
                   size={13}
                   color={active ? '#fff' : erp.textMuted}
                   style={styles.tabIcon}
                 />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-                <View style={[styles.tabCount, active && styles.tabCountActive]}>
-                  <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
-                    {count}
-                  </Text>
-                </View>
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{meta.label}</Text>
+                {meta.count != null ? (
+                  <View style={[styles.tabCount, active && styles.tabCountActive]}>
+                    <Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>
+                      {meta.count}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             )
           })}
-        </View>
+        </ScrollView>
 
+        {tab === 'pipeline' ? (
+          <CrmPipelineView accessToken={accessToken} active={tab === 'pipeline'} />
+        ) : (
+          <>
         <View style={styles.searchWrap}>
           <View style={styles.searchField}>
             <FontAwesome5 name="search" size={14} color={erp.textSubtle} style={styles.searchIcon} />
@@ -265,6 +290,8 @@ export function CrmHomeScreen({ navigation }: Props) {
             )}
           />
         )}
+          </>
+        )}
       </ScreenBody>
 
       <Modal
@@ -307,6 +334,13 @@ export function CrmHomeScreen({ navigation }: Props) {
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: erp.bg },
+    tabRowScroll: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: erp.space.lg,
+      paddingTop: 10,
+      paddingBottom: 4
+    },
     tabRow: {
       flexDirection: 'row',
       gap: 8,
@@ -315,12 +349,11 @@ function createStyles({ erp }: { erp: ErpTheme }) {
       paddingBottom: 4
     },
     tabBtn: {
-      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       paddingVertical: 10,
-      paddingHorizontal: 4,
+      paddingHorizontal: 12,
       borderRadius: erp.radius.md,
       backgroundColor: erp.surface,
       borderWidth: 1,

@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState
 } from 'react'
+import { Alert } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   STEP_IDS,
@@ -24,6 +25,7 @@ import {
 import { useNetwork } from '../hooks/useNetwork'
 import { useAuth } from '../state/AuthContext'
 import { API_BASE_URL } from '../config'
+import { isAdmin } from '../utils/menuAccess'
 import { jobcardsApi } from './api'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { voiceClipToPayloadUrl } from './media/mediaUri'
@@ -95,8 +97,12 @@ type WizardContextValue = {
   handleSave: (opts?: { forceDraft?: boolean; forceSubmitted?: boolean }) => Promise<void>
   runSyncNow: () => Promise<{ synced: number; failed: number }>
   openJobCard: (row: PriorListRow) => Promise<void>
+  openJobCardById: (jobCardId: string) => Promise<void>
   syncOneCard: (row: PriorListRow) => Promise<void>
   refreshPriorList: () => Promise<void>
+  canDeleteJobCards: boolean
+  deletingJobCardId: string | null
+  deleteJobCard: (row: PriorListRow) => Promise<void>
   openingCardId: string | null
   photosLoading: boolean
   arrivalConfirmOpen: boolean
@@ -114,7 +120,13 @@ function activeTechnicianUsers(list: UserOption[]) {
   })
 }
 
-export function JobCardWizardProvider({ children }: { children: React.ReactNode }) {
+export function JobCardWizardProvider({
+  children,
+  initialJobCardId
+}: {
+  children: React.ReactNode
+  initialJobCardId?: string
+}) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
   const {
@@ -156,6 +168,7 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
   const [priorSearch, setPriorSearch] = useState('')
   const [priorClientId, setPriorClientId] = useState('')
   const [openingCardId, setOpeningCardId] = useState<string | null>(null)
+  const [deletingJobCardId, setDeletingJobCardId] = useState<string | null>(null)
   const [photosLoading, setPhotosLoading] = useState(false)
   const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false)
   const [departureConfirmOpen, setDepartureConfirmOpen] = useState(false)
@@ -364,6 +377,8 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       }),
     [formData, editingMeta, arrivalConfirmOpen, departureConfirmOpen]
   )
+
+  const canDeleteJobCards = isAdmin(user)
 
   const applyMediaAndStockFromCard = useCallback((card: JobCardFormData & { photos?: unknown }) => {
     const media = applyPhotosPayloadToWizardState(card.photos, API_BASE_URL)
@@ -603,6 +618,131 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
     [accessToken, applyMediaAndStockFromCard, hydratePhotosForCard]
   )
 
+  const openJobCardById = useCallback(
+    async (jobCardId: string) => {
+      const rowId = String(jobCardId)
+      if (!rowId) return
+
+      const localRows = await offlineStore.readLocalPendingJobCardsAsync()
+      const localMatch = localRows.find(
+        (row) =>
+          String(row.id) === rowId ||
+          String(row.clientDraftId || '') === rowId ||
+          String(row.serverJobCardId || '') === rowId
+      )
+      if (localMatch) {
+        await openJobCard(localMatch as PriorListRow)
+        return
+      }
+
+      const priorMatch = priorRows.find(
+        (row) => String(row.id) === rowId || String(row.serverJobCardId || '') === rowId
+      )
+      if (priorMatch) {
+        await openJobCard(priorMatch)
+        return
+      }
+
+      if (!accessToken) return
+      setOpeningCardId(rowId)
+      setPhotosLoading(false)
+      setSignatureLocked(false)
+      setSelectedPhotos([])
+      setSectionWorkMedia(emptySectionWorkMedia() as SectionWorkMedia)
+      setVoiceAttachments([])
+      try {
+        const res = await jobcardsApi.get(accessToken, rowId)
+        const jc = res.jobCard
+        const merged = { ...createEmptyFormData(), ...jc } as JobCardFormData
+        setEditingMeta({
+          localId: String(jc.id),
+          serverJobCardId: String(jc.id),
+          startedAt: jc.startedAt || jc.createdAt || new Date().toISOString(),
+          createdAt: jc.createdAt || new Date().toISOString(),
+          synced: true,
+          jobCardNumber: jc.jobCardNumber || '',
+          useNewJobTimeFlow: false
+        })
+        setFormData(merged)
+        applyMediaAndStockFromCard(merged)
+        setWizardFlow('form')
+        setCurrentStep(0)
+        void hydratePhotosForCard(String(jc.id), rowId)
+      } catch (e) {
+        setStepError(e instanceof Error ? e.message : 'Could not open job card')
+        setWizardFlow('landing')
+      } finally {
+        setOpeningCardId(null)
+      }
+    },
+    [accessToken, priorRows, openJobCard, applyMediaAndStockFromCard, hydratePhotosForCard]
+  )
+
+  const deleteJobCard = useCallback(
+    async (row: PriorListRow) => {
+      if (!canDeleteJobCards || !row?.id) return
+      if (deletingJobCardId) return
+
+      const label = row.jobCardNumber || row.heading || 'this job card'
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Delete job card',
+          `Delete ${label}? This action cannot be undone.`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) }
+        )
+      })
+      if (!confirmed) return
+
+      const rowId = String(row.id)
+      const isLocal = row.source === 'local' || row.synced === false
+
+      try {
+        setDeletingJobCardId(rowId)
+        if (isLocal) {
+          await offlineStore.removeLocalPendingJobCardAsync(rowId)
+          void refreshUnsyncedCount()
+        } else {
+          if (!accessToken) return
+          await jobcardsApi.delete(accessToken, rowId)
+        }
+
+        if (editingMeta?.localId === rowId || editingMeta?.serverJobCardId === rowId) {
+          setEditingMeta(null)
+          setFormData(createEmptyFormData())
+          setWizardFlow(wizardFlow === 'form' ? 'prior_list' : wizardFlow)
+        }
+
+        await refreshPriorList()
+      } catch (e) {
+        Alert.alert('Delete failed', e instanceof Error ? e.message : 'Could not delete job card')
+      } finally {
+        setDeletingJobCardId(null)
+      }
+    },
+    [
+      canDeleteJobCards,
+      deletingJobCardId,
+      accessToken,
+      editingMeta,
+      wizardFlow,
+      refreshPriorList,
+      refreshUnsyncedCount
+    ]
+  )
+
+  const initialOpenRef = useRef<string | null>(null)
+  useEffect(() => {
+    const targetId = initialJobCardId ? String(initialJobCardId) : ''
+    if (!targetId || loading || !accessToken) return
+    if (initialOpenRef.current === targetId) return
+    initialOpenRef.current = targetId
+    void openJobCardById(targetId)
+  }, [initialJobCardId, loading, accessToken, openJobCardById])
+
   const syncOneCard = useCallback(
     async (row: PriorListRow) => {
       if (!accessToken || !isOnline) return
@@ -663,8 +803,12 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       handleSave,
       runSyncNow,
       openJobCard,
+      openJobCardById,
       syncOneCard,
       refreshPriorList,
+      canDeleteJobCards,
+      deletingJobCardId,
+      deleteJobCard,
       openingCardId,
       photosLoading,
       arrivalConfirmOpen,
@@ -710,8 +854,12 @@ export function JobCardWizardProvider({ children }: { children: React.ReactNode 
       handleSave,
       runSyncNow,
       openJobCard,
+      openJobCardById,
       syncOneCard,
       refreshPriorList,
+      canDeleteJobCards,
+      deletingJobCardId,
+      deleteJobCard,
       openingCardId,
       photosLoading,
       arrivalConfirmOpen,

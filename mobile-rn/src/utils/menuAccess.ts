@@ -10,7 +10,7 @@ const ADMIN_ROLES = new Set([
   'system_admin'
 ])
 
-function isAdmin(user: User | null | undefined) {
+export function isAdmin(user: User | null | undefined) {
   const role = String(user?.role || '').toLowerCase().replace(/[\s_-]/g, '')
   return ADMIN_ROLES.has(role) || role.includes('admin')
 }

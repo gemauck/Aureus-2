@@ -114,5 +114,26 @@ export const crmApi = {
       token,
       body
     }).then((d) => d.opportunity)
+  },
+
+  listOpportunities(token: string) {
+    return request<{ opportunities: CrmOpportunity[] }>('/api/opportunities', { token }).then(
+      (d) => d.opportunities || []
+    )
+  },
+
+  patchOpportunity(token: string, id: string, body: Record<string, unknown>) {
+    return request<{ opportunity: CrmOpportunity }>(`/api/opportunities/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      token,
+      body
+    }).then((d) => d.opportunity)
+  },
+
+  patchSite(token: string, clientId: string, siteId: string, body: Record<string, unknown>) {
+    return request<{ site: unknown }>(
+      `/api/sites/client/${encodeURIComponent(clientId)}/${encodeURIComponent(siteId)}`,
+      { method: 'PATCH', token, body }
+    ).then((d) => d.site)
   }
 }
