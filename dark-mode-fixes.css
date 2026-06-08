@@ -681,8 +681,21 @@ html:not(.dark) #clients-leads-heading.dark\\:text-gray-100 {
 
 /* Ensure input fields are readable in light mode - only override if no inline style */
 html:not(.dark) input[type="text"]:not([style*="color"]):not([style*="background"]),
-html:not(.dark) input[type="search"]:not([style*="color"]):not([style*="background"]) {
+html:not(.dark) input[type="search"]:not([style*="color"]):not([style*="background"]):not(.messenger-conversation-search) {
     color: #111827 !important;
+}
+
+/* Messages panel search sits on blue header — keep light text in light mode */
+input.messenger-conversation-search {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+    background-color: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    min-height: unset !important;
+    padding: 0 !important;
+    width: auto !important;
 }
 
 /* Ensure select dropdowns are readable in light mode - only if not styled inline */

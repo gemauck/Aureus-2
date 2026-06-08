@@ -937,7 +937,7 @@ const Messenger = () => {
             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/60' : 'bg-white/15'}`}>
               <i className="fas fa-search text-white/70 text-sm" />
               <input type="search" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent border-0 outline-none text-sm text-white placeholder-white/60" />
+                className="messenger-conversation-search flex-1 bg-transparent border-0 outline-none text-sm text-white placeholder-white/60 caret-white" />
             </div>
             <div className={`mt-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/50 text-blue-100' : 'bg-white/15 text-white'}`}>
               <span className="text-xs flex items-center gap-1.5">
