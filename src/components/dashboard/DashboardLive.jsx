@@ -1026,8 +1026,6 @@ const ClientActivityMetricsWidget = ({ cardBase, headerText, subText, isDark, cl
     );
 };
 
-/** Below this *widget width*, show compact row cards instead of the wide table (not `window.innerWidth`, so narrow dashboard tiles still lay out correctly). */
-const DASHBOARD_PROGRESS_NARROW_MAX_PX = 768;
 const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 6;
 const DASHBOARD_PROGRESS_HYDRATE_DELAY_MS = 2500;
 
@@ -1083,24 +1081,6 @@ function projectNeedsSectionHydration(project, monthName, year) {
 /** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
 const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects, projectsNetworkSynced = true }) => {
     const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
-    const progressWidgetRef = React.useRef(null);
-    const [isNarrow, setIsNarrow] = React.useState(true);
-    React.useLayoutEffect(() => {
-        const el = progressWidgetRef.current;
-        if (!el) return;
-        const measure = () => {
-            const w = el.getBoundingClientRect().width;
-            setIsNarrow(w < DASHBOARD_PROGRESS_NARROW_MAX_PX);
-        };
-        measure();
-        if (typeof ResizeObserver !== 'undefined') {
-            const ro = new ResizeObserver(measure);
-            ro.observe(el);
-            return () => ro.disconnect();
-        }
-        window.addEventListener('resize', measure);
-        return () => window.removeEventListener('resize', measure);
-    }, []);
     const monthPickerCandidates = React.useMemo(() => {
         if (!m) return [];
         const raw =
@@ -1371,7 +1351,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     return (
         <div
-            ref={progressWidgetRef}
             className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col min-h-0 min-w-0 self-start w-full max-w-full`}
         >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 mb-3 min-w-0 text-left">
@@ -1455,136 +1434,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                             <span>Updating document / compliance / data section detail…</span>
                         </p>
                     ) : null}
-                    {isNarrow ? (
-                <div className={`min-h-0 max-h-80 overflow-y-auto space-y-1.5 border-t ${borderSep} pt-3 -mx-0.5 px-0.5`}>
-                    {rows.map((row) => {
-                        const { docL, compL, dataL, cmtL } = renderRowLinks(row);
-                        const hasComment = row.comments && String(row.comments).trim();
-                        return (
-                            <div
-                                key={String(row.id)}
-                                className={`rounded-lg border ${borderSep} px-2 py-1.5 ${isDark ? 'bg-gray-800/40' : 'bg-gray-50/80'}`}
-                            >
-                                <div
-                                    className="dash-lwm-progress-metrics w-full min-w-0 text-left"
-                                    style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                                        columnGap: '6px',
-                                        rowGap: '4px'
-                                    }}
-                                >
-                                    <div
-                                        className={`min-w-0 text-left pb-2 border-b ${borderSep}`}
-                                        style={{ gridColumn: '1 / -1' }}
-                                    >
-                                        <a
-                                            href={docL}
-                                            className={`font-medium text-xs leading-snug ${headerText} hover:text-primary-600 line-clamp-2 block break-words`}
-                                            title="Open document collection"
-                                        >
-                                            {row.name}
-                                        </a>
-                                        {row.client ? (
-                                            <div className={`text-[10px] ${subText} mt-1.5 break-words`} title={row.client}>
-                                                {row.client}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                    <div
-                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
-                                        style={{ color: '#2563eb' }}
-                                    >
-                                        Doc
-                                    </div>
-                                    <div
-                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
-                                        style={{ color: '#7c3aed' }}
-                                    >
-                                        Comp
-                                    </div>
-                                    <div
-                                        className="min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center"
-                                        style={{ color: '#059669' }}
-                                    >
-                                        Data
-                                    </div>
-                                    <div className={`min-w-0 text-[9px] font-bold uppercase tracking-tight leading-none truncate text-center ${tableHead}`}>
-                                        Cmt
-                                    </div>
-                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
-                                        <a
-                                            href={docL}
-                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
-                                            title={
-                                                row.doc.total > 0
-                                                    ? `Document collection: ${fmtRatio(row.doc.completed, row.doc.total)}`
-                                                    : 'Open document collection'
-                                            }
-                                        >
-                                            {fmtPct(row.doc.percent)}
-                                        </a>
-                                    </div>
-                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
-                                        <a
-                                            href={compL}
-                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
-                                            title={
-                                                row.compliance.total > 0
-                                                    ? `Compliance: ${fmtRatio(row.compliance.completed, row.compliance.total)}`
-                                                    : 'Open compliance review'
-                                            }
-                                        >
-                                            {fmtPct(row.compliance.percent)}
-                                        </a>
-                                    </div>
-                                    <div className="min-w-0 pt-0.5 pb-0.5 text-center">
-                                        <a
-                                            href={dataL}
-                                            className={`block min-w-0 text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`}
-                                            title={
-                                                row.data.total > 0
-                                                    ? `Monthly data: ${fmtRatio(row.data.completed, row.data.total)}`
-                                                    : 'Open monthly data review'
-                                            }
-                                        >
-                                            {fmtPct(row.data.percent)}
-                                        </a>
-                                    </div>
-                                    <div className="min-w-0 pt-0.5 pb-0.5">
-                                        <a
-                                            href={cmtL}
-                                            className={
-                                                hasComment
-                                                    ? `block min-w-0 text-left text-[9px] font-normal leading-snug ${subText} hover:text-primary-600 dark:hover:text-primary-300`
-                                                    : `block min-w-0 text-center text-[11px] font-semibold leading-none tabular-nums ${headerText} hover:text-primary-600`
-                                            }
-                                            title={
-                                                hasComment
-                                                    ? String(row.comments).trim().slice(0, 500)
-                                                    : 'Open progress tracker (comments)'
-                                            }
-                                            aria-label={
-                                                hasComment
-                                                    ? 'Open progress tracker — view or edit comment'
-                                                    : 'Open progress tracker — no comment'
-                                            }
-                                        >
-                                            {hasComment ? (
-                                                <span className="line-clamp-4 break-words whitespace-pre-wrap">
-                                                    {String(row.comments).trim()}
-                                                </span>
-                                            ) : (
-                                                <span className="text-center font-semibold tabular-nums text-gray-400 dark:text-gray-500">—</span>
-                                            )}
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : (
                 <div className={`overflow-x-auto min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
                     <table data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
                         <colgroup>
@@ -1682,7 +1531,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                         </tbody>
                     </table>
                 </div>
-                    )}
                 </>
             )}
         </div>
