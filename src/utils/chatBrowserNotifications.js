@@ -8,19 +8,16 @@ export function isBrowserNotificationSupported() {
 
 export function getChatBrowserNotificationsEnabled() {
     try {
-        return localStorage.getItem(STORAGE_KEY) === '1';
+        const v = localStorage.getItem(STORAGE_KEY);
+        return v !== '0';
     } catch (_) {
-        return false;
+        return true;
     }
 }
 
 export function setChatBrowserNotificationsEnabled(enabled) {
     try {
-        if (enabled) {
-            localStorage.setItem(STORAGE_KEY, '1');
-        } else {
-            localStorage.removeItem(STORAGE_KEY);
-        }
+        localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0');
     } catch (_) { /* private mode */ }
 }
 
@@ -77,12 +74,27 @@ export function showChatBrowserNotification({ title, body, conversationId, tag }
     }
 }
 
+/** After login, request OS permission on first click/key if preference is on (browser policy). */
+export async function ensureBrowserNotificationPermission() {
+    if (!getChatBrowserNotificationsEnabled()) return Notification?.permission || 'default';
+    return requestChatBrowserNotificationPermission();
+}
+
 if (typeof window !== 'undefined') {
+    const primePermission = () => {
+        if (!getChatBrowserNotificationsEnabled()) return;
+        if (Notification.permission !== 'default') return;
+        void requestChatBrowserNotificationPermission();
+    };
+    window.addEventListener('pointerdown', primePermission, { once: true, passive: true });
+    window.addEventListener('keydown', primePermission, { once: true });
+
     window.chatBrowserNotifications = {
         isSupported: isBrowserNotificationSupported,
         getEnabled: getChatBrowserNotificationsEnabled,
         setEnabled: setChatBrowserNotificationsEnabled,
         requestPermission: requestChatBrowserNotificationPermission,
+        ensurePermission: ensureBrowserNotificationPermission,
         show: showChatBrowserNotification
     };
 }

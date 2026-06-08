@@ -51,13 +51,16 @@ export function unlockNotificationSounds() {
     } catch (_) { /* ignore */ }
 }
 
+const SOUND_VOLUME = 1.55;
+
 function playTone(ctx, freq, start, duration, peak = 0.22) {
+    const level = Math.min(0.85, peak * SOUND_VOLUME);
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.linearRampToValueAtTime(peak, start + 0.02);
+    gain.gain.linearRampToValueAtTime(level, start + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     osc.connect(gain);
     gain.connect(ctx.destination);

@@ -273,7 +273,9 @@ const Messenger = () => {
   const [emailMessages, setEmailMessages] = useState(false);
   const [emailPrefLoading, setEmailPrefLoading] = useState(true);
   const [emailPrefSaving, setEmailPrefSaving] = useState(false);
-  const [browserMessages, setBrowserMessages] = useState(false);
+  const [browserMessages, setBrowserMessages] = useState(
+    () => window.chatBrowserNotifications?.getEnabled?.() !== false
+  );
   const [browserPrefSaving, setBrowserPrefSaving] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [reactionPickerId, setReactionPickerId] = useState(null);
@@ -387,7 +389,7 @@ const Messenger = () => {
       .catch(() => { if (!cancelled) setEmailMessages(false); })
       .finally(() => { if (!cancelled) setEmailPrefLoading(false); });
     if (!cancelled) {
-      setBrowserMessages(!!window.chatBrowserNotifications?.getEnabled?.());
+      setBrowserMessages(window.chatBrowserNotifications?.getEnabled?.() !== false);
     }
     return () => { cancelled = true; };
   }, []);
