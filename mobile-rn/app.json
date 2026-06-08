@@ -12,6 +12,7 @@
     ],
     "android": {
       "package": "com.abcotronics.erp.mobile",
+      "minSdkVersion": 24,
       "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

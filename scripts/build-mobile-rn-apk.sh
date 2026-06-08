@@ -33,6 +33,12 @@ echo "OTA manifest: ${EXPO_PUBLIC_API_BASE_URL}/api/public/mobile-ota/manifest"
 cd "$RN"
 npx expo prebuild --platform android --no-install
 
+# react-native-webrtc requires Android API 24+
+GRADLE_PROPS="$RN/android/gradle.properties"
+if ! grep -q '^android.minSdkVersion=24' "$GRADLE_PROPS" 2>/dev/null; then
+  echo 'android.minSdkVersion=24' >> "$GRADLE_PROPS"
+fi
+
 COLORS="$RN/android/app/src/main/res/values/colors.xml"
 if ! grep -q splashscreen_background "$COLORS" 2>/dev/null; then
   sed -i '' 's|</resources>|  <color name="splashscreen_background">#1d4ed8</color>\n</resources>|' "$COLORS" 2>/dev/null \
