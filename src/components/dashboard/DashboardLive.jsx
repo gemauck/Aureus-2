@@ -2505,6 +2505,8 @@ const DashboardLive = () => {
     const [dragOverWidget, setDragOverWidget] = useState(null);
     const [isResizing, setIsResizing] = useState(null); // widgetId being resized
     const [resizeStart, setResizeStart] = useState(null); // { x, y, w, h }
+    const latestLayoutsRef = React.useRef({ mobile: {}, desktop: {} });
+    latestLayoutsRef.current = widgetLayoutsByBreakpoint;
     const [editMode, setEditMode] = useState(false);
     const [gridColumnCount, setGridColumnCount] = useState(() =>
         typeof window !== 'undefined' ? syncDashboardGridColumnCount() : 3
@@ -3198,22 +3200,22 @@ const DashboardLive = () => {
     };
 
     useEffect(() => {
-        if (!isResizing) return;
+        if (!isResizing || !resizeStart) return;
 
+        const { widgetId, direction } = isResizing;
+        const start = resizeStart;
         let rafId = null;
         let lastEvent = null;
 
         const handleMouseMove = (e) => {
-            if (!isResizing || !resizeStart) return;
             lastEvent = e;
             if (rafId !== null) return;
             rafId = requestAnimationFrame(() => {
                 rafId = null;
                 const ev = lastEvent;
-                if (!ev || !resizeStart) return;
-                const deltaX = ev.clientX - resizeStart.x;
-                const deltaY = ev.clientY - resizeStart.y;
-                // Read layout once per frame to avoid forced reflow violations
+                if (!ev) return;
+                const deltaX = ev.clientX - start.x;
+                const deltaY = ev.clientY - start.y;
                 const gridContainer = document.querySelector('.dashboard-live-widget-grid');
                 let cellWidth = 300;
                 let cellHeight = 200;
@@ -3222,30 +3224,35 @@ const DashboardLive = () => {
                     const cols = syncDashboardGridColumnCount();
                     const gap = 20; /* gap-5 */
                     cellWidth = cols > 0 ? (containerWidth - gap * (cols - 1)) / cols : containerWidth;
-                    const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');
-                    if (firstWidget) cellHeight = firstWidget.offsetHeight || 200;
+                    cellHeight = 200;
                 }
                 const deltaW = Math.round(deltaX / cellWidth);
                 const deltaH = Math.round(deltaY / cellHeight);
                 const bucket = layoutBucketRef.current;
-                setWidgetLayoutsByBreakpoint(prev => {
+                const cols = syncDashboardGridColumnCount();
+                setWidgetLayoutsByBreakpoint((prev) => {
                     const cur = { ...(prev[bucket] || {}) };
-                    const idx = selectedWidgets.indexOf(isResizing.widgetId);
+                    const idx = selectedWidgets.indexOf(widgetId);
                     const layout =
-                        cur[isResizing.widgetId] ||
-                        defaultLayoutForWidget(isResizing.widgetId, idx === -1 ? 0 : idx, bucket);
-                    let newW = resizeStart.w;
-                    let newH = resizeStart.h;
-                    const cols = syncDashboardGridColumnCount();
-                    if (cols > 1 && isResizing.direction.includes('e')) {
-                        newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
+                        cur[widgetId] ||
+                        defaultLayoutForWidget(widgetId, idx === -1 ? 0 : idx, bucket);
+                    let newW = start.w;
+                    let newH = start.h;
+                    if (cols > 1) {
+                        if (direction.includes('e')) {
+                            newW = Math.max(1, Math.min(3, start.w + deltaW));
+                        } else if (direction.includes('w')) {
+                            newW = Math.max(1, Math.min(3, start.w - deltaW));
+                        }
                     } else {
                         newW = 1;
                     }
-                    if (isResizing.direction.includes('s')) newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
+                    if (direction.includes('s')) {
+                        newH = Math.max(1, Math.min(3, start.h + deltaH));
+                    }
                     const newBucket = {
                         ...cur,
-                        [isResizing.widgetId]: {
+                        [widgetId]: {
                             ...layout,
                             w: newW,
                             h: newH,
@@ -3253,7 +3260,7 @@ const DashboardLive = () => {
                         }
                     };
                     const next = { ...prev, [bucket]: newBucket };
-                    persistWidgetLayouts(next);
+                    latestLayoutsRef.current = next;
                     return next;
                 });
             });
@@ -3263,14 +3270,18 @@ const DashboardLive = () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             rafId = null;
             lastEvent = null;
+            persistWidgetLayouts(latestLayoutsRef.current);
             setIsResizing(null);
             setResizeStart(null);
         };
 
+        const cursor =
+            direction === 'w' ? 'ew-resize' : direction === 's' ? 'ns-resize' : 'se-resize';
+
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
         document.body.style.userSelect = 'none';
-        document.body.style.cursor = 'se-resize';
+        document.body.style.cursor = cursor;
 
         return () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
@@ -3279,7 +3290,7 @@ const DashboardLive = () => {
             document.body.style.userSelect = '';
             document.body.style.cursor = '';
         };
-    }, [isResizing, resizeStart, selectedWidgets, widgetLayoutsByBreakpoint]);
+    }, [isResizing, resizeStart, selectedWidgets]);
 
     // Live data sync integration
     useEffect(() => {
@@ -3548,7 +3559,7 @@ const DashboardLive = () => {
                                     </strong>{' '}
                                     widget layout (saved separately from the other breakpoint). Drag tiles to reorder
                                     {gridColumnCount >= 2
-                                        ? '; drag the corner to resize width and height.'
+                                        ? '; drag the corner or left edge to resize width, or the corner to change height.'
                                         : '; drag the corner to change tile height.'}
                                 </span>
                             </span>
@@ -3560,7 +3571,8 @@ const DashboardLive = () => {
             <div 
                 className="dashboard-live-widget-grid grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"
                 style={{
-                    gridAutoRows: 'minmax(200px, auto)'
+                    /* Fixed row height so grid-row span controls tile height (content scrolls inside). */
+                    gridAutoRows: '200px'
                 }}
             >
                 {selectedWidgets
@@ -3591,7 +3603,7 @@ const DashboardLive = () => {
                                 onDragOver={(e) => handleDragOver(e, id)}
                                 onDrop={(e) => handleDrop(e, id)}
                                 onDragLeave={handleDragLeave}
-                                className={`relative transition-all ${editMode ? 'cursor-move' : ''} ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                                className={`relative min-w-0 min-h-0 overflow-hidden ${isResizing?.widgetId === id ? '' : 'transition-all'} ${editMode ? 'cursor-move' : ''} ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
                                 style={{
                                     gridColumn: `span ${spanW}`,
                                     gridRow: `span ${spanH}`
@@ -3610,6 +3622,19 @@ const DashboardLive = () => {
                                             </button>
                                         </div>
 
+                                        {/* Left edge — shrink/grow width (wide layouts only) */}
+                                        {gridColumnCount >= 2 ? (
+                                            <div
+                                                className="absolute left-0 top-8 bottom-8 w-2 bg-blue-600/80 hover:bg-blue-700 z-20 rounded-r cursor-ew-resize"
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleResizeStart(e, id, 'w');
+                                                }}
+                                                title="Drag to change tile width"
+                                            />
+                                        ) : null}
+
                                         {/* Resize handles - larger and more visible */}
                                         <div
                                             className={`absolute right-0 bottom-0 w-8 h-8 bg-blue-600 hover:bg-blue-700 z-20 rounded-tl-lg flex items-center justify-center shadow-lg ${
@@ -3618,11 +3643,11 @@ const DashboardLive = () => {
                                             onMouseDown={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                handleResizeStart(e, id, 'se');
+                                                handleResizeStart(e, id, gridColumnCount >= 2 ? 'se' : 's');
                                             }}
                                             title={
                                                 gridColumnCount >= 2
-                                                    ? 'Drag to resize widget (bottom-right corner)'
+                                                    ? 'Drag to resize width and height'
                                                     : 'Drag vertically to change tile height'
                                             }
                                         >
