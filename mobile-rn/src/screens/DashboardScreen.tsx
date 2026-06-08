@@ -379,8 +379,7 @@ export function DashboardScreen({ navigation }: Props) {
       <AppHeader
         title="Dashboard"
         subtitle="Here's what's happening today"
-        notificationBadgeCount={notificationUnread}
-        onNotificationsPress={() => navigation.navigate('Notifications')}
+        navigation={navigation}
         onSettingsPress={() => navigation.navigate('Settings')}
       />
       <ScreenBody padded={false}>

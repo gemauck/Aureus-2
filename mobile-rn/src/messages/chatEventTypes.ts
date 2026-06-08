@@ -12,6 +12,8 @@ export type ChatEventPayload = {
   conversationId?: string
   messageId?: string
   senderId?: string
+  senderName?: string
+  preview?: string
   userId?: string
   name?: string
   message?: ChatMessage

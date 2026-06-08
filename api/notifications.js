@@ -234,6 +234,19 @@ export async function createNotificationForUser(targetUserId, type, title, messa
             data: pushData,
             channelId: isChatMessage ? 'chat' : 'erp'
         }).catch((err) => console.warn('Notification push failed:', err?.message));
+    } else if (isChatMessage) {
+        const pushData = {
+            type,
+            link: validLink || '/dashboard'
+        };
+        if (metadataObj.conversationId) pushData.conversationId = String(metadataObj.conversationId);
+        if (metadataObj.messageId) pushData.messageId = String(metadataObj.messageId);
+        void sendPushToUsers([id], {
+            title,
+            body: String(message || '').slice(0, 200),
+            data: pushData,
+            channelId: 'chat'
+        }).catch((err) => console.warn('Chat push failed:', err?.message));
     }
 
     const shouldSendEmail = isChatMessage ? settings.emailMessages : (type === 'mention' && settings.emailMentions) || (type === 'comment' && settings.emailComments) ||

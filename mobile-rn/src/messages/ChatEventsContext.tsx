@@ -10,8 +10,11 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { erpApi } from '../services/erpApi'
+import { getChatPushEnabled } from '../services/chatPushPrefs'
+import { showLocalChatNotification } from '../services/pushNotifications'
 import { useAuth } from '../state/AuthContext'
 import { ChatEventStream } from './chatEventStream'
+import { getActiveChatConversation } from './chatFocusState'
 import type { ChatEventListener, ChatEventPayload, ChatEventType } from './chatEventTypes'
 
 export const CHAT_POLL_FALLBACK_MS = 60_000
@@ -26,7 +29,8 @@ type ChatEventsContextValue = {
 const ChatEventsContext = createContext<ChatEventsContextValue | undefined>(undefined)
 
 export function ChatEventsProvider({ children }: { children: React.ReactNode }) {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
+  const currentUserId = user?.id || ''
   const { isOnline } = useNetwork()
   const [connected, setConnected] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
@@ -64,6 +68,24 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
     return () => listenersRef.current.delete(listener)
   }, [])
 
+  const maybeNotifyIncomingMessage = useCallback(async (data: ChatEventPayload) => {
+    if (!data.conversationId) return
+    if (data.senderId && data.senderId === currentUserId) return
+    if (data.conversationId === getActiveChatConversation()) return
+
+    const enabled = await getChatPushEnabled()
+    if (!enabled) return
+
+    const title = data.senderName || 'New message'
+    const body = data.preview || 'Sent you a message'
+    void showLocalChatNotification({
+      title,
+      body,
+      conversationId: data.conversationId,
+      messageId: data.messageId
+    })
+  }, [currentUserId])
+
   const handleEvent = useCallback(
     (event: ChatEventType, data: ChatEventPayload) => {
       emit(event, data)
@@ -75,8 +97,11 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
       ) {
         void refreshChatUnread()
       }
+      if (event === 'message') {
+        void maybeNotifyIncomingMessage(data)
+      }
     },
-    [emit, refreshChatUnread]
+    [emit, maybeNotifyIncomingMessage, refreshChatUnread]
   )
 
   useEffect(() => {

@@ -19,6 +19,8 @@ import { useAuth } from '../../state/AuthContext'
 import { chatApi, type ChatConversation, type ChatUser } from '../api'
 import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
 import type { MessagesStackParamList } from '../navigation'
+import { getChatPushEnabled, setChatPushEnabled } from '../../services/chatPushPrefs'
+import { registerPushToken } from '../../services/pushNotifications'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -59,6 +61,9 @@ export function MessagesHomeScreen({ navigation }: Props) {
   const [emailMessages, setEmailMessages] = useState(false)
   const [emailPrefLoading, setEmailPrefLoading] = useState(true)
   const [emailPrefSaving, setEmailPrefSaving] = useState(false)
+  const [pushMessages, setPushMessages] = useState(true)
+  const [pushPrefLoading, setPushPrefLoading] = useState(true)
+  const [pushPrefSaving, setPushPrefSaving] = useState(false)
 
   const load = useCallback(
     async (silent = false) => {
@@ -100,9 +105,35 @@ export function MessagesHomeScreen({ navigation }: Props) {
       } finally {
         if (!cancelled) setEmailPrefLoading(false)
       }
+      if (!cancelled) {
+        setPushMessages(await getChatPushEnabled())
+        setPushPrefLoading(false)
+      }
     })()
     return () => { cancelled = true }
   }, [accessToken])
+
+  const togglePushMessages = async () => {
+    if (pushPrefSaving) return
+    const next = !pushMessages
+    setPushPrefSaving(true)
+    try {
+      if (next && accessToken) {
+        const token = await registerPushToken(accessToken)
+        if (!token) {
+          Alert.alert(
+            'Push notifications',
+            'Allow notifications for Abcotronics ERP in your device settings, then try again.'
+          )
+          return
+        }
+      }
+      await setChatPushEnabled(next)
+      setPushMessages(next)
+    } finally {
+      setPushPrefSaving(false)
+    }
+  }
 
   const toggleEmailMessages = async () => {
     if (!accessToken || emailPrefSaving) return
@@ -158,7 +189,8 @@ export function MessagesHomeScreen({ navigation }: Props) {
       <AppHeader
         title="Messages"
         subtitle="Team chat & direct messages"
-        onNotificationsPress={() => navigation.getParent()?.navigate('Notifications' as never)}
+        navigation={{ navigate: (name) => navigation.getParent()?.navigate(name as never) }}
+        showMessages={false}
       />
       <ScreenBody>
         <View style={styles.toolbar}>
@@ -182,6 +214,17 @@ export function MessagesHomeScreen({ navigation }: Props) {
           <Text style={styles.emailPrefLabel}>Email notifications</Text>
           <View style={[styles.emailPrefSwitch, emailMessages && styles.emailPrefSwitchOn]}>
             <View style={[styles.emailPrefKnob, emailMessages && styles.emailPrefKnobOn]} />
+          </View>
+        </Pressable>
+
+        <Pressable
+          style={styles.emailPrefRow}
+          onPress={() => void togglePushMessages()}
+          disabled={pushPrefLoading || pushPrefSaving}
+        >
+          <Text style={styles.emailPrefLabel}>Push notifications</Text>
+          <View style={[styles.emailPrefSwitch, pushMessages && styles.emailPrefSwitchOn]}>
+            <View style={[styles.emailPrefKnob, pushMessages && styles.emailPrefKnobOn]} />
           </View>
         </Pressable>
 

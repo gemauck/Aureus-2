@@ -14,11 +14,13 @@ import {
 } from 'react-native'
 import { Audio } from 'expo-av'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useFocusEffect } from '@react-navigation/native'
 import { apiUrl } from '../../config'
 import { useAuth } from '../../state/AuthContext'
 
 import { chatApi, type ChatAttachment, type ChatMessage, type MessageReadReceipts } from '../api'
 import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
+import { setActiveChatConversation } from '../chatFocusState'
 import type { ChatEventPayload, ChatEventType } from '../chatEventTypes'
 import type { MessagesStackParamList } from '../navigation'
 import { useThemedStyles } from '../../theme/useThemedStyles'
@@ -163,6 +165,13 @@ export function ChatScreen({ route }: Props) {
   const lastTypingRef = useRef(0)
   const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<FlatList>(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      setActiveChatConversation(conversationId)
+      return () => setActiveChatConversation(null)
+    }, [conversationId])
+  )
 
   const load = useCallback(
     async (silent = false) => {

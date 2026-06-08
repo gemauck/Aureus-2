@@ -34,7 +34,10 @@ module.exports = {
       otaChannel: 'production',
       otaServer: 'self-hosted',
       apiBaseUrl: OTA_BASE.replace(/\/$/, ''),
-      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || ''
+      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
+      eas: {
+        projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID || process.env.EAS_PROJECT_ID || ''
+      }
     }
   }
 }

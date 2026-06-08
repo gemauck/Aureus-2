@@ -20,7 +20,8 @@
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
