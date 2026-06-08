@@ -2025,7 +2025,7 @@ const MainLayout = () => {
                 >
                     {(() => {
                         const themeMenuPanel = showThemeMenu ? (
-                            <div className={`absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
+                            <div className={`erp-theme-menu-panel absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'} border rounded-2xl shadow-xl shadow-gray-900/10 ring-1 ring-black/5 z-50`}>
                                 <div className="p-2">
                                     {isMobile && (
                                         <>
@@ -2044,7 +2044,7 @@ const MainLayout = () => {
                                                     }
                                                     setShowThemeMenu(false);
                                                 }}
-                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
+                                                className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
                                             >
                                                 <i className={`fas fa-${preferDesktopSite ? 'mobile-alt' : 'desktop'} mt-0.5`}></i>
                                                 <span className="leading-snug">
@@ -2064,7 +2064,7 @@ const MainLayout = () => {
                                             toggleTheme();
                                             setShowThemeMenu(false);
                                         }}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
+                                        className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
                                     >
                                         <i className={`fas fa-${isDark ? 'sun' : 'moon'}`}></i>
                                         <span>Switch to {isDark ? 'Light' : 'Dark'}</span>
@@ -2074,7 +2074,7 @@ const MainLayout = () => {
                                             toggleSystemPreference();
                                             setShowThemeMenu(false);
                                         }}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
+                                        className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3 transition-colors`}
                                     >
                                         <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'}`}></i>
                                         <span>{isFollowingSystem ? 'Following' : 'Follow'} System</span>
@@ -2088,7 +2088,7 @@ const MainLayout = () => {
                                                     setShowThemeMenu(false);
                                                     logout();
                                                 }}
-                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-red-300' : 'hover:bg-red-50 text-red-700'} flex items-center space-x-3 transition-colors`}
+                                                className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-red-300' : 'hover:bg-red-50 text-red-700'} flex items-center space-x-3 transition-colors`}
                                             >
                                                 <i className="fas fa-sign-out-alt" />
                                                 <span>Log out</span>

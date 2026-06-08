@@ -1207,7 +1207,7 @@
   }
   
   .header-mobile button,
-  .header-mobile .theme-selector button {
+  .header-mobile .theme-selector > button {
     flex-shrink: 0 !important;
     position: relative !important;
   }

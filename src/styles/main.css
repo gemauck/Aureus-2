@@ -937,7 +937,7 @@ header.erp-app-header .erp-app-header-search {
     line-height: 1.25rem !important;
 }
 
-header.erp-app-header button,
+header.erp-app-header button:not(.erp-theme-menu-item),
 header.erp-app-header .notification-button,
 header.erp-app-header .message-button {
     min-width: 2rem !important;
@@ -947,6 +947,13 @@ header.erp-app-header .message-button {
     padding: 0.375rem !important;
 }
 
+header.erp-app-header .erp-theme-menu-item {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+}
+
 /* Slightly larger bell; badge size unchanged (see mobile-optimizations.css) */
 header.erp-app-header .notification-bell-icon {
     font-size: 1.125rem !important;
@@ -954,8 +961,8 @@ header.erp-app-header .notification-bell-icon {
 }
 
 @media (max-width: 1023px) {
-    header.erp-app-header button,
-    header.erp-app-header [role="button"],
+    header.erp-app-header button:not(.erp-theme-menu-item),
+    header.erp-app-header [role="button"]:not(.erp-theme-menu-item),
     header.erp-app-header .notification-button {
         min-width: 2rem !important;
         min-height: 2rem !important;
