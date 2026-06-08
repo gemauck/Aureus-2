@@ -48,10 +48,12 @@ async function ensureAndroidChannels() {
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false
   })
+  await Notifications.deleteNotificationChannelAsync('erp').catch(() => {})
   await Notifications.setNotificationChannelAsync('erp', {
     name: 'ERP updates',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 200, 100, 200],
+    enableVibrate: true,
     sound: 'notification.wav',
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC
   })

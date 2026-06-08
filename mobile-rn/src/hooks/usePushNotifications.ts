@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import { useAuth } from '../state/AuthContext'
+import { playNotificationVibration } from '../services/notificationSounds'
 import {
   addNotificationReceivedListener,
   addNotificationResponseListener,
@@ -61,6 +62,7 @@ export function usePushNotifications(onOpenNotification?: (data: PushNotificatio
 
     const removeReceived = addNotificationReceivedListener((data) => {
       const isChat = data.type === 'message' || !!data.conversationId
+      void playNotificationVibration(isChat ? 'message' : 'notification').catch(() => {})
       if (isChat) {
         void refreshChatUnread()
       } else {

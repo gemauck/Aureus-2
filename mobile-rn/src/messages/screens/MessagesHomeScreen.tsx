@@ -256,7 +256,7 @@ export function MessagesHomeScreen({ navigation }: Props) {
           onPress={() => void toggleNotificationSounds()}
           disabled={soundPrefLoading || soundPrefSaving}
         >
-          <Text style={styles.emailPrefLabel}>Notification sounds</Text>
+          <Text style={styles.emailPrefLabel}>Notification sounds & vibration</Text>
           <View style={[styles.emailPrefSwitch, soundEnabled && styles.emailPrefSwitchOn]}>
             <View style={[styles.emailPrefKnob, soundEnabled && styles.emailPrefKnobOn]} />
           </View>

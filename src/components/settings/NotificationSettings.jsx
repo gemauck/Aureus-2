@@ -171,10 +171,10 @@ const NotificationSettings = () => {
                     <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                         <div>
                             <label className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                                Notification sounds
+                                Notification sounds & vibration
                             </label>
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                Play a short chime for new messages and bell notifications while ERP is open
+                                Play a short chime and buzz for new messages and bell notifications while ERP is open
                             </p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">

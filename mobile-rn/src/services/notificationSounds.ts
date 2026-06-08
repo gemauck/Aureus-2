@@ -1,11 +1,12 @@
 import { Audio } from 'expo-av'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { Platform, Vibration } from 'react-native'
 
 const STORAGE_KEY = 'abcotronics_notification_sounds_enabled'
 const MIN_GAP_MS = 1200
 
 let audioReady = false
-let lastPlayedAt = 0
+let lastAlertAt = 0
 
 const SOUNDS = {
   message: require('../../assets/sounds/message.wav'),
@@ -13,6 +14,9 @@ const SOUNDS = {
 } as const
 
 export type NotificationSoundKind = keyof typeof SOUNDS
+
+const VIBRATE_MESSAGE_MS = Platform.OS === 'android' ? [0, 220, 120, 220, 120, 220] : 400
+const VIBRATE_NOTIFICATION_MS = Platform.OS === 'android' ? [0, 180, 90, 180] : 280
 
 export async function getNotificationSoundsEnabled(): Promise<boolean> {
   try {
@@ -41,11 +45,37 @@ async function ensureAudioMode() {
   audioReady = true
 }
 
+function shouldThrottleAlert(): boolean {
+  const now = Date.now()
+  if (now - lastAlertAt < MIN_GAP_MS) return true
+  lastAlertAt = now
+  return false
+}
+
+function vibratePulse(kind: NotificationSoundKind) {
+  try {
+    const pattern = kind === 'message' ? VIBRATE_MESSAGE_MS : VIBRATE_NOTIFICATION_MS
+    if (Array.isArray(pattern)) {
+      Vibration.vibrate(pattern as number[], false)
+    } else {
+      Vibration.vibrate(pattern as number)
+    }
+  } catch {
+    /* non-fatal */
+  }
+}
+
+export async function playNotificationVibration(kind: NotificationSoundKind = 'notification') {
+  if (!(await getNotificationSoundsEnabled())) return
+  if (shouldThrottleAlert()) return
+  vibratePulse(kind)
+}
+
 export async function playNotificationSound(kind: NotificationSoundKind = 'notification') {
   if (!(await getNotificationSoundsEnabled())) return
-  const now = Date.now()
-  if (now - lastPlayedAt < MIN_GAP_MS) return
-  lastPlayedAt = now
+  if (shouldThrottleAlert()) return
+
+  vibratePulse(kind)
 
   try {
     await ensureAudioMode()

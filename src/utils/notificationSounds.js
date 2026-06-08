@@ -65,6 +65,14 @@ function playTone(ctx, freq, start, duration, peak = 0.22) {
     osc.stop(start + duration + 0.02);
 }
 
+function playNotificationVibration(kind = 'notification') {
+    try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(kind === 'message' ? [0, 200, 100, 200, 100, 200] : [0, 150, 80, 150]);
+        }
+    } catch (_) { /* unsupported */ }
+}
+
 /**
  * @param {'message' | 'notification'} kind
  */
@@ -72,6 +80,8 @@ export function playNotificationSound(kind = 'notification') {
     if (!getNotificationSoundsEnabled()) return;
     const now = Date.now();
     if (now - lastPlayedAt < MIN_GAP_MS) return;
+
+    playNotificationVibration(kind);
 
     const ctx = getAudioContext();
     if (!ctx) return;
