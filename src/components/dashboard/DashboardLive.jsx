@@ -1026,8 +1026,39 @@ const ClientActivityMetricsWidget = ({ cardBase, headerText, subText, isDark, cl
     );
 };
 
-const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 6;
-const DASHBOARD_PROGRESS_HYDRATE_DELAY_MS = 2500;
+const DASHBOARD_PROGRESS_HYDRATE_CHUNK = 16;
+const DASHBOARD_PROGRESS_SECTIONS_CACHE_KEY = 'dashboard_progress_sections_v1';
+
+function buildProgressSectionsCacheKey(project) {
+    return `${project?.id}:${project?.updatedAt || ''}`;
+}
+
+function readProgressSectionsCache() {
+    try {
+        const raw = sessionStorage.getItem(DASHBOARD_PROGRESS_SECTIONS_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeProgressSectionsCache(entriesByProjectId, projectsById) {
+    if (!entriesByProjectId || !Object.keys(entriesByProjectId).length) return;
+    try {
+        const cache = readProgressSectionsCache();
+        Object.entries(entriesByProjectId).forEach(([id, sections]) => {
+            const project = projectsById?.[id];
+            if (!project || !sections) return;
+            cache[buildProgressSectionsCacheKey(project)] = sections;
+        });
+        const keys = Object.keys(cache);
+        if (keys.length > 120) {
+            keys.slice(0, keys.length - 120).forEach((k) => delete cache[k]);
+        }
+        sessionStorage.setItem(DASHBOARD_PROGRESS_SECTIONS_CACHE_KEY, JSON.stringify(cache));
+    } catch (_) {}
+}
 
 function readDashboardOfflinePayload() {
     const roleForLeads = window.storage?.getUser?.()?.role;
@@ -1124,29 +1155,56 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     }, [trackerIdsKey]);
 
     const [sectionDetails, setSectionDetails] = React.useState({});
+    const sectionDetailsRef = React.useRef(sectionDetails);
+    sectionDetailsRef.current = sectionDetails;
     const [hydrationLoading, setHydrationLoading] = React.useState(false);
 
-    const workingMonthForHydration = React.useMemo(() => {
-        if (!m || !monthPickerCandidates.length) return null;
-        const entry = monthPickerCandidates[0];
-        return { monthName: entry.monthName, year: entry.year };
-    }, [m, monthPickerCandidates]);
+    // Default AUTO month = last calendar month (same as ProjectProgressTracker), not "month with most data".
+    const defaultPickerIndex = 0;
+
+    const clampedPickerIndex = React.useMemo(() => {
+        const len = monthPickerCandidates.length;
+        if (!len) return 0;
+        const raw = pickerOverrideIndex != null ? pickerOverrideIndex : defaultPickerIndex;
+        return Math.max(0, Math.min(len - 1, raw));
+    }, [pickerOverrideIndex, monthPickerCandidates.length]);
+
+    const activeWorkingMonth = monthPickerCandidates[clampedPickerIndex] || monthPickerCandidates[0] || null;
 
     React.useEffect(() => {
-        if (!m || !trackerIdsKey) {
-            setSectionDetails({});
+        if (!m || !trackerIdsKey || !projects?.length) {
+            return;
+        }
+        const cache = readProgressSectionsCache();
+        const trackerProjects = m.filterProjectsForProgressTracker(projects);
+        const fromCache = {};
+        trackerProjects.forEach((p) => {
+            const hit = cache[buildProgressSectionsCacheKey(p)];
+            if (hit) {
+                fromCache[String(p.id)] = hit;
+            }
+        });
+        if (Object.keys(fromCache).length) {
+            setSectionDetails((prev) => ({ ...fromCache, ...prev }));
+        }
+    }, [m, trackerIdsKey, projectsDataVersionKey]);
+
+    React.useEffect(() => {
+        if (!m || !trackerIdsKey || !activeWorkingMonth) {
             setHydrationLoading(false);
             return;
         }
         const trackerProjects = m.filterProjectsForProgressTracker(projects || []);
-        const monthName = workingMonthForHydration?.monthName;
-        const year = workingMonthForHydration?.year;
+        const { monthName, year } = activeWorkingMonth;
+        const projectsById = Object.fromEntries(trackerProjects.map((p) => [String(p.id), p]));
         const ids = trackerProjects
-            .filter((p) => projectNeedsSectionHydration(p, monthName, year))
+            .filter((p) => {
+                if (!projectNeedsSectionHydration(p, monthName, year)) return false;
+                return !sectionDetailsRef.current[String(p.id)];
+            })
             .map((p) => String(p.id))
             .filter(Boolean);
         if (ids.length === 0) {
-            setSectionDetails({});
             setHydrationLoading(false);
             return;
         }
@@ -1156,7 +1214,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         }
 
         let cancelled = false;
-        let delayTimer = null;
 
         const runHydration = async () => {
             setHydrationLoading(true);
@@ -1182,6 +1239,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                         monthlyDataReviewSections: detail.monthlyDataReviewSections
                     };
                 });
+                writeProgressSectionsCache(next, projectsById);
                 setSectionDetails((prev) => ({ ...prev, ...next }));
             } catch (e) {
                 console.warn('LastWorkingMonthProgressWidget: failed to load project details', e);
@@ -1192,15 +1250,12 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             }
         };
 
-        delayTimer = window.setTimeout(() => {
-            if (!cancelled) void runHydration();
-        }, DASHBOARD_PROGRESS_HYDRATE_DELAY_MS);
+        void runHydration();
 
         return () => {
             cancelled = true;
-            if (delayTimer != null) window.clearTimeout(delayTimer);
         };
-    }, [m, trackerIdsKey, projectsDataVersionKey, projects, workingMonthForHydration]);
+    }, [m, trackerIdsKey, projectsDataVersionKey, projects, activeWorkingMonth]);
 
     const mergedProjects = React.useMemo(() => {
         if (!m || !projects) return [];
@@ -1217,48 +1272,16 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         });
     }, [m, projects, sectionDetails]);
 
-    const bestWorkingMonth = React.useMemo(() => {
-        if (!m || !monthPickerCandidates.length) return null;
-        let fallback = monthPickerCandidates[0];
-        let best = null;
-        let bestScore = -1;
-        monthPickerCandidates.forEach((candidate, idx) => {
-            const snap = m.buildSnapshotRows(mergedProjects, candidate);
-            const score = snap.reduce((acc, row) => {
-                let value = acc;
-                if (row?.doc?.percent != null) value += 1;
-                if (row?.compliance?.percent != null) value += 1;
-                if (row?.data?.percent != null) value += 1;
-                if (row?.doc?.total > 0) value += 1;
-                if (row?.compliance?.total > 0) value += 1;
-                if (row?.data?.total > 0) value += 1;
-                return value;
-            }, 0);
-            if (idx === 0) fallback = candidate;
-            if (score > bestScore) {
-                best = candidate;
-                bestScore = score;
-            }
-        });
-        return bestScore > 0 ? best : fallback;
-    }, [m, mergedProjects, monthPickerCandidates]);
+    const pendingSectionHydrationCount = React.useMemo(() => {
+        if (!m || !projects?.length || !activeWorkingMonth) return 0;
+        const { monthName, year } = activeWorkingMonth;
+        return m.filterProjectsForProgressTracker(projects).filter((p) => {
+            if (!projectNeedsSectionHydration(p, monthName, year)) return false;
+            return !sectionDetails[String(p.id)];
+        }).length;
+    }, [m, projects, activeWorkingMonth, sectionDetails]);
 
-    const defaultPickerIndex = React.useMemo(() => {
-        if (!bestWorkingMonth || !monthPickerCandidates.length) return 0;
-        const idx = monthPickerCandidates.findIndex(
-            (c) => c.monthIndex === bestWorkingMonth.monthIndex && c.year === bestWorkingMonth.year
-        );
-        return idx >= 0 ? idx : 0;
-    }, [bestWorkingMonth, monthPickerCandidates]);
-
-    const clampedPickerIndex = React.useMemo(() => {
-        const len = monthPickerCandidates.length;
-        if (!len) return 0;
-        const raw = pickerOverrideIndex != null ? pickerOverrideIndex : defaultPickerIndex;
-        return Math.max(0, Math.min(len - 1, raw));
-    }, [pickerOverrideIndex, defaultPickerIndex, monthPickerCandidates.length]);
-
-    const activeWorkingMonth = monthPickerCandidates[clampedPickerIndex] || bestWorkingMonth;
+    const progressSectionsReady = pendingSectionHydrationCount === 0 && !hydrationLoading;
 
     const goOlderMonth = React.useCallback(() => {
         setPickerOverrideIndex((prev) => {
@@ -1288,7 +1311,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
     const fmtRatio = (completed, total) => `${Number(completed) || 0}/${Number(total) || 0}`;
 
-    if (!m || !bestWorkingMonth || !monthPickerCandidates.length) {
+    if (!m || !monthPickerCandidates.length || !activeWorkingMonth) {
         return (
             <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
@@ -1297,13 +1320,17 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         );
     }
 
-    if (!projectsNetworkSynced) {
+    if (!projectsNetworkSynced || !progressSectionsReady) {
         return (
             <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Project progress</h3>
                 <p className={`text-sm ${subText} flex items-center gap-2`}>
                     <i className="fas fa-circle-notch fa-spin text-primary-500 shrink-0" aria-hidden="true" />
-                    <span>Loading latest progress from server…</span>
+                    <span>
+                        {!projectsNetworkSynced
+                            ? 'Loading latest progress from server…'
+                            : 'Loading document / compliance / data metrics…'}
+                    </span>
                 </p>
             </div>
         );
@@ -1427,13 +1454,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
                 </p>
             ) : (
-                <>
-                    {hydrationLoading ? (
-                        <p className={`text-[11px] text-left ${subText} border-t ${borderSep} pt-2 pb-1 flex flex-row items-center gap-2`}>
-                            <i className="fas fa-circle-notch fa-spin text-primary-500 shrink-0" aria-hidden="true" />
-                            <span>Updating document / compliance / data section detail…</span>
-                        </p>
-                    ) : null}
                 <div className={`overflow-x-auto min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
                     <table data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
                         <colgroup>
@@ -1531,7 +1551,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                         </tbody>
                     </table>
                 </div>
-                </>
             )}
         </div>
     );
