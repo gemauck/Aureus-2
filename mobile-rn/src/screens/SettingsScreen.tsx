@@ -211,15 +211,26 @@ export function SettingsScreen({ navigation }: Props) {
         Alert.alert('Check failed', remoteError || 'Could not read version from server.')
         return
       }
-      if (remote.forceApkInstall && remote.versionCode > APP_VERSION_CODE) {
-        await checkApkUpdate()
+      if (remote.versionCode > APP_VERSION_CODE) {
+        if (remote.forceApkInstall) {
+          await checkApkUpdate()
+          return
+        }
+        const url = remote.apkUrl || DEFAULT_APK_URL
+        Alert.alert(
+          'New APK available',
+          remote.releaseNotes ||
+            `Version ${remote.versionName || remote.versionCode} is available (you have build ${APP_VERSION_CODE}). Download and install to update the app shell.`,
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Download', onPress: () => void Linking.openURL(url) }
+          ]
+        )
         return
       }
       Alert.alert(
         'APK up to date',
-        remote.versionCode > APP_VERSION_CODE
-          ? `Server reports ${remote.versionName || remote.versionCode} but no native reinstall is required yet. UI changes come via JS update — use Check for JS update, then Apply update.`
-          : 'Your installed app shell matches the server. UI changes come via JS update — use Check for JS update above.'
+        'Your installed app shell matches the server. UI changes come via JS update — use Check for JS update above.'
       )
     } finally {
       setChecking(null)
