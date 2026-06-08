@@ -8,6 +8,12 @@ import type { PushNotificationData } from '../notifications/notificationNavigati
 export function usePushNotifications(onOpenNotification?: (data: PushNotificationData) => void) {
   const { accessToken } = useAuth()
   const pushTokenRef = useRef<string | null>(null)
+  const onOpenRef = useRef(onOpenNotification)
+  const handledColdStartRef = useRef(false)
+
+  useEffect(() => {
+    onOpenRef.current = onOpenNotification
+  }, [onOpenNotification])
 
   useEffect(() => {
     if (!accessToken) return
@@ -23,14 +29,19 @@ export function usePushNotifications(onOpenNotification?: (data: PushNotificatio
   }, [accessToken])
 
   useEffect(() => {
-    if (!onOpenNotification) return
+    if (handledColdStartRef.current) return
+    handledColdStartRef.current = true
+
     void Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response) return
       const data = (response.notification.request.content.data || {}) as PushNotificationData
-      onOpenNotification(data)
+      onOpenRef.current?.(data)
     })
-    return addNotificationResponseListener(onOpenNotification)
-  }, [onOpenNotification])
+
+    return addNotificationResponseListener((data) => {
+      onOpenRef.current?.(data)
+    })
+  }, [])
 
   useEffect(() => {
     return () => {

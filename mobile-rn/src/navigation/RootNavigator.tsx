@@ -19,11 +19,7 @@ import { erpApi } from '../services/erpApi'
 
 import type { RootStackParamList } from './types'
 import { linking } from './linking'
-import {
-  ALWAYS_ACCESSIBLE_ROOT_SCREENS,
-  getActiveRootRouteName
-} from './navigationHelpers'
-import { canAccessScreen } from '../utils/screenAccess'
+import { getActiveRootRouteName } from './navigationHelpers'
 import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
 import { useTheme } from '../theme/ThemeContext'
@@ -153,25 +149,32 @@ function AuthenticatedAppInner() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>()
   const [currentRoute, setCurrentRoute] = React.useState('Dashboard')
   const { accessToken, user } = useAuth()
-  const userRef = React.useRef(user)
-  userRef.current = user
+  const accessTokenRef = React.useRef(accessToken)
+  accessTokenRef.current = accessToken
   const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
+  const decrementUnreadRef = React.useRef(decrementUnread)
+  decrementUnreadRef.current = decrementUnread
+  const refreshNotificationUnreadRef = React.useRef(refreshNotificationUnread)
+  refreshNotificationUnreadRef.current = refreshNotificationUnread
 
   // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
   useOTAUpdates(true)
   useAppUpdateCheck(true)
 
-  usePushNotifications((data) => {
-    if (data.notificationId && accessToken) {
-      void erpApi.markNotificationsRead(accessToken, [data.notificationId]).then(() => {
-        decrementUnread(1)
-        void refreshNotificationUnread()
+  const handlePushNotification = React.useCallback((data: Parameters<typeof navigateFromPushData>[1]) => {
+    const token = accessTokenRef.current
+    if (data.notificationId && token) {
+      void erpApi.markNotificationsRead(token, [data.notificationId]).then(() => {
+        decrementUnreadRef.current(1)
+        void refreshNotificationUnreadRef.current()
       })
     }
     if (navigationRef.current) {
-      navigateFromPushData(navigationRef.current, data)
+      navigateFromPushData(navigationRef.current, data, user)
     }
-  })
+  }, [user])
+
+  usePushNotifications(handlePushNotification)
 
   return (
     <JobCardSyncProvider>
@@ -186,11 +189,6 @@ function AuthenticatedAppInner() {
           const rootScreen = getActiveRootRouteName(state)
           if (!rootScreen) return
           setCurrentRoute(rootScreen)
-          const activeUser = userRef.current
-          if (!activeUser || ALWAYS_ACCESSIBLE_ROOT_SCREENS.has(rootScreen)) return
-          if (!canAccessScreen(activeUser, rootScreen)) {
-            navigationRef.navigate('Dashboard')
-          }
         }}
       >
         <Stack.Navigator
