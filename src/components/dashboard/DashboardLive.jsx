@@ -1313,7 +1313,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     if (!m || !monthPickerCandidates.length || !activeWorkingMonth) {
         return (
-            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
+            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm h-full min-h-0 flex flex-col`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
                 <p className={`text-sm ${subText}`}>Progress metrics are loading…</p>
             </div>
@@ -1322,7 +1322,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     if (!projectsNetworkSynced || !progressSectionsReady) {
         return (
-            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
+            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm h-full min-h-0 flex flex-col`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Project progress</h3>
                 <p className={`text-sm ${subText} flex items-center gap-2`}>
                     <i className="fas fa-circle-notch fa-spin text-primary-500 shrink-0" aria-hidden="true" />
@@ -1378,9 +1378,9 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     return (
         <div
-            className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col min-h-0 min-w-0 self-start w-full max-w-full`}
+            className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col h-full min-h-0 min-w-0 w-full max-w-full`}
         >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 mb-3 min-w-0 text-left">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 mb-3 min-w-0 text-left flex-shrink-0">
                 <div className="min-w-0 flex-1 text-left">
                     <div className="flex items-center gap-2 flex-wrap text-left">
                         <h3 className={`text-sm font-semibold ${headerText}`}>Project progress</h3>
@@ -1454,7 +1454,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
                 </p>
             ) : (
-                <div className={`overflow-x-auto min-h-0 max-h-80 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
+                <div className={`overflow-x-auto flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
                     <table data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
                         <colgroup>
                             <col className="w-[36%]" />
@@ -3646,7 +3646,7 @@ const DashboardLive = () => {
                                     </>
                                 )}
                                 
-                                <div className="h-full w-full">
+                                <div className="h-full w-full min-h-0 flex flex-col">
                                     <WidgetWrapper widgetDef={def} dashboardData={dashboardData} />
                                 </div>
                             </div>
