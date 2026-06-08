@@ -1081,7 +1081,7 @@ function projectNeedsSectionHydration(project, monthName, year) {
 }
 
 /** Last calendar month’s working progress (doc / compliance / data / comments) for projects opted into the monthly tracker. */
-const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects }) => {
+const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark, projects, projectsNetworkSynced = true }) => {
     const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
     const progressWidgetRef = React.useRef(null);
     const [isNarrow, setIsNarrow] = React.useState(true);
@@ -1313,6 +1313,18 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
             <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
                 <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Last working month</h3>
                 <p className={`text-sm ${subText}`}>Progress metrics are loading…</p>
+            </div>
+        );
+    }
+
+    if (!projectsNetworkSynced) {
+        return (
+            <div className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm`}>
+                <h3 className={`text-sm font-semibold ${headerText} mb-2`}>Project progress</h3>
+                <p className={`text-sm ${subText} flex items-center gap-2`}>
+                    <i className="fas fa-circle-notch fa-spin text-primary-500 shrink-0" aria-hidden="true" />
+                    <span>Loading latest progress from server…</span>
+                </p>
             </div>
         );
     }
@@ -2605,6 +2617,9 @@ const DashboardLive = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [projectsNetworkSynced, setProjectsNetworkSynced] = useState(
+        () => !dashboardPayloadHasBootstrapData(readDashboardOfflinePayload())
+    );
     const [connectionStatus, setConnectionStatus] = useState('connecting');
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
@@ -2702,6 +2717,7 @@ const DashboardLive = () => {
                     offlineBootstrap.timeEntries,
                     offlineBootstrap.users
                 );
+                setProjectsNetworkSynced(true);
                 setConnectionStatus('connected');
                 return;
             }
@@ -2787,6 +2803,10 @@ const DashboardLive = () => {
                   : offline.users;
 
             applyDashboardPayload(clients, leads, projects, timeEntries, users);
+            if (Array.isArray(projects) && projects.length > 0 && window.storage?.setProjects) {
+                window.storage.setProjects(projects);
+            }
+            setProjectsNetworkSynced(true);
             setConnectionStatus('connected');
         } catch (error) {
             console.error('❌ Failed to load dashboard data:', error);
@@ -2800,6 +2820,7 @@ const DashboardLive = () => {
                 offline.timeEntries,
                 offline.users
             );
+            setProjectsNetworkSynced(true);
         } finally {
             setIsLoading(false);
             setIsRefreshing(false);
@@ -2975,6 +2996,7 @@ const DashboardLive = () => {
                                   subText={subText}
                                   isDark={isDark}
                                   projects={data.projects}
+                                  projectsNetworkSynced={projectsNetworkSynced}
                               />
                           )
                       }
@@ -3078,7 +3100,7 @@ const DashboardLive = () => {
                 )
             }
         ];
-    }, [isDark, isDashboardAdmin, isErpSuperUser, autoRefresh, refreshInterval]);
+    }, [isDark, isDashboardAdmin, isErpSuperUser, autoRefresh, refreshInterval, projectsNetworkSynced]);
 
     // Helper function to persist widget preferences
     const persistWidgets = (ids) => {

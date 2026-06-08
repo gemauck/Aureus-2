@@ -78,6 +78,16 @@ const checklistProgress = (task) => {
   return { done, total: list.length, pct: Math.round((done / list.length) * 100) };
 };
 
+const normalizeTaskFromApi = (task) => {
+  if (!task) return null;
+  return {
+    ...task,
+    status: normalizeStatus(task.status),
+    tags: Array.isArray(task.tags) ? task.tags : [],
+    checklist: Array.isArray(task.checklist) ? task.checklist : []
+  };
+};
+
 const emptyTaskForm = {
   title: '',
   description: '',
@@ -117,6 +127,7 @@ const TaskManagement = () => {
   const [lists, setLists] = useState([]);
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -162,12 +173,7 @@ const TaskManagement = () => {
     if (!response.ok) throw new Error(`Failed to load tasks (${response.status})`);
     const payload = await response.json();
     const data = Array.isArray(payload?.data?.tasks) ? payload.data.tasks : [];
-    return data.map((task) => ({
-      ...task,
-      status: normalizeStatus(task.status),
-      tags: Array.isArray(task.tags) ? task.tags : [],
-      checklist: Array.isArray(task.checklist) ? task.checklist : []
-    }));
+    return data.map((task) => normalizeTaskFromApi(task)).filter(Boolean);
   }, [token]);
 
   const loadTags = useCallback(async () => {
@@ -178,9 +184,13 @@ const TaskManagement = () => {
     return Array.isArray(payload?.data?.tags) ? payload.data.tags : [];
   }, [token]);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const refresh = useCallback(async ({ silent = false } = {}) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+      setError('');
+    }
     try {
       const [nextLists, nextTasks, nextTags] = await Promise.all([loadLists(), loadTasks(), loadTags()]);
       setLists(nextLists);
@@ -188,9 +198,10 @@ const TaskManagement = () => {
       setTags(nextTags);
     } catch (e) {
       console.error('TaskManagement refresh failed:', e);
-      setError(e?.message || 'Failed to load task data.');
+      if (!silent) setError(e?.message || 'Failed to load task data.');
     } finally {
-      setLoading(false);
+      if (silent) setRefreshing(false);
+      else setLoading(false);
     }
   }, [loadLists, loadTasks, loadTags]);
 
@@ -332,7 +343,7 @@ const TaskManagement = () => {
       await Promise.all(reordered.map((list, index) => updateList(list.id, { order: index })));
     } catch (e) {
       console.error('reorderList failed:', e);
-      await refresh();
+      await refresh({ silent: true });
       window.alert('Could not reorder lists.');
     }
   }, [lists, updateList, refresh]);
@@ -346,28 +357,34 @@ const TaskManagement = () => {
     }
     setSaving(true);
     try {
+      const listPayload = {
+        name,
+        color: listForm.color || '#3B82F6',
+        status: normalizeStatus(listForm.status)
+      };
       if (editingListId) {
-        await updateList(editingListId, {
-          name,
-          color: listForm.color || '#3B82F6',
-          status: normalizeStatus(listForm.status)
-        });
+        await updateList(editingListId, listPayload);
+        setLists((prev) => prev.map((list) => (
+          String(list.id) === String(editingListId) ? { ...list, ...listPayload } : list
+        )));
       } else {
         const response = await fetch('/api/user-task-lists', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            name,
-            color: listForm.color || '#3B82F6',
-            status: normalizeStatus(listForm.status)
-          })
+          body: JSON.stringify(listPayload)
         });
         if (!response.ok) throw new Error(`Failed to create list (${response.status})`);
+        const payload = await response.json();
+        const createdList = payload?.data?.list;
+        if (createdList) {
+          setLists((prev) => [...prev, createdList].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+        } else {
+          await refresh({ silent: true });
+        }
       }
       setShowListModal(false);
       setEditingListId(null);
       setListForm({ name: '', color: '#3B82F6', status: 'todo' });
-      await refresh();
     } catch (e) {
       console.error('saveList failed:', e);
       window.alert(e?.message || 'Could not save list.');
@@ -436,12 +453,11 @@ const TaskManagement = () => {
           pendingOpenUserTaskIdRef.current = null;
           return;
         }
-        const normalized = {
-          ...fetched,
-          status: normalizeStatus(fetched.status),
-          tags: Array.isArray(fetched.tags) ? fetched.tags : [],
-          checklist: Array.isArray(fetched.checklist) ? fetched.checklist : []
-        };
+        const normalized = normalizeTaskFromApi(fetched);
+        if (!normalized) {
+          pendingOpenUserTaskIdRef.current = null;
+          return;
+        }
         openEditTaskRef.current(normalized);
         pendingOpenUserTaskIdRef.current = null;
         lastHandledUserTaskSegmentRef.current = id;
@@ -543,10 +559,24 @@ const TaskManagement = () => {
         body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error(`Failed to save task (${response.status})`);
+      const result = await response.json();
+      const savedTask = normalizeTaskFromApi(result?.data?.task);
+      if (savedTask) {
+        setTasks((prev) => {
+          const index = prev.findIndex((task) => String(task.id) === String(savedTask.id));
+          if (index >= 0) {
+            const next = [...prev];
+            next[index] = savedTask;
+            return next;
+          }
+          return [...prev, savedTask];
+        });
+      } else {
+        await refresh({ silent: true });
+      }
       setShowTaskModal(false);
       setEditingTaskId(null);
       setTaskForm({ ...emptyTaskForm });
-      await refresh();
     } catch (e) {
       console.error('saveTask failed:', e);
       window.alert(e?.message || 'Could not save task.');
@@ -557,39 +587,58 @@ const TaskManagement = () => {
 
   const deleteTask = useCallback(async (taskId) => {
     if (!token || !window.confirm('Delete this task?')) return;
+    const previousTasks = tasks;
+    setTasks((prev) => prev.filter((task) => String(task.id) !== String(taskId)));
     try {
       const response = await fetch(`/api/user-tasks/${taskId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error(`Failed to delete task (${response.status})`);
-      await refresh();
     } catch (e) {
       console.error('deleteTask failed:', e);
+      setTasks(previousTasks);
       window.alert(e?.message || 'Could not delete task.');
     }
-  }, [token, refresh]);
+  }, [token, tasks]);
 
   const deleteList = useCallback(async (listId) => {
     if (!token || !window.confirm('Delete this list?')) return;
+    const previousLists = lists;
+    const previousTasks = tasks;
+    const fallbackList = lists.find((list) => String(list.id) !== String(listId));
+    setLists((prev) => prev.filter((list) => String(list.id) !== String(listId)));
+    if (fallbackList) {
+      setTasks((prev) => prev.map((task) => (
+        String(task.listId) === String(listId)
+          ? { ...task, listId: fallbackList.id, status: normalizeStatus(fallbackList.status) }
+          : task
+      )));
+    }
     try {
       const response = await fetch(`/api/user-task-lists/${listId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok && response.status !== 404) throw new Error(`Failed to delete list (${response.status})`);
-      await refresh();
     } catch (e) {
       console.error('deleteList failed:', e);
+      setLists(previousLists);
+      setTasks(previousTasks);
       window.alert(e?.message || 'Could not delete list.');
     }
-  }, [token, refresh]);
+  }, [token, lists, tasks]);
 
   const deleteAllLists = useCallback(async () => {
     if (!token || !window.confirm('Delete ALL lists?')) return;
+    const previousLists = lists;
+    const previousTasks = tasks;
+    setLists([]);
+    setTasks((prev) => prev.map((task) => ({ ...task, listId: null })));
     try {
       const response = await fetch('/api/user-task-lists?all=true', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error(`Failed to delete all lists (${response.status})`);
-      await refresh();
     } catch (e) {
       console.error('deleteAllLists failed:', e);
+      setLists(previousLists);
+      setTasks(previousTasks);
       window.alert(e?.message || 'Could not delete all lists.');
     }
-  }, [token, refresh]);
+  }, [token, lists, tasks]);
 
   const moveTask = useCallback(async (task, list) => {
     if (!token || !task?.id || !list?.id) return;
@@ -606,7 +655,7 @@ const TaskManagement = () => {
       if (!response.ok) throw new Error(`Move failed (${response.status})`);
     } catch (e) {
       console.error('moveTask failed:', e);
-      await refresh();
+      await refresh({ silent: true });
       window.alert('Could not move task.');
     }
   }, [token, tasks, refresh]);
@@ -625,7 +674,7 @@ const TaskManagement = () => {
       if (!response.ok) throw new Error(`Failed to toggle completion (${response.status})`);
     } catch (e) {
       console.error('toggleTaskCompletion failed:', e);
-      await refresh();
+      await refresh({ silent: true });
     }
   }, [token, tasks, refresh]);
 
@@ -786,8 +835,8 @@ const TaskManagement = () => {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => refresh()} className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition ${isDark ? 'border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'}`}>
-                <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`} />
+              <button type="button" onClick={() => refresh({ silent: true })} disabled={refreshing} className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition ${isDark ? 'border-slate-600 bg-slate-800/80 text-slate-200 hover:bg-slate-700' : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50'}`}>
+                <i className={`fas fa-sync-alt ${refreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </button>
               <button type="button" onClick={openCreateList} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-600 to-sky-600 text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-sky-500">
