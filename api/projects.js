@@ -7,6 +7,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { logProjectActivity, getActivityUserFromRequest } from './_lib/projectActivityLog.js'
+import { openTaskWhere } from './_lib/taskStatus.js'
 
 /** Run Project table migration at most once per process (perf: avoid ALTER on every list GET). */
 let projectListColumnsMigrated = false;
@@ -1971,7 +1972,7 @@ async function handler(req, res) {
               ...(includeTaskCount ? {
                 _count: {
                   select: {
-                    tasks: true // Count tasks from Task table (source of truth)
+                    tasks: { where: openTaskWhere() }
                   }
                 }
               } : {})
@@ -2018,7 +2019,7 @@ async function handler(req, res) {
                 ...(includeTaskCount ? {
                   _count: {
                     select: {
-                      tasks: true
+                      tasks: { where: openTaskWhere() }
                     }
                   }
                 } : {})
@@ -2032,9 +2033,8 @@ async function handler(req, res) {
           }
         }
         
-        // Calculate tasksCount from Task table only (no JSON fallback)
+        // Calculate tasksCount from Task table only — open tasks (excludes Done/Archived)
         const projectsWithTaskCount = projects.map(project => {
-          // Tasks are now only stored in Task table - use the count from relation
           const tasksCount = includeTaskCount ? (project._count?.tasks || 0) : 0;
           
           const result = { ...project };
