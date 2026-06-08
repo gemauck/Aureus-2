@@ -21,7 +21,6 @@ export async function sendPushToUsers(userIds, { title, body, data = {}, channel
     return { sent: 0, reason: 'no_tokens' }
   }
 
-  const isChat = channelId === 'chat'
   const messages = pushTokens.map((to) => ({
     to,
     title: title || 'New message',
@@ -29,8 +28,8 @@ export async function sendPushToUsers(userIds, { title, body, data = {}, channel
     data,
     sound: 'default',
     priority: 'high',
-    channelId: channelId || 'erp',
-    ...(isChat ? { badge: 1 } : {})
+    channelId: channelId || 'erp'
+    // App icon badge is synced client-side from real unread counts (not a fixed badge: 1).
   }))
 
   try {

@@ -10,9 +10,20 @@ Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
-    shouldSetBadge: true
+    // Badge is synced from in-app unread counts — do not apply stale badge from push payload.
+    shouldSetBadge: false
   })
 })
+
+/** Home-screen app icon badge (iOS + supported Android launchers). */
+export async function setAppIconBadge(count: number) {
+  const next = Math.max(0, Math.floor(count))
+  try {
+    await Notifications.setBadgeCountAsync(next)
+  } catch {
+    /* unsupported on some Android launchers */
+  }
+}
 
 function resolveExpoProjectId(): string | undefined {
   const fromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID

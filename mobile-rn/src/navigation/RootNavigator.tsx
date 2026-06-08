@@ -10,6 +10,7 @@ import { DashboardScreen } from '../screens/DashboardScreen'
 import { DrawerMenu } from '../components/shell/DrawerMenu'
 import { JobCardSyncProvider } from '../jobcards/JobCardSyncContext'
 import { useAuth } from '../state/AuthContext'
+import { useAppIconBadge } from '../hooks/useAppIconBadge'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
@@ -182,6 +183,7 @@ function AuthenticatedAppInner() {
   }, [user])
 
   usePushNotifications(handlePushNotification)
+  useAppIconBadge()
 
   return (
     <JobCardSyncProvider>
