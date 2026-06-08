@@ -60,6 +60,7 @@ export function MessagesHomeScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
   const [showNew, setShowNew] = useState(false)
+  const [showNotifSettings, setShowNotifSettings] = useState(false)
   const [userSearch, setUserSearch] = useState('')
   const [users, setUsers] = useState<ChatUser[]>([])
   const [searchingUsers, setSearchingUsers] = useState(false)
@@ -207,6 +208,24 @@ export function MessagesHomeScreen({ navigation }: Props) {
     }
   }
 
+  const renderNotifToggle = (
+    label: string,
+    on: boolean,
+    onToggle: () => void,
+    disabled: boolean
+  ) => (
+    <Pressable
+      style={styles.notifSettingRow}
+      onPress={() => void onToggle()}
+      disabled={disabled}
+    >
+      <Text style={styles.emailPrefLabel}>{label}</Text>
+      <View style={[styles.emailPrefSwitch, on && styles.emailPrefSwitchOn]}>
+        <View style={[styles.emailPrefKnob, on && styles.emailPrefKnobOn]} />
+      </View>
+    </Pressable>
+  )
+
   return (
     <View style={styles.root}>
       <AppHeader
@@ -214,6 +233,7 @@ export function MessagesHomeScreen({ navigation }: Props) {
         subtitle="Team chat & direct messages"
         navigation={{ navigate: (name) => navigation.getParent()?.navigate(name as never) }}
         showMessages={false}
+        onSettingsPress={() => setShowNotifSettings(true)}
       />
       <ScreenBody>
         <View style={styles.toolbar}>
@@ -228,39 +248,6 @@ export function MessagesHomeScreen({ navigation }: Props) {
             <Text style={styles.newBtnText}>+ New</Text>
           </Pressable>
         </View>
-
-        <Pressable
-          style={styles.emailPrefRow}
-          onPress={() => void toggleEmailMessages()}
-          disabled={emailPrefLoading || emailPrefSaving}
-        >
-          <Text style={styles.emailPrefLabel}>Email notifications</Text>
-          <View style={[styles.emailPrefSwitch, emailMessages && styles.emailPrefSwitchOn]}>
-            <View style={[styles.emailPrefKnob, emailMessages && styles.emailPrefKnobOn]} />
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={styles.emailPrefRow}
-          onPress={() => void togglePushMessages()}
-          disabled={pushPrefLoading || pushPrefSaving}
-        >
-          <Text style={styles.emailPrefLabel}>Push notifications</Text>
-          <View style={[styles.emailPrefSwitch, pushMessages && styles.emailPrefSwitchOn]}>
-            <View style={[styles.emailPrefKnob, pushMessages && styles.emailPrefKnobOn]} />
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={styles.emailPrefRow}
-          onPress={() => void toggleNotificationSounds()}
-          disabled={soundPrefLoading || soundPrefSaving}
-        >
-          <Text style={styles.emailPrefLabel}>Notification sounds & vibration</Text>
-          <View style={[styles.emailPrefSwitch, soundEnabled && styles.emailPrefSwitchOn]}>
-            <View style={[styles.emailPrefKnob, soundEnabled && styles.emailPrefKnobOn]} />
-          </View>
-        </Pressable>
 
         {loading && !conversations.length ? (
           <ActivityIndicator style={styles.loader} color={erp.primary} />
@@ -311,10 +298,61 @@ export function MessagesHomeScreen({ navigation }: Props) {
         )}
       </ScreenBody>
 
+      <Modal
+        visible={showNotifSettings}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowNotifSettings(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowNotifSettings(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notification settings</Text>
+              <Pressable
+                style={styles.modalCloseBtn}
+                onPress={() => setShowNotifSettings(false)}
+                hitSlop={8}
+                accessibilityLabel="Close notification settings"
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </Pressable>
+            </View>
+            {renderNotifToggle(
+              'Email notifications',
+              emailMessages,
+              toggleEmailMessages,
+              emailPrefLoading || emailPrefSaving
+            )}
+            {renderNotifToggle(
+              'Push notifications',
+              pushMessages,
+              togglePushMessages,
+              pushPrefLoading || pushPrefSaving
+            )}
+            {renderNotifToggle(
+              'Notification sounds & vibration',
+              soundEnabled,
+              toggleNotificationSounds,
+              soundPrefLoading || soundPrefSaving
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal visible={showNew} animationType="slide" transparent onRequestClose={() => setShowNew(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setShowNew(false)}>
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>New message</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>New message</Text>
+              <Pressable
+                style={styles.modalCloseBtn}
+                onPress={() => setShowNew(false)}
+                hitSlop={8}
+                accessibilityLabel="Close new message"
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </Pressable>
+            </View>
             <TextInput
               style={styles.modalSearch}
               placeholder="Search people…"
@@ -355,17 +393,15 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: erp.bg },
   toolbar: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  emailPrefRow: {
+  notifSettingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: erp.surface,
-    borderWidth: 1,
-    borderColor: erp.border,
+    backgroundColor: erp.surfaceMuted,
     borderRadius: erp.radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12
+    paddingVertical: 12,
+    marginBottom: 10
   },
   emailPrefLabel: { fontSize: 14, color: erp.text, fontWeight: '500' },
   emailPrefSwitch: {
@@ -463,7 +499,24 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     padding: 16,
     maxHeight: '80%'
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: erp.text, marginBottom: 12 },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: erp.border
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: erp.text, flex: 1 },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: erp.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  modalCloseText: { fontSize: 18, color: erp.textMuted, fontWeight: '600' },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   userSub: { color: erp.textMuted, fontSize: 13 },
   online: { color: erp.success, fontSize: 12, fontWeight: '600' }

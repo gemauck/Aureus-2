@@ -112,7 +112,12 @@ export function AppHeader({
             </Pressable>
           ) : null}
           {onSettingsPress ? (
-            <Pressable style={styles.iconBtn} onPress={onSettingsPress} hitSlop={8}>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={onSettingsPress}
+              hitSlop={8}
+              accessibilityLabel="Notification settings"
+            >
               <FontAwesome5 name="cog" size={17} color={erp.textMuted} />
             </Pressable>
           ) : null}
