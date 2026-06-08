@@ -1477,7 +1477,6 @@ const MainLayout = () => {
         { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
-        { id: 'messages', label: 'Messages', icon: 'fa-comments', permission: null },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
         // Leave & HR hidden from nav for now — restore: { id: 'leave-platform', label: 'Leave & HR', icon: 'fa-user-clock', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
@@ -1489,6 +1488,7 @@ const MainLayout = () => {
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
         { id: 'my-tasks', label: 'My Tasks', icon: 'fa-check-square', permission: null },
         { id: 'my-notes', label: 'My Notes', icon: 'fa-sticky-note', permission: null },
+        { id: 'messages', label: 'Messages', icon: 'fa-comments', permission: null },
     ];
 
     const [refreshingRole, setRefreshingRole] = React.useState(false);
@@ -1574,8 +1574,12 @@ const MainLayout = () => {
         return menuItems.find(item => item.id === 'my-notes') || null;
     }, [menuItems]);
 
+    const messagesMenuItem = React.useMemo(() => {
+        return menuItems.find(item => item.id === 'messages') || null;
+    }, [menuItems]);
+
     const primaryMenuItems = React.useMemo(() => {
-        return menuItems.filter(item => item.id !== 'my-tasks' && item.id !== 'my-notes');
+        return menuItems.filter(item => item.id !== 'my-tasks' && item.id !== 'my-notes' && item.id !== 'messages');
     }, [menuItems]);
 
     const isAdmin = React.useMemo(() => {
@@ -1942,10 +1946,11 @@ const MainLayout = () => {
                     <div className="flex-1">
                         {primaryMenuItems.map((item) => renderMenuButton(item))}
                     </div>
-                    {(myTasksMenuItem || myNotesMenuItem) && (
+                    {(myTasksMenuItem || myNotesMenuItem || messagesMenuItem) && (
                         <div className={`${isDark ? 'border-t border-slate-700' : 'border-t border-slate-200'} pt-2 mt-2`}>
                             {myTasksMenuItem && renderMenuButton(myTasksMenuItem)}
                             {myNotesMenuItem && renderMenuButton(myNotesMenuItem)}
+                            {messagesMenuItem && renderMenuButton(messagesMenuItem)}
                         </div>
                     )}
                 </nav>

@@ -5,6 +5,8 @@ const POLL_ACTIVE_MS = 30000;
 const POLL_LIST_MS = 30000;
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 const CHAT_LIST_CACHE_KEY = 'abcotronics_chat_conversations_v1';
+const CHAT_MESSAGES_CACHE_KEY = 'abcotronics_chat_messages_v1';
+const CHAT_MESSAGES_CACHE_MAX_CONVS = 25;
 
 function readConversationCache() {
   try {
@@ -25,6 +27,40 @@ function writeConversationCache(conversations, totalUnread) {
       totalUnread: totalUnread || 0,
       at: Date.now()
     }));
+  } catch (_) { /* quota / private mode */ }
+}
+
+function readMessagesCacheStore() {
+  try {
+    const raw = sessionStorage.getItem(CHAT_MESSAGES_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function readMessagesCache(conversationId) {
+  if (!conversationId) return null;
+  const entry = readMessagesCacheStore()[conversationId];
+  if (!entry || !Array.isArray(entry.messages) || !entry.messages.length) return null;
+  return entry.messages;
+}
+
+function writeMessagesCache(conversationId, messages) {
+  if (!conversationId || !Array.isArray(messages) || !messages.length) return;
+  try {
+    const store = readMessagesCacheStore();
+    store[conversationId] = { messages, at: Date.now() };
+    const ids = Object.keys(store);
+    if (ids.length > CHAT_MESSAGES_CACHE_MAX_CONVS) {
+      ids.sort((a, b) => (store[a]?.at || 0) - (store[b]?.at || 0));
+      for (let i = 0; i < ids.length - CHAT_MESSAGES_CACHE_MAX_CONVS; i += 1) {
+        delete store[ids[i]];
+      }
+    }
+    sessionStorage.setItem(CHAT_MESSAGES_CACHE_KEY, JSON.stringify(store));
   } catch (_) { /* quota / private mode */ }
 }
 
@@ -305,9 +341,9 @@ const Messenger = () => {
     }
   }, []);
 
-  const loadMessages = useCallback(async (conversationId, { silent = false, before } = {}) => {
+  const loadMessages = useCallback(async (conversationId, { silent = false, before, fromCache = false } = {}) => {
     if (!conversationId) return;
-    if (!silent) setLoadingMessages(true);
+    if (!silent && !fromCache) setLoadingMessages(true);
     try {
       const qs = before ? `?before=${encodeURIComponent(before)}&limit=50` : '?limit=80';
       const data = await chatFetch(`/api/chat/conversations/${conversationId}/messages${qs}`);
@@ -333,7 +369,7 @@ const Messenger = () => {
     } catch (e) {
       console.error('loadMessages', e);
     } finally {
-      if (!silent) setLoadingMessages(false);
+      if (!silent && !fromCache) setLoadingMessages(false);
     }
   }, [scrollToBottom]);
 
@@ -629,8 +665,21 @@ const Messenger = () => {
       setMessages([]);
       return;
     }
-    loadMessages(selectedId);
-  }, [selectedId, loadMessages]);
+    const cached = readMessagesCache(selectedId);
+    if (cached?.length) {
+      setMessages(cached);
+      setLoadingMessages(false);
+      scrollToBottom(false);
+      loadMessages(selectedId, { silent: true, fromCache: true });
+    } else {
+      loadMessages(selectedId);
+    }
+  }, [selectedId, loadMessages, scrollToBottom]);
+
+  useEffect(() => {
+    if (!selectedId || !messages.length) return;
+    writeMessagesCache(selectedId, messages);
+  }, [selectedId, messages]);
 
   useEffect(() => {
     if (!selectedId) return;
