@@ -19,11 +19,26 @@ const Reports = () => {
     const [highlightFeedbackId, setHighlightFeedbackId] = useState(null);
 
     const applyReportsHash = useCallback(() => {
+        let tab = null;
+        let highlightFeedbackId = null;
+
         const h = window.location.hash || '';
-        if (!h.startsWith('#/reports')) return;
-        const qStr = h.includes('?') ? h.split('?').slice(1).join('?') : '';
-        const q = new URLSearchParams(qStr);
-        const tab = q.get('tab');
+        if (h.startsWith('#/reports')) {
+            const qStr = h.includes('?') ? h.split('?').slice(1).join('?') : '';
+            const q = new URLSearchParams(qStr);
+            tab = q.get('tab');
+            highlightFeedbackId = q.get('highlightFeedbackId');
+        }
+
+        // Mobile WebView loads /reports?tab=… (pathname search) instead of hash routes.
+        if (!tab) {
+            const search = new URLSearchParams(window.location.search || '');
+            tab = search.get('tab');
+            if (!highlightFeedbackId) {
+                highlightFeedbackId = search.get('highlightFeedbackId');
+            }
+        }
+
         if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit') {
             if (tab === 'audit' && !canViewAuditTrail) {
                 setActiveTab(canViewFeedback ? 'feedback' : 'my-queries');
@@ -33,7 +48,7 @@ const Reports = () => {
                 setActiveTab(tab);
             }
         }
-        setHighlightFeedbackId(q.get('highlightFeedbackId') || null);
+        setHighlightFeedbackId(highlightFeedbackId || null);
     }, [canViewAuditTrail, canViewFeedback]);
 
     useEffect(() => {

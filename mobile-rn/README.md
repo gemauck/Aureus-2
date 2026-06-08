@@ -36,7 +36,7 @@ Mobile auth endpoints:
 
 Sign in with your ERP user email and password (active users only). Menu visibility follows the same permission rules as the web ERP.
 
-WebView modules (Manufacturing tabs, Helpdesk, Documents, Reports) receive an **embed token** instead of the long-lived access token.
+WebView modules (Manufacturing tabs, Reports) receive an **embed token** instead of the long-lived access token. Helpdesk and Documents still open in the system browser until their in-app WebView shells land.
 
 ## Job cards (native module)
 

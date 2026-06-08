@@ -60,7 +60,12 @@ export type RootStackParamList = {
       }
     | undefined
   Notifications: undefined
-  Reports: undefined
+  Reports:
+    | {
+        tab?: 'audit' | 'my-queries' | 'feedback'
+        highlightFeedbackId?: string
+      }
+    | undefined
   Settings: undefined
   DashboardCustomize: undefined
 }

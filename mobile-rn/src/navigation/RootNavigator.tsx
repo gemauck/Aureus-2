@@ -130,11 +130,7 @@ const DocumentsScreen = lazyPlaceholderScreen({
   description: 'Document library — available on the web ERP.',
   icon: 'folder-open'
 })
-const ReportsScreen = lazyPlaceholderScreen({
-  webPath: '/reports',
-  description: 'Reports and analytics on the web ERP.',
-  icon: 'chart-bar'
-})
+const ReportsScreen = lazyScreenComponent(() => require('../screens/ReportsScreen').ReportsScreen)
 
 function LoadingScreen() {
   const { erp } = useTheme()

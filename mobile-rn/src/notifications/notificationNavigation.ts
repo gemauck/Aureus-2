@@ -2,6 +2,7 @@ import type { TeamTabId } from '../teams/types'
 import type { CrmDetailTab } from '../crm/types'
 import type { ProjectDetailTab } from '../projects/types'
 import { parseManufacturingLink } from '../manufacturing/constants'
+import { parseReportsLink } from '../reports/constants'
 import { navigateRoot } from '../navigation/navigationHelpers'
 import type { RootStackParamList } from '../navigation/types'
 import type { User } from '../types'
@@ -266,7 +267,17 @@ export function navigateFromNotification(
     return safeNavigate(navigation, user, 'Helpdesk')
   }
   if (path.includes('/reports') || link.includes('reports')) {
-    return safeNavigate(navigation, user, 'Reports')
+    const reportsQuery = parseReportsLink(link || path)
+    const params =
+      reportsQuery.tab || reportsQuery.highlightFeedbackId
+        ? {
+            ...(reportsQuery.tab ? { tab: reportsQuery.tab } : {}),
+            ...(reportsQuery.highlightFeedbackId
+              ? { highlightFeedbackId: reportsQuery.highlightFeedbackId }
+              : {})
+          }
+        : undefined
+    return safeNavigate(navigation, user, 'Reports', params)
   }
   if (path.includes('/jobcards') || path.includes('/service-maintenance')) {
     return safeNavigate(navigation, user, 'JobCards')
