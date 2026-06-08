@@ -284,6 +284,7 @@ const Messenger = () => {
     () => window.pwaMessengerInstall?.isMessengerPwaInstalled?.() || false
   );
   const [pwaInstallBusy, setPwaInstallBusy] = useState(false);
+  const [showNotifSettings, setShowNotifSettings] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [reactionPickerId, setReactionPickerId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -885,6 +886,64 @@ const Messenger = () => {
   const bubbleMine = isDark ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white' : 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white';
   const bubbleTheirs = isDark ? 'bg-gray-800 text-gray-100 border border-gray-700/80' : 'bg-white text-gray-900 border border-gray-100 shadow-sm';
 
+  const renderToggle = (on, disabled, onClick, label) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => void onClick()}
+      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${on ? 'bg-emerald-400' : (isDark ? 'bg-gray-600' : 'bg-gray-300')} disabled:opacity-50`}
+      title={label}
+      aria-pressed={on}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : ''}`} />
+    </button>
+  );
+
+  const renderNotifSettingsModal = () => (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
+      onClick={() => setShowNotifSettings(false)}
+    >
+      <div className={`w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden ${panel} border`} onClick={(e) => e.stopPropagation()}>
+        <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+          <h3 className="font-semibold text-lg">Notification settings</h3>
+          <button type="button" onClick={() => setShowNotifSettings(false)} className={`p-2 rounded-lg ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}>
+            <i className="fas fa-times" />
+          </button>
+        </div>
+        <div className="px-4 py-4 space-y-3">
+          <div className={`flex items-center justify-between gap-3 px-3 py-3 rounded-xl ${isDark ? 'bg-gray-800/60' : 'bg-gray-50'}`}>
+            <span className="text-sm flex items-center gap-2 min-w-0">
+              <i className={`fas fa-envelope text-xs ${muted}`} />
+              Email notifications
+            </span>
+            {renderToggle(
+              emailMessages,
+              emailPrefLoading || emailPrefSaving,
+              toggleEmailMessages,
+              emailMessages ? 'Email alerts on' : 'Email alerts off'
+            )}
+          </div>
+          <div className={`flex items-center justify-between gap-3 px-3 py-3 rounded-xl ${isDark ? 'bg-gray-800/60' : 'bg-gray-50'}`}>
+            <span className="text-sm flex items-center gap-2 min-w-0">
+              <i className={`fas fa-bell text-xs ${muted}`} />
+              Browser notifications
+            </span>
+            {renderToggle(
+              browserMessages,
+              browserPrefSaving || !window.chatBrowserNotifications?.isSupported?.(),
+              toggleBrowserMessages,
+              browserMessages ? 'Desktop alerts on' : 'Desktop alerts off'
+            )}
+          </div>
+          {!window.chatBrowserNotifications?.isSupported?.() && (
+            <p className={`text-xs px-1 ${muted}`}>Browser notifications are not supported in this browser.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderUserPicker = (multi = false) => (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => { setShowNewChat(false); setShowNewGroup(false); }}>
       <div className={`w-full sm:max-w-md max-h-[85vh] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden ${panel} border`} onClick={(e) => e.stopPropagation()}>
@@ -962,6 +1021,10 @@ const Messenger = () => {
                 </p>
               </div>
               <div className="flex gap-1">
+                <button type="button" title="Notification settings" onClick={() => setShowNotifSettings(true)}
+                  className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
+                  <i className="fas fa-cog" />
+                </button>
                 <button type="button" title="New group" onClick={() => { setShowNewGroup(true); searchUsers(''); }}
                   className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors">
                   <i className="fas fa-users" />
@@ -977,44 +1040,12 @@ const Messenger = () => {
               <input type="search" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)}
                 className="messenger-conversation-search flex-1 bg-transparent border-0 outline-none text-sm text-white placeholder-white/60 caret-white" />
             </div>
-            <div className={`mt-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/50 text-blue-100' : 'bg-white/15 text-white'}`}>
-              <span className="text-xs flex items-center gap-1.5">
-                <i className="fas fa-envelope text-[11px] opacity-80" />
-                Email notifications
-              </span>
-              <button
-                type="button"
-                disabled={emailPrefLoading || emailPrefSaving}
-                onClick={() => void toggleEmailMessages()}
-                className={`relative w-10 h-5 rounded-full transition-colors ${emailMessages ? 'bg-emerald-400' : (isDark ? 'bg-gray-700' : 'bg-white/30')} disabled:opacity-50`}
-                title={emailMessages ? 'Email alerts on for new messages' : 'Email alerts off for new messages'}
-                aria-pressed={emailMessages}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailMessages ? 'translate-x-5' : ''}`} />
-              </button>
-            </div>
-            <div className={`mt-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/50 text-blue-100' : 'bg-white/15 text-white'}`}>
-              <span className="text-xs flex items-center gap-1.5">
-                <i className="fas fa-bell text-[11px] opacity-80" />
-                Browser notifications
-              </span>
-              <button
-                type="button"
-                disabled={browserPrefSaving || !window.chatBrowserNotifications?.isSupported?.()}
-                onClick={() => void toggleBrowserMessages()}
-                className={`relative w-10 h-5 rounded-full transition-colors ${browserMessages ? 'bg-emerald-400' : (isDark ? 'bg-gray-700' : 'bg-white/30')} disabled:opacity-50`}
-                title={browserMessages ? 'Chrome/desktop alerts on for new messages' : 'Chrome/desktop alerts off for new messages'}
-                aria-pressed={browserMessages}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${browserMessages ? 'translate-x-5' : ''}`} />
-              </button>
-            </div>
             {!pwaInstalled ? (
               <button
                 type="button"
                 disabled={pwaInstallBusy}
                 onClick={() => void installMessengerDesktopApp()}
-                className={`mt-2 w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left transition-colors ${isDark ? 'bg-gray-900/50 hover:bg-gray-900/70 text-blue-100' : 'bg-white/15 hover:bg-white/25 text-white'} disabled:opacity-50`}
+                className={`mt-2 w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left transition-colors border ${isDark ? 'bg-indigo-950/50 hover:bg-indigo-950/70 border-indigo-400/25 text-blue-100' : 'bg-indigo-900/35 hover:bg-indigo-900/50 border-white/30 text-white'} disabled:opacity-50`}
                 title="Install Messenger as a standalone Chrome / Edge desktop app"
               >
                 <span className="text-xs flex items-center gap-1.5 min-w-0">
@@ -1300,6 +1331,7 @@ const Messenger = () => {
         </main>
       </div>
 
+      {showNotifSettings && renderNotifSettingsModal()}
       {showNewChat && renderUserPicker(false)}
       {showNewGroup && renderUserPicker(true)}
       {readReceiptMessageId && (
