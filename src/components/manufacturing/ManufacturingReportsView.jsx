@@ -388,6 +388,411 @@
     URL.revokeObjectURL(url);
   }
 
+  const ALLOCATION_CHART_TOP_N = 10;
+
+  function formatAllocationMoney(value) {
+    const n = roundMoney(Number(value) || 0);
+    return `R ${n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  function truncateChartLabel(label, maxLen = 36) {
+    const s = label != null ? String(label).trim() : '';
+    if (!s) return 'Unknown';
+    if (s.length <= maxLen) return s;
+    return `${s.slice(0, maxLen - 1)}…`;
+  }
+
+  function buildClientAllocationInsights(rows) {
+    const byCustomer = new Map();
+    const byPart = new Map();
+    const bySource = new Map();
+    let totalValue = 0;
+    let totalQty = 0;
+    let lineCount = 0;
+
+    for (const row of rows || []) {
+      const value = getAllocationLineValue(row);
+      const qty = parseFloat(row.line_quantity);
+      const hasQty = Number.isFinite(qty) && qty > 0;
+      if (!(value > 0) && !hasQty) continue;
+
+      lineCount += 1;
+      totalValue += value;
+      totalQty += hasQty ? qty : 0;
+
+      const customer =
+        (row.customerName || getJournalCustomerNameFromRow(row) || 'Unknown').trim() || 'Unknown';
+      const partKey = String(row.line_sku || row.line_itemName || 'Unknown').trim() || 'Unknown';
+      const partLabel = row.line_itemName || row.line_sku || 'Unknown';
+      const source = String(row.sourceType || 'Other').trim() || 'Other';
+
+      const cust = byCustomer.get(customer) || { label: customer, value: 0, qty: 0, lines: 0 };
+      cust.value = roundMoney(cust.value + value);
+      cust.qty = roundMoney(cust.qty + (hasQty ? qty : 0));
+      cust.lines += 1;
+      byCustomer.set(customer, cust);
+
+      const part = byPart.get(partKey) || { label: partLabel, sku: row.line_sku || '', value: 0, qty: 0 };
+      part.value = roundMoney(part.value + value);
+      part.qty = roundMoney(part.qty + (hasQty ? qty : 0));
+      byPart.set(partKey, part);
+
+      const src = bySource.get(source) || { label: source, value: 0, qty: 0, lines: 0 };
+      src.value = roundMoney(src.value + value);
+      src.qty = roundMoney(src.qty + (hasQty ? qty : 0));
+      src.lines += 1;
+      bySource.set(source, src);
+    }
+
+    const sortByValue = (a, b) => b.value - a.value || b.qty - a.qty;
+    const topClients = Array.from(byCustomer.values()).sort(sortByValue).slice(0, ALLOCATION_CHART_TOP_N);
+    const topParts = Array.from(byPart.values()).sort(sortByValue).slice(0, ALLOCATION_CHART_TOP_N);
+    const bySourceType = Array.from(bySource.values()).sort(sortByValue);
+
+    return {
+      totals: {
+        totalValue: roundMoney(totalValue),
+        totalQty: roundMoney(totalQty),
+        lineCount,
+        clientCount: byCustomer.size,
+        partCount: byPart.size
+      },
+      topClients,
+      topParts,
+      bySourceType,
+      maxClientValue: topClients[0]?.value || 1,
+      maxPartValue: topParts[0]?.value || 1,
+      maxSourceValue: bySourceType[0]?.value || 1
+    };
+  }
+
+  function wrapCanvasText(ctx, text, maxWidth) {
+    const words = String(text).split(/\s+/);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  function drawHorizontalBarSection(ctx, opts) {
+    const {
+      x,
+      y,
+      width,
+      title,
+      items,
+      maxValue,
+      valueFormatter,
+      barColor,
+      labelWidth = 220
+    } = opts;
+    const barMaxWidth = width - labelWidth - 120;
+    const rowHeight = 28;
+
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText(title, x, y);
+    let cursorY = y + 28;
+
+    if (!items.length) {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '13px system-ui, sans-serif';
+      ctx.fillText('No allocation lines in this period.', x, cursorY + 14);
+      return cursorY + 36;
+    }
+
+    ctx.font = '12px system-ui, sans-serif';
+    for (const item of items) {
+      const label = truncateChartLabel(item.label, 34);
+      const value = Number(item.value) || 0;
+      const pct = maxValue > 0 ? value / maxValue : 0;
+      const barW = Math.max(value > 0 ? 6 : 0, pct * barMaxWidth);
+
+      ctx.fillStyle = '#374151';
+      ctx.fillText(label, x, cursorY + 14);
+
+      const barX = x + labelWidth;
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fillRect(barX, cursorY + 4, barMaxWidth, 14);
+      ctx.fillStyle = barColor;
+      ctx.fillRect(barX, cursorY + 4, barW, 14);
+
+      ctx.fillStyle = '#111827';
+      ctx.textAlign = 'right';
+      ctx.fillText(valueFormatter(value), barX + barMaxWidth + 108, cursorY + 14);
+      ctx.textAlign = 'left';
+      cursorY += rowHeight;
+    }
+    return cursorY + 12;
+  }
+
+  function downloadClientAllocationInsightsChart(insights, periodLabel) {
+    const width = 1100;
+    const clientRows = insights.topClients.length;
+    const partRows = insights.topParts.length;
+    const sourceRows = Math.max(insights.bySourceType.length, 1);
+    const height = 220 + clientRows * 28 + 60 + partRows * 28 + 80 + sourceRows * 28 + 80;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      window.alert('Could not create chart image.');
+      return;
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = '#111827';
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.fillText('Client Part Allocation & Expenditure', 40, 42);
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillText(`Period: ${periodLabel}`, 40, 68);
+    ctx.fillText(`Generated: ${formatYmd(new Date())}`, 40, 88);
+
+    const { totals } = insights;
+    const statY = 108;
+    const stats = [
+      { label: 'Total spend', value: formatAllocationMoney(totals.totalValue) },
+      { label: 'Parts issued', value: totals.totalQty.toLocaleString('en-ZA') },
+      { label: 'Clients', value: String(totals.clientCount) },
+      { label: 'Unique parts', value: String(totals.partCount) }
+    ];
+    stats.forEach((stat, i) => {
+      const boxX = 40 + i * 250;
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(boxX, statY, 230, 54);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillText(stat.label, boxX + 12, statY + 20);
+      ctx.fillStyle = '#111827';
+      ctx.font = 'bold 16px system-ui, sans-serif';
+      ctx.fillText(stat.value, boxX + 12, statY + 42);
+    });
+
+    let y = statY + 84;
+    y = drawHorizontalBarSection(ctx, {
+      x: 40,
+      y,
+      width: width - 80,
+      title: `Top clients by expenditure (${ALLOCATION_CHART_TOP_N})`,
+      items: insights.topClients,
+      maxValue: insights.maxClientValue,
+      valueFormatter: formatAllocationMoney,
+      barColor: '#4f46e5'
+    });
+    y = drawHorizontalBarSection(ctx, {
+      x: 40,
+      y,
+      width: width - 80,
+      title: `Top parts by cost (${ALLOCATION_CHART_TOP_N})`,
+      items: insights.topParts,
+      maxValue: insights.maxPartValue,
+      valueFormatter: formatAllocationMoney,
+      barColor: '#059669'
+    });
+    y = drawHorizontalBarSection(ctx, {
+      x: 40,
+      y,
+      width: width - 80,
+      title: 'Expenditure by source',
+      items: insights.bySourceType,
+      maxValue: insights.maxSourceValue,
+      valueFormatter: formatAllocationMoney,
+      barColor: '#d97706'
+    });
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        window.alert('Chart export failed.');
+        return;
+      }
+      const today = formatYmd(new Date());
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `client_allocation_insights_${today}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }
+
+  function AllocationHorizontalBarChart({ title, subtitle, items, maxValue, formatValue, barClass, isDark }) {
+    const textMain = isDark ? 'text-gray-100' : 'text-gray-900';
+    const textMuted = isDark ? 'text-gray-400' : 'text-gray-500';
+    const trackClass = isDark ? 'bg-gray-800' : 'bg-gray-100';
+
+    return React.createElement(
+      'div',
+      { className: 'min-w-0' },
+      React.createElement(
+        'div',
+        { className: 'mb-2' },
+        React.createElement('h4', { className: `text-xs font-semibold ${textMain}` }, title),
+        subtitle &&
+          React.createElement('p', { className: `text-[10px] mt-0.5 ${textMuted}` }, subtitle)
+      ),
+      !items.length
+        ? React.createElement('p', { className: `text-xs ${textMuted}` }, 'No data for this period.')
+        : React.createElement(
+            'div',
+            { className: 'space-y-2', role: 'img', 'aria-label': title },
+            items.map((item, idx) => {
+              const value = Number(item.value) || 0;
+              const pct = maxValue > 0 ? (value / maxValue) * 100 : 0;
+              const qtyNote =
+                item.qty > 0 ? ` · ${item.qty.toLocaleString('en-ZA')} units` : '';
+              return React.createElement(
+                'div',
+                { key: `${item.label}-${idx}`, className: 'group' },
+                React.createElement(
+                  'div',
+                  { className: 'flex items-center justify-between gap-2 mb-0.5' },
+                  React.createElement(
+                    'span',
+                    {
+                      className: `text-[11px] truncate ${textMain}`,
+                      title: item.label
+                    },
+                    truncateChartLabel(item.label, 42)
+                  ),
+                  React.createElement(
+                    'span',
+                    { className: `text-[10px] tabular-nums whitespace-nowrap ${textMuted}` },
+                    `${formatValue(value)}${qtyNote}`
+                  )
+                ),
+                React.createElement(
+                  'div',
+                  { className: `h-2.5 rounded-full overflow-hidden ${trackClass}` },
+                  React.createElement('div', {
+                    className: `h-full rounded-full ${barClass}`,
+                    style: { width: `${Math.max(value > 0 ? 4 : 0, pct)}%` },
+                    title: `${item.label}: ${formatValue(value)}${qtyNote}`
+                  })
+                )
+              );
+            })
+          )
+    );
+  }
+
+  function ClientAllocationInsightsPanel({ insights, periodLabel, isDark }) {
+    const card = isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100';
+    const textMain = isDark ? 'text-gray-100' : 'text-gray-900';
+    const textMuted = isDark ? 'text-gray-400' : 'text-gray-500';
+    const statCard = isDark ? 'bg-gray-800/80 border-gray-700' : 'bg-gray-50 border-gray-100';
+    const { totals } = insights;
+
+    const statTiles = [
+      { label: 'Total spend', value: formatAllocationMoney(totals.totalValue), icon: 'fa-coins' },
+      {
+        label: 'Parts issued',
+        value: totals.totalQty.toLocaleString('en-ZA'),
+        icon: 'fa-boxes-stacked'
+      },
+      { label: 'Clients served', value: String(totals.clientCount), icon: 'fa-building' },
+      { label: 'Unique parts', value: String(totals.partCount), icon: 'fa-puzzle-piece' }
+    ];
+
+    return React.createElement(
+      'div',
+      { className: `${card} rounded-xl border p-4 shadow-sm space-y-4` },
+      React.createElement(
+        'div',
+        { className: 'flex flex-wrap items-start justify-between gap-2' },
+        React.createElement(
+          'div',
+          null,
+          React.createElement(
+            'h4',
+            { className: `text-sm font-semibold ${textMain}` },
+            'Allocation insights'
+          ),
+          React.createElement(
+            'p',
+            { className: `text-xs mt-0.5 ${textMuted}` },
+            `Part allocation and expenditure summary · ${periodLabel}`
+          )
+        ),
+        React.createElement(
+          'span',
+          { className: `text-[10px] ${textMuted}` },
+          `${totals.lineCount} line${totals.lineCount === 1 ? '' : 's'} with value or quantity`
+        )
+      ),
+      React.createElement(
+        'div',
+        { className: 'grid grid-cols-2 lg:grid-cols-4 gap-2' },
+        statTiles.map((tile) =>
+          React.createElement(
+            'div',
+            {
+              key: tile.label,
+              className: `rounded-lg border px-3 py-2 ${statCard}`
+            },
+            React.createElement(
+              'div',
+              { className: `text-[10px] uppercase tracking-wide ${textMuted}` },
+              React.createElement('i', { className: `fas ${tile.icon} mr-1 text-[9px]` }),
+              tile.label
+            ),
+            React.createElement(
+              'div',
+              { className: `text-sm font-semibold tabular-nums mt-1 ${textMain}` },
+              tile.value
+            )
+          )
+        )
+      ),
+      React.createElement(
+        'div',
+        { className: 'grid grid-cols-1 xl:grid-cols-2 gap-4' },
+        React.createElement(AllocationHorizontalBarChart, {
+          title: `Top clients by expenditure`,
+          subtitle: `Top ${ALLOCATION_CHART_TOP_N} by line cost`,
+          items: insights.topClients,
+          maxValue: insights.maxClientValue,
+          formatValue: formatAllocationMoney,
+          barClass: 'bg-gradient-to-r from-indigo-600 to-indigo-400',
+          isDark
+        }),
+        React.createElement(AllocationHorizontalBarChart, {
+          title: 'Top parts by cost',
+          subtitle: `Top ${ALLOCATION_CHART_TOP_N} SKUs / items`,
+          items: insights.topParts,
+          maxValue: insights.maxPartValue,
+          formatValue: formatAllocationMoney,
+          barClass: 'bg-gradient-to-r from-emerald-600 to-emerald-400',
+          isDark
+        })
+      ),
+      React.createElement(AllocationHorizontalBarChart, {
+        title: 'Expenditure by source',
+        subtitle: 'Sales orders vs job card consumption',
+        items: insights.bySourceType,
+        maxValue: insights.maxSourceValue,
+        formatValue: formatAllocationMoney,
+        barClass: 'bg-gradient-to-r from-amber-600 to-amber-400',
+        isDark
+      })
+    );
+  }
+
   async function fetchAllJobCardsWithStockUsed() {
     if (!window.DatabaseAPI?.getJobCards) return [];
     const all = [];
@@ -589,6 +994,7 @@
     const [rows, setRows] = useState([]);
     const [exporting, setExporting] = useState(false);
     const [journalExporting, setJournalExporting] = useState(false);
+    const [chartDownloading, setChartDownloading] = useState(false);
     const [valuationLocationId, setValuationLocationId] = useState('all');
 
     const inventoryCostMap = useMemo(() => buildInventoryCostMap(inventory), [inventory]);
@@ -600,6 +1006,7 @@
 
     const isValuationTab = reportTab === 'inventory-valuation';
     const isCostOverrideTab = reportTab === 'cost-overrides';
+    const isClientAllocationTab = reportTab === 'client-allocation';
 
     const resolveLocationLabel = useCallback(
       (locIdOrCode) => {
@@ -933,6 +1340,27 @@
       return roundMoney(rows.reduce((sum, r) => sum + (Number(r.total_value) || 0), 0));
     }, [isValuationTab, rows]);
 
+    const allocationInsights = useMemo(() => {
+      if (!isClientAllocationTab) return null;
+      return buildClientAllocationInsights(rows);
+    }, [isClientAllocationTab, rows]);
+
+    const handleDownloadInsightsChart = () => {
+      if (!allocationInsights?.totals?.lineCount) {
+        window.alert('No allocation data to chart for this date range.');
+        return;
+      }
+      setChartDownloading(true);
+      try {
+        downloadClientAllocationInsightsChart(allocationInsights, periodLabel);
+      } catch (err) {
+        console.error('Chart download failed:', err);
+        window.alert('Chart download failed. See console for details.');
+      } finally {
+        setChartDownloading(false);
+      }
+    };
+
     const handleExport = async () => {
       setExporting(true);
       try {
@@ -1100,7 +1528,23 @@
               React.createElement('i', { className: 'fas fa-file-excel text-xs' }),
               exporting ? 'Exporting…' : 'Export Excel'
             ),
-            reportTab === 'client-allocation' &&
+            isClientAllocationTab &&
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  onClick: handleDownloadInsightsChart,
+                  disabled:
+                    chartDownloading ||
+                    loading ||
+                    !allocationInsights?.totals?.lineCount,
+                  className: 'px-3 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 flex items-center gap-2 disabled:opacity-50',
+                  title: 'Download allocation insights chart as PNG'
+                },
+                React.createElement('i', { className: 'fas fa-chart-bar text-xs' }),
+                chartDownloading ? 'Preparing chart…' : 'Download Chart'
+              ),
+            isClientAllocationTab &&
               React.createElement(
                 'button',
                 {
@@ -1155,6 +1599,14 @@
           },
           error
         ),
+      isClientAllocationTab &&
+        !loading &&
+        allocationInsights?.totals?.lineCount > 0 &&
+        React.createElement(ClientAllocationInsightsPanel, {
+          insights: allocationInsights,
+          periodLabel,
+          isDark
+        }),
       React.createElement(
         'div',
         { className: `${card} rounded-xl border overflow-hidden min-w-0` },
