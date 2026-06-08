@@ -153,6 +153,8 @@ function AuthenticatedAppInner() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>()
   const [currentRoute, setCurrentRoute] = React.useState('Dashboard')
   const { accessToken, user } = useAuth()
+  const userRef = React.useRef(user)
+  userRef.current = user
   const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
 
   // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
@@ -184,8 +186,9 @@ function AuthenticatedAppInner() {
           const rootScreen = getActiveRootRouteName(state)
           if (!rootScreen) return
           setCurrentRoute(rootScreen)
-          if (!user || ALWAYS_ACCESSIBLE_ROOT_SCREENS.has(rootScreen)) return
-          if (!canAccessScreen(user, rootScreen)) {
+          const activeUser = userRef.current
+          if (!activeUser || ALWAYS_ACCESSIBLE_ROOT_SCREENS.has(rootScreen)) return
+          if (!canAccessScreen(activeUser, rootScreen)) {
             navigationRef.navigate('Dashboard')
           }
         }}

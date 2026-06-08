@@ -31,7 +31,12 @@ export function useEmbedToken(accessToken: string | null) {
       setState({ token: data.embedToken, user: data.user, loading: false })
     } catch (err) {
       trackError(err, 'mobileEmbedToken')
-      setState({ token: accessToken, user: null, loading: false })
+      // Keep the previous embed user/token so WebView auth does not flicker on transient errors.
+      setState((prev) => ({
+        token: prev.token || accessToken,
+        user: prev.user,
+        loading: false
+      }))
     }
   }, [accessToken])
 
@@ -43,7 +48,7 @@ export function useEmbedToken(accessToken: string | null) {
     if (!accessToken) return
     const timer = setInterval(() => {
       void refreshEmbedToken()
-    }, 10 * 60 * 1000)
+    }, 8 * 60 * 1000)
     return () => clearInterval(timer)
   }, [accessToken, refreshEmbedToken])
 

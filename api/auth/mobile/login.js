@@ -12,7 +12,7 @@ async function handler(req, res) {
   try {
     let { email, password } = req.body || {}
     email = String(email || '').trim().toLowerCase()
-    password = String(password || '').trim()
+    password = String(password || '').replace(/\0/g, '').trim()
 
     if (!email || !password) return badRequest(res, 'Email and password required')
     if (!process.env.JWT_SECRET) return serverError(res, 'Server configuration error', 'JWT_SECRET missing')

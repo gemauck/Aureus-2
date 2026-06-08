@@ -1,30 +1,60 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { apiClient, registerAuthRefresh } from '../services/apiClient'
+import { AppState } from 'react-native'
+import { apiClient, isUnauthorizedError, refreshAccessToken, registerAuthRefresh } from '../services/apiClient'
 import { clearSession, loadSession, saveSession } from '../services/authSession'
 import { trackError } from '../services/telemetry'
 import type { AuthSession, User } from '../types'
+
+type RefreshPayload = {
+  accessToken: string
+  refreshToken: string
+  user?: User
+}
 
 type AuthContextValue = {
   loading: boolean
   user: User | null
   accessToken: string | null
   refreshToken: string | null
+  sessionExpired: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   refreshAuth: () => Promise<void>
   updateTokens: (accessToken: string, refreshToken: string) => Promise<void>
+  clearSessionExpired: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function buildSession(current: AuthSession, refreshed: RefreshPayload): AuthSession {
+  return {
+    accessToken: refreshed.accessToken,
+    refreshToken: refreshed.refreshToken,
+    user: refreshed.user || current.user
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<AuthSession | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const sessionRef = useRef<AuthSession | null>(null)
 
   useEffect(() => {
     sessionRef.current = session
   }, [session])
+
+  const persistSession = async (nextSession: AuthSession) => {
+    sessionRef.current = nextSession
+    setSession(nextSession)
+    await saveSession(nextSession)
+  }
+
+  const clearAuthSession = async () => {
+    sessionRef.current = null
+    setSession(null)
+    await clearSession()
+  }
 
   useEffect(() => {
     registerAuthRefresh(async () => {
@@ -32,20 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!current?.refreshToken) return null
       try {
         const refreshed = await apiClient.mobileRefresh(current.refreshToken)
-        const nextSession: AuthSession = {
-          ...current,
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken
-        }
-        sessionRef.current = nextSession
-        setSession(nextSession)
-        await saveSession(nextSession)
+        const nextSession = buildSession(current, refreshed)
+        await persistSession(nextSession)
         return refreshed.accessToken
       } catch (err) {
         trackError(err, 'authRefresh')
-        setSession(null)
-        sessionRef.current = null
-        await clearSession()
+        if (isUnauthorizedError(err)) {
+          setSessionExpired(true)
+          await clearAuthSession()
+        }
         return null
       }
     })
@@ -59,50 +84,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  // Proactive refresh while the app is open — avoids the ~10 min embed-token refresh hitting an expired access token.
+  useEffect(() => {
+    if (!session?.refreshToken) return
+
+    const refreshIfNeeded = () => {
+      if (!sessionRef.current?.refreshToken) return
+      void refreshAccessToken().catch((err) => trackError(err, 'authKeepalive'))
+    }
+
+    const interval = setInterval(refreshIfNeeded, 5 * 60 * 1000)
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshIfNeeded()
+    })
+
+    return () => {
+      clearInterval(interval)
+      sub.remove()
+    }
+  }, [session?.refreshToken])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       loading,
       user: session?.user || null,
       accessToken: session?.accessToken || null,
       refreshToken: session?.refreshToken || null,
+      sessionExpired,
+      clearSessionExpired: () => setSessionExpired(false),
       async signIn(email, password) {
-        const data = await apiClient.mobileLogin(email, password)
+        const normalizedEmail = String(email || '').trim().toLowerCase()
+        const normalizedPassword = String(password || '').replace(/\0/g, '').trim()
+        const data = await apiClient.mobileLogin(normalizedEmail, normalizedPassword)
         const nextSession: AuthSession = {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           user: data.user
         }
-        setSession(nextSession)
-        await saveSession(nextSession)
+        setSessionExpired(false)
+        await persistSession(nextSession)
       },
       async signOut() {
         await apiClient.mobileLogout(session?.refreshToken, session?.accessToken || undefined)
-        setSession(null)
-        await clearSession()
+        setSessionExpired(false)
+        await clearAuthSession()
       },
       async refreshAuth() {
         if (!session?.refreshToken) return
         const refreshed = await apiClient.mobileRefresh(session.refreshToken)
-        const nextSession: AuthSession = {
-          ...session,
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken
-        }
-        setSession(nextSession)
-        await saveSession(nextSession)
+        await persistSession(buildSession(session, refreshed))
       },
       async updateTokens(accessToken, refreshToken) {
         if (!session?.user) return
-        const nextSession: AuthSession = {
+        await persistSession({
           ...session,
           accessToken,
           refreshToken
-        }
-        setSession(nextSession)
-        await saveSession(nextSession)
+        })
       }
     }),
-    [loading, session]
+    [loading, session, sessionExpired]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

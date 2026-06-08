@@ -21,7 +21,7 @@ import { useTheme } from '../theme/ThemeContext'
 export function LoginScreen() {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
-  const { signIn } = useAuth()
+  const { signIn, sessionExpired, clearSessionExpired } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -29,11 +29,21 @@ export function LoginScreen() {
 
   async function onSubmit() {
     setError('')
+    clearSessionExpired()
     try {
       setSubmitting(true)
       await signIn(email, password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      const message = err instanceof Error ? err.message : 'Login failed'
+      if (/cannot reach/i.test(message)) {
+        setError(message)
+      } else if (/invalid credentials/i.test(message)) {
+        setError(
+          'Invalid credentials. Check your email and password, or sign in on the web ERP to confirm your account is active.'
+        )
+      } else {
+        setError(message)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -56,6 +66,12 @@ export function LoginScreen() {
         <View style={styles.card}>
           <Text style={styles.title}>Sign in</Text>
           <Text style={styles.subtitle}>Use your Abcotronics ERP account</Text>
+
+          {sessionExpired ? (
+            <Text style={styles.sessionHint}>
+              Your session expired. Sign in again to continue.
+            </Text>
+          ) : null}
 
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -138,6 +154,13 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     marginBottom: 14
   },
   error: { color: erp.danger, fontWeight: '600', marginBottom: 10, fontSize: 14 },
+  sessionHint: {
+    color: erp.warning || erp.primary,
+    fontWeight: '600',
+    marginBottom: 12,
+    fontSize: 14,
+    lineHeight: 20
+  },
   btn: {
     backgroundColor: erp.primary,
     borderRadius: erp.radius.md,

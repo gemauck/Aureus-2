@@ -12,6 +12,20 @@ type RequestOptions = {
 
 type AuthRefreshHandler = () => Promise<string | null>
 
+export class ApiRequestError extends Error {
+  statusCode: number
+
+  constructor(message: string, statusCode: number) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.statusCode = statusCode
+  }
+}
+
+export function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.statusCode === 401
+}
+
 let authRefreshHandler: AuthRefreshHandler | null = null
 let refreshInFlight: Promise<string | null> | null = null
 
@@ -20,7 +34,8 @@ export function registerAuthRefresh(handler: AuthRefreshHandler | null) {
   authRefreshHandler = handler
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+/** Single in-flight token refresh shared by 401 retries and session keepalive. */
+export async function refreshAccessToken(): Promise<string | null> {
   if (!authRefreshHandler) return null
   if (!refreshInFlight) {
     refreshInFlight = authRefreshHandler().finally(() => {
@@ -94,7 +109,7 @@ export async function request<T>(
         return request<T>(path, { ...options, token: newToken }, true)
       }
     }
-    throw new Error(message)
+    throw new ApiRequestError(message, response.status)
   }
   return payload?.data as T
 }
@@ -111,7 +126,17 @@ export const apiClient = {
     })
   },
   async mobileRefresh(refreshToken: string) {
-    return request<{ accessToken: string; refreshToken: string }>('/api/auth/mobile/refresh', {
+    return request<{
+      accessToken: string
+      refreshToken: string
+      user?: {
+        id: string
+        email: string
+        role?: string
+        name?: string
+        permissions?: string | string[]
+      }
+    }>('/api/auth/mobile/refresh', {
       method: 'POST',
       body: { refreshToken }
     })

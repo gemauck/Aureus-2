@@ -1,3 +1,4 @@
+import { prisma } from '../../_lib/prisma.js'
 import {
   isMobileEmbedTokenPayload,
   signAccessToken,
@@ -20,13 +21,40 @@ async function handler(req, res) {
     if (!payload || !payload.sub) return unauthorized(res, 'Invalid refresh token')
     if (isMobileEmbedTokenPayload(payload)) return unauthorized(res, 'Invalid refresh token')
 
-    const nextPayload = { sub: payload.sub, email: payload.email, role: payload.role, name: payload.name, platform: 'mobile' }
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        status: true,
+        permissions: true
+      }
+    })
+
+    if (!user || user.status !== 'active') return unauthorized(res, 'Invalid refresh token')
+
+    const nextPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      platform: 'mobile'
+    }
     const accessToken = signAccessToken(nextPayload)
     const rotatedRefreshToken = signRefreshToken(nextPayload)
 
     return ok(res, {
       accessToken,
-      refreshToken: rotatedRefreshToken
+      refreshToken: rotatedRefreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        permissions: user.permissions || '[]'
+      }
     })
   } catch (error) {
     return serverError(res, 'Mobile refresh failed', error?.message || 'Unknown error')
