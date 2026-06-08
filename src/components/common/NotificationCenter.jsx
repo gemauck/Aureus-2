@@ -1,6 +1,9 @@
 // Notification Center Component
 const { useState, useEffect, useRef } = React;
 
+// Chat messages have their own header icon (MessageCenter); keep them out of the bell dropdown.
+const BELL_EXCLUDE_TYPES = 'message';
+
 const NotificationCenter = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
@@ -129,12 +132,15 @@ const NotificationCenter = () => {
             }
             
             try {
-                const response = await window.DatabaseAPI.makeRequest('/notifications', {
-                    method: 'GET',
-                    // Background polling should not spam retries/logs on transient gateway timeouts.
-                    maxRetries: silent ? 0 : 1,
-                    suppressRetryWarnings: silent
-                });
+                const response = await window.DatabaseAPI.makeRequest(
+                    `/notifications?excludeTypes=${encodeURIComponent(BELL_EXCLUDE_TYPES)}`,
+                    {
+                        method: 'GET',
+                        // Background polling should not spam retries/logs on transient gateway timeouts.
+                        maxRetries: silent ? 0 : 1,
+                        suppressRetryWarnings: silent
+                    }
+                );
                 
                 // DatabaseAPI.makeRequest returns { data: {...} } structure
                 const responseData = response?.data || response;
@@ -294,21 +300,54 @@ const NotificationCenter = () => {
     }, []);
     
     const markAsRead = async (notificationIds) => {
+        const ids = Array.isArray(notificationIds) ? notificationIds.filter(Boolean) : [];
+        if (!ids.length) return;
         try {
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
                 console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest not available for markAsRead');
                 return;
             }
-            
+
+            setNotifications((prev) => {
+                const unreadRemoved = prev.filter((n) => ids.includes(n.id) && !n.read).length;
+                if (unreadRemoved > 0) {
+                    setUnreadCount((c) => Math.max(0, c - unreadRemoved));
+                }
+                return prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n));
+            });
+
             await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'PATCH',
-                body: JSON.stringify({ read: true, notificationIds })
+                body: JSON.stringify({ read: true, notificationIds: ids })
             });
-            
-            loadNotifications(); // Reload to update counts
         } catch (error) {
             console.error('❌ Error marking notifications as read:', error);
-            // Don't throw - this is a non-critical operation
+            loadNotifications({ silent: true });
+        }
+    };
+
+    const markAllAsRead = async () => {
+        if (unreadCount <= 0) return;
+        try {
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest not available for markAllAsRead');
+                return;
+            }
+
+            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+            setUnreadCount(0);
+
+            await window.DatabaseAPI.makeRequest('/notifications', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    read: true,
+                    markAll: true,
+                    excludeTypes: BELL_EXCLUDE_TYPES
+                })
+            });
+        } catch (error) {
+            console.error('❌ Error marking all notifications as read:', error);
+            loadNotifications({ silent: true });
         }
     };
     
@@ -447,12 +486,8 @@ const NotificationCenter = () => {
                         </h3>
                         {unreadCount > 0 && (
                             <button
-                                onClick={() => {
-                                    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
-                                    if (unreadIds.length > 0) {
-                                        markAsRead(unreadIds);
-                                    }
-                                }}
+                                type="button"
+                                onClick={markAllAsRead}
                                 className="text-xs text-primary-600 hover:text-primary-700 font-medium"
                             >
                                 Mark all read

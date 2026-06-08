@@ -459,6 +459,14 @@ export async function createNotificationForUser(targetUserId, type, title, messa
     return { notification, created: !!notification };
 }
 
+function parseExcludeTypes(raw) {
+    if (raw == null || raw === '') return [];
+    return String(raw)
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+}
+
 async function handler(req, res) {
     const safeSend = (fn) => {
         if (!res.headersSent && !res.writableEnded) return fn();
@@ -477,10 +485,14 @@ async function handler(req, res) {
                 const read = req.query.read;
                 const limit = Math.min(parseInt(req.query.limit) || 50, 100);
                 const offset = Math.max(0, parseInt(req.query.offset) || 0);
+                const excludeTypes = parseExcludeTypes(req.query.excludeTypes);
 
                 const where = { userId };
                 if (read !== undefined) {
                     where.read = read === 'true';
+                }
+                if (excludeTypes.length) {
+                    where.type = { notIn: excludeTypes };
                 }
 
                 // Timeout guard: respond with 504 before client (client uses 20s, so respond by 14s)
@@ -498,7 +510,11 @@ async function handler(req, res) {
                         // Uses index (userId, createdAt) when available for fast list + sort
                     }),
                     prisma.notification.count({
-                        where: { userId, read: false }
+                        where: {
+                            userId,
+                            read: false,
+                            ...(excludeTypes.length ? { type: { notIn: excludeTypes } } : {})
+                        }
                         // Uses index (userId, read) when available for fast unread count
                     })
                 ]);
@@ -528,17 +544,36 @@ async function handler(req, res) {
         if (req.method === 'PATCH') {
             try {
                 const body = req.body || await parseJsonBody(req);
-                const { read, notificationIds } = body;
+                const { read, notificationIds, markAll, excludeTypes: excludeTypesRaw } = body;
+                const excludeTypes = parseExcludeTypes(excludeTypesRaw);
 
-                if (read === undefined || notificationIds === undefined) {
-                    return badRequest(res, 'Missing required fields: read, notificationIds');
+                if (read === undefined) {
+                    return badRequest(res, 'Missing required field: read');
                 }
 
-                // Mark notifications as read/unread
+                if (markAll === true) {
+                    const where = {
+                        userId,
+                        read: read ? false : true
+                    };
+                    if (excludeTypes.length) {
+                        where.type = { notIn: excludeTypes };
+                    }
+                    const result = await prisma.notification.updateMany({
+                        where,
+                        data: { read }
+                    });
+                    return ok(res, { success: true, updated: result.count });
+                }
+
+                if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+                    return badRequest(res, 'Missing required fields: notificationIds (array) or markAll: true');
+                }
+
                 await prisma.notification.updateMany({
                     where: {
                         id: { in: notificationIds },
-                        userId // Ensure user can only update their own notifications
+                        userId
                     },
                     data: { read }
                 });

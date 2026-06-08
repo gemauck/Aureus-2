@@ -1,6 +1,8 @@
 // Notifications page: full list, filters, mark read, delete, bulk actions
 const { useState, useEffect, useCallback } = React;
 
+const PAGE_EXCLUDE_TYPES = 'message';
+
 const NOTIFICATION_ICONS = {
     mention: 'fa-at',
     comment: 'fa-comment',
@@ -53,6 +55,7 @@ const NotificationsPage = () => {
             const query = new URLSearchParams();
             query.set('limit', String(LIMIT));
             query.set('offset', append ? String(notifications.length) : '0');
+            query.set('excludeTypes', PAGE_EXCLUDE_TYPES);
             if (filter === 'unread') query.set('read', 'false');
             const url = `/notifications?${query.toString()}`;
             const response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
@@ -86,19 +89,48 @@ const NotificationsPage = () => {
         if (!ids.length || !window.DatabaseAPI?.makeRequest) return;
         setActionLoading(true);
         try {
-            await window.DatabaseAPI.makeRequest('/notifications', {
-                method: 'PATCH',
-                body: JSON.stringify({ read: true, notificationIds: ids })
+            setNotifications((prev) => {
+                const unreadRemoved = prev.filter((n) => ids.includes(n.id) && !n.read).length;
+                if (unreadRemoved > 0) {
+                    setUnreadCount((c) => Math.max(0, c - unreadRemoved));
+                }
+                return prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n));
             });
-            setNotifications((prev) => prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
-            setUnreadCount((c) => Math.max(0, c - ids.length));
             setSelectedIds((s) => {
                 const next = new Set(s);
                 ids.forEach((id) => next.delete(id));
                 return next;
             });
+            await window.DatabaseAPI.makeRequest('/notifications', {
+                method: 'PATCH',
+                body: JSON.stringify({ read: true, notificationIds: ids })
+            });
         } catch (err) {
             console.warn('Mark as read failed:', err);
+            loadNotifications({ silent: true });
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const markAllAsRead = async () => {
+        if (unreadCount <= 0 || !window.DatabaseAPI?.makeRequest) return;
+        setActionLoading(true);
+        try {
+            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+            setUnreadCount(0);
+            setSelectedIds(new Set());
+            await window.DatabaseAPI.makeRequest('/notifications', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    read: true,
+                    markAll: true,
+                    excludeTypes: PAGE_EXCLUDE_TYPES
+                })
+            });
+        } catch (err) {
+            console.warn('Mark all as read failed:', err);
+            loadNotifications({ silent: true });
         } finally {
             setActionLoading(false);
         }
@@ -223,11 +255,11 @@ const NotificationsPage = () => {
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    {unreadIds.length > 0 && (
+                    {unreadCount > 0 && (
                         <button
                             type="button"
                             disabled={actionLoading}
-                            onClick={() => markAsRead(unreadIds)}
+                            onClick={markAllAsRead}
                             className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
                                 isDark
                                     ? 'text-primary-400 hover:bg-gray-800'
