@@ -68,6 +68,42 @@ const Settings = () => {
     const [docLogoDataUrl, setDocLogoDataUrl] = useState('');
     const [docLoading, setDocLoading] = useState(false);
     const [docSaveStatus, setDocSaveStatus] = useState('');
+    const [erpPwaInstallable, setErpPwaInstallable] = useState(
+        () => window.pwaErpInstall?.canPromptErpPwaInstall?.() || false
+    );
+    const [erpPwaInstalled, setErpPwaInstalled] = useState(
+        () => window.pwaErpInstall?.isErpPwaInstalled?.() || false
+    );
+    const [erpPwaInstallBusy, setErpPwaInstallBusy] = useState(false);
+
+    React.useEffect(() => {
+        const onInstallable = () => setErpPwaInstallable(true);
+        const onInstalled = () => {
+            setErpPwaInstalled(true);
+            setErpPwaInstallable(false);
+        };
+        window.addEventListener('erp-pwa:installable', onInstallable);
+        window.addEventListener('erp-pwa:installed', onInstalled);
+        return () => {
+            window.removeEventListener('erp-pwa:installable', onInstallable);
+            window.removeEventListener('erp-pwa:installed', onInstalled);
+        };
+    }, []);
+
+    const installErpDesktopApp = async () => {
+        const pwa = window.pwaErpInstall;
+        if (!pwa || erpPwaInstallBusy) return;
+        setErpPwaInstallBusy(true);
+        try {
+            if (pwa.isErpPwaEntry() && pwa.canPromptErpPwaInstall()) {
+                await pwa.promptErpPwaInstall();
+            } else {
+                pwa.openErpPwaEntry();
+            }
+        } finally {
+            setErpPwaInstallBusy(false);
+        }
+    };
 
     // Resolve Notification Settings component from global window (registered by NotificationSettings.jsx)
     const NotificationsComponent = React.useMemo(() => {
@@ -814,6 +850,62 @@ const Settings = () => {
                         </span>
                     </label>
                 </div>
+            </div>
+
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Desktop app
+                </label>
+                <p className={`text-xs mb-3 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Install the full Abcotronics ERP as a standalone Chrome or Edge desktop app with sidebar navigation and all modules.
+                </p>
+                {erpPwaInstalled ? (
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${isDark ? 'bg-emerald-900/30 text-emerald-300' : 'bg-emerald-50 text-emerald-800'}`}>
+                        <i className="fas fa-check-circle" aria-hidden="true" />
+                        ERP desktop app is installed
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        disabled={erpPwaInstallBusy}
+                        onClick={() => void installErpDesktopApp()}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                            isDark
+                                ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                    >
+                        <i className={`fas ${erpPwaInstallBusy ? 'fa-spinner fa-spin' : 'fa-download'}`} aria-hidden="true" />
+                        {window.__PWA_ERP_APP__ && erpPwaInstallable
+                            ? 'Install ERP desktop app'
+                            : 'Set up ERP desktop app'}
+                    </button>
+                )}
+                <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    For chat only, use{' '}
+                    <a href="/messenger.html" className="text-blue-600 hover:underline dark:text-blue-400">Messenger desktop app</a>.
+                </p>
+            </div>
+
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Android app
+                </label>
+                <p className={`text-xs mb-3 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Install the native Abcotronics ERP app for technicians — job cards, GPS trips, and offline sync on Android.
+                </p>
+                <a
+                    href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/public/downloads/Abcotronics-ERP-Mobile.apk'}
+                    download
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        isDark
+                            ? 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                >
+                    <i className="fab fa-android" aria-hidden="true" />
+                    Download Android app
+                </a>
             </div>
 
             <div>

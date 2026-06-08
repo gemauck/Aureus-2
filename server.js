@@ -3348,6 +3348,24 @@ app.get('/messenger.webmanifest', (req, res) => {
   res.sendFile(manifestPath)
 })
 
+app.get('/app.webmanifest', (req, res) => {
+  const manifestPath = path.join(rootDir, 'app.webmanifest')
+  if (!existsSync(manifestPath)) {
+    return res.status(404).type('text/plain').send('app manifest not found')
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.type('application/manifest+json')
+  res.sendFile(manifestPath)
+})
+
+// Full ERP PWA entry — same SPA shell, dedicated manifest + start URL
+app.get('/app.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.sendFile(path.join(rootDir, 'index.html'))
+})
+
 // Messenger PWA entry — same SPA shell, dedicated manifest + start URL
 app.get('/messenger.html', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')

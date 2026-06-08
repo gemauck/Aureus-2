@@ -10,11 +10,25 @@
     <meta name="theme-color" content="#2563eb">
     <script>
         (function() {
-            var isMessengerEntry = location.pathname === '/messenger.html';
+            var path = location.pathname || '/';
+            var isMessengerEntry = path === '/messenger.html';
+            var isErpAppEntry = path === '/app.html';
             window.__PWA_MESSENGER__ = isMessengerEntry;
+            window.__PWA_ERP_APP__ = isErpAppEntry;
+            var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.matchMedia('(display-mode: minimal-ui)').matches
+                || window.navigator.standalone === true;
+            if (isStandalone && !isMessengerEntry) {
+                document.documentElement.classList.add('erp-pwa-installed');
+            }
+            if (isErpAppEntry || (isStandalone && !isMessengerEntry)) {
+                document.documentElement.classList.add('erp-pwa-app');
+            }
             var manifest = document.createElement('link');
             manifest.rel = 'manifest';
-            manifest.href = isMessengerEntry ? '/messenger.webmanifest' : '/manifest.webmanifest';
+            manifest.href = isMessengerEntry
+                ? '/messenger.webmanifest'
+                : (isErpAppEntry ? '/app.webmanifest' : '/manifest.webmanifest');
             document.head.appendChild(manifest);
             if (isMessengerEntry) {
                 document.documentElement.classList.add('erp-messenger-pwa');
@@ -107,7 +121,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1780920117825'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1780920897792'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload (defer so it does not compete with first-paint resources) -->
     <script>
@@ -150,7 +164,7 @@
     <!-- VERSION: 20260511-meeting-notes-presence - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1780920117825';
+            var APP_VERSION = '1780920897792';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -1273,8 +1287,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1780920117825" as="script">
-    <script defer src="/dist/core-bundle.js?v=1780920117825"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1780920897792" as="script">
+    <script defer src="/dist/core-bundle.js?v=1780920897792"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1645,9 +1659,9 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1780920117825" as="script">
+    <link rel="prefetch" href="/lazy-load-components.js?v=1780920897792" as="script">
     <link rel="prefetch" href="/dist/src/components/projects/ProjectDetail.js?v=1778959662824" as="script">
-    <script defer src="/lazy-load-components.js?v=1780920117825"></script>
+    <script defer src="/lazy-load-components.js?v=1780920897792"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

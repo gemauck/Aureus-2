@@ -611,6 +611,13 @@ const MainLayout = () => {
     
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+    const [erpPwaInstallable, setErpPwaInstallable] = useState(
+        () => window.pwaErpInstall?.canPromptErpPwaInstall?.() || false
+    );
+    const [erpPwaInstalled, setErpPwaInstalled] = useState(
+        () => window.pwaErpInstall?.isErpPwaInstalled?.() || false
+    );
+    const [erpPwaInstallBusy, setErpPwaInstallBusy] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
     
@@ -643,6 +650,35 @@ const MainLayout = () => {
         window.triggerPasswordChangeModal = () => setShowPasswordChangeModal(true);
         window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
     }, []);
+
+    React.useEffect(() => {
+        const onInstallable = () => setErpPwaInstallable(true);
+        const onInstalled = () => {
+            setErpPwaInstalled(true);
+            setErpPwaInstallable(false);
+        };
+        window.addEventListener('erp-pwa:installable', onInstallable);
+        window.addEventListener('erp-pwa:installed', onInstalled);
+        return () => {
+            window.removeEventListener('erp-pwa:installable', onInstallable);
+            window.removeEventListener('erp-pwa:installed', onInstalled);
+        };
+    }, []);
+
+    const installErpDesktopApp = React.useCallback(async () => {
+        const pwa = window.pwaErpInstall;
+        if (!pwa || erpPwaInstallBusy) return;
+        setErpPwaInstallBusy(true);
+        try {
+            if (pwa.isErpPwaEntry() && pwa.canPromptErpPwaInstall()) {
+                await pwa.promptErpPwaInstall();
+            } else {
+                pwa.openErpPwaEntry();
+            }
+        } finally {
+            setErpPwaInstallBusy(false);
+        }
+    }, [erpPwaInstallBusy]);
 
     // Close mobile menu when page changes
     React.useEffect(() => {
@@ -2146,6 +2182,43 @@ const MainLayout = () => {
                                             <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
                                         </>
                                     )}
+                                    {!erpPwaInstalled ? (
+                                        <>
+                                            <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
+                                                Desktop app
+                                            </div>
+                                            <button
+                                                type="button"
+                                                disabled={erpPwaInstallBusy}
+                                                onClick={() => {
+                                                    setShowThemeMenu(false);
+                                                    void installErpDesktopApp();
+                                                }}
+                                                className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors disabled:opacity-50`}
+                                            >
+                                                <i className={`fas ${erpPwaInstallBusy ? 'fa-spinner fa-spin' : 'fa-download'} mt-0.5`}></i>
+                                                <span className="leading-snug">
+                                                    {window.__PWA_ERP_APP__ && erpPwaInstallable
+                                                        ? 'Install ERP desktop app'
+                                                        : 'Set up ERP desktop app'}
+                                                </span>
+                                            </button>
+                                            <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
+                                        </>
+                                    ) : null}
+                                    <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
+                                        Mobile app
+                                    </div>
+                                    <a
+                                        href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/public/downloads/Abcotronics-ERP-Mobile.apk'}
+                                        onClick={() => setShowThemeMenu(false)}
+                                        className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
+                                        download
+                                    >
+                                        <i className="fab fa-android mt-0.5" aria-hidden="true"></i>
+                                        <span className="leading-snug">Download Android app</span>
+                                    </a>
+                                    <div className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`} />
                                     <div className={`text-xs font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-3`}>
                                         Theme
                                     </div>
@@ -2190,6 +2263,27 @@ const MainLayout = () => {
                         ) : null;
 
                         const mobileHeaderIconBtn = `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/80' : 'text-gray-500 hover:text-gray-700 hover:bg-white/90'} flex !h-8 !min-h-8 !w-8 !min-w-8 shrink-0 items-center justify-center border-0 bg-transparent p-0 transition-colors`;
+
+                        const androidApkUrl =
+                            window.mobileAppDownload?.getDefaultAndroidApkUrl?.() ||
+                            '/public/downloads/Abcotronics-ERP-Mobile.apk';
+                        const showAndroidAppIcon = window.mobileAppDownload?.isAndroidBrowser?.() || false;
+
+                        const androidAppButton = showAndroidAppIcon ? (
+                            <a
+                                href={androidApkUrl}
+                                download
+                                className={
+                                    effectiveIsMobile
+                                        ? `${mobileHeaderIconBtn} rounded-lg`
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100/90'} flex min-h-8 min-w-8 items-center justify-center rounded-lg p-1.5 transition-all duration-200`
+                                }
+                                title="Download Android app"
+                                aria-label="Download Android app"
+                            >
+                                <i className="fab fa-android text-sm" aria-hidden="true"></i>
+                            </a>
+                        ) : null;
 
                         const settingsButton = (
                             <button
@@ -2260,6 +2354,7 @@ const MainLayout = () => {
                                         {companyName}
                                     </h1>
                                     <div className="flex h-8 shrink-0 flex-nowrap items-center gap-0.5">
+                                        {androidAppButton}
                                         {messagesSlot}
                                         {notificationsSlot}
                                         <div
@@ -2283,6 +2378,7 @@ const MainLayout = () => {
                                     )}
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                    {androidAppButton}
                                     {messagesSlot}
                                     {notificationsSlot}
                                     {settingsButton}
