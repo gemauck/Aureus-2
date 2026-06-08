@@ -60,9 +60,11 @@ export function usePushNotifications(onOpenNotification?: (data: PushNotificatio
     })
 
     const removeReceived = addNotificationReceivedListener((data) => {
-      void refreshNotificationUnread()
-      if (data.type === 'message' || data.conversationId) {
+      const isChat = data.type === 'message' || !!data.conversationId
+      if (isChat) {
         void refreshChatUnread()
+      } else {
+        void refreshNotificationUnread()
       }
     })
 

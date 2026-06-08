@@ -16,11 +16,24 @@ export type DashboardTask = {
 
 export type DashboardNotification = {
   id: string
+  type?: string
   title?: string
   message?: string
   read?: boolean
   createdAt?: string
   link?: string
+}
+
+/** Chat messages use MessageCenter badge; exclude from bell/notifications list (matches web). */
+export const NOTIFICATION_BELL_EXCLUDE_TYPES = 'message'
+
+function notificationsQuery(limit: number, extra?: Record<string, string>) {
+  const q = new URLSearchParams({ limit: String(limit) })
+  q.set('excludeTypes', NOTIFICATION_BELL_EXCLUDE_TYPES)
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) q.set(k, v)
+  }
+  return `/api/notifications?${q.toString()}`
 }
 
 export type DashboardJobCard = {
@@ -102,7 +115,7 @@ export const erpApi = {
 
   getNotifications(token: string, limit = 8) {
     return request<{ notifications?: DashboardNotification[]; unreadCount?: number } | DashboardNotification[]>(
-      `/api/notifications?limit=${limit}`,
+      notificationsQuery(limit),
       { token }
     ).then((data) => {
       if (Array.isArray(data)) return data
@@ -111,7 +124,7 @@ export const erpApi = {
   },
 
   getNotificationUnreadCount(token: string) {
-    return request<{ unreadCount?: number }>('/api/notifications?limit=1', { token }).then(
+    return request<{ unreadCount?: number }>(notificationsQuery(1), { token }).then(
       (d) => d.unreadCount ?? 0
     )
   },

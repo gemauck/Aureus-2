@@ -26,12 +26,16 @@ function resolveExpoProjectId(): string | undefined {
 
 async function ensureAndroidChannels() {
   if (Platform.OS !== 'android') return
+  // Recreate chat channel so vibration/importance updates apply after app upgrades.
+  await Notifications.deleteNotificationChannelAsync('chat').catch(() => {})
   await Notifications.setNotificationChannelAsync('chat', {
     name: 'Chat messages',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 400, 200, 400, 200, 400],
+    enableVibrate: true,
     sound: 'default',
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: false
   })
   await Notifications.setNotificationChannelAsync('erp', {
     name: 'ERP updates',
@@ -51,7 +55,13 @@ export async function registerPushToken(accessToken: string): Promise<string | n
   const { status: existing } = await Notifications.getPermissionsAsync()
   let final = existing
   if (existing !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync()
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true
+      }
+    })
     final = status
   }
   if (final !== 'granted') {
@@ -124,6 +134,11 @@ export function addNotificationReceivedListener(
   return () => sub.remove()
 }
 
+export async function hasPushNotificationPermission(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync()
+  return status === 'granted'
+}
+
 export async function showLocalChatNotification(opts: {
   title: string
   body: string
@@ -137,6 +152,7 @@ export async function showLocalChatNotification(opts: {
       title,
       body,
       sound: 'default',
+      priority: Notifications.AndroidNotificationPriority.MAX,
       data: {
         type: 'message',
         conversationId,

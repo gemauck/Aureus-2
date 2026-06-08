@@ -14,7 +14,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { NotificationUnreadProvider, useNotificationUnread } from '../notifications/NotificationUnreadContext'
-import { ChatEventsProvider } from '../messages/ChatEventsContext'
+import { ChatEventsProvider, useChatEvents } from '../messages/ChatEventsContext'
 import { navigateFromPushData } from '../notifications/notificationNavigation'
 import { erpApi } from '../services/erpApi'
 
@@ -149,10 +149,13 @@ function AuthenticatedAppInner() {
   const accessTokenRef = React.useRef(accessToken)
   accessTokenRef.current = accessToken
   const { refresh: refreshNotificationUnread, decrementUnread } = useNotificationUnread()
+  const { refreshChatUnread } = useChatEvents()
   const decrementUnreadRef = React.useRef(decrementUnread)
   decrementUnreadRef.current = decrementUnread
   const refreshNotificationUnreadRef = React.useRef(refreshNotificationUnread)
   refreshNotificationUnreadRef.current = refreshNotificationUnread
+  const refreshChatUnreadRef = React.useRef(refreshChatUnread)
+  refreshChatUnreadRef.current = refreshChatUnread
 
   // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
   useOTAUpdates(true)
@@ -160,11 +163,18 @@ function AuthenticatedAppInner() {
 
   const handlePushNotification = React.useCallback((data: Parameters<typeof navigateFromPushData>[1]) => {
     const token = accessTokenRef.current
+    const isChat = data.type === 'message' || !!data.conversationId
     if (data.notificationId && token) {
       void erpApi.markNotificationsRead(token, [data.notificationId]).then(() => {
-        decrementUnreadRef.current(1)
-        void refreshNotificationUnreadRef.current()
+        if (isChat) {
+          void refreshChatUnreadRef.current()
+        } else {
+          decrementUnreadRef.current(1)
+          void refreshNotificationUnreadRef.current()
+        }
       })
+    } else if (isChat) {
+      void refreshChatUnreadRef.current()
     }
     if (navigationRef.current) {
       navigateFromPushData(navigationRef.current, data, user)
