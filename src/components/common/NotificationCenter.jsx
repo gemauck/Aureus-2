@@ -17,6 +17,8 @@ const NotificationCenter = () => {
     const pollingDelayRef = useRef(30000); // 30s default; backs off on rate limits
     const lastLoadTimestampRef = useRef(0); // Throttle focus-triggered loads to avoid 429s
     const FOCUS_LOAD_MIN_INTERVAL_MS = 20000; // Don't load on focus if we loaded in the last 20 seconds
+    const knownNotificationIdsRef = useRef(new Set());
+    const notificationsPrimedRef = useRef(false);
     
     // Helper function to restart polling - will be defined after loadNotifications
     const restartPollingRef = useRef(null);
@@ -147,6 +149,20 @@ const NotificationCenter = () => {
                 const fromServer = responseData?.notifications || [];
                 const newUnread = responseData?.unreadCount ?? 0;
                 setUnreadCount(newUnread);
+
+                if (notificationsPrimedRef.current && silent) {
+                    const freshUnread = fromServer.filter(
+                        (n) => n?.id && !n.read && !knownNotificationIdsRef.current.has(n.id)
+                    );
+                    if (freshUnread.length > 0) {
+                        window.notificationSounds?.play?.('notification');
+                    }
+                }
+                fromServer.forEach((n) => {
+                    if (n?.id) knownNotificationIdsRef.current.add(n.id);
+                });
+                notificationsPrimedRef.current = true;
+
                 // Silent poll: only update list if it changed, to avoid full re-render/flash
                 if (silent) {
                     setNotifications((prev) => {

@@ -44,7 +44,7 @@ async function ensureAndroidChannels() {
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 400, 200, 400, 200, 400],
     enableVibrate: true,
-    sound: 'default',
+    sound: 'message.wav',
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false
   })
@@ -52,7 +52,7 @@ async function ensureAndroidChannels() {
     name: 'ERP updates',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 200, 100, 200],
-    sound: 'default',
+    sound: 'notification.wav',
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC
   })
   await Notifications.setNotificationChannelAsync('default', {
@@ -162,7 +162,7 @@ export async function showLocalChatNotification(opts: {
     content: {
       title,
       body,
-      sound: 'default',
+      sound: 'message.wav',
       priority: Notifications.AndroidNotificationPriority.MAX,
       data: {
         type: 'message',

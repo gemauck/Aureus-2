@@ -2,7 +2,7 @@
   "expo": {
     "name": "Abcotronics ERP",
     "slug": "abcotronics-erp-mobile",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "orientation": "portrait",
     "scheme": "abcotronics",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
     ],
     "android": {
       "package": "com.abcotronics.erp.mobile",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1d4ed8"
@@ -53,7 +53,10 @@
         {
           "icon": "./assets/icon.png",
           "color": "#1d4ed8",
-          "sounds": []
+          "sounds": [
+            "./assets/sounds/message.wav",
+            "./assets/sounds/notification.wav"
+          ]
         }
       ],
       "expo-updates"

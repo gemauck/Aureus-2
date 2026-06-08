@@ -11,6 +11,7 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { erpApi } from '../services/erpApi'
 import { getChatPushEnabled } from '../services/chatPushPrefs'
+import { playNotificationSound } from '../services/notificationSounds'
 import { hasPushNotificationPermission, showLocalChatNotification } from '../services/pushNotifications'
 import { useAuth } from '../state/AuthContext'
 import { ChatEventStream } from './chatEventStream'
@@ -76,18 +77,20 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
     const enabled = await getChatPushEnabled()
     if (!enabled) return
 
-    // When OS push permission is granted, server Expo push handles sound/vibration (avoid duplicate alerts).
     const pushGranted = await hasPushNotificationPermission()
-    if (pushGranted) return
-
-    const title = data.senderName || 'New message'
-    const body = data.preview || 'Sent you a message'
-    void showLocalChatNotification({
-      title,
-      body,
-      conversationId: data.conversationId,
-      messageId: data.messageId
-    })
+    if (!pushGranted) {
+      const title = data.senderName || 'New message'
+      const body = data.preview || 'Sent you a message'
+      void showLocalChatNotification({
+        title,
+        body,
+        conversationId: data.conversationId,
+        messageId: data.messageId
+      })
+    } else if (AppState.currentState === 'active') {
+      // Foreground chime when server push may not audibly alert.
+      void playNotificationSound('message')
+    }
   }, [currentUserId])
 
   const handleEvent = useCallback(

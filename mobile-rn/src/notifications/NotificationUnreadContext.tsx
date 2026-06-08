@@ -8,6 +8,7 @@ import React, {
 } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import { erpApi } from '../services/erpApi'
+import { playNotificationSound } from '../services/notificationSounds'
 import { useAuth } from '../state/AuthContext'
 
 const POLL_MS = 30_000
@@ -25,14 +26,23 @@ const NotificationUnreadContext = createContext<NotificationUnreadContextValue |
 export function NotificationUnreadProvider({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  const prevUnreadRef = React.useRef(0)
+  const primedRef = React.useRef(false)
 
   const refresh = useCallback(async () => {
     if (!accessToken) {
       setUnreadCount(0)
+      prevUnreadRef.current = 0
+      primedRef.current = false
       return
     }
     try {
       const count = await erpApi.getNotificationUnreadCount(accessToken)
+      if (primedRef.current && count > prevUnreadRef.current) {
+        void playNotificationSound('notification')
+      }
+      prevUnreadRef.current = count
+      primedRef.current = true
       setUnreadCount(count)
     } catch {
       /* keep last count on transient errors */

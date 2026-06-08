@@ -89,19 +89,28 @@ const MessageCenter = () => {
 
             loadUnread(true);
 
-            const browserNotif = window.chatBrowserNotifications;
-            if (!browserNotif?.getEnabled?.()) return;
             if (data.conversationId && data.conversationId === activeConversationRef.current) return;
             if (document.hasFocus?.() && activeConversationRef.current === data.conversationId) return;
 
             const senderLabel = data.senderName || 'Someone';
             const preview = data.preview || 'Sent you a message';
-            browserNotif.show({
-                title: senderLabel,
-                body: preview,
-                conversationId: data.conversationId,
-                tag: data.messageId ? `chat-msg-${data.messageId}` : undefined
-            });
+            const browserNotif = window.chatBrowserNotifications;
+            const tabFocused = document.hasFocus?.();
+            const browserEnabled = browserNotif?.getEnabled?.();
+
+            if (browserEnabled) {
+                browserNotif.show({
+                    title: senderLabel,
+                    body: preview,
+                    conversationId: data.conversationId,
+                    tag: data.messageId ? `chat-msg-${data.messageId}` : undefined
+                });
+            }
+
+            // In-app chime when tab is focused (OS notification may be silent) or browser notifications off.
+            if (!browserEnabled || tabFocused) {
+                window.notificationSounds?.play?.('message');
+            }
         });
 
         es.addEventListener('conversation', () => loadUnread(true));

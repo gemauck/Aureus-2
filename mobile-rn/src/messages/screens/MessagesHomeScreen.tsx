@@ -20,6 +20,11 @@ import { chatApi, type ChatConversation, type ChatUser } from '../api'
 import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
 import type { MessagesStackParamList } from '../navigation'
 import { getChatPushEnabled, setChatPushEnabled } from '../../services/chatPushPrefs'
+import {
+  getNotificationSoundsEnabled,
+  playNotificationSound,
+  setNotificationSoundsEnabled
+} from '../../services/notificationSounds'
 import { registerPushToken } from '../../services/pushNotifications'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -64,6 +69,9 @@ export function MessagesHomeScreen({ navigation }: Props) {
   const [pushMessages, setPushMessages] = useState(true)
   const [pushPrefLoading, setPushPrefLoading] = useState(true)
   const [pushPrefSaving, setPushPrefSaving] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [soundPrefLoading, setSoundPrefLoading] = useState(true)
+  const [soundPrefSaving, setSoundPrefSaving] = useState(false)
 
   const load = useCallback(
     async (silent = false) => {
@@ -108,10 +116,25 @@ export function MessagesHomeScreen({ navigation }: Props) {
       if (!cancelled) {
         setPushMessages(await getChatPushEnabled())
         setPushPrefLoading(false)
+        setSoundEnabled(await getNotificationSoundsEnabled())
+        setSoundPrefLoading(false)
       }
     })()
     return () => { cancelled = true }
   }, [accessToken])
+
+  const toggleNotificationSounds = async () => {
+    if (soundPrefSaving) return
+    const next = !soundEnabled
+    setSoundPrefSaving(true)
+    try {
+      await setNotificationSoundsEnabled(next)
+      setSoundEnabled(next)
+      if (next) void playNotificationSound('message')
+    } finally {
+      setSoundPrefSaving(false)
+    }
+  }
 
   const togglePushMessages = async () => {
     if (pushPrefSaving) return
@@ -225,6 +248,17 @@ export function MessagesHomeScreen({ navigation }: Props) {
           <Text style={styles.emailPrefLabel}>Push notifications</Text>
           <View style={[styles.emailPrefSwitch, pushMessages && styles.emailPrefSwitchOn]}>
             <View style={[styles.emailPrefKnob, pushMessages && styles.emailPrefKnobOn]} />
+          </View>
+        </Pressable>
+
+        <Pressable
+          style={styles.emailPrefRow}
+          onPress={() => void toggleNotificationSounds()}
+          disabled={soundPrefLoading || soundPrefSaving}
+        >
+          <Text style={styles.emailPrefLabel}>Notification sounds</Text>
+          <View style={[styles.emailPrefSwitch, soundEnabled && styles.emailPrefSwitchOn]}>
+            <View style={[styles.emailPrefKnob, soundEnabled && styles.emailPrefKnobOn]} />
           </View>
         </Pressable>
 
