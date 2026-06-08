@@ -94,6 +94,16 @@
         return hashInput.startsWith('#') ? hashInput : `#${hashInput}`;
     };
 
+    const isMessengerPwaMode = () => !!window.__PWA_MESSENGER__;
+
+    const buildMessengerPwaUrl = (segments = [], searchInput) => {
+        const sanitizedSegments = sanitizeSegments(segments);
+        const hashParts = ['messages', ...sanitizedSegments].filter(Boolean);
+        const hash = `#/${hashParts.join('/')}`;
+        const searchStr = buildSearch(searchInput !== undefined ? searchInput : window.location.search);
+        return `/messenger.html${searchStr}${hash}`;
+    };
+
     const getRoute = () => {
         // First check hash-based routing (e.g., #/projects/{id}?params)
         const hash = window.location.hash || '';
@@ -102,13 +112,18 @@
             const hashPath = hash.substring(2); // Remove '#/'
             const hashParts = hashPath.split('?');
             const hashPathname = hashParts[0] || '';
-            const hashSegments = hashPathname.split('/').filter(Boolean);
+            let hashSegments = hashPathname.split('/').filter(Boolean);
             
             if (hashSegments.length > 0) {
                 let page = hashSegments[0];
                 // Map 'crm' to 'clients' for backward compatibility
                 if (page === 'crm') {
                     page = 'clients';
+                }
+
+                if (isMessengerPwaMode() && page !== 'messages') {
+                    page = 'messages';
+                    hashSegments = ['messages'];
                 }
                 
                 // Parse query params from hash if present
@@ -130,6 +145,16 @@
             }
         }
         
+        // Messenger desktop PWA: stay on chat-only entry (pathname is /messenger.html)
+        if (isMessengerPwaMode()) {
+            return {
+                page: 'messages',
+                segments: [],
+                search: new URLSearchParams(window.location.search || ''),
+                hash: window.location.hash || ''
+            };
+        }
+
         // Fallback to pathname-based routing
         const segments = getSegmentsFromPath();
         let page = segments[0] || 'dashboard';
@@ -179,12 +204,18 @@
         preserveHash = true
     } = {}) => {
         const currentRoute = getRoute();
-        const targetPage = page || currentRoute.page || 'dashboard';
-        const targetSegments = sanitizeSegments(segments);
+        let targetPage = page || currentRoute.page || 'dashboard';
+        let targetSegments = sanitizeSegments(segments);
         const searchValue = search !== undefined ? search : (preserveSearch ? window.location.search : '');
         const hashValue = hash !== undefined ? hash : (preserveHash ? window.location.hash : '');
 
-        const nextUrl = `${buildPath(targetPage, targetSegments)}${buildSearch(searchValue)}${buildHash(hashValue)}`;
+        let nextUrl;
+        if (isMessengerPwaMode()) {
+            targetPage = 'messages';
+            nextUrl = buildMessengerPwaUrl(targetSegments, searchValue);
+        } else {
+            nextUrl = `${buildPath(targetPage, targetSegments)}${buildSearch(searchValue)}${buildHash(hashValue)}`;
+        }
 
         if (isNavigating) {
             if (nextUrl === lastNavigationUrl) {

@@ -8,6 +8,10 @@ const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-pa
 /** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
 const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense'];
 
+function isMessengerPwaMode() {
+    return typeof window !== 'undefined' && !!window.__PWA_MESSENGER__;
+}
+
 /** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
 const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
 /** Set true when Calendar & Mail is ready to show again. */
@@ -112,6 +116,9 @@ const MainLayout = () => {
     }, []);
     
     const getInitialPage = () => {
+        if (isMessengerPwaMode()) {
+            return 'messages';
+        }
         if (window.RouteState) {
             const route = window.RouteState.getRoute();
             let page = route?.page;
@@ -307,6 +314,22 @@ const MainLayout = () => {
             let nextPage = route?.page || 'dashboard';
             const currentPath = window.location.pathname;
             const currentPage = currentPath.split('/').filter(Boolean)[0] || 'dashboard';
+
+            if (isMessengerPwaMode()) {
+                if (nextPage !== 'messages') {
+                    isNavigating = true;
+                    lastProcessedRoute = routeKey;
+                    routeState.setPageSubpath('messages', [], { replace: true });
+                    navigationTimeout = setTimeout(() => {
+                        isNavigating = false;
+                        lastProcessedRoute = null;
+                    }, 500);
+                    return;
+                }
+                lastProcessedRoute = routeKey;
+                setCurrentPage('messages');
+                return;
+            }
             
             // Map 'crm' to 'clients' for backward compatibility
             if (nextPage === 'crm') {
@@ -597,6 +620,9 @@ const MainLayout = () => {
         if (!page) {
             return;
         }
+        if (isMessengerPwaMode() && page !== 'messages') {
+            page = 'messages';
+        }
         const subpath = Array.isArray(options.subpath) ? options.subpath : [];
         if (window.RouteState) {
             window.RouteState.setPageSubpath(page, subpath, {
@@ -636,13 +662,27 @@ const MainLayout = () => {
         
         window.addEventListener('navigateToPage', handleNavigate);
         return () => window.removeEventListener('navigateToPage', handleNavigate);
+    }, [navigateToPage]);
+
+    React.useEffect(() => {
+        if (!isMessengerPwaMode()) return;
+        setCurrentPage('messages');
+        if (window.RouteState) {
+            const route = window.RouteState.getRoute();
+            if (route?.page !== 'messages') {
+                window.RouteState.setPageSubpath('messages', [], { replace: true });
+            }
+        } else if (!window.location.hash.includes('/messages')) {
+            window.location.hash = '#/messages';
+        }
     }, []);
     
     // Listen for entity navigation events
     React.useEffect(() => {
         const handleEntityNavigate = (event) => {
             if (!event.detail) return;
-            
+            if (isMessengerPwaMode()) return;
+
             const { entityType, entityId, url, options } = event.detail;
             if (!entityType || !entityId) return;
             
@@ -1598,6 +1638,13 @@ const MainLayout = () => {
     }, [user?.role]);
 
     React.useEffect(() => {
+        if (isMessengerPwaMode()) {
+            if (currentPage !== 'messages') {
+                setCurrentPage('messages');
+            }
+            return;
+        }
+
         const userRole = user?.role?.toLowerCase();
         
         // Check permissions for admin-only pages
@@ -1842,6 +1889,49 @@ const MainLayout = () => {
             )}
         </button>
     );
+
+    if (isMessengerPwaMode()) {
+        return (
+            <div className={`flex h-screen flex-col overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-[#f0f4f8]'}`}>
+                <header
+                    className={`erp-messenger-pwa-header flex h-10 shrink-0 items-center justify-between px-3 sm:px-4 ${
+                        isDark ? 'border-b border-gray-800 bg-gray-900/95' : 'border-b border-gray-200 bg-white/95'
+                    }`}
+                >
+                    <div className="flex min-w-0 items-center gap-2">
+                        <i className="fas fa-comments text-blue-500 text-sm" aria-hidden="true" />
+                        <span className={`truncate text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            Abcotronics Messenger
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={toggleTheme}
+                            className={`${isDark ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'} flex h-8 w-8 items-center justify-center rounded-lg transition-colors`}
+                            title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+                        >
+                            <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={logout}
+                            className={`${isDark ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'} flex h-8 w-8 items-center justify-center rounded-lg transition-colors`}
+                            title="Log out"
+                        >
+                            <i className="fas fa-sign-out-alt text-sm" />
+                        </button>
+                    </div>
+                </header>
+                <main className="min-h-0 flex-1 overflow-hidden">
+                    <ErrorBoundary key="messages-pwa">
+                        <Messenger />
+                    </ErrorBoundary>
+                </main>
+                {PasswordChangeModal && showPasswordChangeModal && <PasswordChangeModal />}
+            </div>
+        );
+    }
 
     /* Layout: effectiveIsMobile = width < 1024 && !preferDesktopSite; aligns with main.css max-width 1023px */
     return (

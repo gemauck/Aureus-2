@@ -1007,8 +1007,13 @@ const Messenger = () => {
     </div>
   );
 
+  const isMessengerPwa = !!window.__PWA_MESSENGER__;
+  const rootShellClass = isMessengerPwa
+    ? `h-full min-h-0 overflow-hidden ${shell}`
+    : `h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px] rounded-2xl overflow-hidden shadow-xl border ${shell} ${isDark ? 'border-gray-800' : 'border-gray-200'}`;
+
   return (
-    <div className={`h-[calc(100vh-7rem)] sm:h-[calc(100vh-5rem)] min-h-[480px] rounded-2xl overflow-hidden shadow-xl border ${shell} ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+    <div className={rootShellClass}>
       <div className="flex h-full">
         {/* Conversation list */}
         <aside className={`w-full sm:w-96 shrink-0 flex flex-col border-r ${panel} ${mobileShowThread ? 'hidden sm:flex' : 'flex'}`}>
