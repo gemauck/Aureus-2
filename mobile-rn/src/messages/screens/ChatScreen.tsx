@@ -18,6 +18,8 @@ import { apiUrl } from '../../config'
 import { useAuth } from '../../state/AuthContext'
 
 import { chatApi, type ChatAttachment, type ChatMessage, type MessageReadReceipts } from '../api'
+import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
+import type { ChatEventPayload, ChatEventType } from '../chatEventTypes'
 import type { MessagesStackParamList } from '../navigation'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -26,6 +28,7 @@ import { useTheme } from '../../theme/ThemeContext'
 type Props = NativeStackScreenProps<MessagesStackParamList, 'Chat'>
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥']
+const CHAT_TYPING_POLL_MS = 5000
 
 function formatMsgTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -142,6 +145,7 @@ export function ChatScreen({ route }: Props) {
   const { erp } = useTheme()
   const { conversationId } = route.params
   const { accessToken, user } = useAuth()
+  const { connected, subscribe, refreshChatUnread } = useChatEvents()
   const userId = user?.id || ''
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
@@ -157,6 +161,7 @@ export function ChatScreen({ route }: Props) {
     null
   )
   const lastTypingRef = useRef(0)
+  const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const listRef = useRef<FlatList>(null)
 
   const load = useCallback(
@@ -165,38 +170,98 @@ export function ChatScreen({ route }: Props) {
       if (!silent) setLoading(true)
       try {
         const list = await chatApi.getMessages(accessToken, conversationId)
-        setMessages(list)
+        if (silent) {
+          setMessages((prev) => {
+            if (!prev.length) return list
+            const ids = new Set(prev.map((m) => m.id))
+            const merged = [...prev]
+            for (const m of list) {
+              if (!ids.has(m.id)) merged.push(m)
+            }
+            return merged.sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            )
+          })
+        } else {
+          setMessages(list)
+        }
         await chatApi.markRead(accessToken, conversationId)
+        void refreshChatUnread()
       } finally {
         if (!silent) setLoading(false)
       }
     },
-    [accessToken, conversationId]
+    [accessToken, conversationId, refreshChatUnread]
   )
+
+  const setTypingFromNames = useCallback((names: string[]) => {
+    if (typingClearRef.current) clearTimeout(typingClearRef.current)
+    if (!names.length) {
+      setTypingLabel('')
+      return
+    }
+    if (names.length === 1) setTypingLabel(`${names[0]} is typing…`)
+    else setTypingLabel(`${names.length} people are typing…`)
+    typingClearRef.current = setTimeout(() => setTypingLabel(''), 5000)
+  }, [])
 
   useEffect(() => {
     void load()
-    const id = setInterval(() => load(true), 15000)
+    const id = setInterval(() => load(true), CHAT_POLL_FALLBACK_MS)
     return () => clearInterval(id)
   }, [load])
 
   useEffect(() => {
-    if (!accessToken) return
+    const onEvent = (event: ChatEventType, data: ChatEventPayload) => {
+      if (data.conversationId !== conversationId) return
+
+      if (event === 'message' || event === 'reaction') {
+        void load(true)
+        return
+      }
+
+      if (event === 'message_updated' && data.message) {
+        setMessages((prev) => prev.map((m) => (m.id === data.message!.id ? data.message! : m)))
+        return
+      }
+
+      if (event === 'message_deleted' && data.messageId) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === data.messageId
+              ? { ...m, deletedAt: new Date().toISOString(), content: '' }
+              : m
+          )
+        )
+        return
+      }
+
+      if (event === 'typing' && data.userId && data.userId !== userId) {
+        setTypingFromNames([data.name || 'Someone'])
+      }
+    }
+
+    return subscribe(onEvent)
+  }, [conversationId, load, setTypingFromNames, subscribe, userId])
+
+  useEffect(() => {
+    if (connected || !accessToken) return
     const id = setInterval(async () => {
       try {
         const typing = await chatApi.getTyping(accessToken, conversationId)
-        if (!typing.length) {
-          setTypingLabel('')
-          return
-        }
-        if (typing.length === 1) setTypingLabel(`${typing[0].name} is typing…`)
-        else setTypingLabel(`${typing.length} people are typing…`)
+        setTypingFromNames(typing.map((t) => t.name))
       } catch {
         setTypingLabel('')
       }
-    }, 2500)
+    }, CHAT_TYPING_POLL_MS)
     return () => clearInterval(id)
-  }, [accessToken, conversationId])
+  }, [accessToken, connected, conversationId, setTypingFromNames])
+
+  useEffect(() => {
+    return () => {
+      if (typingClearRef.current) clearTimeout(typingClearRef.current)
+    }
+  }, [])
 
   const onChangeText = (value: string) => {
     setText(value)

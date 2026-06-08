@@ -14,6 +14,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { NotificationUnreadProvider, useNotificationUnread } from '../notifications/NotificationUnreadContext'
+import { ChatEventsProvider } from '../messages/ChatEventsContext'
 import { navigateFromPushData } from '../notifications/notificationNavigation'
 import { erpApi } from '../services/erpApi'
 
@@ -223,7 +224,9 @@ function AuthenticatedAppInner() {
 function AuthenticatedApp() {
   return (
     <NotificationUnreadProvider>
-      <AuthenticatedAppInner />
+      <ChatEventsProvider>
+        <AuthenticatedAppInner />
+      </ChatEventsProvider>
     </NotificationUnreadProvider>
   )
 }

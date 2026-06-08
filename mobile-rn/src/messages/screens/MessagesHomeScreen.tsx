@@ -17,6 +17,7 @@ import { ScreenBody } from '../../components/shell/ScreenBody'
 import { useAuth } from '../../state/AuthContext'
 
 import { chatApi, type ChatConversation, type ChatUser } from '../api'
+import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
 import type { MessagesStackParamList } from '../navigation'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -45,6 +46,7 @@ export function MessagesHomeScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
   const { accessToken, user } = useAuth()
+  const { subscribe } = useChatEvents()
   const userId = user?.id || ''
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,9 +77,16 @@ export function MessagesHomeScreen({ navigation }: Props) {
 
   useEffect(() => {
     void load()
-    const id = setInterval(() => load(true), 15000)
+    const id = setInterval(() => load(true), CHAT_POLL_FALLBACK_MS)
     return () => clearInterval(id)
   }, [load])
+
+  useEffect(() => {
+    return subscribe((event) => {
+      if (event === 'typing' || event === 'reaction') return
+      void load(true)
+    })
+  }, [load, subscribe])
 
   useEffect(() => {
     if (!accessToken) return

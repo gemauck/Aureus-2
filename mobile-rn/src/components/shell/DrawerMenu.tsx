@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import {
   Modal,
   Pressable,
@@ -18,11 +18,11 @@ import { navigateRoot } from '../../navigation/navigationHelpers'
 import { getVisibleMenuItems } from '../../utils/menuAccess'
 import { canAccessScreen } from '../../utils/screenAccess'
 import { useAppShell } from './AppShellContext'
-import { erpApi } from '../../services/erpApi'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
 import { useNotificationUnread } from '../../notifications/NotificationUnreadContext'
+import { useChatEvents } from '../../messages/ChatEventsContext'
 
 type Props = {
   navigationRef: React.RefObject<NavigationContainerRef<RootStackParamList>>
@@ -46,30 +46,11 @@ export function DrawerMenu({ navigationRef, currentRoute }: Props) {
   const insets = useSafeAreaInsets()
   const { menuOpen, closeMenu } = useAppShell()
   const { user, signOut, accessToken } = useAuth()
-  const [chatUnread, setChatUnread] = useState(0)
+  const { chatUnread } = useChatEvents()
   const { unreadCount: notificationUnread } = useNotificationUnread()
   const items = getVisibleMenuItems(user)
   const mainItems = items.filter((i) => i.section !== 'footer')
   const footerItems = items.filter((i) => i.section === 'footer')
-
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    const load = async () => {
-      try {
-        const count = await erpApi.getChatUnreadCount(accessToken)
-        if (!cancelled) setChatUnread(count)
-      } catch {
-        if (!cancelled) setChatUnread(0)
-      }
-    }
-    load()
-    const id = setInterval(load, 30000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [accessToken, menuOpen])
 
   function navigateTo(screen: keyof RootStackParamList) {
     closeMenu()
