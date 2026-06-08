@@ -277,6 +277,13 @@ const Messenger = () => {
     () => window.chatBrowserNotifications?.getEnabled?.() !== false
   );
   const [browserPrefSaving, setBrowserPrefSaving] = useState(false);
+  const [pwaInstallable, setPwaInstallable] = useState(
+    () => window.pwaMessengerInstall?.canPromptMessengerPwaInstall?.() || false
+  );
+  const [pwaInstalled, setPwaInstalled] = useState(
+    () => window.pwaMessengerInstall?.isMessengerPwaInstalled?.() || false
+  );
+  const [pwaInstallBusy, setPwaInstallBusy] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [reactionPickerId, setReactionPickerId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -292,6 +299,35 @@ const Messenger = () => {
   const selectedIdRef = useRef(null);
   const sseRef = useRef(null);
   const hasListRef = useRef(!!initialCache?.conversations?.length);
+
+  useEffect(() => {
+    const onInstallable = () => setPwaInstallable(true);
+    const onInstalled = () => {
+      setPwaInstalled(true);
+      setPwaInstallable(false);
+    };
+    window.addEventListener('messenger-pwa:installable', onInstallable);
+    window.addEventListener('messenger-pwa:installed', onInstalled);
+    return () => {
+      window.removeEventListener('messenger-pwa:installable', onInstallable);
+      window.removeEventListener('messenger-pwa:installed', onInstalled);
+    };
+  }, []);
+
+  const installMessengerDesktopApp = async () => {
+    const pwa = window.pwaMessengerInstall;
+    if (!pwa || pwaInstallBusy) return;
+    setPwaInstallBusy(true);
+    try {
+      if (pwa.isMessengerPwaEntry() && pwa.canPromptMessengerPwaInstall()) {
+        await pwa.promptMessengerPwaInstall();
+      } else {
+        pwa.openMessengerPwaEntry();
+      }
+    } finally {
+      setPwaInstallBusy(false);
+    }
+  };
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -973,6 +1009,25 @@ const Messenger = () => {
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${browserMessages ? 'translate-x-5' : ''}`} />
               </button>
             </div>
+            {!pwaInstalled ? (
+              <button
+                type="button"
+                disabled={pwaInstallBusy}
+                onClick={() => void installMessengerDesktopApp()}
+                className={`mt-2 w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left transition-colors ${isDark ? 'bg-gray-900/50 hover:bg-gray-900/70 text-blue-100' : 'bg-white/15 hover:bg-white/25 text-white'} disabled:opacity-50`}
+                title="Install Messenger as a standalone Chrome / Edge desktop app"
+              >
+                <span className="text-xs flex items-center gap-1.5 min-w-0">
+                  <i className="fas fa-window-restore text-[11px] opacity-80 shrink-0" />
+                  <span className="truncate">
+                    {window.__PWA_MESSENGER__ && pwaInstallable
+                      ? 'Install desktop app'
+                      : 'Set up desktop app'}
+                  </span>
+                </span>
+                <i className="fas fa-download text-[11px] opacity-80 shrink-0" />
+              </button>
+            ) : null}
           </div>
 
           <div className="flex-1 overflow-y-auto">

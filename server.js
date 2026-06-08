@@ -3338,6 +3338,24 @@ app.get('/manifest.webmanifest', (req, res) => {
   res.sendFile(manifestPath)
 })
 
+app.get('/messenger.webmanifest', (req, res) => {
+  const manifestPath = path.join(rootDir, 'messenger.webmanifest')
+  if (!existsSync(manifestPath)) {
+    return res.status(404).type('text/plain').send('messenger manifest not found')
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.type('application/manifest+json')
+  res.sendFile(manifestPath)
+})
+
+// Messenger PWA entry — same SPA shell, dedicated manifest + start URL
+app.get('/messenger.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.sendFile(path.join(rootDir, 'index.html'))
+})
+
 // Serve static files from root directory with HTTP/2-safe headers
 // MUST be after API routes to avoid serving HTML for API endpoints
 app.use(

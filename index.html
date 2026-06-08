@@ -8,7 +8,27 @@
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.1, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="theme-color" content="#2563eb">
-    <link rel="manifest" href="/manifest.webmanifest">
+    <script>
+        (function() {
+            var isMessengerEntry = location.pathname === '/messenger.html';
+            window.__PWA_MESSENGER__ = isMessengerEntry;
+            var manifest = document.createElement('link');
+            manifest.rel = 'manifest';
+            manifest.href = isMessengerEntry ? '/messenger.webmanifest' : '/manifest.webmanifest';
+            document.head.appendChild(manifest);
+            if (isMessengerEntry) {
+                document.title = 'Abcotronics Messenger';
+                var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+                if (appleTitle) appleTitle.setAttribute('content', 'Messenger');
+                var hash = location.hash || '';
+                if (!hash || hash === '#/' || hash === '#') {
+                    location.hash = '#/messages?source=pwa';
+                } else if (hash.indexOf('/messages') === -1) {
+                    location.hash = '#/messages' + (hash.indexOf('?') >= 0 ? hash.slice(hash.indexOf('?')) : '?source=pwa');
+                }
+            }
+        })();
+    </script>
     <link rel="apple-touch-icon" href="/favicon.svg">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -86,7 +106,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1780917627104'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1780918283846'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload (defer so it does not compete with first-paint resources) -->
     <script>
@@ -129,7 +149,7 @@
     <!-- VERSION: 20260511-meeting-notes-presence - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1780917627104';
+            var APP_VERSION = '1780918283846';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -1252,8 +1272,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1780917627104" as="script">
-    <script defer src="/dist/core-bundle.js?v=1780917627104"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1780918283846" as="script">
+    <script defer src="/dist/core-bundle.js?v=1780918283846"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1624,9 +1644,9 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1780917627104" as="script">
+    <link rel="prefetch" href="/lazy-load-components.js?v=1780918283846" as="script">
     <link rel="prefetch" href="/dist/src/components/projects/ProjectDetail.js?v=1778959662824" as="script">
-    <script defer src="/lazy-load-components.js?v=1780917627104"></script>
+    <script defer src="/lazy-load-components.js?v=1780918283846"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

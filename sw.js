@@ -1,9 +1,11 @@
-const SW_VERSION = 'abcotronics-pwa-v2-20260604';
+const SW_VERSION = 'abcotronics-pwa-v3-20260608';
 const APP_CACHE = `${SW_VERSION}-app`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 
 const PRECACHE_URLS = [
   '/manifest.webmanifest',
+  '/messenger.webmanifest',
+  '/messenger.html',
   '/job-card',
   '/jobcard',
   '/job-cards',
@@ -50,12 +52,13 @@ self.addEventListener('message', event => {
   }
 });
 
-function isJobCardNavigation(url, mode) {
+function isAppShellNavigation(url, mode) {
   if (mode !== 'navigate') return false;
   return (
     url.pathname === '/job-card' ||
     url.pathname === '/jobcard' ||
     url.pathname === '/job-cards' ||
+    url.pathname === '/messenger.html' ||
     url.pathname === '/'
   );
 }
@@ -68,7 +71,7 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
-  if (isJobCardNavigation(url, request.mode)) {
+  if (isAppShellNavigation(url, request.mode)) {
     event.respondWith(
       (async () => {
         try {
@@ -81,6 +84,7 @@ self.addEventListener('fetch', event => {
         } catch {
           return (
             (await caches.match(request)) ||
+            (await caches.match('/messenger.html')) ||
             (await caches.match('/job-card')) ||
             (await caches.match('/index.html'))
           );

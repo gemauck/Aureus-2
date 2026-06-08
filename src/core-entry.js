@@ -45,6 +45,7 @@ import './components/common/QuickFallback.jsx';
 import './components/common/CommentInputWithMentions.jsx';
 import './utils/chatBrowserNotifications.js';
 import './utils/notificationSounds.js';
+import './utils/pwaMessengerInstall.js';
 import './components/common/NotificationCenter.jsx';
 import './components/common/MessageCenter.jsx';
 import './components/common/GlobalSearch.jsx';
