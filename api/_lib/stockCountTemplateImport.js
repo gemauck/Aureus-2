@@ -107,6 +107,8 @@ export async function runStockCountImportPipeline(
   } = options
   const referencePrefix = pipelineOpts.referencePrefix || 'Stock count import'
   const batchIdPrefix = pipelineOpts.batchIdPrefix || 'sc'
+  const importDate = pipelineOpts.importDate || new Date()
+  const transactionTimeoutMs = pipelineOpts.transactionTimeoutMs || 360000
 
   const allItems = await prisma.inventoryItem.findMany({
     select: { sku: true, name: true },
@@ -269,7 +271,7 @@ export async function runStockCountImportPipeline(
           manufacturingPartNumber: pr.manufacturingPartNumber,
           boxNumber: pr.boxNumber,
           needsCatalogReview: pr.isNewLine,
-          importDate: new Date()
+          importDate
         })
         if (movement) {
           movementsCreated++
@@ -286,7 +288,7 @@ export async function runStockCountImportPipeline(
     },
     {
       maxWait: 60000,
-      timeout: 360000
+      timeout: transactionTimeoutMs
     }
   )
 
