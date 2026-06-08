@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import * as ImageManipulator from 'expo-image-manipulator'
-import { JOB_CARD_IMAGE_MAX_DIMENSION } from '../../../../src/jobCardWizard/constants.js'
 import { MediaGallery } from './MediaGallery'
+import { prepareImageMediaItem } from './imageThumbnails'
 import type { MediaItem } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
@@ -13,15 +12,6 @@ type Props = {
   photos: MediaItem[]
   onChange: (photos: MediaItem[]) => void
   readOnly?: boolean
-}
-
-async function compressUri(uri: string): Promise<string> {
-  const result = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: JOB_CARD_IMAGE_MAX_DIMENSION } }],
-    { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-  )
-  return `data:image/jpeg;base64,${result.base64 || ''}`
 }
 
 export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
@@ -45,11 +35,15 @@ export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
       if (res.canceled) return
       const next = [...photos]
       for (const asset of res.assets) {
-        if (asset.type === 'video') {
-          next.push({ url: asset.uri, name: asset.fileName || 'Video', mediaType: 'video' })
+        if (asset.type === 'video' && asset.uri) {
+          next.push({
+            url: asset.uri,
+            thumbUrl: asset.uri,
+            name: asset.fileName || 'Video',
+            mediaType: 'video'
+          })
         } else if (asset.uri) {
-          const dataUrl = await compressUri(asset.uri)
-          next.push({ url: dataUrl, name: asset.fileName || 'Photo' })
+          next.push(await prepareImageMediaItem(asset.uri, asset.fileName || 'Photo'))
         }
       }
       onChange(next)
@@ -74,8 +68,10 @@ export function PhotoPickerSection({ photos, onChange, readOnly }: Props) {
         allowsEditing: false
       })
       if (res.canceled || !res.assets[0]?.uri) return
-      const dataUrl = await compressUri(res.assets[0].uri)
-      onChange([...photos, { url: dataUrl, name: 'Camera photo' }])
+      onChange([
+        ...photos,
+        await prepareImageMediaItem(res.assets[0].uri, 'Camera photo')
+      ])
     } catch (err) {
       Alert.alert('Camera', err instanceof Error ? err.message : 'Could not open the camera.')
     } finally {

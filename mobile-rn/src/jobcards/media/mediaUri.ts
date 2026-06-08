@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system'
+import type { MediaItem } from '../types'
 
 /** Convert local file URI to data URL for API sync (voice notes, etc.). */
 export async function uriToDataUrl(uri: string, fallbackMime = 'audio/mp4'): Promise<string> {
@@ -27,4 +28,22 @@ export async function uriToDataUrl(uri: string, fallbackMime = 'audio/mp4'): Pro
 
 export async function voiceClipToPayloadUrl(clip: { dataUrl: string }): Promise<string> {
   return uriToDataUrl(clip.dataUrl, 'audio/mp4')
+}
+
+/** Resolve file:// attachments to data URLs before sync (photos, videos). */
+export async function normalizeMediaItemForSave(item: MediaItem): Promise<MediaItem> {
+  const url = String(item.url || '').trim()
+  if (!url.startsWith('file:') && !url.startsWith('content:')) {
+    return item
+  }
+  const isVideo =
+    item.mediaType === 'video' ||
+    /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url) ||
+    url.startsWith('data:video')
+  const dataUrl = await uriToDataUrl(url, isVideo ? 'video/mp4' : 'image/jpeg')
+  return {
+    ...item,
+    url: dataUrl,
+    thumbUrl: item.thumbUrl && !item.thumbUrl.startsWith('file:') ? item.thumbUrl : item.thumbUrl || url
+  }
 }

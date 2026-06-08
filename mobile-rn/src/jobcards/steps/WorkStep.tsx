@@ -18,8 +18,11 @@ export function WorkStep() {
     sectionWorkMedia,
     setSectionWorkMedia,
     voiceAttachments,
-    setVoiceAttachments
+    setVoiceAttachments,
+    saveDraftQuiet
   } = useJobCardWizard()
+
+  const afterTranscription = () => void saveDraftQuiet({ forceDraft: true })
 
   return (
     <View>
@@ -45,6 +48,7 @@ export function WorkStep() {
             setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
           }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
+          onAfterTranscription={afterTranscription}
         />
         <SectionMediaPicker
           section="diagnosis"
@@ -72,6 +76,7 @@ export function WorkStep() {
             setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
           }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
+          onAfterTranscription={afterTranscription}
         />
         <SectionMediaPicker
           section="actionsTaken"
@@ -126,6 +131,7 @@ export function WorkStep() {
             setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
           }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
+          onAfterTranscription={afterTranscription}
         />
       </SectionCard>
 

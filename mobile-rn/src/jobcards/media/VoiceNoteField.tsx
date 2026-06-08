@@ -4,6 +4,7 @@ import { Audio } from 'expo-av'
 import type { VoiceClip } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
+import { useNetwork } from '../../hooks/useNetwork'
 import {
   formatVoiceNoteTranscriptBlock,
   mimeFromRecordingUri,
@@ -18,6 +19,8 @@ type Props = {
   onRemove?: (id: string) => void
   fieldValue?: string
   onFieldChange?: (value: string) => void
+  /** Called after a clip is transcribed so the draft can be saved locally / synced. */
+  onAfterTranscription?: () => void
 }
 
 export function VoiceNoteField({
@@ -27,9 +30,11 @@ export function VoiceNoteField({
   onVoiceClipUpdate,
   onRemove,
   fieldValue = '',
-  onFieldChange
+  onFieldChange,
+  onAfterTranscription
 }: Props) {
   const styles = useThemedStyles(createStyles)
+  const { isOnline } = useNetwork()
   const [recording, setRecording] = useState<Audio.Recording | null>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [transcribingClipId, setTranscribingClipId] = useState<string | null>(null)
@@ -87,6 +92,7 @@ export function VoiceNoteField({
       fieldValueRef.current = next
       onFieldChange(next)
       onVoiceClipUpdate?.(clip.id, { transcribed: true, needsTranscription: false })
+      onAfterTranscription?.()
       return true
     } finally {
       if (mountedRef.current) {
@@ -113,7 +119,7 @@ export function VoiceNoteField({
     return () => {
       cancelled = true
     }
-  }, [pendingAutoKey, onFieldChange])
+  }, [pendingAutoKey, onFieldChange, isOnline])
 
   async function toggleRecord() {
     try {
@@ -196,7 +202,9 @@ export function VoiceNoteField({
         <Text style={styles.hintRecording}>Recording… speak, then tap stop to save and transcribe.</Text>
       ) : onFieldChange ? (
         <Text style={styles.hintIdle}>
-          Each clip is transcribed automatically into the field above.
+          {isOnline
+            ? 'Each clip is transcribed automatically into the field above.'
+            : 'Recorded offline — transcription runs automatically when you are back online.'}
         </Text>
       ) : null}
       {recordHint ? <Text style={styles.hintError}>{recordHint}</Text> : null}

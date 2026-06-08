@@ -27,7 +27,8 @@ import { jobcardsApi } from './api'
 import { useWizardPriorList } from './hooks/useWizardPriorList'
 import { useWizardReferenceData } from './hooks/useWizardReferenceData'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
-import { voiceClipToPayloadUrl } from './media/mediaUri'
+import { normalizeMediaItemForSave, voiceClipToPayloadUrl } from './media/mediaUri'
+import { inferVoiceClipsNeedingTranscription } from './media/voiceClipState'
 import { getOfflineStore } from './offlineStore'
 import { useJobCardSync } from './JobCardSyncContext'
 import type {
@@ -94,6 +95,7 @@ type WizardContextValue = {
   handleNext: () => void
   handlePrevious: () => void
   handleSave: (opts?: { forceDraft?: boolean; forceSubmitted?: boolean }) => Promise<void>
+  saveDraftQuiet: (opts?: { forceDraft?: boolean }) => Promise<void>
   runSyncNow: () => Promise<{ synced: number; failed: number }>
   openJobCard: (row: PriorListRow) => Promise<void>
   openJobCardById: (jobCardId: string) => Promise<void>
@@ -237,7 +239,14 @@ export function JobCardWizardProvider({
     const media = applyPhotosPayloadToWizardState(card.photos, API_BASE_URL)
     setSelectedPhotos(media.selectedPhotos)
     setSectionWorkMedia(media.sectionWorkMedia)
-    setVoiceAttachments(media.voiceAttachments)
+    setVoiceAttachments(
+      inferVoiceClipsNeedingTranscription(media.voiceAttachments, {
+        diagnosis: card.diagnosis || '',
+        actionsTaken: card.actionsTaken || '',
+        otherComments: card.otherComments || '',
+        reasonForVisit: card.reasonForVisit || ''
+      })
+    )
     if (media.customerSignature) {
       setFormData((f) => ({ ...f, customerSignature: media.customerSignature }))
       setSignatureLocked(true)
@@ -298,9 +307,19 @@ export function JobCardWizardProvider({
             ? 'draft'
             : formData.status || 'draft'
 
+        const normalizedPhotos = await Promise.all(selectedPhotos.map(normalizeMediaItemForSave))
+        const normalizedSectionMedia = Object.fromEntries(
+          await Promise.all(
+            (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).map(async (sec) => [
+              sec,
+              await Promise.all((sectionWorkMedia[sec] || []).map(normalizeMediaItemForSave))
+            ])
+          )
+        ) as SectionWorkMedia
+
         const sectionPhotoEntries = (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).flatMap(
           (sec) =>
-            (sectionWorkMedia[sec] || []).map((item) => ({
+            (normalizedSectionMedia[sec] || []).map((item) => ({
               kind: 'sectionMedia',
               section: sec,
               url: item.url,
@@ -321,7 +340,9 @@ export function JobCardWizardProvider({
         const jobCardData = buildJobCardSavePayload({
           formData: {
             ...formData,
-            photos: selectedPhotos.length ? (selectedPhotos as JobCardFormData['photos']) : formData.photos,
+            photos: normalizedPhotos.length
+              ? (normalizedPhotos as JobCardFormData['photos'])
+              : formData.photos,
             stockUsed: formData.stockUsed
           },
           editingMeta,
@@ -380,6 +401,14 @@ export function JobCardWizardProvider({
       } finally {
         setIsSubmitting(false)
       }
+    },
+    [editingMeta, persistDraftQuiet]
+  )
+
+  const saveDraftQuiet = useCallback(
+    async (opts: { forceDraft?: boolean } = { forceDraft: true }) => {
+      if (!editingMeta) return
+      await persistDraftQuiet(opts)
     },
     [editingMeta, persistDraftQuiet]
   )
@@ -657,6 +686,7 @@ export function JobCardWizardProvider({
       handleNext,
       handlePrevious,
       handleSave,
+      saveDraftQuiet,
       runSyncNow,
       openJobCard,
       openJobCardById,
@@ -708,6 +738,7 @@ export function JobCardWizardProvider({
       handleNext,
       handlePrevious,
       handleSave,
+      saveDraftQuiet,
       runSyncNow,
       openJobCard,
       openJobCardById,

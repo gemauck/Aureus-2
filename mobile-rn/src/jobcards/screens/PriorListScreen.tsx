@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { priorListLocalSearchHay } from '../../../../src/jobCardWizard/priorList.js'
 import { useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
+import { countPendingCardMedia, extractPendingCardThumbUrls } from '../media/pendingCardMedia'
 import type { PriorListRow } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
@@ -220,6 +222,9 @@ function PriorRow({
   const { jc } = useTheme()
   const title = row.heading || row.jobCardNumber || row.clientName || 'Draft'
   const status = row.synced ? (row.status === 'submitted' ? 'Submitted' : 'Synced') : 'Draft'
+  const thumbUrls = !row.synced ? extractPendingCardThumbUrls(row.photos, 4) : []
+  const mediaCount = !row.synced ? countPendingCardMedia(row.photos) : 0
+  const stockCount = Array.isArray(row.stockUsed) ? row.stockUsed.length : 0
 
   return (
     <View style={styles.row}>
@@ -256,6 +261,27 @@ function PriorRow({
           <Text style={styles.rowSub} numberOfLines={2}>
             {row.agentName || '—'} · {row.clientName || '—'} · {row.siteName || row.location || '—'}
           </Text>
+          {!row.synced && (thumbUrls.length > 0 || stockCount > 0) ? (
+            <View style={styles.pendingMeta}>
+              {thumbUrls.length > 0 ? (
+                <View style={styles.thumbStrip}>
+                  {thumbUrls.map((uri, i) => (
+                    <Image key={`${uri}-${i}`} source={{ uri }} style={styles.thumb} />
+                  ))}
+                  {mediaCount > thumbUrls.length ? (
+                    <View style={styles.thumbMore}>
+                      <Text style={styles.thumbMoreText}>+{mediaCount - thumbUrls.length}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              {stockCount > 0 ? (
+                <Text style={styles.stockBadge}>
+                  {stockCount} stock line{stockCount === 1 ? '' : 's'} queued
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         {opening ? (
           <ActivityIndicator color={jc.primary} />
@@ -329,6 +355,24 @@ function createStyles({ jc }: { jc: JcTheme }) {
   statusTextDraft: { color: jc.warning },
   statusTextSynced: { color: jc.primaryDark },
   rowSub: { color: jc.textMuted, marginTop: 4, fontSize: 13, lineHeight: 18 },
+  pendingMeta: { marginTop: 8, gap: 6 },
+  thumbStrip: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  thumb: {
+    width: 40,
+    height: 40,
+    borderRadius: jc.radius.sm,
+    backgroundColor: jc.surfaceMuted
+  },
+  thumbMore: {
+    width: 40,
+    height: 40,
+    borderRadius: jc.radius.sm,
+    backgroundColor: jc.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  thumbMoreText: { color: jc.primaryDark, fontWeight: '700', fontSize: 11 },
+  stockBadge: { color: jc.primaryDark, fontSize: 11, fontWeight: '600' },
   deleteBtn: {
     alignSelf: 'flex-end',
     paddingHorizontal: 12,

@@ -50,7 +50,9 @@ After login, open **Job cards (native)** from Home.
 | Client + site picker | ✅ |
 | **Start trip** / **Arrived on site** (GPS while app open) | ✅ |
 | Offline queue + sync | ✅ |
-| Photos / stock / voice (web parity) | 🔜 Phase 2+ |
+| Photos (capture + thumbnails while offline) | ✅ |
+| Stock from van / warehouse (offline picker) | ✅ |
+| Voice notes (record offline, transcribe on reconnect) | ✅ |
 
 ### Trip tracking
 
@@ -61,6 +63,12 @@ After login, open **Job cards (native)** from Home.
 ### Offline
 
 If the device is offline (or the server fails), saves are queued in AsyncStorage and synced automatically when you are back online — including in the background while you use other modules, when the app returns to the foreground, or when you tap **Sync now** on the Job cards home screen.
+
+**Photos:** Captured images are stored locally with thumbnails visible in the gallery and on unsynced cards in the prior list. Full-resolution data is embedded in the queued payload and uploads with the card.
+
+**Stock:** Select a van or warehouse location, then pick SKUs from on-hand stock at that site. Per-location stock lists are cached on device after the first online load (or when you open the Stock step while online). Manufacturing ledger movements are created server-side after sync.
+
+**Voice:** Record clips offline; transcription runs automatically when connectivity returns (OpenAI Whisper via `/api/public/transcribe-audio`). Transcripts are appended to the relevant text field and saved with the draft.
 
 ## Pilot modules (existing shells)
 

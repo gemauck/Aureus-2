@@ -67,6 +67,8 @@ export const REFERENCE_CACHE_KEYS = {
   serviceFormTemplates: 'service_form_templates',
   inventory: 'manufacturing_inventory',
   locations: 'manufacturing_stock_locations',
+  /** Per-location on-hand rows keyed by location UUID (van / warehouse stock picker). */
+  locationInventory: 'manufacturing_location_inventory_v1',
   projects: 'manufacturing_projects',
   projectsAlt: 'projects'
 };

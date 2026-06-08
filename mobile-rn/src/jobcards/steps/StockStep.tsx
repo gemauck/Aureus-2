@@ -2,12 +2,13 @@ import React, { useEffect, useMemo } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { createStockEntryRow } from '../../../../src/jobCardWizard/formDefaults.js'
 import { useJobCardWizard } from '../WizardContext'
-import { useLocationInventory } from '../hooks/useLocationInventory'
+import { prefetchLocationInventory, useLocationInventory } from '../hooks/useLocationInventory'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
 import { InfoBanner } from '../components/InfoBanner'
 import { useFormStyles } from '../components/formStyles'
 import type { JobCardFormData, StockEntryRow as StockRow, StockLocation } from '../types'
+import { useNetwork } from '../../hooks/useNetwork'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -27,12 +28,12 @@ function StockEntryRowEditor({
   locationOptions: { value: string; label: string }[]
   onUpdate: (id: string, patch: Partial<StockRow>) => void
   onRemove: (id: string) => void
-  onAddLine: (rowId: string) => void
+  onAddLine: (rowId: string, pick?: { itemName?: string }) => void
 }) {
   const styles = useThemedStyles(createStyles)
   const formStyles = useFormStyles()
   const { jc } = useTheme()
-  const { rows, loading, error } = useLocationInventory(row.locationId, Boolean(row.locationId))
+  const { rows, loading, error, fromCache } = useLocationInventory(row.locationId, Boolean(row.locationId))
 
   const skuOptions = useMemo(
     () =>
@@ -70,6 +71,9 @@ function StockEntryRowEditor({
         </View>
       ) : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {fromCache && row.locationId && !loading ? (
+        <Text style={styles.cacheHint}>Using cached stock for this location (offline).</Text>
+      ) : null}
       {row.locationId && !loading && skuOptions.length === 0 ? (
         <Text style={styles.noStockHint}>No on-hand stock at this location.</Text>
       ) : null}
@@ -105,7 +109,7 @@ function StockEntryRowEditor({
       <Pressable
         style={[formStyles.primaryBtn, !canAdd && styles.btnDisabled]}
         disabled={!canAdd}
-        onPress={() => onAddLine(row.id)}
+        onPress={() => onAddLine(row.id, { itemName: selectedPick?.name })}
       >
         <Text style={formStyles.primaryBtnText}>+ Add to job card</Text>
       </Pressable>
@@ -125,9 +129,16 @@ export function StockStep() {
     ensureInventoryLoaded
   } = useJobCardWizard()
 
+  const { isOnline } = useNetwork()
+
   useEffect(() => {
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
+
+  useEffect(() => {
+    if (!isOnline || !stockLocations.length) return
+    void prefetchLocationInventory(stockLocations.map((l) => l.id))
+  }, [isOnline, stockLocations])
 
   const locationOptions = stockLocations.map((l) => ({
     value: l.id,
@@ -139,7 +150,7 @@ export function StockStep() {
     [formData.materialsBought]
   )
 
-  function addStockFromRow(rowId: string) {
+  function addStockFromRow(rowId: string, pick?: { itemName?: string }) {
     const row = stockEntryRows.find((r) => r.id === rowId)
     if (!row?.locationId || !row.sku || !(row.quantity > 0)) return
     const loc = stockLocations.find((l) => l.id === row.locationId)
@@ -149,7 +160,7 @@ export function StockStep() {
       quantity: row.quantity,
       locationId: row.locationId,
       locationName: loc?.name || '',
-      itemName: row.sku
+      itemName: pick?.itemName || row.sku
     }
     setFormData((f) => {
       const existing = f.stockUsed.filter((x) => x.id !== line.id)
@@ -370,6 +381,7 @@ function createStyles({ jc }: { jc: JcTheme }) {
   loadingText: { color: jc.textMuted, fontSize: 13 },
   errorText: { color: jc.warning, fontSize: 13 },
   noStockHint: { color: jc.textMuted, fontSize: 12 },
+  cacheHint: { color: jc.primaryDark, fontSize: 11, fontStyle: 'italic' },
   btnDisabled: { opacity: 0.45 },
   appliedBox: { gap: jc.space.sm, marginTop: jc.space.sm },
   appliedRow: {

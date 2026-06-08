@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import * as ImageManipulator from 'expo-image-manipulator'
 import { MediaGallery } from './MediaGallery'
+import { prepareImageMediaItem } from './imageThumbnails'
 import type { MediaItem } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
@@ -33,21 +33,9 @@ export function SectionMediaPicker({ section, items, onChange }: Props) {
         allowsEditing: false
       })
       if (res.canceled || !res.assets[0]?.uri) return
-      const manipulated = await ImageManipulator.manipulateAsync(
-        res.assets[0].uri,
-        [{ resize: { width: 1280 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      )
-      if (!manipulated.base64) {
-        Alert.alert('Photo', 'Could not process the photo. Try again.')
-        return
-      }
       onChange([
         ...items,
-        {
-          url: `data:image/jpeg;base64,${manipulated.base64}`,
-          name: `${section} photo`
-        }
+        await prepareImageMediaItem(res.assets[0].uri, `${section} photo`)
       ])
     } catch (err) {
       Alert.alert('Camera', err instanceof Error ? err.message : 'Could not open the camera.')
@@ -69,21 +57,9 @@ export function SectionMediaPicker({ section, items, onChange }: Props) {
         quality: 0.85
       })
       if (res.canceled || !res.assets[0]?.uri) return
-      const manipulated = await ImageManipulator.manipulateAsync(
-        res.assets[0].uri,
-        [{ resize: { width: 1280 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      )
-      if (!manipulated.base64) {
-        Alert.alert('Photo', 'Could not process the photo. Try again.')
-        return
-      }
       onChange([
         ...items,
-        {
-          url: `data:image/jpeg;base64,${manipulated.base64}`,
-          name: `${section} photo`
-        }
+        await prepareImageMediaItem(res.assets[0].uri, `${section} photo`)
       ])
     } catch (err) {
       Alert.alert('Photos', err instanceof Error ? err.message : 'Could not open the photo library.')

@@ -54,8 +54,15 @@ export function VisitStep() {
   const formStyles = useFormStyles()
   const styles = useThemedStyles(createStyles)
   const { jc } = useTheme()
-  const { formData, setFormData, editingMeta, voiceAttachments, setVoiceAttachments } =
-    useJobCardWizard()
+  const {
+    formData,
+    setFormData,
+    editingMeta,
+    voiceAttachments,
+    setVoiceAttachments,
+    saveDraftQuiet
+  } = useJobCardWizard()
+  const afterTranscription = () => void saveDraftQuiet({ forceDraft: true })
   const [mapOpen, setMapOpen] = React.useState(false)
 
   const categoryOptions = useMemo(
@@ -142,6 +149,7 @@ export function VisitStep() {
             setVoiceAttachments((v) => v.map((c) => (c.id === id ? { ...c, ...patch } : c)))
           }
           onRemove={(id) => setVoiceAttachments((v) => v.filter((x) => x.id !== id))}
+          onAfterTranscription={afterTranscription}
         />
       </SectionCard>
 
