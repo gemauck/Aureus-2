@@ -7,6 +7,7 @@ export type ChatEventType =
   | 'conversation'
   | 'message_updated'
   | 'message_deleted'
+  | 'call'
 
 export type ChatEventPayload = {
   conversationId?: string
@@ -20,6 +21,12 @@ export type ChatEventPayload = {
   emoji?: string
   removed?: boolean
   teamId?: string
+  callId?: string
+  type?: string
+  media?: string
+  payload?: unknown
+  fromUserId?: string
+  fromName?: string
 }
 
 export type ChatEventListener = (event: ChatEventType, data: ChatEventPayload) => void

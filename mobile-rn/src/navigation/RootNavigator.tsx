@@ -16,6 +16,7 @@ import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { NotificationUnreadProvider, useNotificationUnread } from '../notifications/NotificationUnreadContext'
 import { ChatEventsProvider, useChatEvents } from '../messages/ChatEventsContext'
+import { ChatCallProvider } from '../messages/ChatCallContext'
 import { navigateFromPushData } from '../notifications/notificationNavigation'
 import { erpApi } from '../services/erpApi'
 
@@ -233,7 +234,9 @@ function AuthenticatedApp() {
   return (
     <NotificationUnreadProvider>
       <ChatEventsProvider>
-        <AuthenticatedAppInner />
+        <ChatCallProvider>
+          <AuthenticatedAppInner />
+        </ChatCallProvider>
       </ChatEventsProvider>
     </NotificationUnreadProvider>
   )

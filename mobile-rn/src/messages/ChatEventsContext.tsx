@@ -11,8 +11,12 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { erpApi } from '../services/erpApi'
 import { getChatPushEnabled } from '../services/chatPushPrefs'
-import { playNotificationSound } from '../services/notificationSounds'
-import { hasPushNotificationPermission, showLocalChatNotification } from '../services/pushNotifications'
+import { playNotificationSound, startCallRing } from '../services/notificationSounds'
+import {
+  hasPushNotificationPermission,
+  showLocalCallNotification,
+  showLocalChatNotification
+} from '../services/pushNotifications'
 import { useAuth } from '../state/AuthContext'
 import { ChatEventStream } from './chatEventStream'
 import { getActiveChatConversation } from './chatFocusState'
@@ -69,6 +73,37 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
     return () => listenersRef.current.delete(listener)
   }, [])
 
+  const maybeNotifyIncomingCall = useCallback(async (data: ChatEventPayload) => {
+    if (!data.conversationId || data.type !== 'invite') return
+    if (data.fromUserId && data.fromUserId === currentUserId) return
+    if (data.conversationId === getActiveChatConversation()) return
+
+    const enabled = await getChatPushEnabled()
+    if (!enabled) return
+
+    const label = data.fromName || 'Someone'
+    const isVideo = data.media === 'video'
+    const title = isVideo ? `${label} — video call` : `${label} — voice call`
+    const body = 'Tap to answer'
+
+    const pushGranted = await hasPushNotificationPermission()
+    if (!pushGranted) {
+      void showLocalCallNotification({
+        title,
+        body,
+        conversationId: data.conversationId,
+        callId: data.callId,
+        media: data.media,
+        fromUserId: data.fromUserId,
+        fromName: data.fromName
+      })
+    }
+
+    if (AppState.currentState === 'active') {
+      void startCallRing()
+    }
+  }, [currentUserId])
+
   const maybeNotifyIncomingMessage = useCallback(async (data: ChatEventPayload) => {
     if (!data.conversationId) return
     if (data.senderId && data.senderId === currentUserId) return
@@ -107,8 +142,11 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
       if (event === 'message') {
         void maybeNotifyIncomingMessage(data)
       }
+      if (event === 'call' && data.type === 'invite') {
+        void maybeNotifyIncomingCall(data)
+      }
     },
-    [emit, maybeNotifyIncomingMessage, refreshChatUnread]
+    [emit, maybeNotifyIncomingCall, maybeNotifyIncomingMessage, refreshChatUnread]
   )
 
   useEffect(() => {

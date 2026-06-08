@@ -2,7 +2,7 @@ const fs = require('fs')
 const path = require('path')
 
 /** Bump when native modules / permissions change — must match native APK expo_runtime_version. */
-const RUNTIME_VERSION = 'erp-mobile-2'
+const RUNTIME_VERSION = 'erp-mobile-3'
 
 const OTA_BASE =
   process.env.MOBILE_OTA_PUBLIC_URL ||

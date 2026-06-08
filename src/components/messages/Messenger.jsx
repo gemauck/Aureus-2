@@ -243,6 +243,143 @@ function ReadReceiptsPanel({ messageId, onClose, isDark }) {
   );
 }
 
+function ChatCallOverlay({
+  phase,
+  media,
+  peerName,
+  muted,
+  cameraOff,
+  localStream,
+  remoteStream,
+  onAccept,
+  onReject,
+  onHangUp,
+  onToggleMute,
+  onToggleCamera,
+  isDark
+}) {
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const shell = isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900';
+  const mutedText = isDark ? 'text-gray-400' : 'text-gray-500';
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localStream || null;
+    }
+  }, [localStream, phase]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream || null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteStream || null;
+    }
+  }, [remoteStream, phase]);
+
+  if (!phase || phase === 'idle' || phase === 'ended') return null;
+
+  const isVideo = media === 'video';
+  const title =
+    phase === 'incoming' ? `Incoming ${isVideo ? 'video' : 'voice'} call`
+      : phase === 'outgoing' ? `Calling ${peerName || '…'}`
+        : phase === 'connecting' ? 'Connecting…'
+          : `On call with ${peerName || 'colleague'}`;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className={`w-full max-w-lg rounded-2xl shadow-2xl border overflow-hidden ${shell} ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className={`px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+          <h3 className="font-semibold text-lg">{title}</h3>
+          <p className={`text-sm ${mutedText}`}>{peerName}</p>
+        </div>
+
+        {isVideo && (phase === 'active' || phase === 'connecting') ? (
+          <div className="relative aspect-video bg-black">
+            <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute bottom-3 right-3 h-24 w-32 rounded-lg border border-white/30 object-cover shadow-lg"
+            />
+          </div>
+        ) : (
+          <div className={`flex flex-col items-center justify-center py-10 ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl mb-3">
+              <i className={`fas ${isVideo ? 'fa-video' : 'fa-phone'}`} />
+            </div>
+            <p className={`text-sm ${mutedText}`}>
+              {phase === 'outgoing' ? 'Ringing…' : phase === 'incoming' ? 'Answer or decline' : 'Voice call in progress'}
+            </p>
+          </div>
+        )}
+
+        <audio ref={remoteAudioRef} autoPlay playsInline className="sr-only" />
+
+        <div className={`flex items-center justify-center gap-3 px-4 py-4 ${isDark ? 'bg-gray-900/80' : 'bg-gray-50'}`}>
+          {phase === 'incoming' ? (
+            <>
+              <button
+                type="button"
+                onClick={onReject}
+                className="h-12 w-12 rounded-full bg-red-600 text-white hover:bg-red-500 transition-colors"
+                title="Decline"
+              >
+                <i className="fas fa-phone-slash" />
+              </button>
+              <button
+                type="button"
+                onClick={onAccept}
+                className="h-12 w-12 rounded-full bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                title="Accept"
+              >
+                <i className={`fas ${isVideo ? 'fa-video' : 'fa-phone'}`} />
+              </button>
+            </>
+          ) : (
+            <>
+              {phase === 'active' || phase === 'connecting' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={onToggleMute}
+                    className={`h-11 w-11 rounded-full transition-colors ${muted ? 'bg-red-600 text-white' : (isDark ? 'bg-gray-800 text-gray-200' : 'bg-white border border-gray-200 text-gray-700')}`}
+                    title={muted ? 'Unmute' : 'Mute'}
+                  >
+                    <i className={`fas ${muted ? 'fa-microphone-slash' : 'fa-microphone'}`} />
+                  </button>
+                  {isVideo ? (
+                    <button
+                      type="button"
+                      onClick={onToggleCamera}
+                      className={`h-11 w-11 rounded-full transition-colors ${cameraOff ? 'bg-red-600 text-white' : (isDark ? 'bg-gray-800 text-gray-200' : 'bg-white border border-gray-200 text-gray-700')}`}
+                      title={cameraOff ? 'Turn camera on' : 'Turn camera off'}
+                    >
+                      <i className={`fas ${cameraOff ? 'fa-video-slash' : 'fa-video'}`} />
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={onHangUp}
+                className="h-12 w-12 rounded-full bg-red-600 text-white hover:bg-red-500 transition-colors"
+                title="End call"
+              >
+                <i className="fas fa-phone-slash" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Messenger = () => {
   const { isDark } = window.useTheme();
   const currentUser = window.storage?.getUser?.() || {};
@@ -285,6 +422,17 @@ const Messenger = () => {
   );
   const [pwaInstallBusy, setPwaInstallBusy] = useState(false);
   const [showNotifSettings, setShowNotifSettings] = useState(false);
+  const [callPhase, setCallPhase] = useState('idle');
+  const [callMedia, setCallMedia] = useState('audio');
+  const [callPeerName, setCallPeerName] = useState('');
+  const [callConversationId, setCallConversationId] = useState(null);
+  const [callMuted, setCallMuted] = useState(false);
+  const [callCameraOff, setCallCameraOff] = useState(false);
+  const [callLocalStream, setCallLocalStream] = useState(null);
+  const [callRemoteStream, setCallRemoteStream] = useState(null);
+  const [pendingIncomingCall, setPendingIncomingCall] = useState(null);
+  const callSessionRef = useRef(null);
+  const callConversationIdRef = useRef(null);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [reactionPickerId, setReactionPickerId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -333,6 +481,10 @@ const Messenger = () => {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    callConversationIdRef.current = callConversationId;
+  }, [callConversationId]);
 
   const parseConversationFromUrl = useCallback(() => {
     const params = new URLSearchParams(window.location.search || '');
@@ -413,6 +565,200 @@ const Messenger = () => {
       if (!silent && !fromCache) setLoadingMessages(false);
     }
   }, [scrollToBottom]);
+
+  const relayCallSignal = useCallback(async (conversationId, body) => {
+    await chatFetch(`/api/chat/conversations/${conversationId}/call-signal`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }, []);
+
+  const resetCallUi = useCallback(() => {
+    window.notificationSounds?.stopCallRing?.();
+    setCallPhase('idle');
+    setCallPeerName('');
+    setCallConversationId(null);
+    setCallMuted(false);
+    setCallCameraOff(false);
+    setCallLocalStream(null);
+    setCallRemoteStream(null);
+    setPendingIncomingCall(null);
+    callSessionRef.current = null;
+  }, []);
+
+  const ensureCallSession = useCallback((conversationId) => {
+    if (callSessionRef.current) return callSessionRef.current;
+    const factory = window.chatWebRtcCall?.createChatCallSession;
+    if (!factory) {
+      window.alert('Calling is still loading — try again in a moment.');
+      return null;
+    }
+    const session = factory({
+      conversationId,
+      sendSignal: (payload) => relayCallSignal(conversationId, payload),
+      onStateChange: (state) => {
+        if (state === 'ended') {
+          resetCallUi();
+          return;
+        }
+        setCallPhase(state);
+      },
+      onRemoteStream: (stream) => setCallRemoteStream(stream),
+      onError: (message) => window.alert(message || 'Call failed')
+    });
+    callSessionRef.current = session;
+    return session;
+  }, [relayCallSignal, resetCallUi]);
+
+  const handleRemoteCallSignal = useCallback(async (data) => {
+    if (!data?.conversationId || data.fromUserId === currentUserId) return;
+    if (data.type === 'invite' && callPhase !== 'idle') {
+      try {
+        await relayCallSignal(data.conversationId, {
+          callId: data.callId,
+          type: 'reject',
+          media: data.media || 'audio',
+          payload: { reason: 'busy' }
+        });
+      } catch (_) { /* ignore */ }
+      return;
+    }
+    const session = ensureCallSession(data.conversationId);
+    if (!session) return;
+    callSessionRef.current = session;
+    const result = await session.handleRemoteSignal(data);
+    if (result?.kind === 'incoming' && result.offer) {
+      setPendingIncomingCall({
+        conversationId: data.conversationId,
+        callId: data.callId,
+        media: data.media || 'audio',
+        fromName: data.fromName || 'Someone',
+        offer: result.offer
+      });
+      setCallPhase('incoming');
+      setCallPeerName(data.fromName || 'Someone');
+      setCallMedia(data.media || 'audio');
+      setCallConversationId(data.conversationId);
+      window.notificationSounds?.startCallRing?.();
+      return;
+    }
+    if (result?.kind === 'rejected' || result?.kind === 'ended') {
+      resetCallUi();
+    }
+  }, [currentUserId, callPhase, relayCallSignal, ensureCallSession, resetCallUi]);
+
+  useEffect(() => {
+    const onIncoming = (e) => {
+      const data = e?.detail;
+      if (data) void handleRemoteCallSignal(data);
+    };
+    const onFocusCall = (e) => {
+      const { conversationId } = e?.detail || {};
+      if (conversationId && conversationId !== selectedId) {
+        setSelectedId(conversationId);
+        setMobileShowThread(true);
+        void loadMessages(conversationId);
+      }
+    };
+    window.addEventListener('chat:call-incoming', onIncoming);
+    window.addEventListener('chat:call-focus', onFocusCall);
+    return () => {
+      window.removeEventListener('chat:call-incoming', onIncoming);
+      window.removeEventListener('chat:call-focus', onFocusCall);
+    };
+  }, [handleRemoteCallSignal, selectedId, loadMessages]);
+
+  useEffect(() => {
+    if (!selectedId || callPhase !== 'idle') return;
+    let cancelled = false;
+    chatFetch(`/api/chat/conversations/${selectedId}/call-pending`)
+      .then((data) => {
+        if (cancelled || !data?.pending?.offer) return;
+        void handleRemoteCallSignal({
+          conversationId: selectedId,
+          callId: data.pending.callId,
+          type: 'invite',
+          media: data.pending.media || 'audio',
+          payload: { sdp: data.pending.offer },
+          fromUserId: data.pending.fromUserId,
+          fromName: data.pending.fromName || 'Someone'
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedId, callPhase, handleRemoteCallSignal]);
+
+  const startDirectCall = useCallback(async (media) => {
+    if (!selectedId || selected?.type !== 'direct') return;
+    if (callSessionRef.current && callSessionRef.current.getState() !== 'idle') {
+      window.alert('You are already in a call.');
+      return;
+    }
+    const session = ensureCallSession(selectedId);
+    if (!session) return;
+    setCallConversationId(selectedId);
+    setCallMedia(media);
+    setCallPeerName(selected?.name || 'Colleague');
+    try {
+      await session.startOutgoing(media);
+      setCallLocalStream(session.getLocalStream());
+      setCallPhase(session.getState());
+      window.notificationSounds?.play?.('message');
+    } catch (e) {
+      resetCallUi();
+      window.alert(e.message || 'Could not start call');
+    }
+  }, [selectedId, selected, ensureCallSession, resetCallUi]);
+
+  const acceptIncomingCall = useCallback(async () => {
+    const pending = pendingIncomingCall;
+    if (!pending?.conversationId || !pending?.callId || !pending?.offer) return;
+    const session = ensureCallSession(pending.conversationId);
+    if (!session) return;
+    setCallConversationId(pending.conversationId);
+    setCallMedia(pending.media || 'audio');
+    setCallPeerName(pending.fromName || 'Colleague');
+    setPendingIncomingCall(null);
+    if (pending.conversationId !== selectedId) {
+      setSelectedId(pending.conversationId);
+      setMobileShowThread(true);
+      void loadMessages(pending.conversationId);
+    }
+    try {
+      await session.acceptIncoming(pending.callId, pending.media || 'audio', pending.offer);
+      setCallLocalStream(session.getLocalStream());
+      setCallPhase(session.getState());
+    } catch (e) {
+      resetCallUi();
+      window.alert(e.message || 'Could not answer call');
+    }
+  }, [pendingIncomingCall, ensureCallSession, resetCallUi, selectedId, loadMessages]);
+
+  const rejectIncomingCall = useCallback(async () => {
+    const pending = pendingIncomingCall;
+    if (pending?.conversationId && pending?.callId) {
+      try {
+        await relayCallSignal(pending.conversationId, {
+          callId: pending.callId,
+          type: 'reject',
+          media: pending.media || 'audio',
+          payload: { reason: 'declined' }
+        });
+      } catch (_) { /* ignore */ }
+    }
+    resetCallUi();
+  }, [pendingIncomingCall, relayCallSignal, resetCallUi]);
+
+  const hangUpCall = useCallback(async () => {
+    const session = callSessionRef.current;
+    if (session) await session.endCall(true);
+    resetCallUi();
+  }, [resetCallUi]);
+
+  useEffect(() => () => {
+    const session = callSessionRef.current;
+    if (session) void session.endCall(false);
+  }, []);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
@@ -526,12 +872,15 @@ const Messenger = () => {
         loadConversations(true);
       });
     });
+    es.addEventListener('call', (ev) => {
+      handlePayload(ev, (data) => { void handleRemoteCallSignal(data); });
+    });
 
     return () => {
       es.close();
       sseRef.current = null;
     };
-  }, [currentUserId, loadConversations, loadMessages]);
+  }, [currentUserId, loadConversations, loadMessages, handleRemoteCallSignal]);
 
   const toggleReaction = async (messageId, emoji) => {
     try {
@@ -1146,6 +1495,26 @@ const Messenger = () => {
                       : (selected?.participants?.find((p) => p.userId !== currentUserId)?.user?.online ? 'Online' : 'Offline')}
                   </p>
                 </div>
+                {selected?.type === 'direct' && callPhase === 'idle' ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      title="Voice call"
+                      onClick={() => void startDirectCall('audio')}
+                      className={`p-2.5 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                    >
+                      <i className="fas fa-phone text-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Video call"
+                      onClick={() => void startDirectCall('video')}
+                      className={`p-2.5 rounded-xl transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                    >
+                      <i className="fas fa-video text-sm" />
+                    </button>
+                  </div>
+                ) : null}
               </header>
 
               {typingLabel ? (
@@ -1336,6 +1705,27 @@ const Messenger = () => {
         </main>
       </div>
 
+      <ChatCallOverlay
+        phase={callPhase}
+        media={callMedia}
+        peerName={callPeerName}
+        muted={callMuted}
+        cameraOff={callCameraOff}
+        localStream={callLocalStream}
+        remoteStream={callRemoteStream}
+        onAccept={() => void acceptIncomingCall()}
+        onReject={() => void rejectIncomingCall()}
+        onHangUp={() => void hangUpCall()}
+        onToggleMute={() => {
+          const session = callSessionRef.current;
+          if (session) setCallMuted(session.toggleMute());
+        }}
+        onToggleCamera={() => {
+          const session = callSessionRef.current;
+          if (session) setCallCameraOff(session.toggleCamera());
+        }}
+        isDark={isDark}
+      />
       {showNotifSettings && renderNotifSettingsModal()}
       {showNewChat && renderUserPicker(false)}
       {showNewGroup && renderUserPicker(true)}

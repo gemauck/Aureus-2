@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -14,12 +14,13 @@ import {
 } from 'react-native'
 import { Audio } from 'expo-av'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { apiUrl } from '../../config'
 import { useAuth } from '../../state/AuthContext'
 
 import { chatApi, type ChatAttachment, type ChatMessage, type MessageReadReceipts } from '../api'
 import { CHAT_POLL_FALLBACK_MS, useChatEvents } from '../ChatEventsContext'
+import { useChatCall } from '../ChatCallContext'
 import { setActiveChatConversation } from '../chatFocusState'
 import type { ChatEventPayload, ChatEventType } from '../chatEventTypes'
 import type { MessagesStackParamList } from '../navigation'
@@ -145,9 +146,11 @@ function ReadReceiptsModal({
 export function ChatScreen({ route }: Props) {
   const styles = useThemedStyles(createStyles)
   const { erp } = useTheme()
-  const { conversationId } = route.params
+  const navigation = useNavigation()
+  const { conversationId, title, conversationType, callId } = route.params
   const { accessToken, user } = useAuth()
   const { connected, subscribe, refreshChatUnread } = useChatEvents()
+  const { phase, registerConversation, startOutgoing } = useChatCall()
   const userId = user?.id || ''
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
@@ -169,9 +172,38 @@ export function ChatScreen({ route }: Props) {
   useFocusEffect(
     useCallback(() => {
       setActiveChatConversation(conversationId)
-      return () => setActiveChatConversation(null)
-    }, [conversationId])
+      registerConversation(conversationId, { callId, peerName: title })
+      return () => {
+        setActiveChatConversation(null)
+        registerConversation(null)
+      }
+    }, [conversationId, callId, title, registerConversation])
   )
+
+  useLayoutEffect(() => {
+    const isDirect = conversationType === 'direct'
+    navigation.setOptions({
+      headerRight: () =>
+        isDirect && phase === 'idle' ? (
+          <View style={styles.callHeaderBtns}>
+            <Pressable
+              style={styles.callHeaderBtn}
+              onPress={() => void startOutgoing(conversationId, 'audio', title || 'Chat')}
+              hitSlop={8}
+            >
+              <Text style={styles.callHeaderIcon}>📞</Text>
+            </Pressable>
+            <Pressable
+              style={styles.callHeaderBtn}
+              onPress={() => void startOutgoing(conversationId, 'video', title || 'Chat')}
+              hitSlop={8}
+            >
+              <Text style={styles.callHeaderIcon}>📹</Text>
+            </Pressable>
+          </View>
+        ) : null
+    })
+  }, [navigation, conversationType, phase, conversationId, title, startOutgoing, styles])
 
   const load = useCallback(
     async (silent = false) => {
@@ -562,6 +594,9 @@ export function ChatScreen({ route }: Props) {
 
 function createStyles({ erp }: { erp: ErpTheme }) {
   return StyleSheet.create({
+  callHeaderBtns: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 4 },
+  callHeaderBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  callHeaderIcon: { fontSize: 20 },
   root: { flex: 1, backgroundColor: erp.bg },
   loader: { marginTop: 40 },
   list: { padding: 12, paddingBottom: 8 },

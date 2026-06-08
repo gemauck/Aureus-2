@@ -38,6 +38,10 @@ export type PushNotificationData = {
   type?: string
   link?: string
   conversationId?: string
+  callId?: string
+  media?: string
+  fromUserId?: string
+  fromName?: string
   projectId?: string
   taskId?: string
   clientId?: string
@@ -179,10 +183,15 @@ export function navigateFromNotification(
     (meta.conversationId as string) ||
     link.match(/conversation=([^&]+)/)?.[1] ||
     null
+  const callId = (meta.callId as string) || link.match(/call=([^&]+)/)?.[1] || undefined
   if (conversationId) {
     navigation.navigate('Messages', {
       screen: 'Chat',
-      params: { conversationId: decodeURIComponent(conversationId), title: item.title || 'Chat' }
+      params: {
+        conversationId: decodeURIComponent(conversationId),
+        title: item.title || 'Chat',
+        ...(callId ? { callId: decodeURIComponent(callId) } : {})
+      }
     } as never)
     return true
   }
@@ -312,12 +321,26 @@ export function navigateFromPushData(
   data: PushNotificationData,
   user?: User | null
 ) {
+  if (data.type === 'call_invite' && data.conversationId) {
+    navigation.navigate('Messages', {
+      screen: 'Chat',
+      params: {
+        conversationId: data.conversationId,
+        title: data.fromName || 'Incoming call',
+        callId: data.callId,
+        conversationType: 'direct'
+      }
+    } as never)
+    return
+  }
+
   const item: NotificationNavItem = {
     id: data.notificationId,
     link: data.link,
     type: data.type,
     metadata: {
       conversationId: data.conversationId,
+      callId: data.callId,
       projectId: data.projectId,
       taskId: data.taskId,
       clientId: data.clientId,

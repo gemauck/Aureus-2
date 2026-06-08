@@ -115,6 +115,41 @@ const MessageCenter = () => {
 
         es.addEventListener('conversation', () => loadUnread(true));
 
+        es.addEventListener('call', (ev) => {
+            let data = {};
+            try {
+                data = JSON.parse(ev.data || '{}');
+            } catch (_) { return; }
+            if (data.type !== 'invite' || !data.conversationId) return;
+            if (data.fromUserId && data.fromUserId === userId) return;
+
+            window.dispatchEvent(new CustomEvent('chat:call-incoming', { detail: data }));
+
+            const tabFocused = document.hasFocus?.();
+            const browserNotif = window.chatBrowserNotifications;
+            const browserEnabled = browserNotif?.getEnabled?.();
+            const onActiveCall =
+                data.conversationId === activeConversationRef.current && tabFocused;
+
+            if (browserEnabled && !onActiveCall) {
+                const label = data.fromName || 'Someone';
+                const isVideo = data.media === 'video';
+                browserNotif.showCall?.({
+                    title: isVideo ? `${label} — video call` : `${label} — voice call`,
+                    body: 'Tap to answer',
+                    conversationId: data.conversationId,
+                    callId: data.callId,
+                    media: data.media
+                });
+            }
+
+            if (!onActiveCall) {
+                window.notificationSounds?.startCallRing?.();
+            } else {
+                window.notificationSounds?.play?.('call');
+            }
+        });
+
         return () => {
             es.close();
             sseRef.current = null;

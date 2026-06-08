@@ -6,10 +6,14 @@ import { badRequest, created, ok, serverError, notFound, unauthorized } from './
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { notifyChatMessageParticipants } from './_lib/notifyChatMessage.js'
+import { storePendingCallInvite, clearPendingCallInvite, getPendingCallForConversation } from './_lib/chatCallPending.js'
+import { notifyChatCallInvite } from './_lib/notifyChatCall.js'
 import { getChatTyping, setChatTyping } from './_lib/chatTypingStore.js'
 import { publishChatEvent } from './_lib/chatEventBus.js'
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥']
+const ALLOWED_CALL_SIGNAL_TYPES = new Set(['invite', 'offer', 'answer', 'ice', 'accept', 'reject', 'end'])
+const ALLOWED_CALL_MEDIA = new Set(['audio', 'video'])
 
 const USER_SELECT = {
   id: true,
@@ -708,6 +712,98 @@ async function handler(req, res) {
           { conversationId, userId, name: sender?.name || sender?.email || 'Someone' }
         )
         return ok(res, { ok: true })
+      }
+
+      // POST /api/chat/conversations/:id/call-signal — relay WebRTC signaling (1:1 direct chats only)
+      if (req.method === 'POST' && sub[2] === 'call-signal') {
+        const part = await getParticipant(conversationId, userId)
+        if (!part) return notFound(res, 'Conversation not found')
+
+        const conv = await prisma.chatConversation.findUnique({
+          where: { id: conversationId },
+          select: { type: true }
+        })
+        if (!conv || conv.type !== 'direct') {
+          return badRequest(res, 'Calls are only available in direct messages')
+        }
+
+        const body = await parseJsonBody(req)
+        const signalType = String(body.type || '').trim()
+        const callId = String(body.callId || '').trim()
+        const media = String(body.media || 'audio').trim()
+
+        if (!ALLOWED_CALL_SIGNAL_TYPES.has(signalType)) {
+          return badRequest(res, 'Invalid call signal type')
+        }
+        if (!callId || callId.length > 80) return badRequest(res, 'callId required')
+        if (!ALLOWED_CALL_MEDIA.has(media)) return badRequest(res, 'Invalid call media type')
+
+        const payload = body.payload !== undefined ? body.payload : null
+        const payloadSize = payload == null ? 0 : JSON.stringify(payload).length
+        if (payloadSize > 120000) return badRequest(res, 'Call signal payload too large')
+
+        const sender = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true, email: true }
+        })
+        const calleeIds = (await getConversationParticipantIds(conversationId)).filter((id) => id !== userId)
+        const fromName = sender?.name || sender?.email || 'Someone'
+
+        publishChatEvent(calleeIds, 'call', {
+          conversationId,
+          callId,
+          type: signalType,
+          media,
+          payload,
+          fromUserId: userId,
+          fromName
+        })
+
+        if (signalType === 'invite') {
+          if (payload?.sdp) {
+            storePendingCallInvite({
+              callId,
+              conversationId,
+              media,
+              fromUserId: userId,
+              fromName,
+              offer: payload.sdp
+            })
+          }
+          void notifyChatCallInvite({
+            conversationId,
+            callId,
+            media,
+            senderId: userId,
+            senderName: fromName,
+            calleeUserIds: calleeIds
+          })
+        } else if (signalType === 'end' || signalType === 'reject') {
+          clearPendingCallInvite(callId)
+        }
+
+        return ok(res, { ok: true })
+      }
+
+      // GET /api/chat/conversations/:id/call-pending — recover invite after push / reconnect
+      if (req.method === 'GET' && sub[2] === 'call-pending') {
+        const part = await getParticipant(conversationId, userId)
+        if (!part) return notFound(res, 'Conversation not found')
+
+        const pending = getPendingCallForConversation(conversationId, userId)
+        if (!pending?.offer) {
+          return ok(res, { pending: null })
+        }
+        return ok(res, {
+          pending: {
+            callId: pending.callId,
+            conversationId: pending.conversationId,
+            media: pending.media,
+            fromUserId: pending.fromUserId,
+            fromName: pending.fromName,
+            offer: pending.offer
+          }
+        })
       }
 
       // GET /api/chat/conversations/:id/messages

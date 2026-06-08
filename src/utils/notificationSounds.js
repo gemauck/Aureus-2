@@ -76,15 +76,24 @@ function playNotificationVibration(kind = 'notification') {
     } catch (_) { /* unsupported */ }
 }
 
+let callRingTimer = null;
+
+function playCallChime(ctx) {
+    const t0 = ctx.currentTime + 0.01;
+    playTone(ctx, 523, t0, 0.18, 0.28);
+    playTone(ctx, 659, t0 + 0.2, 0.18, 0.26);
+    playTone(ctx, 784, t0 + 0.4, 0.22, 0.24);
+}
+
 /**
- * @param {'message' | 'notification'} kind
+ * @param {'message' | 'notification' | 'call'} kind
  */
 export function playNotificationSound(kind = 'notification') {
     if (!getNotificationSoundsEnabled()) return;
     const now = Date.now();
-    if (now - lastPlayedAt < MIN_GAP_MS) return;
+    if (kind !== 'call' && now - lastPlayedAt < MIN_GAP_MS) return;
 
-    playNotificationVibration(kind);
+    playNotificationVibration(kind === 'call' ? 'message' : kind);
 
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -94,11 +103,30 @@ export function playNotificationSound(kind = 'notification') {
     if (kind === 'message') {
         playTone(ctx, 880, t0, 0.1, 0.24);
         playTone(ctx, 1175, t0 + 0.11, 0.14, 0.22);
+    } else if (kind === 'call') {
+        playCallChime(ctx);
     } else {
         playTone(ctx, 660, t0, 0.11, 0.22);
         playTone(ctx, 880, t0 + 0.13, 0.16, 0.2);
     }
     lastPlayedAt = now;
+}
+
+/** Ring repeatedly while an incoming call is waiting (stops when stopCallRing is called). */
+export function startCallRing() {
+    stopCallRing();
+    const tick = () => {
+        playNotificationSound('call');
+    };
+    tick();
+    callRingTimer = setInterval(tick, 2800);
+}
+
+export function stopCallRing() {
+    if (callRingTimer) {
+        clearInterval(callRingTimer);
+        callRingTimer = null;
+    }
 }
 
 if (typeof window !== 'undefined') {
@@ -111,6 +139,8 @@ if (typeof window !== 'undefined') {
         getEnabled: getNotificationSoundsEnabled,
         setEnabled: setNotificationSoundsEnabled,
         unlock: unlockNotificationSounds,
-        play: playNotificationSound
+        play: playNotificationSound,
+        startCallRing,
+        stopCallRing
     };
 }

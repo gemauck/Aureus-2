@@ -180,5 +180,30 @@ export const chatApi = {
       method: 'PUT',
       body: { emailMessages }
     }).then((d) => d.settings || {})
+  },
+
+  sendCallSignal(
+    token: string,
+    conversationId: string,
+    body: { callId: string; type: string; media: 'audio' | 'video'; payload?: unknown }
+  ) {
+    return request(`/api/chat/conversations/${conversationId}/call-signal`, {
+      token,
+      method: 'POST',
+      body
+    })
+  },
+
+  getCallPending(token: string, conversationId: string) {
+    return request<{
+      pending: {
+        callId: string
+        conversationId: string
+        media: string
+        fromUserId: string
+        fromName: string
+        offer: { type?: string; sdp?: string }
+      } | null
+    }>(`/api/chat/conversations/${conversationId}/call-pending`, { token }).then((d) => d.pending)
   }
 }

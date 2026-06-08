@@ -201,7 +201,11 @@ export function MessagesHomeScreen({ navigation }: Props) {
       })
       setShowNew(false)
       setUserSearch('')
-      navigation.navigate('Chat', { conversationId: conv.id, title: conv.name })
+      navigation.navigate('Chat', {
+        conversationId: conv.id,
+        title: conv.name,
+        conversationType: conv.type
+      })
       void load(true)
     } catch (e) {
       console.error(e)
@@ -265,7 +269,11 @@ export function MessagesHomeScreen({ navigation }: Props) {
                 <Pressable
                   style={styles.row}
                   onPress={() =>
-                    navigation.navigate('Chat', { conversationId: item.id, title: item.name })
+                    navigation.navigate('Chat', {
+                      conversationId: item.id,
+                      title: item.name,
+                      conversationType: item.type
+                    })
                   }
                 >
                   <View style={[styles.avatar, item.type === 'group' && styles.avatarGroup]}>

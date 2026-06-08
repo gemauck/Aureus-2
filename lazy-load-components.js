@@ -21,6 +21,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/clients/BulkOperations.jsx',
         './src/components/clients/ClientNewsFeed.jsx',
         // Messages — early load for fast nav
+        './src/utils/chatWebRtcCall.js',
         './src/components/messages/Messenger.jsx',
     ].concat([
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail (with robust loader), then Projects

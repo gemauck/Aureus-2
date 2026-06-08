@@ -62,6 +62,16 @@ async function ensureAndroidChannels() {
     importance: Notifications.AndroidImportance.HIGH,
     sound: 'default'
   })
+  await Notifications.deleteNotificationChannelAsync('call').catch(() => {})
+  await Notifications.setNotificationChannelAsync('call', {
+    name: 'Voice & video calls',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 500, 300, 500, 300, 500],
+    enableVibrate: true,
+    sound: 'notification.wav',
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    bypassDnd: false
+  })
 }
 
 export async function registerPushToken(accessToken: string): Promise<string | null> {
@@ -172,6 +182,37 @@ export async function showLocalChatNotification(opts: {
         messageId
       } as PushNotificationData,
       ...(Platform.OS === 'android' ? { channelId: 'chat' } : {})
+    },
+    trigger: null
+  })
+}
+
+export async function showLocalCallNotification(opts: {
+  title: string
+  body: string
+  conversationId: string
+  callId?: string
+  media?: string
+  fromUserId?: string
+  fromName?: string
+}) {
+  const { title, body, conversationId, callId, media, fromUserId, fromName } = opts
+  await ensureAndroidChannels()
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      sound: 'notification.wav',
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      data: {
+        type: 'call_invite',
+        conversationId,
+        callId,
+        media,
+        fromUserId,
+        fromName
+      } as PushNotificationData,
+      ...(Platform.OS === 'android' ? { channelId: 'call' } : {})
     },
     trigger: null
   })

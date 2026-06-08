@@ -89,3 +89,44 @@ export async function playNotificationSound(kind: NotificationSoundKind = 'notif
     /* non-fatal */
   }
 }
+
+let callRingSound: Audio.Sound | null = null
+let callRingActive = false
+
+export async function startCallRing() {
+  if (!(await getNotificationSoundsEnabled())) return
+  if (callRingActive) return
+  callRingActive = true
+
+  try {
+    await ensureAudioMode()
+    await stopCallRing()
+    const { sound } = await Audio.Sound.createAsync(SOUNDS.notification, {
+      isLooping: true,
+      shouldPlay: true,
+      volume: 1
+    })
+    callRingSound = sound
+    Vibration.vibrate(Platform.OS === 'android' ? [0, 500, 300, 500, 300, 500] : 500, true)
+  } catch {
+    callRingActive = false
+  }
+}
+
+export async function stopCallRing() {
+  callRingActive = false
+  try {
+    Vibration.cancel()
+  } catch {
+    /* ignore */
+  }
+  if (callRingSound) {
+    try {
+      await callRingSound.stopAsync()
+      await callRingSound.unloadAsync()
+    } catch {
+      /* ignore */
+    }
+    callRingSound = null
+  }
+}
