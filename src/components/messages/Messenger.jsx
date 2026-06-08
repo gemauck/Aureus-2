@@ -273,6 +273,8 @@ const Messenger = () => {
   const [emailMessages, setEmailMessages] = useState(false);
   const [emailPrefLoading, setEmailPrefLoading] = useState(true);
   const [emailPrefSaving, setEmailPrefSaving] = useState(false);
+  const [browserMessages, setBrowserMessages] = useState(false);
+  const [browserPrefSaving, setBrowserPrefSaving] = useState(false);
   const [readReceiptMessageId, setReadReceiptMessageId] = useState(null);
   const [reactionPickerId, setReactionPickerId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -384,6 +386,9 @@ const Messenger = () => {
       })
       .catch(() => { if (!cancelled) setEmailMessages(false); })
       .finally(() => { if (!cancelled) setEmailPrefLoading(false); });
+    if (!cancelled) {
+      setBrowserMessages(!!window.chatBrowserNotifications?.getEnabled?.());
+    }
     return () => { cancelled = true; };
   }, []);
 
@@ -400,6 +405,31 @@ const Messenger = () => {
       window.alert(e.message || 'Could not update email preference');
     } finally {
       setEmailPrefSaving(false);
+    }
+  };
+
+  const toggleBrowserMessages = async () => {
+    const browserNotif = window.chatBrowserNotifications;
+    if (!browserNotif?.isSupported?.()) {
+      window.alert('Browser notifications are not supported in this browser.');
+      return;
+    }
+    const next = !browserMessages;
+    setBrowserPrefSaving(true);
+    try {
+      if (next) {
+        const permission = await browserNotif.requestPermission();
+        if (permission !== 'granted') {
+          window.alert(permission === 'denied'
+            ? 'Notifications are blocked. Allow notifications for this site in your browser settings.'
+            : 'Notification permission was not granted.');
+          return;
+        }
+      }
+      browserNotif.setEnabled(next);
+      setBrowserMessages(next);
+    } finally {
+      setBrowserPrefSaving(false);
     }
   };
 
@@ -923,6 +953,22 @@ const Messenger = () => {
                 aria-pressed={emailMessages}
               >
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailMessages ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+            <div className={`mt-2 flex items-center justify-between gap-2 px-3 py-2 rounded-xl ${isDark ? 'bg-gray-900/50 text-blue-100' : 'bg-white/15 text-white'}`}>
+              <span className="text-xs flex items-center gap-1.5">
+                <i className="fas fa-bell text-[11px] opacity-80" />
+                Browser notifications
+              </span>
+              <button
+                type="button"
+                disabled={browserPrefSaving || !window.chatBrowserNotifications?.isSupported?.()}
+                onClick={() => void toggleBrowserMessages()}
+                className={`relative w-10 h-5 rounded-full transition-colors ${browserMessages ? 'bg-emerald-400' : (isDark ? 'bg-gray-700' : 'bg-white/30')} disabled:opacity-50`}
+                title={browserMessages ? 'Chrome/desktop alerts on for new messages' : 'Chrome/desktop alerts off for new messages'}
+                aria-pressed={browserMessages}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${browserMessages ? 'translate-x-5' : ''}`} />
               </button>
             </div>
           </div>

@@ -797,8 +797,12 @@
   /* CRITICAL: Notification badge MUST stay within button on mobile - AGGRESSIVE CONTAINMENT */
   @media (max-width: 768px) {
     button.notification-button,
+    button.message-button,
     button:has(.fa-bell),
-    button[title="Notifications"] {
+    button:has(.fa-comments),
+    button[title="Notifications"],
+    button[title="Messages"],
+    button[title*="unread message"] {
       position: relative !important;
       overflow: hidden !important;
       width: 44px !important;
@@ -812,8 +816,12 @@
     }
     
     button.notification-button > span.notification-icon-wrapper,
+    button.message-button > span.message-icon-wrapper,
     button:has(.fa-bell) > span[class*="relative"],
-    button[title="Notifications"] > span[class*="relative"] {
+    button:has(.fa-comments) > span[class*="relative"],
+    button[title="Notifications"] > span[class*="relative"],
+    button[title="Messages"] > span[class*="relative"],
+    button[title*="unread message"] > span[class*="relative"] {
       position: relative !important;
       display: inline-flex !important;
       align-items: center !important;
@@ -828,11 +836,19 @@
     
     /* Badge must be INSIDE button bounds - no border, fully contained */
     button.notification-button span.notification-badge,
+    button.message-button span.message-badge,
     button:has(.fa-bell) span[class*="absolute"][class*="bg-red-600"],
+    button:has(.fa-comments) span[class*="absolute"][class*="bg-blue-600"],
     button[title="Notifications"] span[class*="absolute"][class*="bg-red-600"],
+    button[title="Messages"] span[class*="absolute"][class*="bg-blue-600"],
+    button[title*="unread message"] span[class*="absolute"][class*="bg-blue-600"],
     button.notification-button span[class*="absolute"],
+    button.message-button span[class*="absolute"],
     button:has(.fa-bell) span[class*="absolute"],
-    button[title="Notifications"] span[class*="absolute"] {
+    button:has(.fa-comments) span[class*="absolute"],
+    button[title="Notifications"] span[class*="absolute"],
+    button[title="Messages"] span[class*="absolute"],
+    button[title*="unread message"] span[class*="absolute"] {
       position: absolute !important;
       top: 4px !important;
       right: 4px !important;
@@ -859,8 +875,12 @@
     
     /* Prevent any parent from allowing overflow */
     button.notification-button *,
+    button.message-button *,
     button:has(.fa-bell) *,
-    button[title="Notifications"] * {
+    button:has(.fa-comments) *,
+    button[title="Notifications"] *,
+    button[title="Messages"] *,
+    button[title*="unread message"] * {
       max-width: 100% !important;
       box-sizing: border-box !important;
     }
@@ -869,15 +889,23 @@
   /* Desktop: Badge stays within button bounds */
   @media (min-width: 769px) {
     button.notification-button,
+    button.message-button,
     button:has(.fa-bell),
-    button[title="Notifications"] {
+    button:has(.fa-comments),
+    button[title="Notifications"],
+    button[title="Messages"],
+    button[title*="unread message"] {
       position: relative !important;
       overflow: hidden !important;
     }
     
     button.notification-button span.notification-badge,
+    button.message-button span.message-badge,
     button:has(.fa-bell) span[class*="absolute"][class*="bg-red-600"],
-    button[title="Notifications"] span[class*="absolute"][class*="bg-red-600"] {
+    button:has(.fa-comments) span[class*="absolute"][class*="bg-blue-600"],
+    button[title="Notifications"] span[class*="absolute"][class*="bg-red-600"],
+    button[title="Messages"] span[class*="absolute"][class*="bg-blue-600"],
+    button[title*="unread message"] span[class*="absolute"][class*="bg-blue-600"] {
       position: absolute !important;
       top: 4px !important;
       right: 4px !important;

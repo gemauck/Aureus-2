@@ -790,7 +790,9 @@ async function handler(req, res) {
         publishChatEvent(participantIds, 'message', {
           conversationId,
           messageId: message.id,
-          senderId: userId
+          senderId: userId,
+          senderName,
+          preview: preview || 'New message'
         })
 
         return created(res, { message: mappedMessage })

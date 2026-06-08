@@ -809,6 +809,7 @@ const MainLayout = () => {
     }, [clientsComponentReady]);
     
     const [notificationCenterReady, setNotificationCenterReady] = React.useState(false);
+    const [messageCenterReady, setMessageCenterReady] = React.useState(false);
     const [taskManagementReady, setTaskManagementReady] = React.useState(
         !!(window.TaskManagement && typeof window.TaskManagement === 'function')
     );
@@ -843,6 +844,37 @@ const MainLayout = () => {
             clearTimeout(timeout);
         };
     }, [notificationCenterReady]);
+
+    React.useEffect(() => {
+        const checkMessageCenter = () => {
+            const MessageCenterComponent = window.MessageCenter;
+            const isValidComponent = MessageCenterComponent && typeof MessageCenterComponent === 'function';
+            if (isValidComponent && !messageCenterReady) {
+                setMessageCenterReady(true);
+                return true;
+            }
+            return false;
+        };
+
+        if (checkMessageCenter()) return;
+
+        const interval = setInterval(() => {
+            if (!messageCenterReady) {
+                checkMessageCenter();
+            } else {
+                clearInterval(interval);
+            }
+        }, 200);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+        }, 10000);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [messageCenterReady]);
 
     React.useEffect(() => {
         if (taskManagementReady) {
@@ -1182,31 +1214,10 @@ const MainLayout = () => {
 
     const [chatUnread, setChatUnread] = React.useState(0);
     React.useEffect(() => {
-        if (!user?.id) return;
-        const token = window.storage?.getToken?.();
-        if (!token) return;
-        const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
-        const loadUnread = async () => {
-            try {
-                const res = await fetch(`${apiBase}/api/chat/unread`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    credentials: 'include'
-                });
-                if (!res.ok) return;
-                const json = await res.json();
-                const count = json?.data?.unreadCount ?? json?.unreadCount ?? 0;
-                setChatUnread(count);
-            } catch (_) { /* chat tables may not exist yet */ }
-        };
-        loadUnread();
-        const interval = setInterval(loadUnread, 30000);
         const onChatUnread = (e) => setChatUnread(e.detail?.count ?? 0);
         window.addEventListener('chat:unread', onChatUnread);
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('chat:unread', onChatUnread);
-        };
-    }, [user?.id]);
+        return () => window.removeEventListener('chat:unread', onChatUnread);
+    }, []);
     
     const Users = React.useMemo(() => {
         const UsersComponent = window.Users || window.UserManagement;
@@ -2129,6 +2140,12 @@ const MainLayout = () => {
                             </div>
                         ) : null;
 
+                        const messagesSlot = messageCenterReady && window.MessageCenter ? (
+                            <div className="flex h-8 shrink-0 items-center justify-center [&_button.message-button]:!h-8 [&_button.message-button]:!min-h-8 [&_button.message-button]:!w-8 [&_button.message-button]:!min-w-8 [&_button.message-button]:!max-h-8 [&_button.message-button]:!max-w-8">
+                                <window.MessageCenter />
+                            </div>
+                        ) : null;
+
                         if (effectiveIsMobile) {
                             return (
                                 <div
@@ -2153,6 +2170,7 @@ const MainLayout = () => {
                                         {companyName}
                                     </h1>
                                     <div className="flex h-8 shrink-0 flex-nowrap items-center gap-0.5">
+                                        {messagesSlot}
                                         {notificationsSlot}
                                         <div
                                             className={`flex h-8 flex-nowrap items-center divide-x overflow-hidden rounded-md border ${
@@ -2175,6 +2193,7 @@ const MainLayout = () => {
                                     )}
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                    {messagesSlot}
                                     {notificationsSlot}
                                     {settingsButton}
                                     {themeSelector}

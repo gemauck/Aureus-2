@@ -43,7 +43,9 @@ import './components/common/ErrorBoundary.jsx';
 import './components/common/LoadingState.jsx';
 import './components/common/QuickFallback.jsx';
 import './components/common/CommentInputWithMentions.jsx';
+import './utils/chatBrowserNotifications.js';
 import './components/common/NotificationCenter.jsx';
+import './components/common/MessageCenter.jsx';
 import './components/common/GlobalSearch.jsx';
 
 // Auth flow
