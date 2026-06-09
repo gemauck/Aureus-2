@@ -637,10 +637,9 @@ const ServiceAndMaintenance = () => {
     loadData();
   }, []);
 
-  // Preload JobCards bundle early so the list is not blocked on a second lazy script round-trip
+  // Preload JobCards + incident scripts. JobCards may already be on window from lazy-load-components —
+  // still inject incident panels (they are not in the lazy loader list).
   useEffect(() => {
-    if (window.JobCards) return undefined;
-
     const isProduction =
       typeof window.USE_PRODUCTION_BUILD !== 'undefined'
         ? window.USE_PRODUCTION_BUILD === true
@@ -660,8 +659,10 @@ const ServiceAndMaintenance = () => {
       document.body.appendChild(script);
     };
 
-    injectScript('components/manufacturing/jobCardActivityDisplay.js');
-    injectScript('components/manufacturing/JobCards.jsx', { isJsx: true });
+    if (!window.JobCards) {
+      injectScript('components/manufacturing/jobCardActivityDisplay.js');
+      injectScript('components/manufacturing/JobCards.jsx', { isJsx: true });
+    }
     injectScript('components/service-maintenance/IncidentReportsPanel.jsx', { isJsx: true });
     injectScript('incidentReport/IncidentReportPrintBundle.jsx', { isJsx: true });
     injectScript('incidentReport/jobCardToIncidentPrefill.js');
