@@ -37,6 +37,10 @@ function canMutateIncident(incident, user) {
   return false
 }
 
+function canDeleteIncident(user) {
+  return isAdminRole(user?.role)
+}
+
 function parseJson(str, defaultValue = []) {
   try {
     if (!str) return defaultValue
@@ -405,8 +409,8 @@ async function handler(req, res) {
     try {
       const existing = await prisma.incidentReport.findUnique({ where: { id } })
       if (!existing) return notFound(res, 'Incident report not found')
-      if (!incidentMutateRole(req.user) && existing.ownerId !== (req.user?.sub || req.user?.id)) {
-        return forbidden(res, 'Not allowed to delete this incident report')
+      if (!canDeleteIncident(req.user)) {
+        return forbidden(res, 'Only administrators can delete incident reports')
       }
       await prisma.incidentReport.delete({ where: { id } })
       return ok(res, { deleted: true, id })
