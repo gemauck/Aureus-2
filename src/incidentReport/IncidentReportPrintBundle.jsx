@@ -421,6 +421,65 @@
     return `<div class="narrative"><div class="narrative-head">Photos</div><div class="photo-grid">${tiles}</div></div>`
   }
 
+  const WORD_EXPORT_HEAD_INJECTION = `
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta name="ProgId" content="Word.Document" />
+  <meta name="Generator" content="Abcotronics ERP" />
+  <!--[if gte mso 9]><xml>
+  <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+  </w:WordDocument>
+  </xml><![endif]-->
+  <style>
+    .title-band { background: #1e3a5f !important; }
+    @page Section1 { size: 21cm 29.7cm; margin: 1.4cm; }
+    div.Section1 { page: Section1; }
+  </style>
+`
+
+  function wrapPrintHtmlForWord(printHtml) {
+    if (!printHtml || typeof printHtml !== 'string') return ''
+    let html = printHtml
+    if (!html.includes('xmlns:w=')) {
+      html = html.replace(
+        /<html>/i,
+        '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'
+      )
+    }
+    html = html.replace(/<head>/i, `<head>${WORD_EXPORT_HEAD_INJECTION}`)
+    html = html.replace(/<body>/i, '<body><div class="Section1">')
+    html = html.replace(/<\/body>/i, '</div></body>')
+    return html
+  }
+
+  function incidentReportExportFilename(incident, ext = 'doc') {
+    const base = String(incident?.incidentNumber || incident?.id || 'incident').replace(/[^a-zA-Z0-9._-]/g, '_')
+    return `${base}.${ext}`
+  }
+
+  function buildIncidentReportWordHtml(incident, opts = {}) {
+    return wrapPrintHtmlForWord(buildIncidentReportPrintHtml(incident, opts))
+  }
+
+  function downloadIncidentReportWord(incident, opts = {}) {
+    const html = buildIncidentReportWordHtml(incident, opts)
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' })
+    const url = URL.createObjectURL(blob)
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = incidentReportExportFilename(incident, 'doc')
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+
   function buildIncidentReportPrintHtml(incident, opts = {}) {
     const companyName = opts.companyName || 'Abcotronics'
     const letterhead = opts.letterhead || {}
@@ -481,6 +540,10 @@
 
   window.IncidentReportPrint = {
     buildIncidentReportPrintHtml,
+    buildIncidentReportWordHtml,
+    downloadIncidentReportWord,
+    incidentReportExportFilename,
+    wrapPrintHtmlForWord,
     partitionIncidentPhotosForPrint,
     escapeHtml,
     formatIncidentPrintDate

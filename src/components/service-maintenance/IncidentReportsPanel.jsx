@@ -462,6 +462,7 @@ function IncidentReportsPanel({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [downloadingWord, setDownloadingWord] = useState(false)
   const [clientJobCards, setClientJobCards] = useState([])
   const [clientJobCardsLoading, setClientJobCardsLoading] = useState(false)
   const [jobCardPickerId, setJobCardPickerId] = useState('')
@@ -582,6 +583,43 @@ function IncidentReportsPanel({
     if (typeof onConsumeInitialOpenNew === 'function') onConsumeInitialOpenNew()
   }, [initialOpenNew, onConsumeInitialOpenNew])
 
+  const loadIncidentExportContext = useCallback(async () => {
+    if (!selected) return null
+    let incident = { ...selected }
+    if (token && selected.id) {
+      try {
+        const res = await fetch(`/api/incident-reports/${encodeURIComponent(selected.id)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          incident = data?.incidentReport || data?.data?.incidentReport || incident
+        }
+      } catch (error) {
+        console.warn('Could not refresh incident before export', error)
+      }
+    }
+
+    let companyName = 'Abcotronics'
+    let letterhead = {}
+    if (window.DatabaseAPI?.getDocumentSettings) {
+      try {
+        const response = await window.DatabaseAPI.getDocumentSettings()
+        const documentSettings = response?.data || {}
+        companyName = documentSettings.companyName || companyName
+        letterhead =
+          documentSettings.jobCardLetterhead ||
+          documentSettings.poLetterhead ||
+          documentSettings.serviceLetterhead ||
+          {}
+      } catch (error) {
+        console.warn('Could not load document settings for incident export', error)
+      }
+    }
+
+    return { incident, companyName, letterhead }
+  }, [selected, token])
+
   const handleDownloadPdf = useCallback(async () => {
     if (!selected || downloadingPdf) return
     const printWin = window.open('', '_blank')
@@ -591,43 +629,14 @@ function IncidentReportsPanel({
     }
     try {
       setDownloadingPdf(true)
-      let incident = { ...selected }
-      if (token && selected.id) {
-        try {
-          const res = await fetch(`/api/incident-reports/${encodeURIComponent(selected.id)}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          const data = await res.json().catch(() => ({}))
-          if (res.ok) {
-            incident = data?.incidentReport || data?.data?.incidentReport || incident
-          }
-        } catch (error) {
-          console.warn('Could not refresh incident before PDF', error)
-        }
-      }
-
-      let companyName = 'Abcotronics'
-      let letterhead = {}
-      if (window.DatabaseAPI?.getDocumentSettings) {
-        try {
-          const response = await window.DatabaseAPI.getDocumentSettings()
-          const documentSettings = response?.data || {}
-          companyName = documentSettings.companyName || companyName
-          letterhead =
-            documentSettings.jobCardLetterhead ||
-            documentSettings.poLetterhead ||
-            documentSettings.serviceLetterhead ||
-            {}
-        } catch (error) {
-          console.warn('Could not load document settings for incident PDF', error)
-        }
-      }
+      const ctx = await loadIncidentExportContext()
+      if (!ctx) return
 
       const buildHtml = window.IncidentReportPrint?.buildIncidentReportPrintHtml
       const html =
         typeof buildHtml === 'function'
-          ? buildHtml(incident, { companyName, letterhead })
-          : `<html><body><pre>${escapeHtml(JSON.stringify(incident, null, 2))}</pre></body></html>`
+          ? buildHtml(ctx.incident, { companyName: ctx.companyName, letterhead: ctx.letterhead })
+          : `<html><body><pre>${escapeHtml(JSON.stringify(ctx.incident, null, 2))}</pre></body></html>`
 
       printWin.document.write(html)
       printWin.document.close()
@@ -661,7 +670,28 @@ function IncidentReportsPanel({
     } finally {
       setDownloadingPdf(false)
     }
-  }, [selected, downloadingPdf, token])
+  }, [selected, downloadingPdf, loadIncidentExportContext])
+
+  const handleDownloadWord = useCallback(async () => {
+    if (!selected || downloadingWord) return
+    try {
+      setDownloadingWord(true)
+      const ctx = await loadIncidentExportContext()
+      if (!ctx) return
+
+      const downloadWord = window.IncidentReportPrint?.downloadIncidentReportWord
+      if (typeof downloadWord !== 'function') {
+        window.alert('Word export is not available. Please refresh the page and try again.')
+        return
+      }
+      downloadWord(ctx.incident, { companyName: ctx.companyName, letterhead: ctx.letterhead })
+    } catch (error) {
+      console.error('Failed to generate incident Word document', error)
+      window.alert(error?.message || 'Failed to generate incident Word document.')
+    } finally {
+      setDownloadingWord(false)
+    }
+  }, [selected, downloadingWord, loadIncidentExportContext])
 
   const loadClientJobCards = useCallback(
     async (clientId) => {
@@ -996,11 +1026,22 @@ function IncidentReportsPanel({
               <button
                 type="button"
                 onClick={handleDownloadPdf}
-                disabled={downloadingPdf}
+                disabled={downloadingPdf || downloadingWord}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
               >
                 <i className={`fa-solid ${downloadingPdf ? 'fa-spinner fa-spin' : 'fa-file-pdf'}`} />
                 {downloadingPdf ? 'Preparing PDF…' : 'Download PDF'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadWord}
+                disabled={downloadingWord || downloadingPdf}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-60 ${
+                  isDark ? 'border-blue-700 bg-blue-950/40 text-blue-200' : 'border-blue-200 bg-blue-50 text-blue-800'
+                }`}
+              >
+                <i className={`fa-solid ${downloadingWord ? 'fa-spinner fa-spin' : 'fa-file-word'}`} />
+                {downloadingWord ? 'Preparing Word…' : 'Download Word'}
               </button>
               <button
                 type="button"
