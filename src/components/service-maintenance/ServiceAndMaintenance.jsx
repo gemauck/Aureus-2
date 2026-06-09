@@ -459,6 +459,7 @@ const ServiceAndMaintenance = () => {
   const [deepLinkIncidentId, setDeepLinkIncidentId] = useState('');
   const [incidentCreatePrefill, setIncidentCreatePrefill] = useState(null);
   const [prefetchedIncidents, setPrefetchedIncidents] = useState(null);
+  const prefetchedIncidentsRef = useRef(null);
   const incidentsPrefetchStartedRef = useRef(false);
   const [jobCardIncidentDraftPrompt, setJobCardIncidentDraftPrompt] = useState(null);
   const [reportingIncidentFromJobCard, setReportingIncidentFromJobCard] = useState(false);
@@ -478,7 +479,7 @@ const ServiceAndMaintenance = () => {
   }, []);
 
   const prefetchIncidentReports = useCallback(async () => {
-    if (prefetchedIncidents !== null) return prefetchedIncidents;
+    if (prefetchedIncidentsRef.current !== null) return prefetchedIncidentsRef.current;
     if (incidentsPrefetchStartedRef.current) return null;
     const token = window.storage?.getToken?.();
     if (!token) return null;
@@ -490,19 +491,22 @@ const ServiceAndMaintenance = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        prefetchedIncidentsRef.current = [];
         setPrefetchedIncidents([]);
         return [];
       }
       const list = data?.incidentReports || data?.data?.incidentReports || [];
       const rows = Array.isArray(list) ? list : [];
+      prefetchedIncidentsRef.current = rows;
       setPrefetchedIncidents(rows);
       return rows;
     } catch (error) {
       console.warn('Failed to prefetch incident reports', error);
+      prefetchedIncidentsRef.current = [];
       setPrefetchedIncidents([]);
       return [];
     }
-  }, [prefetchedIncidents]);
+  }, []);
 
   useEffect(() => {
     void prefetchIncidentReports();
@@ -2940,8 +2944,11 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               clients={clients}
               users={users}
               isDark={isDark}
+              isAdminUser={isAdminUser}
               initialIncidentId={deepLinkIncidentId}
               createPrefill={incidentCreatePrefill}
+              initialRows={Array.isArray(prefetchedIncidents) ? prefetchedIncidents : null}
+              skipInitialFetch={Array.isArray(prefetchedIncidents)}
               onConsumeCreatePrefill={() => setIncidentCreatePrefill(null)}
               onConsumeInitialIncidentId={() => setDeepLinkIncidentId('')}
               onOpenJobCard={(jobCard) => {

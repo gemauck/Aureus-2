@@ -281,6 +281,7 @@ function IncidentReportsPanel({
   clients = [],
   users = [],
   isDark = false,
+  isAdminUser = false,
   onOpenJobCard,
   initialIncidentId = '',
   createPrefill = null,
@@ -300,6 +301,7 @@ function IncidentReportsPanel({
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [clientJobCards, setClientJobCards] = useState([])
   const [clientJobCardsLoading, setClientJobCardsLoading] = useState(false)
@@ -357,12 +359,10 @@ function IncidentReportsPanel({
   }, [initialRows])
 
   useEffect(() => {
-    if (skipInitialFetch && Array.isArray(initialRows)) {
-      void loadRows({ silent: true })
-      return
-    }
-    void loadRows()
-  }, [loadRows, skipInitialFetch, initialRows])
+    const isDefaultListQuery = !debouncedSearch && statusFilter === 'all'
+    const silent = skipInitialFetch && Array.isArray(initialRows) && isDefaultListQuery
+    void loadRows({ silent })
+  }, [loadRows, skipInitialFetch, initialRows, debouncedSearch, statusFilter])
 
   useEffect(() => {
     if (!createPrefill) return
@@ -579,6 +579,34 @@ function IncidentReportsPanel({
     }
   }, [token, saving, form, selected, loadRows])
 
+  const deleteSelected = useCallback(async () => {
+    if (!token || !selected?.id || deleting || !isAdminUser) return
+    const label = selected.incidentNumber || selected.id
+    const confirmed = window.confirm(
+      `Delete incident report ${label}?\n\nThis cannot be undone.`
+    )
+    if (!confirmed) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/incident-reports/${encodeURIComponent(selected.id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.error || 'Delete failed')
+      }
+      setShowDetail(false)
+      setSelected(null)
+      setShowForm(false)
+      await loadRows()
+    } catch (e) {
+      window.alert(e?.message || 'Failed to delete incident report')
+    } finally {
+      setDeleting(false)
+    }
+  }, [token, selected, deleting, isAdminUser, loadRows])
+
   const filteredRows = useMemo(() => rows, [rows])
 
   const inputCls = `w-full rounded-lg border px-3 py-2 text-sm ${
@@ -733,6 +761,19 @@ function IncidentReportsPanel({
               >
                 Edit
               </button>
+              {isAdminUser ? (
+                <button
+                  type="button"
+                  onClick={() => void deleteSelected()}
+                  disabled={deleting}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium disabled:opacity-60 ${
+                    isDark ? 'border-red-800 text-red-300 hover:bg-red-950/40' : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                  }`}
+                >
+                  <i className={`fa-solid ${deleting ? 'fa-spinner fa-spin' : 'fa-trash'}`} />
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
