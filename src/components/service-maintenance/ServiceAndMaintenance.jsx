@@ -478,42 +478,72 @@ const ServiceAndMaintenance = () => {
   const handleReportIncidentFromJobCard = useCallback(async () => {
     if (!selectedJobCard || reportingIncidentFromJobCard) return;
     const token = window.storage?.getToken?.();
-    const helpers = window.IncidentJobCardPrefill;
-    const buildPrefill = helpers?.buildIncidentPrefillFromJobCard;
     const authorName = String(user?.name || user?.email || '').trim();
-
-    const openWithPrefill = () => {
-      const prefill = buildPrefill
-        ? buildPrefill(selectedJobCard, { authorName })
-        : {
-            clientId: selectedJobCard.clientId || '',
-            clientName: selectedJobCard.clientName || '',
-            siteId: selectedJobCard.siteId || '',
-            siteName: selectedJobCard.siteName || '',
-            jobCardId: selectedJobCard.id || '',
-            jobCardNumber: selectedJobCard.jobCardNumber || '',
-            status: 'draft'
-          };
-      setShowJobCardDetail(false);
-      setDeepLinkIncidentId('');
-      setHeaderTab('incidents');
-      setIncidentCreatePrefill(prefill);
-    };
-
-    const openExistingDraft = (draftId) => {
-      setShowJobCardDetail(false);
-      setIncidentCreatePrefill(null);
-      setDeepLinkIncidentId(String(draftId));
-      setHeaderTab('incidents');
-    };
-
-    if (!selectedJobCard.id || !token || !helpers?.fetchDraftIncidentsForJobCard) {
-      openWithPrefill();
-      return;
-    }
 
     setReportingIncidentFromJobCard(true);
     try {
+      const helpers =
+        window.IncidentJobCardPrefill?.buildIncidentPrefillFromJobCard
+          ? window.IncidentJobCardPrefill
+          : await (window.IncidentJobCardPrefill?.waitForIncidentPrefillHelpers?.() ||
+              new Promise((resolve) => {
+                const started = Date.now();
+                const tick = () => {
+                  if (window.IncidentJobCardPrefill?.buildIncidentPrefillFromJobCard) {
+                    resolve(window.IncidentJobCardPrefill);
+                    return;
+                  }
+                  if (Date.now() - started >= 8000) {
+                    resolve(window.IncidentJobCardPrefill || null);
+                    return;
+                  }
+                  window.setTimeout(tick, 50);
+                };
+                tick();
+              }));
+
+      let jobCardForPrefill = selectedJobCard;
+      if (token && selectedJobCard.id && helpers?.fetchJobCardForPrefill) {
+        const full = await helpers.fetchJobCardForPrefill(token, selectedJobCard.id);
+        if (full?.id) jobCardForPrefill = full;
+      }
+
+      const buildPrefill = helpers?.buildIncidentPrefillFromJobCard;
+
+      const openWithPrefill = () => {
+        const prefill = buildPrefill
+          ? buildPrefill(jobCardForPrefill, { authorName })
+          : {
+              clientId: jobCardForPrefill.clientId || '',
+              clientName: jobCardForPrefill.clientName || '',
+              siteId: jobCardForPrefill.siteId || '',
+              siteName: jobCardForPrefill.siteName || '',
+              jobCardId: jobCardForPrefill.id || '',
+              jobCardNumber: jobCardForPrefill.jobCardNumber || '',
+              description: String(jobCardForPrefill.reasonForVisit || '').trim(),
+              immediateActions: String(jobCardForPrefill.actionsTaken || '').trim(),
+              investigationNotes: String(jobCardForPrefill.diagnosis || '').trim(),
+              correctiveActions: String(jobCardForPrefill.futureWorkRequired || '').trim(),
+              status: 'draft'
+            };
+        setShowJobCardDetail(false);
+        setDeepLinkIncidentId('');
+        setHeaderTab('incidents');
+        setIncidentCreatePrefill(prefill);
+      };
+
+      const openExistingDraft = (draftId) => {
+        setShowJobCardDetail(false);
+        setIncidentCreatePrefill(null);
+        setDeepLinkIncidentId(String(draftId));
+        setHeaderTab('incidents');
+      };
+
+      if (!selectedJobCard.id || !token || !helpers?.fetchDraftIncidentsForJobCard) {
+        openWithPrefill();
+        return;
+      }
+
       const drafts = await helpers.fetchDraftIncidentsForJobCard(token, selectedJobCard.id);
       if (!drafts.length) {
         openWithPrefill();

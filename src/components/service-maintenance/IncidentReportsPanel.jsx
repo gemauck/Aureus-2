@@ -742,6 +742,14 @@ function IncidentReportsPanel({
               <input className={`${inputCls} mt-1`} value={form.siteName} onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))} />
             </label>
             <label className="block text-xs font-medium">
+              Location
+              <input className={`${inputCls} mt-1`} value={form.locationDescription} onChange={(e) => setForm((f) => ({ ...f, locationDescription: e.target.value }))} placeholder="Site location or address" />
+            </label>
+            <label className="block text-xs font-medium">
+              Equipment / vehicle involved
+              <input className={`${inputCls} mt-1`} value={form.equipmentInvolved} onChange={(e) => setForm((f) => ({ ...f, equipmentInvolved: e.target.value }))} />
+            </label>
+            <label className="block text-xs font-medium">
               Relevant assets
               <textarea className={`${inputCls} mt-1`} rows={2} value={form.relevantAssets} onChange={(e) => setForm((f) => ({ ...f, relevantAssets: e.target.value }))} placeholder="Equipment, vehicles, or plant involved" />
             </label>
@@ -777,6 +785,14 @@ function IncidentReportsPanel({
             <label className="block text-xs font-medium">
               Immediate actions
               <textarea className={`${inputCls} mt-1`} rows={3} value={form.immediateActions} onChange={(e) => setForm((f) => ({ ...f, immediateActions: e.target.value }))} />
+            </label>
+            <label className="block text-xs font-medium">
+              Investigation notes
+              <textarea className={`${inputCls} mt-1`} rows={3} value={form.investigationNotes} onChange={(e) => setForm((f) => ({ ...f, investigationNotes: e.target.value }))} placeholder="Diagnosis, findings, or observations" />
+            </label>
+            <label className="block text-xs font-medium">
+              Corrective / follow-up actions
+              <textarea className={`${inputCls} mt-1`} rows={3} value={form.correctiveActions} onChange={(e) => setForm((f) => ({ ...f, correctiveActions: e.target.value }))} placeholder="Future work or corrective steps" />
             </label>
             <label className="block text-xs font-medium">
               Status

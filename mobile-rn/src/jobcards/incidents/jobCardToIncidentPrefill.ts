@@ -1,6 +1,8 @@
 import type { EditingMeta, JobCardFormData } from '../types'
 import type { IncidentPerson } from './incidentApi'
 
+const HEADING_PREFIX = 'Heading:'
+const PROJECT_ASSOCIATION_PREFIX = 'Project Association:'
 const TANK_BOWSER_RE = /tank|bowser|bower|mobile/i
 
 function parseTechnicians(raw: string[] | unknown): string[] {
@@ -37,10 +39,11 @@ export function mapCallOutCategoryToIncidentType(category: string): string {
 function formatStockLine(item: {
   itemName?: string
   name?: string
+  description?: string
   sku?: string
   quantity?: number
 }): string {
-  const name = String(item.itemName || item.name || '').trim()
+  const name = String(item.itemName || item.name || item.description || '').trim()
   const sku = String(item.sku || '').trim()
   const qty = item.quantity
   const parts: string[] = []
@@ -48,6 +51,26 @@ function formatStockLine(item: {
   if (sku) parts.push(`(${sku})`)
   if (qty != null && qty !== 0) parts.push(`× ${qty}`)
   return parts.join(' ').trim()
+}
+
+function technicianNotesFromOtherComments(rawComments: string): string {
+  const kept: string[] = []
+  for (const line of String(rawComments || '').split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    if (t.startsWith(HEADING_PREFIX)) continue
+    if (t.startsWith(PROJECT_ASSOCIATION_PREFIX)) continue
+    if (
+      t.startsWith('Customer:') ||
+      t.startsWith('Position:') ||
+      t.startsWith('Feedback:') ||
+      t.startsWith('Signature:')
+    ) {
+      continue
+    }
+    kept.push(line)
+  }
+  return kept.join('\n').trim()
 }
 
 function buildTechnicianName(formData: JobCardFormData): string {
@@ -71,10 +94,16 @@ function buildPeopleInvolved(formData: JobCardFormData): IncidentPerson[] {
 
 function buildDescription(formData: JobCardFormData): string {
   const parts: string[] = []
+  const heading = String(formData.heading || '').trim()
+  const category = String(formData.callOutCategory || '').trim()
   const reason = String(formData.reasonForVisit || '').trim()
-  const comments = String(formData.otherComments || '').trim()
+  const notes = technicianNotesFromOtherComments(formData.otherComments)
+
+  if (heading) parts.push(`Heading:\n${heading}`)
+  if (category) parts.push(`Call-out category: ${category}`)
   if (reason) parts.push(`Reason for visit:\n${reason}`)
-  if (comments) parts.push(`Other comments:\n${comments}`)
+  if (notes) parts.push(`Additional notes:\n${notes}`)
+
   return parts.join('\n\n')
 }
 
@@ -83,6 +112,17 @@ function buildLocationDescription(formData: JobCardFormData): string {
   const siteName = String(formData.siteName || '').trim()
   if (location && siteName && location !== siteName) return `${location} — ${siteName}`
   return location || siteName
+}
+
+function buildRelevantAssets(formData: JobCardFormData): string {
+  const stockUsed = Array.isArray(formData.stockUsed) ? formData.stockUsed : []
+  const materials = Array.isArray(formData.materialsBought) ? formData.materialsBought : []
+  const stockLines = stockUsed.map(formatStockLine).filter(Boolean).map((line) => `• ${line}`)
+  const materialLines = materials
+    .map(formatStockLine)
+    .filter(Boolean)
+    .map((line) => `• ${line} (purchased)`)
+  return [...stockLines, ...materialLines].join('\n')
 }
 
 export type IncidentPrefillPayload = {
@@ -118,7 +158,6 @@ export function buildIncidentPrefillFromJobCard(
   opts: { authorName?: string } = {}
 ): IncidentPrefillPayload {
   const stockUsed = Array.isArray(formData.stockUsed) ? formData.stockUsed : []
-  const assetLines = stockUsed.map(formatStockLine).filter(Boolean)
   const tankLines = stockUsed
     .filter((item) => TANK_BOWSER_RE.test(`${item.itemName || ''} ${item.sku || ''}`))
     .map(formatStockLine)
@@ -150,7 +189,7 @@ export function buildIncidentPrefillFromJobCard(
     correctiveActions: String(formData.futureWorkRequired || '').trim(),
     witnesses: '',
     equipmentInvolved: String(formData.vehicleUsed || '').trim(),
-    relevantAssets: assetLines.map((line) => `• ${line}`).join('\n'),
+    relevantAssets: buildRelevantAssets(formData),
     relevantTanksMobileBowsers: tankLines.map((line) => `• ${line}`).join('\n'),
     technicianName: buildTechnicianName(formData),
     authorName: String(opts.authorName || formData.agentName || '').trim(),

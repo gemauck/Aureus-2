@@ -78,6 +78,10 @@ export function IncidentFormScreen() {
   const [status, setStatus] = useState('draft')
   const [description, setDescription] = useState('')
   const [immediateActions, setImmediateActions] = useState('')
+  const [investigationNotes, setInvestigationNotes] = useState('')
+  const [correctiveActions, setCorrectiveActions] = useState('')
+  const [locationDescription, setLocationDescription] = useState('')
+  const [equipmentInvolved, setEquipmentInvolved] = useState('')
   const [relevantAssets, setRelevantAssets] = useState('')
   const [relevantTanksMobileBowsers, setRelevantTanksMobileBowsers] = useState('')
   const [technicianName, setTechnicianName] = useState('')
@@ -105,6 +109,10 @@ export function IncidentFormScreen() {
       setStatus(prefill.status || 'draft')
       setDescription(prefill.description || '')
       setImmediateActions(prefill.immediateActions || '')
+      setInvestigationNotes(prefill.investigationNotes || '')
+      setCorrectiveActions(prefill.correctiveActions || '')
+      setLocationDescription(prefill.locationDescription || '')
+      setEquipmentInvolved(prefill.equipmentInvolved || '')
       setRelevantAssets(prefill.relevantAssets || '')
       setRelevantTanksMobileBowsers(prefill.relevantTanksMobileBowsers || '')
       setTechnicianName(prefill.technicianName || '')
@@ -141,6 +149,10 @@ export function IncidentFormScreen() {
         setStatus(row.status || 'draft')
         setDescription(row.description || '')
         setImmediateActions(row.immediateActions || '')
+        setInvestigationNotes(row.investigationNotes || '')
+        setCorrectiveActions(row.correctiveActions || '')
+        setLocationDescription(row.locationDescription || '')
+        setEquipmentInvolved(row.equipmentInvolved || '')
         setRelevantAssets(row.relevantAssets || '')
         setRelevantTanksMobileBowsers(row.relevantTanksMobileBowsers || '')
         setTechnicianName(row.technicianName || '')
@@ -169,6 +181,10 @@ export function IncidentFormScreen() {
       severity,
       description,
       immediateActions,
+      investigationNotes,
+      correctiveActions,
+      locationDescription,
+      equipmentInvolved,
       relevantAssets,
       relevantTanksMobileBowsers,
       technicianName,
@@ -187,6 +203,10 @@ export function IncidentFormScreen() {
       severity,
       description,
       immediateActions,
+      investigationNotes,
+      correctiveActions,
+      locationDescription,
+      equipmentInvolved,
       relevantAssets,
       relevantTanksMobileBowsers,
       technicianName,
@@ -311,6 +331,10 @@ export function IncidentFormScreen() {
         />
         <Field label="Description" value={description} onChangeText={setDescription} multiline styles={styles} />
         <Field label="Immediate actions" value={immediateActions} onChangeText={setImmediateActions} multiline styles={styles} />
+        <Field label="Investigation notes" value={investigationNotes} onChangeText={setInvestigationNotes} multiline styles={styles} />
+        <Field label="Corrective / follow-up actions" value={correctiveActions} onChangeText={setCorrectiveActions} multiline styles={styles} />
+        <Field label="Location" value={locationDescription} onChangeText={setLocationDescription} styles={styles} />
+        <Field label="Equipment / vehicle involved" value={equipmentInvolved} onChangeText={setEquipmentInvolved} styles={styles} />
         <Field label="Relevant assets" value={relevantAssets} onChangeText={setRelevantAssets} multiline styles={styles} />
         <Field label="Relevant tanks / mobile bowsers" value={relevantTanksMobileBowsers} onChangeText={setRelevantTanksMobileBowsers} multiline styles={styles} />
         <Field label="Technician involved" value={technicianName} onChangeText={setTechnicianName} styles={styles} />
