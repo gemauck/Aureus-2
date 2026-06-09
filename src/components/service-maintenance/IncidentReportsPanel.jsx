@@ -294,7 +294,7 @@ function IncidentReportsPanel({
   }`
 
   return (
-    <div className="space-y-3">
+    <div className="relative min-h-[calc(100dvh-10rem)] w-full space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
@@ -383,8 +383,8 @@ function IncidentReportsPanel({
       )}
 
       {showDetail && selected ? (
-        <div className={`absolute inset-0 z-40 flex flex-col ${isDark ? 'bg-gray-950/90' : 'bg-white/95'} backdrop-blur-sm`}>
-          <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+        <div className={`absolute inset-0 z-40 flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
+          <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                 {selected.incidentNumber || 'Incident report'}
@@ -434,8 +434,8 @@ function IncidentReportsPanel({
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ['Type', selected.incidentType],
                 ['Severity', selected.severity],
@@ -479,15 +479,34 @@ function IncidentReportsPanel({
 
       {showForm ? (
         <div className={`absolute inset-0 z-50 flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-            <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-              {selected?.id ? 'Edit incident' : 'New incident report'}
-            </h2>
-            <button type="button" onClick={() => setShowForm(false)} className="text-xs underline">
+          <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                aria-label="Back to incidents"
+              >
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+              <div>
+                <div className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Incident report
+                </div>
+                <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  {selected?.id ? 'Edit incident' : 'New incident report'}
+                </h2>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium ${isDark ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-700'}`}
+            >
               Cancel
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <label className="block text-xs font-medium">
               Client
               <select
@@ -560,6 +579,8 @@ function IncidentReportsPanel({
                 ))}
               </select>
             </label>
+          </div>
+          <div className={`flex shrink-0 items-center border-t px-6 py-4 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <button type="button" disabled={saving} onClick={() => void saveForm()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
               {saving ? 'Saving…' : 'Save incident'}
             </button>

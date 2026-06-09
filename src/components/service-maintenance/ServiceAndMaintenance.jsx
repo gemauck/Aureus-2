@@ -2805,7 +2805,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
           )}
         </div>
       ) : headerTab === 'incidents' ? (
-        <div data-section="incident-reports-panel">
+        <div data-section="incident-reports-panel" className="relative min-h-[calc(100dvh-10rem)]">
           {incidentsReady && window.IncidentReportsPanel ? (
             <window.IncidentReportsPanel
               clients={clients}

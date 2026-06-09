@@ -13,10 +13,7 @@ import {
 } from './_lib/incidentReportResolve.js'
 import { insertIncidentReportActivityFromRequest } from './_lib/incidentReportActivity.js'
 import { buildIncidentReportPdfBuffer } from './_lib/incidentReportPdf.js'
-import {
-  INCIDENT_ALLOWED_STATUSES,
-  normalizeIncidentStatus
-} from '../src/incidentReport/constants.js'
+import { normalizeIncidentStatus } from './_lib/incidentReportConstants.js'
 
 function incidentMutateRole(user) {
   if (isAdminRole(user?.role)) return true
@@ -202,8 +199,6 @@ async function handler(req, res) {
     return badRequest(res, 'Invalid incident reports endpoint')
   }
 
-  const paginate = getPagination()
-
   if (!id && req.method === 'GET') {
     try {
       const url = new URL(req.url, 'http://localhost')
@@ -215,7 +210,7 @@ async function handler(req, res) {
         url.searchParams.get('mine') === '1' ||
         String(url.searchParams.get('mine') || '').toLowerCase() === 'true'
       const allowLarge = !!(clientId || jobCardId || q)
-      const { page, pageSize } = paginate(req)
+      const { page, pageSize } = getPagination(allowLarge)(req)
       const owner = req.user?.sub || req.user?.id || null
 
       const where = {}

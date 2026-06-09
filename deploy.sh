@@ -355,6 +355,10 @@ if [ -f migrations/add-notification-email-messages.sql ]; then
 fi
 
 echo
+echo "-> Regenerating Prisma client (ensure API models match schema)..."
+npx prisma generate --schema=./prisma/schema.prisma
+
+echo
 echo "-> Restarting process manager..."
 if command -v pm2 >/dev/null 2>&1; then
   if pm2 describe "${PM2_PROCESS_NAME}" >/dev/null 2>&1; then
