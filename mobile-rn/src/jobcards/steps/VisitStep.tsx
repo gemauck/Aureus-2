@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react'
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import React, { useCallback, useMemo } from 'react'
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import {
   formatTravelDurationMinutes,
   jobSiteMinutesFromDatetimeLocals
@@ -15,6 +15,9 @@ import { VoiceNoteField } from '../media/VoiceNoteField'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
+import { useAuth } from '../../state/AuthContext'
+import { incidentApi } from '../incidents/incidentApi'
+import { buildIncidentPrefillFromJobCard } from '../incidents/jobCardToIncidentPrefill'
 
 type LocationPickerProps = React.ComponentProps<
   typeof import('../map/LocationPickerModal').LocationPickerModal
@@ -54,6 +57,7 @@ export function VisitStep() {
   const formStyles = useFormStyles()
   const styles = useThemedStyles(createStyles)
   const { jc } = useTheme()
+  const { accessToken, user } = useAuth()
   const {
     formData,
     setFormData,
@@ -61,10 +65,46 @@ export function VisitStep() {
     voiceAttachments,
     setVoiceAttachments,
     saveDraftQuiet,
-    openIncidentReport
+    openIncidentReport,
+    openIncidentForEdit
   } = useJobCardWizard()
   const afterTranscription = () => void saveDraftQuiet({ forceDraft: true })
   const [mapOpen, setMapOpen] = React.useState(false)
+
+  const handleReportIncident = useCallback(async () => {
+    const authorName = String(user?.name || user?.email || '').trim()
+    const prefill = buildIncidentPrefillFromJobCard(formData, editingMeta, { authorName })
+    const serverJobCardId = editingMeta?.serverJobCardId
+
+    const openNew = () => openIncidentReport(prefill)
+
+    if (!accessToken || !serverJobCardId) {
+      openNew()
+      return
+    }
+
+    try {
+      const res = await incidentApi.listDraftsForJobCard(accessToken, serverJobCardId)
+      const drafts = res.incidentReports || []
+      if (!drafts.length) {
+        openNew()
+        return
+      }
+      const draft = drafts[0]
+      const label = draft.incidentNumber || draft.id
+      Alert.alert(
+        'Draft incident exists',
+        `${label} is already linked to this job card.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Create new', onPress: openNew },
+          { text: 'Open existing', onPress: () => openIncidentForEdit(draft.id) }
+        ]
+      )
+    } catch {
+      openNew()
+    }
+  }, [accessToken, editingMeta, formData, openIncidentForEdit, openIncidentReport, user])
 
   const categoryOptions = useMemo(
     () => JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt: string) => ({ value: opt, label: opt })),
@@ -217,19 +257,7 @@ export function VisitStep() {
         title="Incident report"
         subtitle="Record a site incident linked to this job card."
       >
-        <Pressable
-          style={styles.incidentBtn}
-          onPress={() =>
-            openIncidentReport({
-              clientId: formData.clientId,
-              clientName: formData.clientName,
-              siteId: formData.siteId,
-              siteName: formData.siteName,
-              jobCardId: editingMeta?.serverJobCardId || editingMeta?.localId || undefined,
-              jobCardNumber: editingMeta?.jobCardNumber || undefined
-            })
-          }
-        >
+        <Pressable style={styles.incidentBtn} onPress={() => void handleReportIncident()}>
           <Text style={styles.incidentBtnText}>Report incident</Text>
         </Pressable>
       </SectionCard>

@@ -41,6 +41,16 @@ function formatDate(value) {
   return dt.toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })
 }
 
+function prefillIncidentAtLocal(value) {
+  if (!value) return new Date().toISOString().slice(0, 16)
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+    return value.slice(0, 16)
+  }
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return new Date().toISOString().slice(0, 16)
+  return dt.toISOString().slice(0, 16)
+}
+
 function statusBadgeClasses(status, isDark) {
   const s = String(status || 'draft').toLowerCase()
   if (s === 'closed') {
@@ -250,7 +260,8 @@ function IncidentReportsPanel({
   onOpenJobCard,
   initialIncidentId = '',
   createPrefill = null,
-  onConsumeCreatePrefill
+  onConsumeCreatePrefill,
+  onConsumeInitialIncidentId
 }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -319,7 +330,11 @@ function IncidentReportsPanel({
     setForm({
       ...emptyForm(),
       ...createPrefill,
-      incidentAt: new Date().toISOString().slice(0, 16)
+      authorName: createPrefill.authorName || currentUserName(),
+      incidentAt: prefillIncidentAtLocal(createPrefill.incidentAt),
+      peopleInvolved: Array.isArray(createPrefill.peopleInvolved) && createPrefill.peopleInvolved.length
+        ? createPrefill.peopleInvolved
+        : [{ name: '', role: '', injured: false }]
     })
     setShowForm(true)
     if (typeof onConsumeCreatePrefill === 'function') onConsumeCreatePrefill()
@@ -346,8 +361,11 @@ function IncidentReportsPanel({
   )
 
   useEffect(() => {
-    if (initialIncidentId) void openIncidentById(initialIncidentId)
-  }, [initialIncidentId, openIncidentById])
+    if (!initialIncidentId) return
+    void openIncidentById(initialIncidentId).finally(() => {
+      if (typeof onConsumeInitialIncidentId === 'function') onConsumeInitialIncidentId()
+    })
+  }, [initialIncidentId, openIncidentById, onConsumeInitialIncidentId])
 
   const handleDownloadPdf = useCallback(async () => {
     if (!selected || downloadingPdf) return

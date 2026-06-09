@@ -458,6 +458,8 @@ const ServiceAndMaintenance = () => {
   );
   const [deepLinkIncidentId, setDeepLinkIncidentId] = useState('');
   const [incidentCreatePrefill, setIncidentCreatePrefill] = useState(null);
+  const [jobCardIncidentDraftPrompt, setJobCardIncidentDraftPrompt] = useState(null);
+  const [reportingIncidentFromJobCard, setReportingIncidentFromJobCard] = useState(false);
   const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
   const createJobCardMenuRef = useRef(null);
   const jobCardsListScrollRestoreFrameRef = useRef(null);
@@ -472,6 +474,66 @@ const ServiceAndMaintenance = () => {
     }
     return document.scrollingElement || document.documentElement || document.body;
   }, []);
+
+  const handleReportIncidentFromJobCard = useCallback(async () => {
+    if (!selectedJobCard || reportingIncidentFromJobCard) return;
+    const token = window.storage?.getToken?.();
+    const helpers = window.IncidentJobCardPrefill;
+    const buildPrefill = helpers?.buildIncidentPrefillFromJobCard;
+    const authorName = String(user?.name || user?.email || '').trim();
+
+    const openWithPrefill = () => {
+      const prefill = buildPrefill
+        ? buildPrefill(selectedJobCard, { authorName })
+        : {
+            clientId: selectedJobCard.clientId || '',
+            clientName: selectedJobCard.clientName || '',
+            siteId: selectedJobCard.siteId || '',
+            siteName: selectedJobCard.siteName || '',
+            jobCardId: selectedJobCard.id || '',
+            jobCardNumber: selectedJobCard.jobCardNumber || '',
+            status: 'draft'
+          };
+      setShowJobCardDetail(false);
+      setDeepLinkIncidentId('');
+      setHeaderTab('incidents');
+      setIncidentCreatePrefill(prefill);
+    };
+
+    const openExistingDraft = (draftId) => {
+      setShowJobCardDetail(false);
+      setIncidentCreatePrefill(null);
+      setDeepLinkIncidentId(String(draftId));
+      setHeaderTab('incidents');
+    };
+
+    if (!selectedJobCard.id || !token || !helpers?.fetchDraftIncidentsForJobCard) {
+      openWithPrefill();
+      return;
+    }
+
+    setReportingIncidentFromJobCard(true);
+    try {
+      const drafts = await helpers.fetchDraftIncidentsForJobCard(token, selectedJobCard.id);
+      if (!drafts.length) {
+        openWithPrefill();
+        return;
+      }
+      setJobCardIncidentDraftPrompt({
+        drafts,
+        onOpenExisting: () => {
+          openExistingDraft(drafts[0].id);
+          setJobCardIncidentDraftPrompt(null);
+        },
+        onCreateNew: () => {
+          openWithPrefill();
+          setJobCardIncidentDraftPrompt(null);
+        }
+      });
+    } finally {
+      setReportingIncidentFromJobCard(false);
+    }
+  }, [selectedJobCard, reportingIncidentFromJobCard, user]);
 
   const saveJobCardsListScrollPosition = useCallback(
     (jobCardId) => {
@@ -602,6 +664,7 @@ const ServiceAndMaintenance = () => {
     injectScript('components/manufacturing/JobCards.jsx', { isJsx: true });
     injectScript('components/service-maintenance/IncidentReportsPanel.jsx', { isJsx: true });
     injectScript('incidentReport/IncidentReportPrintBundle.jsx', { isJsx: true });
+    injectScript('incidentReport/jobCardToIncidentPrefill.js');
     return undefined;
   }, []);
 
@@ -2805,6 +2868,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               initialIncidentId={deepLinkIncidentId}
               createPrefill={incidentCreatePrefill}
               onConsumeCreatePrefill={() => setIncidentCreatePrefill(null)}
+              onConsumeInitialIncidentId={() => setDeepLinkIncidentId('')}
               onOpenJobCard={(jobCard) => {
                 if (jobCard?.id) handleOpenJobCardDetail(jobCard);
               }}
@@ -2900,27 +2964,16 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!selectedJobCard) return;
-                    setShowJobCardDetail(false);
-                    setHeaderTab('incidents');
-                    setIncidentCreatePrefill({
-                      clientId: selectedJobCard.clientId || '',
-                      clientName: selectedJobCard.clientName || '',
-                      siteId: selectedJobCard.siteId || '',
-                      siteName: selectedJobCard.siteName || '',
-                      jobCardId: selectedJobCard.id || '',
-                      jobCardNumber: selectedJobCard.jobCardNumber || ''
-                    });
-                  }}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold shadow-sm ${
+                  disabled={reportingIncidentFromJobCard}
+                  onClick={() => void handleReportIncidentFromJobCard()}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold shadow-sm disabled:opacity-60 ${
                     isDark
                       ? 'border-amber-700 bg-amber-950/40 text-amber-200 hover:bg-amber-900/40'
                       : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
                   }`}
                 >
-                  <i className="fa-solid fa-triangle-exclamation" />
-                  Report incident
+                  <i className={`fa-solid ${reportingIncidentFromJobCard ? 'fa-spinner fa-spin' : 'fa-triangle-exclamation'}`} />
+                  {reportingIncidentFromJobCard ? 'Preparing…' : 'Report incident'}
                 </button>
                 <button
                   type="button"
@@ -3828,6 +3881,61 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
           </div>
         </div>
       )}
+      {jobCardIncidentDraftPrompt ? (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="job-card-incident-draft-prompt-title"
+        >
+          <div
+            className={`w-full max-w-md rounded-xl border p-5 shadow-xl ${
+              isDark ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-900'
+            }`}
+          >
+            <h3 id="job-card-incident-draft-prompt-title" className="text-base font-semibold">
+              Draft incident already exists
+            </h3>
+            <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {jobCardIncidentDraftPrompt.drafts
+                .map((row) => row.incidentNumber || row.id)
+                .filter(Boolean)
+                .join(', ')}{' '}
+              is linked to this job card.
+            </p>
+            <p className={`mt-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+              Open the existing draft or start a new incident form with job card details pre-filled.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJobCardIncidentDraftPrompt(null)}
+                className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+                  isDark ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-700'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={jobCardIncidentDraftPrompt.onCreateNew}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                  isDark ? 'border-amber-700 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}
+              >
+                Create new
+              </button>
+              <button
+                type="button"
+                onClick={jobCardIncidentDraftPrompt.onOpenExisting}
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+              >
+                Open existing
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {photoLightboxUrl ? (
         <div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4 sm:p-6"

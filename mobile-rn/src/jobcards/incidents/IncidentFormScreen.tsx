@@ -19,6 +19,7 @@ import { useJobCardWizard } from '../WizardContext'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
 import { incidentApi } from './incidentApi'
+import type { IncidentPrefill } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -91,14 +92,31 @@ export function IncidentFormScreen() {
     [clients]
   )
 
+  const applyIncidentPrefill = useCallback(
+    (prefill: IncidentPrefill) => {
+      setClientId(prefill.clientId || '')
+      setClientName(prefill.clientName || '')
+      setSiteName(prefill.siteName || '')
+      setJobCardId(prefill.jobCardId || '')
+      setJobCardNumber(prefill.jobCardNumber || '')
+      if (prefill.incidentAt) setIncidentAt(toDatetimeLocal(prefill.incidentAt))
+      setIncidentType(prefill.incidentType || '')
+      setSeverity(prefill.severity || '')
+      setStatus(prefill.status || 'draft')
+      setDescription(prefill.description || '')
+      setImmediateActions(prefill.immediateActions || '')
+      setRelevantAssets(prefill.relevantAssets || '')
+      setRelevantTanksMobileBowsers(prefill.relevantTanksMobileBowsers || '')
+      setTechnicianName(prefill.technicianName || '')
+      setAuthorName(prefill.authorName || user?.name || user?.email || '')
+    },
+    [user]
+  )
+
   useEffect(() => {
     if (!editingIncidentId || !accessToken) {
       if (incidentPrefill) {
-        setClientId(incidentPrefill.clientId || '')
-        setClientName(incidentPrefill.clientName || '')
-        setSiteName(incidentPrefill.siteName || '')
-        setJobCardId(incidentPrefill.jobCardId || '')
-        setJobCardNumber(incidentPrefill.jobCardNumber || '')
+        applyIncidentPrefill(incidentPrefill)
       }
       setLoading(false)
       return
@@ -137,7 +155,7 @@ export function IncidentFormScreen() {
     return () => {
       cancelled = true
     }
-  }, [accessToken, editingIncidentId, incidentPrefill, setWizardFlow])
+  }, [accessToken, applyIncidentPrefill, editingIncidentId, incidentPrefill, setWizardFlow, user])
 
   const buildPayload = useCallback(
     () => ({

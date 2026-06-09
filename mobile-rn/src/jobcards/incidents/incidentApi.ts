@@ -45,6 +45,10 @@ export const incidentApi = {
     return request<{ incidentReports?: IncidentReport[] }>(`/api/incident-reports?${q}`, { token })
   },
 
+  listDraftsForJobCard(token: string, jobCardId: string) {
+    return incidentApi.list(token, { jobCardId, status: 'draft', pageSize: '10' })
+  },
+
   get(token: string, id: string) {
     return request<{ incidentReport?: IncidentReport }>(`/api/incident-reports/${encodeURIComponent(id)}`, {
       token

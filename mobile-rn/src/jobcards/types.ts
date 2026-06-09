@@ -13,6 +13,24 @@ export type IncidentPrefill = {
   siteName?: string
   jobCardId?: string
   jobCardNumber?: string
+  incidentAt?: string
+  locationDescription?: string
+  locationLatitude?: string
+  locationLongitude?: string
+  incidentType?: string
+  severity?: string
+  description?: string
+  immediateActions?: string
+  investigationNotes?: string
+  correctiveActions?: string
+  witnesses?: string
+  equipmentInvolved?: string
+  relevantAssets?: string
+  relevantTanksMobileBowsers?: string
+  technicianName?: string
+  authorName?: string
+  peopleInvolved?: Array<{ name: string; role: string; injured: boolean }>
+  status?: string
 }
 
 export type WizardStepId = 'assignment' | 'visit' | 'work' | 'stock' | 'signoff'
