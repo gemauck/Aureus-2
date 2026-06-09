@@ -17,6 +17,18 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheCrmClients,
+  cacheCrmGroups,
+  cacheCrmLeads,
+  offlineListMessage,
+  readCachedCrmClients,
+  readCachedCrmGroups,
+  readCachedCrmLeads,
+  readRecentCrmEntities,
+  type CrmRecentEntry
+} from '../../offline/erpReadCaches'
 import { useAuth } from '../../state/AuthContext'
 
 import type { RootStackParamList } from '../../navigation/types'
@@ -43,6 +55,7 @@ type Props = NativeStackScreenProps<CrmStackParamList, 'CrmHome'>
 
 const FILTERS: { key: CrmFilterKey; label: string; icon: string }[] = [
   { key: 'all', label: 'All', icon: 'list' },
+  { key: 'recent', label: 'Recent', icon: 'history' },
   { key: 'active', label: 'Active', icon: 'check-circle' },
   { key: 'starred', label: 'Starred', icon: 'star' }
 ]
@@ -52,7 +65,9 @@ export function CrmHomeScreen({ navigation }: Props) {
   const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { accessToken, user } = useAuth()
+  const { isOnline } = useNetwork()
   const [tab, setTab] = useState<CrmTab>('clients')
+  const [recentEntries, setRecentEntries] = useState<CrmRecentEntry[]>([])
   const [clients, setClients] = useState<CrmClient[]>([])
   const [leads, setLeads] = useState<CrmLead[]>([])
   const [groups, setGroups] = useState<CrmGroup[]>([])
@@ -74,23 +89,66 @@ export function CrmHomeScreen({ navigation }: Props) {
       }
       if (!silent) setLoading(true)
       setError('')
+
+      const applyCached = async () => {
+        const [cachedClients, cachedLeads, cachedGroups, recent] = await Promise.all([
+          readCachedCrmClients(),
+          readCachedCrmLeads(),
+          readCachedCrmGroups(),
+          readRecentCrmEntities()
+        ])
+        setRecentEntries(recent || [])
+        const hasAny =
+          Boolean(cachedClients?.length) ||
+          Boolean(cachedLeads?.length) ||
+          Boolean(cachedGroups?.length)
+        if (hasAny) {
+          setClients(cachedClients || [])
+          setLeads(cachedLeads || [])
+          setGroups(cachedGroups || [])
+          setError(offlineListMessage(true))
+          return true
+        }
+        setClients([])
+        setLeads([])
+        setGroups([])
+        setError(offlineListMessage(false))
+        return false
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       try {
-        const [c, l, g] = await Promise.all([
+        const [c, l, g, recent] = await Promise.all([
           crmApi.listClients(accessToken),
           crmApi.listLeads(accessToken),
-          crmApi.listGroups(accessToken)
+          crmApi.listGroups(accessToken),
+          readRecentCrmEntities()
         ])
-        setClients(filterClientsList(c.map(normalizeEntity)))
-        setLeads(l.map(normalizeEntity))
-        setGroups(g.map(normalizeEntity))
+        const clients = filterClientsList(c.map(normalizeEntity))
+        const leads = l.map(normalizeEntity)
+        const groups = g.map(normalizeEntity)
+        setClients(clients)
+        setLeads(leads)
+        setGroups(groups)
+        setRecentEntries(recent || [])
+        await Promise.all([cacheCrmClients(clients), cacheCrmLeads(leads), cacheCrmGroups(groups)])
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load CRM data')
+        const hadCache = await applyCached()
+        if (!hadCache) {
+          setError(e instanceof Error ? e.message : 'Could not load CRM data')
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [accessToken]
+    [accessToken, isOnline]
   )
 
   useEffect(() => {
@@ -105,10 +163,22 @@ export function CrmHomeScreen({ navigation }: Props) {
   const industryLabel =
     industry === 'all' ? 'All industries' : industry
 
-  const filtered = useMemo(
-    () => sortByName(filterEntities(source, query, filter, industry, tab)),
-    [source, query, filter, industry, tab]
-  )
+  const filtered = useMemo(() => {
+    if (filter === 'recent' && (tab === 'clients' || tab === 'leads')) {
+      const kind = tab === 'clients' ? 'client' : 'lead'
+      const recentIds = recentEntries
+        .filter((row) => row.entityType === kind)
+        .map((row) => row.entityId)
+      const order = new Map(recentIds.map((id, index) => [id, index]))
+      const base = filterEntities(source, query, 'all', industry, tab).filter((item) =>
+        order.has(String(item.id))
+      )
+      return base.sort(
+        (a, b) => (order.get(String(a.id)) ?? 0) - (order.get(String(b.id)) ?? 0)
+      )
+    }
+    return sortByName(filterEntities(source, query, filter, industry, tab))
+  }, [source, query, filter, industry, tab, recentEntries])
 
   const showPipeline = isAdmin(user)
 

@@ -3,6 +3,12 @@ import { StyleSheet, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { ModuleListScreen } from '../components/shell/ModuleListScreen'
+import { useNetwork } from '../hooks/useNetwork'
+import {
+  cacheNotifications,
+  offlineListMessage,
+  readCachedNotifications
+} from '../offline/erpReadCaches'
 import { erpApi, type DashboardNotification } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
 import { navigateFromNotification } from '../notifications/notificationNavigation'
@@ -17,6 +23,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>
 export function NotificationsScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles)
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
   const { refresh: refreshUnread, decrementUnread } = useNotificationUnread()
   const [reloadKey, setReloadKey] = React.useState(0)
 
@@ -29,8 +36,21 @@ export function NotificationsScreen({ navigation }: Props) {
 
   const loadItems = useCallback(async () => {
     if (!accessToken) return []
-    return erpApi.getNotifications(accessToken, 50)
-  }, [accessToken, reloadKey])
+    if (!isOnline) {
+      const cached = await readCachedNotifications()
+      if (cached?.length) return cached
+      throw new Error(offlineListMessage(false))
+    }
+    try {
+      const rows = await erpApi.getNotifications(accessToken, 50)
+      await cacheNotifications(rows)
+      return rows
+    } catch (e) {
+      const cached = await readCachedNotifications()
+      if (cached?.length) return cached
+      throw e
+    }
+  }, [accessToken, isOnline, reloadKey])
 
   const onPressItem = async (item: DashboardNotification) => {
     if (accessToken && item.id && !item.read) {

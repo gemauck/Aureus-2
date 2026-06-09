@@ -13,6 +13,12 @@ import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { openTask } from '../../dashboard/dashboardNavigation'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheMyTasks,
+  offlineListMessage,
+  readCachedMyTasks
+} from '../../offline/erpReadCaches'
 import { erpApi, mergeDashboardTasks, type DashboardTask } from '../../services/erpApi'
 import { useAuth } from '../../state/AuthContext'
 import { useThemedStyles } from '../../theme/useThemedStyles'
@@ -58,6 +64,7 @@ export function MyTasksHomeScreen({ navigation }: Props) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
   const [tasks, setTasks] = useState<DashboardTask[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -71,20 +78,45 @@ export function MyTasksHomeScreen({ navigation }: Props) {
       if (!accessToken) return
       if (!silent) setLoading(true)
       setError('')
+
+      const applyCached = async () => {
+        const cached = await readCachedMyTasks()
+        if (cached?.length) {
+          setTasks(cached)
+          setError(offlineListMessage(true))
+          return true
+        }
+        setTasks([])
+        setError(offlineListMessage(false))
+        return false
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       try {
         const [projectTasks, userTasks] = await Promise.all([
           erpApi.getProjectTasks(accessToken).catch(() => []),
           erpApi.getUserTasks(accessToken).catch(() => [])
         ])
-        setTasks(mergeDashboardTasks(userTasks, projectTasks))
+        const merged = mergeDashboardTasks(userTasks, projectTasks)
+        setTasks(merged)
+        await cacheMyTasks(merged)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load tasks')
+        const hadCache = await applyCached()
+        if (!hadCache) {
+          setError(e instanceof Error ? e.message : 'Could not load tasks')
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [accessToken]
+    [accessToken, isOnline]
   )
 
   useEffect(() => {

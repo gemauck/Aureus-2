@@ -16,6 +16,14 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheProjectsList,
+  cacheProjectTasksList,
+  offlineListMessage,
+  readCachedProjectsList,
+  readCachedProjectTasksList
+} from '../../offline/erpReadCaches'
 import { useAuth } from '../../state/AuthContext'
 
 import type { RootStackParamList } from '../../navigation/types'
@@ -72,6 +80,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   const { erp } = useTheme()
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { accessToken, user } = useAuth()
+  const { isOnline } = useNetwork()
   const [tab, setTab] = useState<ProjectsTab>('projects')
   const [listView, setListView] = useState<ProjectListView>('list')
   const [sortKey, setSortKey] = useState<ProjectSortKey>('name')
@@ -100,6 +109,27 @@ export function ProjectsHomeScreen({ navigation }: Props) {
       }
       if (!silent) setProjectsLoading(true)
       setError('')
+
+      const applyCached = async () => {
+        const cached = await readCachedProjectsList()
+        const starred = await loadStarredIds()
+        setStarredIds(starred)
+        if (cached?.length) {
+          setProjects(cached)
+          setError(offlineListMessage(true))
+          return true
+        }
+        setProjects([])
+        setError(offlineListMessage(false))
+        return false
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setProjectsLoading(false)
+        return
+      }
+
       try {
         const [p, starred] = await Promise.all([
           projectsApi.listProjects(accessToken),
@@ -107,32 +137,56 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         ])
         setProjects(p)
         setStarredIds(starred)
+        await cacheProjectsList(p)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load projects')
+        const hadCache = await applyCached()
+        if (!hadCache) {
+          setError(e instanceof Error ? e.message : 'Could not load projects')
+        }
       } finally {
         setProjectsLoading(false)
       }
     },
-    [accessToken]
+    [accessToken, isOnline]
   )
 
   const loadTasks = useCallback(
     async (silent = false) => {
       if (!accessToken) return
       if (!silent) setTasksLoading(true)
+
+      const applyCached = async () => {
+        const cached = await readCachedProjectTasksList()
+        if (cached?.length) {
+          setAllTasks(cached)
+          setTasksLoaded(true)
+          setError(offlineListMessage(true))
+          return true
+        }
+        return false
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setTasksLoading(false)
+        return
+      }
+
       try {
         const t = await projectsApi.listAllTasks(accessToken)
         setAllTasks(t)
         setTasksLoaded(true)
+        await cacheProjectTasksList(t)
       } catch (e) {
-        if (!silent) {
+        const hadCache = await applyCached()
+        if (!hadCache && !silent) {
           setError(e instanceof Error ? e.message : 'Could not load tasks')
         }
       } finally {
         setTasksLoading(false)
       }
     },
-    [accessToken]
+    [accessToken, isOnline]
   )
 
   const refreshAll = useCallback(

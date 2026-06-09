@@ -92,6 +92,13 @@ Incident reports can be **created and edited offline** (queued on device, synced
 - **Client sites** cached per client after first online load.
 - **Pending uploads** screen lists job cards, incidents, and stock-takes waiting to sync, with per-item Retry and Sync all.
 
+**Phase 2 offline (read-mostly navigation):**
+
+- **My Tasks** — last fetched task list cached on device; browse offline after one online load.
+- **Projects** — project list and all-tasks tab cached (starred filter still works via local starred IDs).
+- **Clients** — clients/leads/groups lists cached; **Recent** filter shows last opened records; **Starred** works from cached data.
+- **Notifications** — last fetched list and unread badge count cached for offline viewing.
+
 ## Pilot modules (existing shells)
 
 - Dashboard, Clients, Projects, Tasks, Notifications, Attachments — list/load stubs from Phase 1 pilot.

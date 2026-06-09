@@ -221,7 +221,7 @@ export type CrmGroupMember = CrmEntityBase & {
 
 export type CrmTab = 'clients' | 'leads' | 'pipeline' | 'groups'
 
-export type CrmFilterKey = 'all' | 'starred' | 'active'
+export type CrmFilterKey = 'all' | 'starred' | 'active' | 'recent'
 
 export type CrmDetailTab =
   | 'overview'

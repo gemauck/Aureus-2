@@ -20,6 +20,7 @@ import { openProject } from '../../dashboard/dashboardNavigation'
 import { navigateIncidentReport } from '../../navigation/navigationHelpers'
 import type { RootStackParamList } from '../../navigation/types'
 
+import { rememberRecentCrmEntity } from '../../offline/erpReadCaches'
 import { crmApi } from '../api'
 import { CrmDetailPanelContent } from '../components/CrmDetailPanels'
 import { CrmDetailTabBar } from '../components/CrmDetailTabBar'
@@ -81,6 +82,10 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (initialTab) setTab(initialTab)
   }, [initialTab, entityId])
+
+  useEffect(() => {
+    void rememberRecentCrmEntity(entityType, entityId)
+  }, [entityType, entityId])
 
   const load = useCallback(async () => {
     if (!accessToken) return

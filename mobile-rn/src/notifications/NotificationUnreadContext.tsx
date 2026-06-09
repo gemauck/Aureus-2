@@ -7,6 +7,11 @@ import React, {
   useState
 } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
+import { useNetwork } from '../hooks/useNetwork'
+import {
+  cacheNotificationUnread,
+  readCachedNotificationUnread
+} from '../offline/erpReadCaches'
 import { erpApi } from '../services/erpApi'
 import { playNotificationSound } from '../services/notificationSounds'
 import { useAuth } from '../state/AuthContext'
@@ -25,6 +30,7 @@ const NotificationUnreadContext = createContext<NotificationUnreadContextValue |
 
 export function NotificationUnreadProvider({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
   const [unreadCount, setUnreadCount] = useState(0)
   const prevUnreadRef = React.useRef(0)
   const primedRef = React.useRef(false)
@@ -36,6 +42,15 @@ export function NotificationUnreadProvider({ children }: { children: React.React
       primedRef.current = false
       return
     }
+    if (!isOnline) {
+      const cached = await readCachedNotificationUnread()
+      if (cached != null) {
+        setUnreadCount(cached)
+        prevUnreadRef.current = cached
+        primedRef.current = true
+      }
+      return
+    }
     try {
       const count = await erpApi.getNotificationUnreadCount(accessToken)
       if (primedRef.current && count > prevUnreadRef.current) {
@@ -44,10 +59,15 @@ export function NotificationUnreadProvider({ children }: { children: React.React
       prevUnreadRef.current = count
       primedRef.current = true
       setUnreadCount(count)
+      await cacheNotificationUnread(count)
     } catch {
-      /* keep last count on transient errors */
+      const cached = await readCachedNotificationUnread()
+      if (cached != null) {
+        setUnreadCount(cached)
+        prevUnreadRef.current = cached
+      }
     }
-  }, [accessToken])
+  }, [accessToken, isOnline])
 
   const decrementUnread = useCallback((count = 1) => {
     setUnreadCount((prev) => Math.max(0, prev - count))
