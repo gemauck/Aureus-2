@@ -1,6 +1,5 @@
-import type { EditingMeta, JobCardFormData } from '../types'
+import type { EditingMeta, JobCardFormData, MediaItem, SectionWorkMedia } from '../types'
 import type { IncidentPerson, LinkedJobCard } from './incidentApi'
-import type { JobCardFormData, MediaItem, SectionWorkMedia, EditingMeta } from '../types'
 
 const HEADING_PREFIX = 'Heading:'
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:'
