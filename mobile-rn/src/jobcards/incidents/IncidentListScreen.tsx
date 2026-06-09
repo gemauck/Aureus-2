@@ -140,7 +140,7 @@ export function IncidentListScreen() {
 
 function createStyles({ jc }: { jc: JcTheme }) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: jc.background },
+    root: { flex: 1, backgroundColor: jc.bg },
     toolbar: { paddingHorizontal: 16, paddingVertical: 10 },
     newBtn: {
       backgroundColor: jc.primary,

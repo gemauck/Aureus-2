@@ -279,10 +279,7 @@ export function IncidentFormScreen() {
         ) : null}
         <ChipRow label="Incident type" options={INCIDENT_TYPES} value={incidentType} onSelect={setIncidentType} styles={styles} jc={jc} />
         <ChipRow label="Severity" options={SEVERITIES} value={severity} onSelect={setSeverity} styles={styles} jc={jc} />
-        <View style={styles.field}>
-          <Text style={styles.label}>Incident date & time</Text>
-          <DateTimeField value={incidentAt} onChange={setIncidentAt} />
-        </View>
+        <DateTimeField label="Incident date & time" value={incidentAt} onChange={setIncidentAt} />
         <ChipRow
           label="Status"
           options={STATUS_OPTIONS.map((o) => o.label)}
@@ -384,7 +381,7 @@ function ChipRow({
 
 function createStyles(jc: JcTheme) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: jc.background },
+    root: { flex: 1, backgroundColor: jc.bg },
     loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     content: { padding: 16, paddingBottom: 40, gap: 12 },
     field: { gap: 6 },

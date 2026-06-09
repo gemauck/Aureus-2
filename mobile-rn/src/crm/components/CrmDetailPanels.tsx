@@ -88,6 +88,12 @@ type PanelProps = {
   onCreateOpportunity?: (body: { title: string; value?: number }) => Promise<void>
   onOpenMember?: (member: CrmGroupMember) => void
   onOpenProject?: (projectId: string, projectName?: string) => void
+  onReportIncident?: (prefill: {
+    clientId?: string
+    clientName?: string
+    siteId?: string
+    siteName?: string
+  }) => void
 }
 
 export function CrmDetailPanelContent(props: PanelProps) {
@@ -581,6 +587,21 @@ export function CrmDetailPanelContent(props: PanelProps) {
     }
     return (
       <View style={styles.section}>
+        {entityType === 'client' && props.onReportIncident ? (
+          <Pressable
+            style={styles.incidentAction}
+            onPress={() =>
+              props.onReportIncident?.({
+                clientId: entity.id,
+                clientName: entity.name || '',
+                siteName: entitySites(entity)[0]?.name || ''
+              })
+            }
+          >
+            <FontAwesome5 name="exclamation-triangle" size={14} color={erp.warning} />
+            <Text style={styles.incidentActionText}>Report incident for this client</Text>
+          </Pressable>
+        ) : null}
         {hasServices ? (
           <>
             <Text style={styles.sectionHeading}>Service records</Text>
@@ -837,6 +858,18 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   },
   groupTitle: { fontSize: 14, fontWeight: '800', color: erp.text },
   groupItem: { fontSize: 14, color: erp.textMuted, fontWeight: '600' },
+  incidentAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: erp.warningSoft,
+    borderRadius: erp.radius.md,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: erp.warning,
+    marginBottom: 12
+  },
+  incidentActionText: { flex: 1, fontSize: 14, fontWeight: '700', color: erp.text },
   miniCard: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.md,

@@ -60,7 +60,8 @@ export function VisitStep() {
     editingMeta,
     voiceAttachments,
     setVoiceAttachments,
-    saveDraftQuiet
+    saveDraftQuiet,
+    openIncidentReport
   } = useJobCardWizard()
   const afterTranscription = () => void saveDraftQuiet({ forceDraft: true })
   const [mapOpen, setMapOpen] = React.useState(false)
@@ -212,6 +213,27 @@ export function VisitStep() {
         ) : null}
       </SectionCard>
 
+      <SectionCard
+        title="Incident report"
+        subtitle="Record a site incident linked to this job card."
+      >
+        <Pressable
+          style={styles.incidentBtn}
+          onPress={() =>
+            openIncidentReport({
+              clientId: formData.clientId,
+              clientName: formData.clientName,
+              siteId: formData.siteId,
+              siteName: formData.siteName,
+              jobCardId: editingMeta?.serverJobCardId || editingMeta?.localId || undefined,
+              jobCardNumber: editingMeta?.jobCardNumber || undefined
+            })
+          }
+        >
+          <Text style={styles.incidentBtnText}>Report incident</Text>
+        </Pressable>
+      </SectionCard>
+
       <DeferredLocationPickerModal
         visible={mapOpen}
         initialLatitude={formData.latitude}
@@ -275,6 +297,14 @@ function createStyles({ jc }: { jc: JcTheme }) {
     borderColor: jc.border,
     padding: jc.space.md
   },
-  durationValue: { fontSize: 16, fontWeight: '700', color: jc.text, marginTop: 4 }
+  durationValue: { fontSize: 16, fontWeight: '700', color: jc.text, marginTop: 4 },
+  incidentBtn: {
+    backgroundColor: jc.accentOrange,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: jc.radius.md,
+    alignItems: 'center'
+  },
+  incidentBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 }
   })
 }

@@ -70,6 +70,21 @@ If the device is offline (or the server fails), saves are queued in AsyncStorage
 
 **Voice:** Record clips offline; transcription runs automatically when connectivity returns (OpenAI Whisper via `/api/public/transcribe-audio`). Transcripts are appended to the relevant text field and saved with the draft.
 
+### Incident reports
+
+Open **Service & Maintenance** from the menu, or **Job cards** → **Report incident** / **Incident reports**.
+
+| Feature | Status |
+|--------|--------|
+| Create incident (client, site, type, severity, date, status) | ✅ |
+| Link to active job card (from Visit step) | ✅ |
+| List your incidents | ✅ |
+| Edit saved incident | ✅ |
+| Share PDF (server-generated) | ✅ |
+| Report from CRM client (Service & Maintenance tab) | ✅ |
+
+Incident reports require an internet connection to save and download PDFs.
+
 ## Pilot modules (existing shells)
 
 - Dashboard, Clients, Projects, Tasks, Notifications, Attachments — list/load stubs from Phase 1 pilot.

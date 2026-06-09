@@ -17,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useAuth } from '../../state/AuthContext'
 
 import { openProject } from '../../dashboard/dashboardNavigation'
+import { navigateIncidentReport } from '../../navigation/navigationHelpers'
 import type { RootStackParamList } from '../../navigation/types'
 
 import { crmApi } from '../api'
@@ -435,6 +436,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
               navigation.push('CrmDetail', { entityType: memberType, entityId: member.id })
             }}
             onOpenProject={(projectId) => openProject(rootNavigation, projectId)}
+            onReportIncident={(prefill) => navigateIncidentReport(rootNavigation, { incidentPrefill: prefill })}
           />
         </ScrollView>
 
