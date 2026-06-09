@@ -67,11 +67,108 @@
 
   function narrativeBlock(title, body) {
     const text = String(body ?? '').trim()
-    const bodyClass = text ? 'narrative-body' : 'narrative-body empty'
-    const content = text ? escapeHtml(text) : 'Not recorded'
+    if (!text) return ''
     return `<div class="narrative">
       <div class="narrative-head">${escapeHtml(title)}</div>
-      <div class="${bodyClass}">${content}</div>
+      <div class="narrative-body">${escapeHtml(text)}</div>
+    </div>`
+  }
+
+  function buildSummaryCells(incident) {
+    const cells = []
+    const push = (label, value, valueHtml = null) => {
+      const text = String(value ?? '').trim()
+      if (!text) return
+      cells.push({ label, valueHtml: valueHtml ?? escapeHtml(text) })
+    }
+
+    push('Client', incident.clientName)
+    push('Incident type', incident.incidentType)
+    const severity = String(incident.severity || '').trim()
+    if (severity) {
+      cells.push({
+        label: 'Severity',
+        valueHtml: `<span class="${severityBadgeClass(severity)}">${escapeHtml(severity)}</span>`
+      })
+    }
+    const incidentAt = formatIncidentPrintDate(incident.incidentAt)
+    if (incidentAt !== '—') push('Incident date & time', incidentAt)
+    const statusLabel = incidentStatusLabel(incident.status)
+    if (statusLabel) {
+      cells.push({
+        label: 'Status',
+        valueHtml: `<span class="badge badge-status">${escapeHtml(statusLabel)}</span>`
+      })
+    }
+    push('Technician', incident.technicianName)
+    push('Author', incident.authorName)
+    const links =
+      Array.isArray(incident?.linkedJobCards) && incident.linkedJobCards.length
+        ? incident.linkedJobCards
+        : incident?.jobCardId
+          ? [{ jobCardNumber: incident.jobCardNumber, id: incident.jobCardId }]
+          : []
+    const jobCardLabels = links.map((row) => String(row?.jobCardNumber || row?.id || '').trim()).filter(Boolean).join(', ')
+    push('Linked job cards', jobCardLabels)
+    const drafted = formatIncidentPrintDate(incident.createdAt)
+    if (drafted !== '—') push('Draft recorded', drafted)
+    const submitted = formatIncidentPrintDate(incident.submittedAt)
+    if (submitted !== '—') push('Submitted', submitted)
+    push('Location', formatLocation(incident))
+    return cells
+  }
+
+  function summaryPanelHtml(cells) {
+    if (!cells.length) return ''
+    const rows = []
+    for (let i = 0; i < cells.length; i += 4) {
+      rows.push(cells.slice(i, i + 4))
+    }
+    const rowHtml = rows
+      .map((row) => {
+        const padded = [...row]
+        while (padded.length < 4) padded.push(null)
+        return `<tr>${padded.map((cell) => (cell ? summaryCell(cell.label, cell.valueHtml) : '<td></td>')).join('')}</tr>`
+      })
+      .join('')
+    return `<div class="summary-panel"><table class="summary-table">${rowHtml}</table></div>`
+  }
+
+  function signOffSectionHtml(incident) {
+    const authorName = String(incident.authorName || '').trim()
+    const technicianName = String(incident.technicianName || '').trim()
+    const drafted = formatIncidentPrintDate(incident.createdAt)
+    const submitted = formatIncidentPrintDate(incident.submittedAt)
+    const sig = String(incident.authorSignature || '').trim()
+    const hasSig = sig.startsWith('data:image/')
+    if (!authorName && !technicianName && drafted === '—' && submitted === '—' && !hasSig) return ''
+
+    const fields = []
+    if (authorName) {
+      fields.push(`<div class="signoff-field"><div class="lbl">Author</div><div class="val">${escapeHtml(authorName)}</div></div>`)
+    }
+    if (technicianName) {
+      fields.push(
+        `<div class="signoff-field"><div class="lbl">Technician involved</div><div class="val">${escapeHtml(technicianName)}</div></div>`
+      )
+    }
+    if (drafted !== '—') {
+      fields.push(
+        `<div class="signoff-field"><div class="lbl">Draft recorded</div><div class="val">${escapeHtml(drafted)}</div></div>`
+      )
+    }
+    if (submitted !== '—') {
+      fields.push(
+        `<div class="signoff-field"><div class="lbl">Submitted</div><div class="val">${escapeHtml(submitted)}</div></div>`
+      )
+    }
+
+    return `<div class="signoff">
+      <div class="signoff-head">Author sign-off</div>
+      <div class="signoff-body">
+        ${fields.join('')}
+        ${hasSig ? signatureBlockHtml(sig) : ''}
+      </div>
     </div>`
   }
 
@@ -298,8 +395,15 @@
     return rows
   }
 
+  function resolvePrintPhotos(photos) {
+    if (typeof window !== 'undefined' && window.IncidentPhotos?.partitionIncidentPhotosForPrint) {
+      return window.IncidentPhotos.partitionIncidentPhotosForPrint(photos)
+    }
+    return partitionIncidentPhotosForPrint(photos)
+  }
+
   function incidentPhotoGalleryHtml(photos) {
-    const rows = partitionIncidentPhotosForPrint(photos)
+    const rows = resolvePrintPhotos(photos)
     if (!rows.length) return ''
     const tiles = rows
       .map((row) => {
@@ -321,14 +425,8 @@
       ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Company logo" />`
       : ''
     const incidentNumber = displayValue(incident.incidentNumber || incident.id)
-    const severity = displayValue(incident.severity)
-    const severityHtml =
-      severity === '—'
-        ? '—'
-        : `<span class="${severityBadgeClass(severity)}">${escapeHtml(severity)}</span>`
-    const statusLabel = incidentStatusLabel(incident.status)
-    const statusHtml = `<span class="badge badge-status">${escapeHtml(statusLabel)}</span>`
     const printedAt = formatIncidentPrintDate(new Date())
+    const summaryCells = buildSummaryCells(incident)
 
     return `<!DOCTYPE html>
 <html>
@@ -358,33 +456,9 @@
       </div>
     </div>
 
-    <div class="summary-panel">
-      <table class="summary-table">
-        <tr>
-          ${summaryCell('Client', escapeHtml(displayValue(incident.clientName)))}
-          ${summaryCell('Site', escapeHtml(displayValue(incident.siteName)))}
-          ${summaryCell('Incident type', escapeHtml(displayValue(incident.incidentType)))}
-          ${summaryCell('Severity', severityHtml)}
-        </tr>
-        <tr>
-          ${summaryCell('Incident date & time', escapeHtml(formatIncidentPrintDate(incident.incidentAt)))}
-          ${summaryCell('Status', statusHtml)}
-          ${summaryCell('Technician', escapeHtml(displayValue(incident.technicianName)))}
-          ${summaryCell('Author', escapeHtml(displayValue(incident.authorName)))}
-        </tr>
-        <tr>
-          ${summaryCell('Linked job cards', escapeHtml(formatLinkedJobCards(incident)))}
-          ${summaryCell('Draft recorded', escapeHtml(formatIncidentPrintDate(incident.createdAt)))}
-          ${summaryCell('Submitted', escapeHtml(formatIncidentPrintDate(incident.submittedAt)))}
-          ${summaryCell('Location', escapeHtml(displayValue(formatLocation(incident))))}
-        </tr>
-      </table>
-    </div>
+    ${summaryPanelHtml(summaryCells)}
 
     ${narrativeBlock('Equipment / vehicle involved', incident.equipmentInvolved)}
-    ${narrativeBlock('Witnesses', incident.witnesses)}
-    ${narrativeBlock('People involved', formatPeopleInvolved(incident.peopleInvolved))}
-    ${narrativeBlock('Relevant assets', incident.relevantAssets)}
     ${narrativeBlock('Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)}
     ${narrativeBlock('Description', incident.description)}
     ${narrativeBlock('Immediate actions', incident.immediateActions)}
@@ -392,28 +466,7 @@
     ${narrativeBlock('Corrective / follow-up actions', incident.correctiveActions)}
     ${incidentPhotoGalleryHtml(incident.photos)}
 
-    <div class="signoff">
-      <div class="signoff-head">Author sign-off</div>
-      <div class="signoff-body">
-        <div class="signoff-field">
-          <div class="lbl">Author</div>
-          <div class="val">${escapeHtml(displayValue(incident.authorName))}</div>
-        </div>
-        <div class="signoff-field">
-          <div class="lbl">Technician involved</div>
-          <div class="val">${escapeHtml(displayValue(incident.technicianName))}</div>
-        </div>
-        <div class="signoff-field">
-          <div class="lbl">Draft recorded</div>
-          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.createdAt))}</div>
-        </div>
-        <div class="signoff-field">
-          <div class="lbl">Submitted</div>
-          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.submittedAt))}</div>
-        </div>
-        ${signatureBlockHtml(incident.authorSignature)}
-      </div>
-    </div>
+    ${signOffSectionHtml(incident)}
 
     <div class="confidential">This document contains operational incident information. Handle in accordance with company policy.</div>
     <div class="doc-footer">${escapeHtml(companyName)} &bull; Incident ${escapeHtml(incidentNumber)} &bull; Printed ${escapeHtml(printedAt)}</div>

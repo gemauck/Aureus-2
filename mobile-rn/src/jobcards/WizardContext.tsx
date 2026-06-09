@@ -30,6 +30,7 @@ import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { normalizeMediaItemForSave, voiceClipToPayloadUrl } from './media/mediaUri'
 import { inferVoiceClipsNeedingTranscription } from './media/voiceClipState'
 import { getOfflineStore } from './offlineStore'
+import { cacheJobCard, getCachedJobCard } from './jobCardCache'
 import { useJobCardSync } from './JobCardSyncContext'
 import type {
   ProjectOption,
@@ -92,6 +93,7 @@ type WizardContextValue = {
   startNewJobCard: () => void
   openPriorList: () => void
   openStockTake: () => void
+  openPendingUploads: () => void
   openIncidentReport: (prefill?: IncidentPrefill) => void
   openIncidentList: () => void
   openIncidentForEdit: (incidentId: string) => void
@@ -225,6 +227,10 @@ export function JobCardWizardProvider({
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
 
+  const openPendingUploads = useCallback(() => {
+    setWizardFlow('pending_uploads')
+  }, [])
+
   const openIncidentReport = useCallback(
     (prefill?: IncidentPrefill) => {
       setEditingIncidentId(null)
@@ -349,6 +355,7 @@ export function JobCardWizardProvider({
       const scheduleAutoSync = opts.scheduleAutoSync !== false
       const offlineStore = await getOfflineStore()
       await offlineStore.upsertLocalPendingJobCardAsync({ ...payload, synced: false })
+      void cacheJobCard(payload)
       await refreshUnsyncedCount()
       if (scheduleAutoSync) bumpLocalDrafts()
     },
@@ -412,6 +419,9 @@ export function JobCardWizardProvider({
         }) as Record<string, unknown>
 
         jobCardData.id = editingMeta.localId
+        if (editingMeta.serverJobCardId) {
+          jobCardData.serverJobCardId = editingMeta.serverJobCardId
+        }
         const tryImmediateSync = Boolean(isOnline && accessToken)
         await persistLocal(jobCardData, { scheduleAutoSync: !tryImmediateSync })
 
@@ -506,6 +516,27 @@ export function JobCardWizardProvider({
     setCurrentStep((s) => Math.max(s - 1, 0))
   }, [])
 
+  const applyServerJobCardToWizard = useCallback(
+    (jc: JobCardFormData, opts: { fromCache?: boolean } = {}) => {
+      const id = String(jc.id)
+      setEditingMeta({
+        localId: id,
+        serverJobCardId: id,
+        startedAt: jc.startedAt || jc.createdAt || new Date().toISOString(),
+        createdAt: jc.createdAt || new Date().toISOString(),
+        synced: !opts.fromCache,
+        jobCardNumber: jc.jobCardNumber || '',
+        useNewJobTimeFlow: false
+      })
+      const merged = { ...createEmptyFormData(), ...jc } as JobCardFormData
+      setFormData(merged)
+      applyMediaAndStockFromCard(merged)
+      setWizardFlow('form')
+      setCurrentStep(0)
+    },
+    [applyMediaAndStockFromCard]
+  )
+
   const openJobCard = useCallback(
     async (row: PriorListRow) => {
       const rowId = String(row.id)
@@ -532,31 +563,43 @@ export function JobCardWizardProvider({
         setCurrentStep(0)
         return
       }
-      if (!accessToken) return
+
       setOpeningCardId(rowId)
       try {
-        const res = await jobcardsApi.get(accessToken, rowId)
-        const jc = res.jobCard
-        const merged = { ...createEmptyFormData(), ...jc } as JobCardFormData
-        setEditingMeta({
-          localId: String(jc.id),
-          serverJobCardId: String(jc.id),
-          startedAt: jc.startedAt || jc.createdAt || new Date().toISOString(),
-          createdAt: jc.createdAt || new Date().toISOString(),
-          synced: true,
-          jobCardNumber: jc.jobCardNumber || '',
-          useNewJobTimeFlow: false
+        if (accessToken && isOnline) {
+          try {
+            const res = await jobcardsApi.get(accessToken, rowId)
+            const jc = res.jobCard as JobCardFormData
+            void cacheJobCard(jc as unknown as Record<string, unknown>)
+            applyServerJobCardToWizard(jc)
+            void hydratePhotosForCard(String(jc.id), rowId)
+            return
+          } catch {
+            /* fall through to cache */
+          }
+        }
+        const cached = await getCachedJobCard(rowId)
+        if (!cached) {
+          Alert.alert(
+            'Unavailable offline',
+            'This job card is not cached on the device. Open it once while online.'
+          )
+          return
+        }
+        applyServerJobCardToWizard({ ...createEmptyFormData(), ...cached } as JobCardFormData, {
+          fromCache: true
         })
-        setFormData(merged)
-        applyMediaAndStockFromCard(merged)
-        setWizardFlow('form')
-        setCurrentStep(0)
-        void hydratePhotosForCard(String(jc.id), rowId)
       } finally {
         setOpeningCardId(null)
       }
     },
-    [accessToken, applyMediaAndStockFromCard, hydratePhotosForCard]
+    [
+      accessToken,
+      isOnline,
+      applyMediaAndStockFromCard,
+      applyServerJobCardToWizard,
+      hydratePhotosForCard
+    ]
   )
 
   const openJobCardById = useCallback(
@@ -585,7 +628,6 @@ export function JobCardWizardProvider({
         return
       }
 
-      if (!accessToken) return
       setOpeningCardId(rowId)
       setPhotosLoading(false)
       setSignatureLocked(false)
@@ -593,23 +635,27 @@ export function JobCardWizardProvider({
       setSectionWorkMedia(emptySectionWorkMedia() as SectionWorkMedia)
       setVoiceAttachments([])
       try {
-        const res = await jobcardsApi.get(accessToken, rowId)
-        const jc = res.jobCard
-        const merged = { ...createEmptyFormData(), ...jc } as JobCardFormData
-        setEditingMeta({
-          localId: String(jc.id),
-          serverJobCardId: String(jc.id),
-          startedAt: jc.startedAt || jc.createdAt || new Date().toISOString(),
-          createdAt: jc.createdAt || new Date().toISOString(),
-          synced: true,
-          jobCardNumber: jc.jobCardNumber || '',
-          useNewJobTimeFlow: false
+        if (accessToken && isOnline) {
+          try {
+            const res = await jobcardsApi.get(accessToken, rowId)
+            const jc = res.jobCard as JobCardFormData
+            void cacheJobCard(jc as unknown as Record<string, unknown>)
+            applyServerJobCardToWizard(jc)
+            void hydratePhotosForCard(String(jc.id), rowId)
+            return
+          } catch {
+            /* fall through to cache */
+          }
+        }
+        const cached = await getCachedJobCard(rowId)
+        if (!cached) {
+          setStepError('Job card not cached on this device. Open it once while online.')
+          setWizardFlow('landing')
+          return
+        }
+        applyServerJobCardToWizard({ ...createEmptyFormData(), ...cached } as JobCardFormData, {
+          fromCache: true
         })
-        setFormData(merged)
-        applyMediaAndStockFromCard(merged)
-        setWizardFlow('form')
-        setCurrentStep(0)
-        void hydratePhotosForCard(String(jc.id), rowId)
       } catch (e) {
         setStepError(e instanceof Error ? e.message : 'Could not open job card')
         setWizardFlow('landing')
@@ -617,7 +663,7 @@ export function JobCardWizardProvider({
         setOpeningCardId(null)
       }
     },
-    [accessToken, priorRows, openJobCard, applyMediaAndStockFromCard, hydratePhotosForCard]
+    [accessToken, isOnline, priorRows, openJobCard, applyServerJobCardToWizard, hydratePhotosForCard]
   )
 
   const deleteJobCard = useCallback(
@@ -680,7 +726,7 @@ export function JobCardWizardProvider({
   const initialOpenRef = useRef<string | null>(null)
   useEffect(() => {
     const targetId = initialJobCardId ? String(initialJobCardId) : ''
-    if (!targetId || loading || !accessToken) return
+    if (!targetId || loading) return
     if (initialOpenRef.current === targetId) return
     initialOpenRef.current = targetId
     void openJobCardById(targetId)
@@ -740,6 +786,7 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openPendingUploads,
       openIncidentReport,
       openIncidentList,
       openIncidentForEdit,
@@ -797,6 +844,7 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openPendingUploads,
       openIncidentReport,
       openIncidentList,
       openIncidentForEdit,

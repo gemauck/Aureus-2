@@ -513,7 +513,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
 
     return (
         <div className={`${cardBase} border rounded-xl p-3 sm:p-5 flex flex-col h-full shadow-sm`}>
-            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+            <div className="flex items-center justify-between mb-2 flex-shrink-0">
                 <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
                 <i className="fas fa-tasks text-teal-500 opacity-70"></i>
             </div>
@@ -535,7 +535,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                 </div>
             ) : (
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="space-y-2 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
+                    <div className="space-y-1 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
                         {allTasks.map(task => {
                             const dueDateInfo = getDueDateStatus(task.dueDate);
                             const isProjectTask = task.type === 'project';
@@ -545,63 +545,54 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                 <div
                                     key={task.id || `task-${Math.random()}`}
                                     onClick={() => handleTaskClick(task)}
-                                    className={`p-3 rounded-lg ${isDark ? 'bg-gray-800 border border-gray-800 hover:bg-gray-750 hover:border-gray-700' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:border-gray-200'} cursor-pointer transition-all duration-200`}
+                                    className={`py-1.5 px-2 rounded-md ${isDark ? 'bg-gray-800 border border-gray-800 hover:bg-gray-750 hover:border-gray-700' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:border-gray-200'} cursor-pointer transition-all duration-200`}
                                     title={isProjectTask ? `Click to view project: ${task.project?.name || 'Unknown'}` : 'Click to view in My Tasks'}
                                 >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(task.status)}`}>
-                                                    {task.status || 'todo'}
-                                                </span>
-                                                {isProjectTask && task.project && (
-                                                    <span className={`text-xs ${subText} truncate`} title={task.project.name}>
-                                                        <i className="fas fa-project-diagram mr-1"></i>
-                                                        {task.project.name}
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={`text-[10px] leading-none px-1 py-0.5 rounded shrink-0 ${getStatusColor(task.status)}`}>
+                                            {task.status || 'todo'}
+                                        </span>
+                                        <p className={`text-xs ${headerText} font-medium truncate flex-1 min-w-0 leading-tight`} title={task.title || task.name}>
+                                            {task.title || task.name}
+                                        </p>
+                                        {(task.startDate || dueDateInfo) && (
+                                            <span className="shrink-0 text-[10px] leading-none">
+                                                {dueDateInfo ? (
+                                                    <span className={dueDateInfo.color}>
+                                                        <i className="fas fa-calendar-alt mr-0.5"></i>
+                                                        {dueDateInfo.text}
                                                     </span>
-                                                )}
-                                                {isUserTask && (
-                                                    <span className={`text-xs ${subText} truncate`}>
-                                                        <i className="fas fa-check-square mr-1"></i>
-                                                        My Task
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className={`text-sm ${headerText} font-medium truncate`} title={task.title || task.name}>
-                                                {task.title || task.name}
-                                            </p>
-                                            {isProjectTask && task.project?.clientName && (
-                                                <p className={`text-xs ${subText} truncate`} title={task.project.clientName}>
-                                                    {task.project.clientName}
-                                                </p>
-                                            )}
-                                        </div>
+                                                ) : task.startDate && (() => {
+                                                    const d = new Date(task.startDate);
+                                                    return !Number.isNaN(d.getTime()) ? (
+                                                        <span className={subText}>
+                                                            <i className="fas fa-play-circle mr-0.5"></i>
+                                                            {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                        </span>
+                                                    ) : null;
+                                                })()}
+                                            </span>
+                                        )}
                                     </div>
-                                    {(task.startDate || dueDateInfo) && (
-                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">
-                                            {task.startDate && (() => {
-                                                const d = new Date(task.startDate);
-                                                return !Number.isNaN(d.getTime()) ? (
-                                                    <span className={subText}>
-                                                        <i className="fas fa-play-circle mr-1"></i>
-                                                        Start {d.toLocaleDateString()}
-                                                    </span>
-                                                ) : null;
-                                            })()}
-                                            {dueDateInfo && (
-                                                <span className={dueDateInfo.color}>
-                                                    <i className="fas fa-calendar-alt mr-1"></i>
-                                                    {dueDateInfo.text}
-                                                </span>
+                                    {(isProjectTask || isUserTask) && (
+                                        <p className={`text-[10px] ${subText} truncate mt-0.5 leading-tight`} title={[task.project?.name, task.project?.clientName].filter(Boolean).join(' · ') || 'My Task'}>
+                                            {isProjectTask && task.project?.name && (
+                                                <><i className="fas fa-project-diagram mr-0.5 opacity-60"></i>{task.project.name}</>
                                             )}
-                                        </div>
+                                            {isProjectTask && task.project?.clientName && (
+                                                <>{task.project?.name ? ' · ' : ''}{task.project.clientName}</>
+                                            )}
+                                            {isUserTask && (
+                                                <><i className="fas fa-check-square mr-0.5 opacity-60"></i>My Task</>
+                                            )}
+                                        </p>
                                     )}
                                 </div>
                             );
                         })}
                     </div>
                     {allTasks.length > 0 && (
-                        <div className={`text-xs ${subText} text-center pt-3 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0 mt-3`}>
+                        <div className={`text-xs ${subText} text-center pt-2 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0 mt-2`}>
                             {activeProjectTaskCount > 0 && activeUserTaskCount > 0 && (
                                 <span>{activeProjectTaskCount} project task{activeProjectTaskCount !== 1 ? 's' : ''} • {activeUserTaskCount} personal task{activeUserTaskCount !== 1 ? 's' : ''}</span>
                             )}

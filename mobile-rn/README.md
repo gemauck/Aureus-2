@@ -85,6 +85,13 @@ Open **Service & Maintenance** from the menu, or **Job cards** → **Report inci
 
 Incident reports can be **created and edited offline** (queued on device, synced on reconnect). PDF download still requires connectivity. Stock-take counts can be entered offline; drafts auto-save locally and submissions queue until online.
 
+**Phase 1 offline (Service & Maintenance):**
+
+- Open **synced job cards** from device cache after one online visit (last 50 opened cards).
+- **Prior list** shows cached server cards when offline (merged with local pending).
+- **Client sites** cached per client after first online load.
+- **Pending uploads** screen lists job cards, incidents, and stock-takes waiting to sync, with per-item Retry and Sync all.
+
 ## Pilot modules (existing shells)
 
 - Dashboard, Clients, Projects, Tasks, Notifications, Attachments — list/load stubs from Phase 1 pilot.

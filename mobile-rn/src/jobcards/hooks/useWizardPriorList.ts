@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { buildMergedWizardJobCardRows } from '../../../../src/jobCardWizard/index.js'
 import { jobcardsApi } from '../api'
 import { getOfflineStore } from '../offlineStore'
+import { cachePriorList, getCachedPriorList } from '../jobCardCache'
 import type { PriorListRow, WizardFlow } from '../types'
 
 export function useWizardPriorList(opts: {
@@ -27,6 +28,9 @@ export function useWizardPriorList(opts: {
           clientId: priorClientId || undefined
         })
         serverList = res.jobCards || []
+        await cachePriorList(serverList)
+      } else {
+        serverList = await getCachedPriorList()
       }
       const offlineStore = await getOfflineStore()
       const local = await offlineStore.readLocalPendingJobCardsAsync()
@@ -34,7 +38,8 @@ export function useWizardPriorList(opts: {
     } catch {
       const offlineStore = await getOfflineStore()
       const local = await offlineStore.readLocalPendingJobCardsAsync()
-      setPriorRows(buildMergedWizardJobCardRows([], local, Boolean(accessToken)))
+      const cached = await getCachedPriorList()
+      setPriorRows(buildMergedWizardJobCardRows(cached, local, Boolean(accessToken)))
     } finally {
       setPriorLoading(false)
     }

@@ -13,20 +13,28 @@ import { useAuth } from '../state/AuthContext'
 import { getOfflineStore, migrateLegacyOfflineQueue } from './offlineStore'
 import { listUnsyncedPendingIncidents } from './incidents/incidentOfflineStore'
 import { syncAllPendingIncidents } from './incidents/incidentSync'
+import { getPendingIncident } from './incidents/incidentOfflineStore'
+import { syncOnePendingIncident } from './incidents/incidentSync'
 import { listPendingSubmits } from './stockTake/stockTakeOfflineStore'
-import { syncAllPendingStockTakeSubmits } from './stockTake/stockTakeSync'
+import { syncAllPendingStockTakeSubmits, syncOnePendingStockTakeSubmit } from './stockTake/stockTakeSync'
+import { listPendingUploadItems, type PendingUploadItem } from './pendingUploads'
 
 type SyncEngine = Awaited<ReturnType<typeof getSyncEngine>>
 
 type SyncOneResult = Awaited<ReturnType<SyncEngine['syncOneLocalPendingJobCardToServer']>>
 
+type RetryResult = { ok: boolean; errorText?: string }
+
 type JobCardSyncContextValue = {
   unsyncedCount: number
+  pendingUploads: PendingUploadItem[]
   pendingAutoSync: boolean
   refreshUnsyncedCount: () => Promise<void>
+  refreshPendingUploads: () => Promise<void>
   bumpLocalDrafts: () => void
   runSyncNow: () => Promise<{ synced: number; failed: number }>
   syncOnePendingCard: (card: Record<string, unknown>) => Promise<SyncOneResult>
+  retryPendingUpload: (item: PendingUploadItem) => Promise<RetryResult>
 }
 
 const JobCardSyncContext = createContext<JobCardSyncContextValue | undefined>(undefined)
@@ -43,6 +51,7 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
   const { accessToken } = useAuth()
   const { isOnline } = useNetwork()
   const [unsyncedCount, setUnsyncedCount] = useState(0)
+  const [pendingUploads, setPendingUploads] = useState<PendingUploadItem[]>([])
   const [pendingAutoSync, setPendingAutoSync] = useState(false)
   const [localDraftsTick, setLocalDraftsTick] = useState(0)
   const syncInFlightRef = useRef(false)
@@ -69,15 +78,15 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
     return syncEngineRef.current
   }, [])
 
-  const refreshUnsyncedCount = useCallback(async () => {
-    const offlineStore = await getOfflineStore()
-    const [jobCards, incidents, stockTakes] = await Promise.all([
-      offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
-      listUnsyncedPendingIncidents(),
-      listPendingSubmits()
-    ])
-    setUnsyncedCount(jobCards.length + incidents.length + stockTakes.length)
+  const refreshPendingUploads = useCallback(async () => {
+    const items = await listPendingUploadItems()
+    setPendingUploads(items)
+    setUnsyncedCount(items.length)
   }, [])
+
+  const refreshUnsyncedCount = useCallback(async () => {
+    await refreshPendingUploads()
+  }, [refreshPendingUploads])
 
   const bumpLocalDrafts = useCallback(() => {
     setLocalDraftsTick((t) => t + 1)
@@ -115,6 +124,47 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       return result
     },
     [withSyncLock, refreshUnsyncedCount, bumpLocalDrafts, ensureSyncEngine]
+  )
+
+  const retryPendingUpload = useCallback(
+    async (item: PendingUploadItem): Promise<RetryResult> => {
+      if (!accessTokenRef.current || !isOnlineRef.current) {
+        return { ok: false, errorText: 'Offline' }
+      }
+      const token = accessTokenRef.current
+      if (item.kind === 'job_card') {
+        const offlineStore = await getOfflineStore()
+        const cards = await offlineStore.readLocalPendingJobCardsAsync()
+        const card = cards.find((row) => row && String(row.id) === String(item.id))
+        if (!card) return { ok: false, errorText: 'Job card not found on device' }
+        const result = await syncOnePendingCard(card as Record<string, unknown>)
+        return result.ok
+          ? { ok: true }
+          : { ok: false, errorText: result.errorText || 'Sync failed' }
+      }
+      if (item.kind === 'incident') {
+        const pending = await getPendingIncident(item.id)
+        if (!pending) return { ok: false, errorText: 'Incident not found on device' }
+        const result = await withSyncLock(() => syncOnePendingIncident(token, pending))
+        if (result === null) return { ok: false, errorText: 'Sync already in progress' }
+        await refreshPendingUploads()
+        if (result.ok) bumpLocalDrafts()
+        return result.ok
+          ? { ok: true }
+          : { ok: false, errorText: result.errorText || 'Sync failed' }
+      }
+      const stockTakes = await listPendingSubmits()
+      const stockTake = stockTakes.find((row) => row && String(row.id) === String(item.id))
+      if (!stockTake) return { ok: false, errorText: 'Stock-take not found on device' }
+      const result = await withSyncLock(() =>
+        syncOnePendingStockTakeSubmit(token, stockTake, { submitForReview: true })
+      )
+      if (result === null) return { ok: false, errorText: 'Sync already in progress' }
+      await refreshPendingUploads()
+      if (result.ok) bumpLocalDrafts()
+      return result.ok ? { ok: true } : { ok: false, errorText: result.errorText || 'Sync failed' }
+    },
+    [syncOnePendingCard, withSyncLock, refreshPendingUploads, bumpLocalDrafts]
   )
 
   const runAutoSyncPendingJobCards = useCallback(async () => {
@@ -211,19 +261,25 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
   const value = useMemo<JobCardSyncContextValue>(
     () => ({
       unsyncedCount,
+      pendingUploads,
       pendingAutoSync,
       refreshUnsyncedCount,
+      refreshPendingUploads,
       bumpLocalDrafts,
       runSyncNow: runAutoSyncPendingJobCards,
-      syncOnePendingCard
+      syncOnePendingCard,
+      retryPendingUpload
     }),
     [
       unsyncedCount,
+      pendingUploads,
       pendingAutoSync,
       refreshUnsyncedCount,
+      refreshPendingUploads,
       bumpLocalDrafts,
       runAutoSyncPendingJobCards,
-      syncOnePendingCard
+      syncOnePendingCard,
+      retryPendingUpload
     ]
   )
 

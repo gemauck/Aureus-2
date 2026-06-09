@@ -11,6 +11,8 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { priorListLocalSearchHay } from '../../../../src/jobCardWizard/priorList.js'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useNetwork } from '../../hooks/useNetwork'
 import { useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { countPendingCardMedia, extractPendingCardThumbUrls } from '../media/pendingCardMedia'
@@ -40,6 +42,7 @@ export function PriorListScreen() {
     deletingJobCardId,
     deleteJobCard
   } = useJobCardWizard()
+  const { isOnline } = useNetwork()
 
   const [priorSiteName, setPriorSiteName] = useState('')
   const [priorTechnician, setPriorTechnician] = useState('')
@@ -135,6 +138,12 @@ export function PriorListScreen() {
         <Text style={styles.title}>Existing job cards</Text>
         <Text style={styles.count}>{filtered.length} shown</Text>
       </View>
+      <OfflineBanner visible={!isOnline} />
+      {!isOnline ? (
+        <Text style={styles.offlineHint}>
+          Showing cards saved on this device. Open a card once online to cache it for offline edit.
+        </Text>
+      ) : null}
 
       <View style={styles.filters}>
         <TextInput
@@ -314,6 +323,13 @@ function createStyles({ jc }: { jc: JcTheme }) {
   back: { color: jc.primary, fontWeight: '600', fontSize: 15 },
   title: { fontSize: 26, fontWeight: '800', color: jc.text, letterSpacing: -0.4 },
   count: { color: jc.textMuted, fontSize: 13, marginBottom: jc.space.sm },
+  offlineHint: {
+    color: jc.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    paddingHorizontal: jc.space.lg,
+    marginBottom: jc.space.sm
+  },
   filters: { paddingHorizontal: jc.space.lg, gap: jc.space.sm, marginBottom: jc.space.sm },
   search: {
     borderWidth: 1,

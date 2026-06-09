@@ -2,6 +2,7 @@ import PDFDocument from 'pdfkit'
 import { incidentStatusLabel } from './incidentReportConstants.js'
 import { loadDocumentBranding } from './documentBranding.js'
 import { formatLinkedJobCardLabels } from './incidentReportJobCards.js'
+import { getAppUrl } from './getAppUrl.js'
 
 function billingBrandTextAlign(brandTextX, left) {
   return brandTextX > left ? 'right' : 'left'
@@ -35,6 +36,119 @@ function formatPeopleInvolved(people) {
     })
     .filter(Boolean)
   return lines.join('\n')
+}
+
+function parseIncidentPhotos(raw) {
+  try {
+    if (!raw) return []
+    if (Array.isArray(raw)) return raw
+    return typeof raw === 'string' ? JSON.parse(raw) : []
+  } catch {
+    return typeof raw === 'string' && raw.trim() ? [raw] : []
+  }
+}
+
+function incidentPhotoUrl(entry) {
+  if (!entry) return ''
+  if (typeof entry === 'string') return String(entry).trim()
+  if (typeof entry !== 'object') return ''
+  if (entry.kind === 'safetyCultureMedia' && entry.mediaId && entry.token) {
+    const params = new URLSearchParams({
+      media_id: String(entry.mediaId),
+      token: String(entry.token)
+    })
+    if (entry.issueId != null) params.set('issue_id', String(entry.issueId))
+    return `/api/safety-culture/media/proxy?${params}`
+  }
+  return String(entry.url || entry.thumbUrl || entry.dataUrl || entry.previewUrl || '').trim()
+}
+
+function incidentPhotoIsVideo(entry) {
+  const url = incidentPhotoUrl(entry)
+  if (!url) return false
+  if (typeof entry === 'object' && entry) {
+    const mt = String(entry.mediaType || entry.mimeType || '').toLowerCase()
+    if (mt.includes('video')) return true
+    if (entry.kind === 'video') return true
+  }
+  return /^data:video\//i.test(url) || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)
+}
+
+async function fetchImageBufferForPdf(url, timeoutMs = 8000) {
+  if (!url || typeof url !== 'string') return null
+  let u = url.trim()
+  if (/^data:image\/(png|jpeg|jpg);base64,/i.test(u)) {
+    try {
+      const b64 = u.split(',')[1]
+      return Buffer.from(b64, 'base64')
+    } catch {
+      return null
+    }
+  }
+  if (u.startsWith('/')) {
+    u = `${getAppUrl()}${u}`
+  }
+  if (!/^https?:\/\//i.test(u)) return null
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), timeoutMs)
+  try {
+    const res = await fetch(u, { signal: ac.signal, redirect: 'follow' })
+    if (!res.ok) return null
+    const ct = (res.headers.get('content-type') || '').toLowerCase()
+    if (!ct.startsWith('image/')) return null
+    const ab = await res.arrayBuffer()
+    const buf = Buffer.from(ab)
+    if (buf.length > 2_500_000) return null
+    return buf
+  } catch {
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+async function loadIncidentPhotoBuffers(photosInput, { maxImages = 12 } = {}) {
+  const photos = parseIncidentPhotos(photosInput)
+  const out = []
+  for (const entry of photos) {
+    if (out.length >= maxImages) break
+    if (incidentPhotoIsVideo(entry)) continue
+    const url = incidentPhotoUrl(entry)
+    if (!url) continue
+    const buf = await fetchImageBufferForPdf(url)
+    if (!buf) continue
+    const label =
+      entry && typeof entry === 'object' && entry.name ? String(entry.name) : `Photo ${out.length + 1}`
+    out.push({ buf, label })
+  }
+  return out
+}
+
+function buildSummaryCells(incident) {
+  const cells = []
+  const push = (label, value) => {
+    const text = String(value ?? '').trim()
+    if (!text || text === '—') return
+    cells.push({ label, value: text })
+  }
+
+  push('Client', incident.clientName)
+  push('Incident type', incident.incidentType)
+  if (String(incident.severity || '').trim()) {
+    cells.push({ label: 'Severity', value: String(incident.severity).trim(), severity: true })
+  }
+  const incidentAt = formatPdfDateSast(incident.incidentAt)
+  if (incidentAt !== '—') push('Incident date & time', incidentAt)
+  push('Status', incidentStatusLabel(incident.status))
+  push('Technician', incident.technicianName)
+  push('Author', incident.authorName)
+  push('Linked job cards', formatLinkedJobCardLabels(incident))
+  const drafted = formatPdfDateSast(incident.createdAt)
+  if (drafted !== '—') push('Draft recorded', drafted)
+  const submitted = formatPdfDateSast(incident.submittedAt)
+  if (submitted !== '—') push('Submitted', submitted)
+  push('Location', formatLocation(incident))
+  return cells
 }
 
 function formatPdfDateSast(value) {
@@ -131,8 +245,9 @@ function drawSeverityBadge(doc, x, y, severity) {
 }
 
 function drawNarrativeSection(doc, left, right, y, title, body) {
-  const contentW = right - left
   const text = String(body ?? '').trim()
+  if (!text) return y
+  const contentW = right - left
   const headH = 28
   doc.save()
   doc.rect(left, y, contentW, headH).fill('#f8fafc')
@@ -144,15 +259,57 @@ function drawNarrativeSection(doc, left, right, y, title, body) {
 
   const bodyY = y + headH
   const bodyPad = 12
-  doc.font('Helvetica').fontSize(10).fillColor(text ? '#1f2937' : '#9ca3af')
-  const rendered = text || 'Not recorded'
-  doc.text(rendered, left + bodyPad, bodyY + bodyPad, {
+  doc.font('Helvetica').fontSize(10).fillColor('#1f2937')
+  doc.text(text, left + bodyPad, bodyY + bodyPad, {
     width: contentW - bodyPad * 2,
     lineGap: 3
   })
   const bodyH = Math.max(56, doc.y - bodyY + bodyPad)
   doc.strokeColor('#d1d5db').lineWidth(0.5).rect(left, bodyY, contentW, bodyH).stroke()
   return bodyY + bodyH + 14
+}
+
+function drawPhotosSection(doc, left, right, y, photoRows) {
+  if (!photoRows.length) return y
+  const contentW = right - left
+  const headH = 28
+  doc.save()
+  doc.rect(left, y, contentW, headH).fill('#f8fafc')
+  doc.strokeColor('#d1d5db').lineWidth(0.5).rect(left, y, contentW, headH).stroke()
+  doc.fillColor('#374151').font('Helvetica-Bold').fontSize(9).text('PHOTOS', left + 12, y + 10, {
+    width: contentW - 24
+  })
+  doc.restore()
+
+  let contentY = y + headH + 12
+  const colW = (contentW - 12) / 2
+  let col = 0
+  for (const row of photoRows) {
+    const imgX = left + col * (colW + 12)
+    if (contentY > doc.page.height - 180) {
+      doc.addPage()
+      contentY = doc.page.margins.top
+      col = 0
+    }
+    try {
+      doc.image(row.buf, imgX, contentY, { fit: [colW, 120] })
+      doc.fillColor('#6b7280').font('Helvetica').fontSize(7.5).text(row.label, imgX, contentY + 124, {
+        width: colW
+      })
+    } catch {
+      /* skip corrupt image */
+    }
+    col += 1
+    if (col >= 2) {
+      col = 0
+      contentY += 142
+    }
+  }
+  if (col > 0) contentY += 142
+  doc.strokeColor('#d1d5db').lineWidth(0.5)
+    .rect(left, y + headH, contentW, contentY - y - headH + 4)
+    .stroke()
+  return contentY + 14
 }
 
 function drawPdfHeader(doc, companyName, letterhead) {
@@ -206,13 +363,18 @@ function drawPdfHeader(doc, companyName, letterhead) {
 }
 
 function drawSignOffSection(doc, left, right, y, incident) {
-  const contentW = right - left
   const sig = String(incident.authorSignature || '').trim()
-  const authorName = displayValue(incident.authorName)
-  const technicianName = displayValue(incident.technicianName)
+  const authorName = String(incident.authorName || '').trim()
+  const technicianName = String(incident.technicianName || '').trim()
   const draftedAt = formatPdfDateSast(incident.createdAt)
   const submittedAt = formatPdfDateSast(incident.submittedAt)
-  const sectionH = 130
+  const hasSig = sig && /^data:image\/(png|jpeg|jpg);base64,/i.test(sig)
+  if (!authorName && !technicianName && draftedAt === '—' && submittedAt === '—' && !hasSig) {
+    return y
+  }
+
+  const contentW = right - left
+  const sectionH = hasSig ? 130 : 96
 
   doc.save()
   doc.rect(left, y, contentW, 28).fill('#f8fafc')
@@ -221,30 +383,38 @@ function drawSignOffSection(doc, left, right, y, incident) {
 
   const metaY = y + 36
   const colW = contentW / 2
-  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('AUTHOR', left + 12, metaY)
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(authorName, left + 12, metaY + 12, { width: colW - 20 })
-  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('TECHNICIAN INVOLVED', left + colW + 12, metaY)
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(technicianName, left + colW + 12, metaY + 12, {
-    width: colW - 20
-  })
+  let dateY = metaY
+  if (authorName) {
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('AUTHOR', left + 12, metaY)
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(authorName, left + 12, metaY + 12, { width: colW - 20 })
+  }
+  if (technicianName) {
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('TECHNICIAN INVOLVED', left + colW + 12, metaY)
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(technicianName, left + colW + 12, metaY + 12, {
+      width: colW - 20
+    })
+  }
+  if (authorName || technicianName) dateY = metaY + 34
 
-  const dateY = metaY + 34
-  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('DRAFT RECORDED', left + 12, dateY)
-  doc.fillColor('#111827').font('Helvetica').fontSize(9).text(draftedAt, left + 12, dateY + 11)
-  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SUBMITTED', left + colW + 12, dateY)
-  doc.fillColor('#111827').font('Helvetica').fontSize(9).text(submittedAt, left + colW + 12, dateY + 11)
+  if (draftedAt !== '—') {
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('DRAFT RECORDED', left + 12, dateY)
+    doc.fillColor('#111827').font('Helvetica').fontSize(9).text(draftedAt, left + 12, dateY + 11)
+  }
+  if (submittedAt !== '—') {
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SUBMITTED', left + colW + 12, dateY)
+    doc.fillColor('#111827').font('Helvetica').fontSize(9).text(submittedAt, left + colW + 12, dateY + 11)
+  }
+  if (draftedAt !== '—' || submittedAt !== '—') dateY += 28
 
-  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SIGNATURE', left + 12, dateY + 28)
-  if (sig && /^data:image\/(png|jpeg|jpg);base64,/i.test(sig)) {
+  if (hasSig) {
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SIGNATURE', left + 12, dateY)
     try {
       const b64 = sig.split(',')[1]
       const imgBuf = Buffer.from(b64, 'base64')
-      doc.image(imgBuf, left + 12, dateY + 38, { fit: [160, 52] })
+      doc.image(imgBuf, left + 12, dateY + 10, { fit: [160, 52] })
     } catch {
-      doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(9).text('Not signed', left + 12, dateY + 42)
+      /* skip bad signature */
     }
-  } else {
-    doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(9).text('Not signed', left + 12, dateY + 42)
   }
 
   doc.restore()
@@ -259,6 +429,8 @@ function drawSignOffSection(doc, left, right, y, incident) {
 export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
   const { companyName, letterhead } = await loadDocumentBranding(prismaClient)
   const incidentNumber = displayValue(incident.incidentNumber || incident.id)
+  const photoRows = await loadIncidentPhotoBuffers(incident.photos)
+  const summaryCells = buildSummaryCells(incident)
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 48 })
@@ -274,45 +446,39 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
     doc.y = y
     y = drawTitleBand(doc, left, right, incidentNumber)
 
-    doc.strokeColor('#d1d5db').lineWidth(0.75).rect(left, y, contentW, 138).stroke()
-    const row1Y = y
-    const cellsRow1 = [
-      { label: 'Client', value: displayValue(incident.clientName) },
-      { label: 'Site', value: displayValue(incident.siteName) },
-      { label: 'Incident type', value: displayValue(incident.incidentType) },
-      { label: 'Severity', value: displayValue(incident.severity) }
-    ]
-    drawSummaryRow(doc, left, right, row1Y, cellsRow1, {
-      severityCol: 3,
-      drawSeverity: (x, badgeY) => drawSeverityBadge(doc, x, badgeY, incident.severity)
-    })
-
-    const row2Y = row1Y + 46
-    drawSummaryRow(doc, left, right, row2Y, [
-      { label: 'Incident date & time', value: formatPdfDateSast(incident.incidentAt) },
-      { label: 'Status', value: incidentStatusLabel(incident.status) },
-      { label: 'Technician', value: displayValue(incident.technicianName) },
-      { label: 'Author', value: displayValue(incident.authorName) }
-    ])
-
-    const row3Y = row2Y + 46
-    drawSummaryRow(doc, left, right, row3Y, [
-      { label: 'Linked job cards', value: displayValue(formatLinkedJobCardLabels(incident)) },
-      { label: 'Draft recorded', value: formatPdfDateSast(incident.createdAt) },
-      { label: 'Submitted', value: formatPdfDateSast(incident.submittedAt) },
-      { label: 'Location', value: displayValue(formatLocation(incident)) }
-    ])
-    y += 138 + 18
+    if (summaryCells.length) {
+      const summaryRows = []
+      for (let i = 0; i < summaryCells.length; i += 4) {
+        summaryRows.push(summaryCells.slice(i, i + 4))
+      }
+      const panelH = summaryRows.length * 46
+      doc.strokeColor('#d1d5db').lineWidth(0.75).rect(left, y, contentW, panelH).stroke()
+      let rowY = y
+      for (const row of summaryRows) {
+        const cells = [...row]
+        while (cells.length < 4) cells.push(null)
+        const severityIdx = cells.findIndex((cell) => cell?.severity)
+        drawSummaryRow(doc, left, right, rowY, cells, {
+          severityCol: severityIdx >= 0 ? severityIdx : undefined,
+          drawSeverity:
+            severityIdx >= 0
+              ? (x, badgeY) => drawSeverityBadge(doc, x, badgeY, cells[severityIdx].value)
+              : undefined
+        })
+        rowY += 46
+      }
+      y += panelH + 18
+    } else {
+      y += 18
+    }
 
     y = drawNarrativeSection(doc, left, right, y, 'Equipment / vehicle involved', incident.equipmentInvolved)
-    y = drawNarrativeSection(doc, left, right, y, 'Witnesses', incident.witnesses)
-    y = drawNarrativeSection(doc, left, right, y, 'People involved', formatPeopleInvolved(incident.peopleInvolved))
-    y = drawNarrativeSection(doc, left, right, y, 'Relevant assets', incident.relevantAssets)
     y = drawNarrativeSection(doc, left, right, y, 'Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)
     y = drawNarrativeSection(doc, left, right, y, 'Description', incident.description)
     y = drawNarrativeSection(doc, left, right, y, 'Immediate actions', incident.immediateActions)
     y = drawNarrativeSection(doc, left, right, y, 'Investigation notes', incident.investigationNotes)
     y = drawNarrativeSection(doc, left, right, y, 'Corrective / follow-up actions', incident.correctiveActions)
+    y = drawPhotosSection(doc, left, right, y, photoRows)
     y = drawSignOffSection(doc, left, right, y, incident)
 
     doc

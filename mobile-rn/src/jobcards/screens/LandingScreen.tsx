@@ -21,6 +21,7 @@ export function LandingScreen() {
     openStockTake,
     openIncidentReport,
     openIncidentList,
+    openPendingUploads,
     runSyncNow,
     openingCardId
   } = useJobCardWizard()
@@ -95,18 +96,21 @@ export function LandingScreen() {
           <View style={styles.syncBox}>
             <Text style={styles.syncTitle}>
               {pendingAutoSync
-                ? 'Syncing job cards to the server…'
-                : `${unsyncedCount} job card${unsyncedCount === 1 ? '' : 's'} waiting to sync`}
+                ? 'Syncing pending uploads…'
+                : `${unsyncedCount} item${unsyncedCount === 1 ? '' : 's'} waiting to sync`}
             </Text>
             <Text style={styles.syncSub}>
-              Stock used is recorded in Manufacturing only after the job card reaches the server.
+              Job cards, incidents, and stock-take submissions upload when you are back online.
             </Text>
+            <Pressable style={styles.viewPendingBtn} onPress={openPendingUploads}>
+              <Text style={styles.viewPendingText}>View pending uploads</Text>
+            </Pressable>
             <Pressable
               style={[styles.syncBtn, (!isOnline || pendingAutoSync) && styles.disabled]}
               disabled={!isOnline || pendingAutoSync}
               onPress={() => void runSyncNow()}
             >
-              <Text style={styles.syncBtnText}>{pendingAutoSync ? 'Syncing…' : 'Sync now'}</Text>
+              <Text style={styles.syncBtnText}>{pendingAutoSync ? 'Syncing…' : 'Sync all now'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -232,15 +236,20 @@ function createStyles({ jc }: { jc: JcTheme }) {
   },
   syncTitle: { fontWeight: '700', color: jc.primaryDark, fontSize: 14 },
   syncSub: { color: jc.textMuted, fontSize: 12, lineHeight: 17 },
-  syncBtn: {
-    backgroundColor: jc.surface,
-    borderWidth: 1,
-    borderColor: jc.primaryMuted,
-    padding: 12,
-    borderRadius: jc.radius.md,
-    alignItems: 'center',
-    marginTop: 4
-  },
+    viewPendingBtn: {
+      alignItems: 'center',
+      paddingVertical: 6
+    },
+    viewPendingText: { color: jc.primaryDark, fontWeight: '700', fontSize: 13 },
+    syncBtn: {
+      backgroundColor: jc.surface,
+      borderWidth: 1,
+      borderColor: jc.primaryMuted,
+      padding: 12,
+      borderRadius: jc.radius.md,
+      alignItems: 'center',
+      marginTop: 4
+    },
   syncBtnText: { fontWeight: '700', color: jc.primaryDark },
   disabled: { opacity: 0.5 }
   })

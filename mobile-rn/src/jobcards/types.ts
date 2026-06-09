@@ -5,6 +5,7 @@ export type WizardFlow =
   | 'stock_take'
   | 'incident_form'
   | 'incident_list'
+  | 'pending_uploads'
 
 export type IncidentPrefill = {
   clientId?: string

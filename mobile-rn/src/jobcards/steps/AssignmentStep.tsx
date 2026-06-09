@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNetwork } from '../../hooks/useNetwork'
 import { jobcardsApi } from '../api'
+import { cacheClientSites, getCachedClientSites } from '../clientSitesCache'
 import { NO_CLIENT_ID, useJobCardWizard } from '../WizardContext'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
@@ -123,6 +124,11 @@ export function AssignmentStep() {
 
       let sites = parseSitesFromClient(client)
 
+      if (sites.length === 0) {
+        const cachedSites = await getCachedClientSites(formData.clientId)
+        if (cachedSites.length) sites = cachedSites
+      }
+
       if (isOnline && sites.length === 0) {
         setSitesLoading(true)
         try {
@@ -132,10 +138,13 @@ export function AssignmentStep() {
               id: s.id || `site_${i}`,
               name: s.name || `Site ${i + 1}`
             }))
+            void cacheClientSites(formData.clientId, sites)
           }
         } finally {
           if (!cancelled) setSitesLoading(false)
         }
+      } else if (sites.length) {
+        void cacheClientSites(formData.clientId, sites)
       }
 
       if (!cancelled) {

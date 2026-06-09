@@ -948,7 +948,7 @@ function IncidentReportsPanel({
                 ) : null}
               </div>
               <div className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {[row.incidentType, row.clientName, row.siteName, formatDate(row.incidentAt || row.createdAt)]
+                {[row.incidentType, row.clientName, formatDate(row.incidentAt || row.createdAt)]
                   .filter(Boolean)
                   .join(' · ')}
               </div>
@@ -971,7 +971,7 @@ function IncidentReportsPanel({
                 {selected.incidentNumber || 'Incident report'}
               </h2>
               <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                {selected.clientName || '—'} · {selected.siteName || '—'}
+                {selected.clientName || '—'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1039,7 +1039,6 @@ function IncidentReportsPanel({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ['Client', selected.clientName],
-                ['Site', selected.siteName],
                 ['Type', selected.incidentType],
                 ['Severity', selected.severity],
                 ['Status', selected.status],
@@ -1086,7 +1085,8 @@ function IncidentReportsPanel({
               </section>
             ) : null}
             {[
-              ['Relevant assets', selected.relevantAssets],
+              ['Location', selected.locationDescription],
+              ['Equipment / vehicle involved', selected.equipmentInvolved],
               ['Relevant tanks / mobile bowsers', selected.relevantTanksMobileBowsers],
               ['Description', selected.description],
               ['Immediate actions', selected.immediateActions]
@@ -1186,10 +1186,6 @@ function IncidentReportsPanel({
               Incident date & time
               <input type="datetime-local" className={`${inputCls} mt-1`} value={form.incidentAt} onChange={(e) => setForm((f) => ({ ...f, incidentAt: e.target.value }))} />
             </label>
-            <label className="block text-xs font-medium">
-              Site name
-              <input className={`${inputCls} mt-1`} value={form.siteName} onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))} />
-            </label>
             <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
               <div className={`text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Linked job cards</div>
               <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -1276,7 +1272,7 @@ function IncidentReportsPanel({
                 </div>
               </div>
               <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                Attach site photos or videos. Photos from linked job cards are copied automatically.
+                Attach photos or videos. Photos from linked job cards are copied automatically.
               </p>
               <div className="mt-3">
                 <IncidentPhotoGallery
@@ -1288,15 +1284,11 @@ function IncidentReportsPanel({
             </div>
             <label className="block text-xs font-medium">
               Location
-              <input className={`${inputCls} mt-1`} value={form.locationDescription} onChange={(e) => setForm((f) => ({ ...f, locationDescription: e.target.value }))} placeholder="Site location or address" />
+              <input className={`${inputCls} mt-1`} value={form.locationDescription} onChange={(e) => setForm((f) => ({ ...f, locationDescription: e.target.value }))} placeholder="Location or address" />
             </label>
             <label className="block text-xs font-medium">
               Equipment / vehicle involved
               <input className={`${inputCls} mt-1`} value={form.equipmentInvolved} onChange={(e) => setForm((f) => ({ ...f, equipmentInvolved: e.target.value }))} />
-            </label>
-            <label className="block text-xs font-medium">
-              Relevant assets
-              <textarea className={`${inputCls} mt-1`} rows={2} value={form.relevantAssets} onChange={(e) => setForm((f) => ({ ...f, relevantAssets: e.target.value }))} placeholder="Equipment, vehicles, or plant involved" />
             </label>
             <label className="block text-xs font-medium">
               Relevant tanks / mobile bowsers

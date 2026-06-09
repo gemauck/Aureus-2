@@ -8,6 +8,7 @@ import { WizardScreen } from './WizardScreen'
 import { StockTakeScreen } from '../stockTake/StockTakeScreen'
 import { IncidentFormScreen } from '../incidents/IncidentFormScreen'
 import { IncidentListScreen } from '../incidents/IncidentListScreen'
+import { PendingUploadsScreen } from './PendingUploadsScreen'
 
 type Props = {
   route: RouteProp<RootStackParamList, 'JobCards'>
@@ -26,6 +27,8 @@ function JobCardsFlowRouter() {
       return <IncidentFormScreen />
     case 'incident_list':
       return <IncidentListScreen />
+    case 'pending_uploads':
+      return <PendingUploadsScreen />
     case 'landing':
     default:
       return <LandingScreen />
