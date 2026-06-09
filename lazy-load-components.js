@@ -4,6 +4,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
 (function() {
     // CRM + maps: first batch (was in core-entry.js; shrinking dist/core-bundle.js parse cost)
     const componentFiles = [
+        './src/components/dashboard/DashboardLive.jsx',
         './src/components/maps/MapComponent.jsx',
         './src/components/clients/OpportunityDetailModal.jsx',
         './src/components/clients/ClientDetailModal.jsx',
@@ -12,7 +13,6 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/clients/Pipeline.jsx',
         './src/components/clients/PipelineIntegration.js',
         './src/components/daily-notes/DailyNotes.jsx',
-        './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
         './src/components/dashboard/DashboardEnhanced.jsx',
         './src/components/tasks/TaskManagement.jsx',
@@ -214,6 +214,12 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
             if (src.includes('ProjectModal.jsx') || src.includes('ProjectModal.js')) {
                 if (window.ProjectModal && typeof window.ProjectModal === 'function') {
                     console.log('✅ ProjectModal component already available from Vite module - skipping lazy load');
+                    resolve();
+                    return;
+                }
+            }
+            if (src.includes('DashboardLive.jsx') || src.includes('DashboardLive.js')) {
+                if (window.DashboardLive && typeof window.DashboardLive === 'function') {
                     resolve();
                     return;
                 }
@@ -651,6 +657,13 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
     }
     
     function startLazyLoading() {
+        // Dashboard is the default landing page — fetch its script before the CRM batch queue.
+        if (!window.DashboardLive) {
+            loadComponent('./src/components/dashboard/DashboardLive.jsx').catch((err) => {
+                console.warn('DashboardLive priority load failed:', err);
+            });
+        }
+
         // Wait for critical components from index.html to load first
         // This prevents lazy-loader from overwriting compiled components
         const waitForCriticalComponents = () => {

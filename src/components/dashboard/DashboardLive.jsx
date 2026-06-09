@@ -737,38 +737,53 @@ const ClientActivityMetricsWidget = ({ cardBase, headerText, subText, isDark, cl
 
         const headers = { Authorization: `Bearer ${token}` };
 
-        (async () => {
-            try {
-                const results = await Promise.allSettled([
-                    fetch('/api/tasks?lightweight=true', { headers }).then((r) => (r.ok ? r.json() : null)),
-                    fetch('/api/helpdesk?limit=120', { headers }).then((r) => (r.ok ? r.json() : null)),
-                    fetch('/api/user-tasks?lightweight=true&limit=200', { headers }).then((r) => (r.ok ? r.json() : null)),
-                    typeof window.DatabaseAPI?.getSalesOrders === 'function' ? window.DatabaseAPI.getSalesOrders() : Promise.resolve(null),
-                    typeof window.DatabaseAPI?.getInvoices === 'function' ? window.DatabaseAPI.getInvoices() : Promise.resolve(null)
-                ]);
-                if (cancelled) return;
-                setSupplement({
-                    tasks: results[0].status === 'fulfilled' ? parseTasksApi(results[0].value) : [],
-                    tickets: results[1].status === 'fulfilled' ? parseTicketsApi(results[1].value) : [],
-                    userTasks: results[2].status === 'fulfilled' ? parseUserTasksApi(results[2].value) : [],
-                    salesOrders: results[3].status === 'fulfilled' ? parseSalesOrdersApi(results[3].value) : [],
-                    invoices: results[4].status === 'fulfilled' ? parseInvoicesApi(results[4].value) : []
-                });
-            } catch (_) {
-                if (!cancelled) {
+        const runFetch = () => {
+            if (cancelled) return;
+            (async () => {
+                try {
+                    const results = await Promise.allSettled([
+                        fetch('/api/tasks?lightweight=true', { headers }).then((r) => (r.ok ? r.json() : null)),
+                        fetch('/api/helpdesk?limit=120', { headers }).then((r) => (r.ok ? r.json() : null)),
+                        fetch('/api/user-tasks?lightweight=true&limit=200', { headers }).then((r) => (r.ok ? r.json() : null)),
+                        typeof window.DatabaseAPI?.getSalesOrders === 'function' ? window.DatabaseAPI.getSalesOrders() : Promise.resolve(null),
+                        typeof window.DatabaseAPI?.getInvoices === 'function' ? window.DatabaseAPI.getInvoices() : Promise.resolve(null)
+                    ]);
+                    if (cancelled) return;
                     setSupplement({
-                        tasks: [],
-                        tickets: [],
-                        userTasks: [],
-                        salesOrders: [],
-                        invoices: []
+                        tasks: results[0].status === 'fulfilled' ? parseTasksApi(results[0].value) : [],
+                        tickets: results[1].status === 'fulfilled' ? parseTicketsApi(results[1].value) : [],
+                        userTasks: results[2].status === 'fulfilled' ? parseUserTasksApi(results[2].value) : [],
+                        salesOrders: results[3].status === 'fulfilled' ? parseSalesOrdersApi(results[3].value) : [],
+                        invoices: results[4].status === 'fulfilled' ? parseInvoicesApi(results[4].value) : []
                     });
+                } catch (_) {
+                    if (!cancelled) {
+                        setSupplement({
+                            tasks: [],
+                            tickets: [],
+                            userTasks: [],
+                            salesOrders: [],
+                            invoices: []
+                        });
+                    }
                 }
-            }
-        })();
+            })();
+        };
+
+        let idleId;
+        if (typeof requestIdleCallback === 'function') {
+            idleId = requestIdleCallback(runFetch, { timeout: 2500 });
+        } else {
+            idleId = setTimeout(runFetch, 150);
+        }
 
         return () => {
             cancelled = true;
+            if (typeof cancelIdleCallback === 'function' && idleId) {
+                cancelIdleCallback(idleId);
+            } else {
+                clearTimeout(idleId);
+            }
         };
     }, [clients, leads, projects, timeEntries]);
 
@@ -2457,14 +2472,6 @@ function ErpUsageInsightsWidget({ cardBase, headerText, subText, isDark }) {
 }
 
 const DashboardLive = () => {
-    // Version indicator - logged to console for verification
-    React.useEffect(() => {
-        console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 20px; font-weight: bold; padding: 10px; background: #10b981; color: white;');
-        console.log('%c📍 Look for the "Edit Layout" button at the bottom of the dashboard', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
-        console.log('%c🎨 Click "Edit Layout" to enable drag, drop, and resize features!', 'color: #2563eb; font-size: 14px; font-weight: bold;');
-        // Set a flag so we can verify it loaded
-        window.__DASHBOARD_LIVE_V2_LOADED__ = true;
-    }, []);
     const [dashboardData, setDashboardData] = useState(() => {
         const offline = readDashboardOfflinePayload();
         const stats = calculateStats(
@@ -2476,13 +2483,13 @@ const DashboardLive = () => {
         return { ...offline, stats };
     });
     
-    const [isLoading, setIsLoading] = useState(() => !dashboardPayloadHasBootstrapData(readDashboardOfflinePayload()));
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [projectsNetworkSynced, setProjectsNetworkSynced] = useState(
-        () => !dashboardPayloadHasBootstrapData(readDashboardOfflinePayload())
-    );
+    const [projectsNetworkSynced, setProjectsNetworkSynced] = useState(() => {
+        const projects = readDashboardOfflinePayload().projects;
+        return Array.isArray(projects) && projects.length > 0;
+    });
     const [connectionStatus, setConnectionStatus] = useState('connecting');
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
@@ -2526,9 +2533,8 @@ const DashboardLive = () => {
 
     const lastDashboardRefreshRef = React.useRef(0);
 
-    // Cache-first dashboard load; network refresh runs in the background.
+    // Cache-first dashboard load; core entities stream in as each API responds.
     const loadDashboardData = useCallback(async (options = {}) => {
-        const showLoading = options.showLoading === true;
         const forceNetwork = options.forceNetwork === true;
         const offlineBootstrap = readDashboardOfflinePayload();
         const hasBootstrap = dashboardPayloadHasBootstrapData(offlineBootstrap);
@@ -2551,11 +2557,7 @@ const DashboardLive = () => {
             setConnectionStatus('connected');
         }
 
-        if (showLoading && !hasBootstrap) {
-            setIsLoading(true);
-        } else {
-            setIsRefreshing(true);
-        }
+        setIsRefreshing(true);
         setError(null);
         if (!hasBootstrap) {
             setConnectionStatus('connecting');
@@ -2565,11 +2567,23 @@ const DashboardLive = () => {
         const canViewLeads =
             typeof window.isAdminRole === 'function' && window.isAdminRole(roleForLeads);
 
-        const applyDashboardPayload = (clients, leads, projects, timeEntries, users) => {
-            const stats = calculateStats(clients, leads, projects, timeEntries);
-            setDashboardData({ clients, leads, projects, timeEntries, users, stats });
+        const mergeDashboardSlice = (patch) => {
+            setDashboardData((prev) => {
+                const next = { ...prev, ...patch };
+                next.stats = calculateStats(next.clients, next.leads, next.projects, next.timeEntries);
+                return next;
+            });
             setLastUpdated(new Date());
             lastDashboardRefreshRef.current = Date.now();
+        };
+
+        const applyDashboardPayload = (clients, leads, projects, timeEntries, users) => {
+            mergeDashboardSlice({ clients, leads, projects, timeEntries, users });
+        };
+
+        const finishCoreRefresh = () => {
+            setIsRefreshing(false);
+            setConnectionStatus('connected');
         };
 
         try {
@@ -2583,96 +2597,116 @@ const DashboardLive = () => {
                     offlineBootstrap.users
                 );
                 setProjectsNetworkSynced(true);
-                setConnectionStatus('connected');
+                finishCoreRefresh();
                 return;
             }
 
-            const syncPromises = [
-                (forceNetwork
-                    ? window.DatabaseAPI.getClients(true)
-                    : window.DatabaseAPI.getClients(false)
-                ).catch((err) => {
-                    console.warn('Client sync failed:', err);
-                    return { data: { clients: [] } };
-                }),
-                (canViewLeads
-                    ? (forceNetwork
-                        ? window.DatabaseAPI.getLeads(true)
-                        : window.DatabaseAPI.getLeads(false))
-                    : Promise.resolve({ data: { leads: [] } })
-                ).catch((err) => {
-                    console.warn('Lead sync failed:', err);
-                    return { data: { leads: [] } };
-                }),
-                window.DatabaseAPI.getProjects({ forceRefresh: forceNetwork }).catch((err) => {
-                    console.warn('Project sync failed:', err);
-                    return { data: [] };
-                }),
-                window.DatabaseAPI.makeRequest('/time-entries', { forceRefresh: forceNetwork }).catch((err) => {
-                    console.warn('Time entry sync failed:', err);
-                    return { data: [] };
-                })
-            ];
-
+            const offline = offlineBootstrap;
             let fetchUsers = false;
             try {
                 const role = window.storage?.getUser?.()?.role;
                 if (typeof window.isAdminRole === 'function' && window.isAdminRole(role)) {
                     fetchUsers = true;
-                    syncPromises.push(
-                        window.DatabaseAPI.makeRequest('/users', { forceRefresh: forceNetwork }).catch((err) => {
-                            console.warn('User sync failed:', err);
-                            return { data: [] };
-                        })
-                    );
                 }
             } catch (_) {}
 
-            const offline = offlineBootstrap;
-            const results = await Promise.allSettled(syncPromises);
-            const mappedResults = results.map((r) => (r.status === 'fulfilled' ? r.value : { data: [] }));
+            let corePending = canViewLeads ? 3 : 2;
 
-            const clientsRes = mappedResults[0] || { data: [] };
-            const leadsRes = mappedResults[1] || { data: [] };
-            const projectsRes = mappedResults[2] || { data: [] };
-            const timeEntriesRes = mappedResults[3] || { data: [] };
-            const usersRes = fetchUsers && mappedResults[4] ? mappedResults[4] : { data: [] };
+            const markCoreSliceDone = () => {
+                corePending -= 1;
+                if (corePending <= 0) {
+                    finishCoreRefresh();
+                }
+            };
 
-            const clientsFromApi = Array.isArray(clientsRes.data?.clients)
-                ? clientsRes.data.clients.filter((c) => c.type === 'client' || !c.type)
-                : null;
-            const clients = clientsFromApi ?? offline.clients;
+            (forceNetwork
+                ? window.DatabaseAPI.getClients(true)
+                : window.DatabaseAPI.getClients(false)
+            )
+                .then((clientsRes) => {
+                    const clientsFromApi = Array.isArray(clientsRes?.data?.clients)
+                        ? clientsRes.data.clients.filter((c) => c.type === 'client' || !c.type)
+                        : null;
+                    if (window.storage?.setClients && clientsFromApi) {
+                        window.storage.setClients(clientsFromApi);
+                    }
+                    mergeDashboardSlice({ clients: clientsFromApi ?? offline.clients });
+                })
+                .catch((err) => {
+                    console.warn('Client sync failed:', err);
+                    mergeDashboardSlice({ clients: offline.clients });
+                })
+                .finally(markCoreSliceDone);
 
-            const leadsFromAPI = Array.isArray(leadsRes.data?.leads) ? leadsRes.data.leads : [];
-            const leads = canViewLeads ? leadsFromAPI : [];
-
-            if (canViewLeads && window.storage?.setLeads) {
-                window.storage.setLeads(leadsFromAPI);
+            if (canViewLeads) {
+                (forceNetwork ? window.DatabaseAPI.getLeads(true) : window.DatabaseAPI.getLeads(false))
+                    .then((leadsRes) => {
+                        const leadsFromAPI = Array.isArray(leadsRes?.data?.leads) ? leadsRes.data.leads : [];
+                        if (window.storage?.setLeads) {
+                            window.storage.setLeads(leadsFromAPI);
+                        }
+                        mergeDashboardSlice({ leads: leadsFromAPI });
+                    })
+                    .catch((err) => {
+                        console.warn('Lead sync failed:', err);
+                        mergeDashboardSlice({ leads: offline.leads });
+                    })
+                    .finally(markCoreSliceDone);
             }
-            if (window.storage?.setClients && clientsFromApi) {
-                window.storage.setClients(clientsFromApi);
-            }
 
-            const projects = Array.isArray(projectsRes.data?.projects)
-                ? projectsRes.data.projects
-                : Array.isArray(projectsRes.data)
-                  ? projectsRes.data
-                  : offline.projects;
-            const timeEntries = Array.isArray(timeEntriesRes.data)
-                ? timeEntriesRes.data
-                : offline.timeEntries;
-            const users = Array.isArray(usersRes?.data?.users)
-                ? usersRes.data.users
-                : Array.isArray(usersRes?.data)
-                  ? usersRes.data
-                  : offline.users;
+            window.DatabaseAPI.getProjects({ forceRefresh: forceNetwork })
+                .then((projectsRes) => {
+                    const projects = Array.isArray(projectsRes?.data?.projects)
+                        ? projectsRes.data.projects
+                        : Array.isArray(projectsRes?.data)
+                          ? projectsRes.data
+                          : offline.projects;
+                    if (Array.isArray(projects) && projects.length > 0 && window.storage?.setProjects) {
+                        window.storage.setProjects(projects);
+                    }
+                    mergeDashboardSlice({ projects });
+                    setProjectsNetworkSynced(true);
+                })
+                .catch((err) => {
+                    console.warn('Project sync failed:', err);
+                    mergeDashboardSlice({ projects: offline.projects });
+                    setProjectsNetworkSynced(true);
+                })
+                .finally(markCoreSliceDone);
 
-            applyDashboardPayload(clients, leads, projects, timeEntries, users);
-            if (Array.isArray(projects) && projects.length > 0 && window.storage?.setProjects) {
-                window.storage.setProjects(projects);
+            const loadSecondaryData = () => {
+                window.DatabaseAPI.makeRequest('/time-entries', { forceRefresh: forceNetwork })
+                    .then((timeEntriesRes) => {
+                        const timeEntries = Array.isArray(timeEntriesRes?.data)
+                            ? timeEntriesRes.data
+                            : offline.timeEntries;
+                        mergeDashboardSlice({ timeEntries });
+                    })
+                    .catch((err) => {
+                        console.warn('Time entry sync failed:', err);
+                    });
+
+                if (fetchUsers) {
+                    window.DatabaseAPI.makeRequest('/users', { forceRefresh: forceNetwork })
+                        .then((usersRes) => {
+                            const users = Array.isArray(usersRes?.data?.users)
+                                ? usersRes.data.users
+                                : Array.isArray(usersRes?.data)
+                                  ? usersRes.data
+                                  : offline.users;
+                            mergeDashboardSlice({ users });
+                        })
+                        .catch((err) => {
+                            console.warn('User sync failed:', err);
+                        });
+                }
+            };
+
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(loadSecondaryData, { timeout: 3000 });
+            } else {
+                setTimeout(loadSecondaryData, 50);
             }
-            setProjectsNetworkSynced(true);
-            setConnectionStatus('connected');
         } catch (error) {
             console.error('❌ Failed to load dashboard data:', error);
             setError(error.message);
@@ -2686,8 +2720,6 @@ const DashboardLive = () => {
                 offline.users
             );
             setProjectsNetworkSynced(true);
-        } finally {
-            setIsLoading(false);
             setIsRefreshing(false);
         }
     }, []);
@@ -3484,18 +3516,6 @@ const DashboardLive = () => {
             default: return 'fa-question-circle';
         }
     };
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading live dashboard data...</p>
-                    <p className="text-xs text-gray-500 mt-2">Connecting to live data sources...</p>
-                </div>
-            </div>
-        );
-    }
 
     if (error) {
         return (
