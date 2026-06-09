@@ -19,6 +19,7 @@ export function LandingScreen() {
     startNewJobCard,
     openPriorList,
     openStockTake,
+    openIncidentReport,
     runSyncNow,
     openingCardId
   } = useJobCardWizard()
@@ -73,6 +74,13 @@ export function LandingScreen() {
           subtitle="Count stock by location and submit for review."
           tint={jc.accentTeal}
           onPress={openStockTake}
+        />
+        <MenuButton
+          icon="!"
+          title="Report incident"
+          subtitle="Record a site incident with optional job card link."
+          tint={jc.accentOrange}
+          onPress={() => openIncidentReport()}
         />
 
         {unsyncedCount > 0 ? (

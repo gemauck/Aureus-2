@@ -4317,6 +4317,18 @@ const JobCardFormPublic = () => {
     setStockTakeSubmitting(false);
   };
 
+  const openIncidentReport = () => {
+    if (typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(
+        new CustomEvent('navigateToPage', {
+          detail: { page: 'service-maintenance', subpath: ['incidents'] }
+        })
+      );
+      return;
+    }
+    window.location.hash = '#/service-maintenance/incidents';
+  };
+
   const openStockTake = () => {
     setStockTakeSessionId('');
     setStockTakeSessionRevision(0);
@@ -7384,6 +7396,24 @@ const JobCardFormPublic = () => {
                   </span>
                 </span>
                 <i className="fa-solid fa-chevron-right text-blue-300 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={openIncidentReport}
+              className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+                  <i className="fa-solid fa-triangle-exclamation text-xl" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-base sm:text-lg">Report incident</span>
+                  <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
+                    Record a site incident in Service &amp; Maintenance (optional job card link).
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-amber-300 flex-shrink-0" aria-hidden />
               </span>
             </button>
           </div>

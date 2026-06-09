@@ -67,6 +67,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const [tags, setTags] = useState<CrmTag[]>([])
   const [opportunities, setOpportunities] = useState<CrmOpportunity[]>([])
   const [jobCards, setJobCards] = useState<CrmJobCard[]>([])
+  const [incidentReports, setIncidentReports] = useState<Array<Record<string, unknown>>>([])
   const [clientNotes, setClientNotes] = useState<CrmClientNote[]>([])
   const [loadingExtras, setLoadingExtras] = useState(false)
   const [patchBusy, setPatchBusy] = useState(false)
@@ -88,6 +89,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     setTags([])
     setOpportunities([])
     setJobCards([])
+    setIncidentReports([])
     setClientNotes([])
     setGroupMembers([])
     try {
@@ -144,8 +146,12 @@ export function CrmDetailScreen({ route, navigation }: Props) {
           setOpportunities(opps)
         }
         if (activeTab === 'services' && entityType === 'client') {
-          const cards = await crmApi.getJobCardsForClient(accessToken, entityId)
+          const [cards, incidents] = await Promise.all([
+            crmApi.getJobCardsForClient(accessToken, entityId),
+            crmApi.getIncidentReportsForClient(accessToken, entityId)
+          ])
           setJobCards(cards)
+          setIncidentReports(incidents)
         }
         if (activeTab === 'notes' && (entityType === 'client' || entityType === 'group')) {
           const notes = await crmApi.getClientNotes(accessToken, entityId)
@@ -413,6 +419,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
             tags={tags}
             opportunities={opportunities}
             jobCards={jobCards}
+            incidentReports={incidentReports}
             clientNotes={clientNotes}
             groupMembers={groupMembers}
             notesDraft={notesDraft}

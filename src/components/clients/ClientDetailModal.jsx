@@ -2396,6 +2396,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Job cards state - MUST be declared before loadJobCards function
     const [jobCards, setJobCards] = useState([]);
     const [loadingJobCards, setLoadingJobCards] = useState(false);
+    const [incidentReports, setIncidentReports] = useState([]);
+    const [loadingIncidentReports, setLoadingIncidentReports] = useState(false);
     
     // Refs to prevent duplicate loading calls - MUST be declared before loadJobCards function
     const isLoadingJobCardsRef = useRef(false);
@@ -2914,6 +2916,51 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }));
         }
     };
+
+    const loadIncidentReports = useCallback(async () => {
+        if (!client?.id) {
+            setIncidentReports([]);
+            return [];
+        }
+        const token = window.storage?.getToken?.();
+        if (!token) {
+            setLoadingIncidentReports(false);
+            return [];
+        }
+        setLoadingIncidentReports(true);
+        try {
+            const response = await fetch(
+                `/api/incident-reports?clientId=${encodeURIComponent(client.id)}&pageSize=200`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (!response.ok) {
+                setIncidentReports([]);
+                return [];
+            }
+            const data = await response.json();
+            const rows = data.incidentReports || data.data?.incidentReports || [];
+            const list = Array.isArray(rows) ? rows : [];
+            setIncidentReports(list);
+            return list;
+        } catch (error) {
+            console.error('Error loading incident reports:', error);
+            setIncidentReports([]);
+            return [];
+        } finally {
+            setLoadingIncidentReports(false);
+        }
+    }, [client?.id]);
+
+    const handleIncidentReportClick = (incident) => {
+        const incidentId = incident?.id;
+        if (!incidentId) return;
+        window.dispatchEvent(new CustomEvent('navigateToPage', {
+            detail: {
+                page: 'service-maintenance',
+                subpath: ['incidents', incidentId]
+            }
+        }));
+    };
     
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
@@ -3219,6 +3266,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 })();
                 loadPromises.push(jobCardsPromise);
                 criticalLoadPromises.push(jobCardsPromise);
+
+                const incidentReportsPromise = loadIncidentReports().catch((error) => {
+                    console.error('❌ Error loading incident reports in initial load:', error);
+                    return [];
+                });
+                loadPromises.push(incidentReportsPromise);
                 
                 // ALWAYS load contacts immediately on initial load to ensure we have the latest data
                 // Even if client object has contacts, we still load from DB to get the most up-to-date count
@@ -8104,6 +8157,65 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         {activeTab === 'service-maintenance' && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Incident reports</h3>
+                                    <div className="text-sm text-gray-600">
+                                        {incidentReports.length} incident{incidentReports.length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+
+                                {loadingIncidentReports ? (
+                                    <div className="text-center py-6 text-gray-500 text-sm">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2"></div>
+                                        <p>Loading incident reports...</p>
+                                    </div>
+                                ) : incidentReports.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {incidentReports.map((incident) => (
+                                            <div
+                                                key={incident.id}
+                                                className="bg-white border border-gray-200 rounded-lg p-3 hover:border-amber-300 hover:shadow-sm transition cursor-pointer"
+                                                onClick={() => handleIncidentReportClick(incident)}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">
+                                                                {incident.incidentNumber || `Incident #${incident.id.slice(0, 8)}`}
+                                                            </h4>
+                                                            <span className="px-2 py-0.5 text-xs rounded font-medium bg-amber-100 text-amber-800">
+                                                                {incident.status || 'draft'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 space-y-0.5">
+                                                            {incident.incidentType && (
+                                                                <div><i className="fas fa-exclamation-triangle mr-1.5 w-4"></i>{incident.incidentType}</div>
+                                                            )}
+                                                            {incident.siteName && (
+                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{incident.siteName}</div>
+                                                            )}
+                                                            {incident.reportedByName && (
+                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{incident.reportedByName}</div>
+                                                            )}
+                                                            {(incident.incidentAt || incident.createdAt) && (
+                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(incident.incidentAt || incident.createdAt).toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg' })}</div>
+                                                            )}
+                                                            {incident.description && (
+                                                                <div className="mt-1 text-xs text-gray-500 italic">{incident.description.substring(0, 100)}{incident.description.length > 100 ? '...' : ''}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-6 text-gray-500 text-sm border border-dashed border-gray-200 rounded-lg">
+                                        <i className="fas fa-triangle-exclamation text-2xl mb-2"></i>
+                                        <p>No incident reports for this client</p>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                                     <h3 className="text-lg font-semibold text-gray-900">Service & Maintenance Job Cards</h3>
                                     <div className="text-sm text-gray-600">
                                         {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}

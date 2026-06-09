@@ -1,4 +1,13 @@
-export type WizardFlow = 'landing' | 'prior_list' | 'form' | 'stock_take'
+export type WizardFlow = 'landing' | 'prior_list' | 'form' | 'stock_take' | 'incident_form'
+
+export type IncidentPrefill = {
+  clientId?: string
+  clientName?: string
+  siteId?: string
+  siteName?: string
+  jobCardId?: string
+  jobCardNumber?: string
+}
 
 export type WizardStepId = 'assignment' | 'visit' | 'work' | 'stock' | 'signoff'
 

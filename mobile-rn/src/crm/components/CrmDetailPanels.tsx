@@ -75,6 +75,7 @@ type PanelProps = {
   tags: CrmTag[]
   opportunities: CrmOpportunity[]
   jobCards: CrmJobCard[]
+  incidentReports?: Array<Record<string, unknown>>
   clientNotes: CrmClientNote[]
   groupMembers?: CrmGroupMember[]
   notesDraft: string
@@ -568,12 +569,14 @@ export function CrmDetailPanelContent(props: PanelProps) {
 
   if (tab === 'services') {
     const services = entityServices(entity)
+    const incidents = props.incidentReports || []
     const hasJobCards = jobCards.length > 0
+    const hasIncidents = incidents.length > 0
     const hasServices = services.length > 0
-    if (loadingExtras && !hasJobCards && !hasServices) {
+    if (loadingExtras && !hasJobCards && !hasIncidents && !hasServices) {
       return <ActivityIndicator color={erp.primary} style={{ marginTop: 24 }} />
     }
-    if (!hasServices && !hasJobCards) {
+    if (!hasServices && !hasJobCards && !hasIncidents) {
       return <EmptyState icon="wrench" title="No service or job card records" />
     }
     return (
@@ -591,9 +594,31 @@ export function CrmDetailPanelContent(props: PanelProps) {
             ))}
           </>
         ) : null}
+        {hasIncidents ? (
+          <>
+            <Text style={[styles.sectionHeading, (hasServices || hasJobCards) && styles.sectionHeadingSpaced]}>
+              Incident reports
+            </Text>
+            {incidents.map((inc) => {
+              const id = String(inc.id || '')
+              return (
+                <View key={id} style={styles.miniCard}>
+                  <Text style={styles.miniTitle}>{String(inc.incidentNumber || id)}</Text>
+                  <Text style={styles.miniSub}>
+                    {[inc.incidentType, inc.siteName].filter(Boolean).join(' · ') || '—'}
+                  </Text>
+                  {inc.status ? <CrmStatusBadge label={String(inc.status)} compact /> : null}
+                  {inc.incidentAt || inc.createdAt ? (
+                    <Text style={styles.miniSub}>{formatDate(String(inc.incidentAt || inc.createdAt))}</Text>
+                  ) : null}
+                </View>
+              )
+            })}
+          </>
+        ) : null}
         {hasJobCards ? (
           <>
-            <Text style={[styles.sectionHeading, hasServices && styles.sectionHeadingSpaced]}>
+            <Text style={[styles.sectionHeading, (hasServices || hasIncidents) && styles.sectionHeadingSpaced]}>
               Job cards
             </Text>
             {jobCards.map((jc) => (

@@ -450,6 +450,14 @@ const ServiceAndMaintenance = () => {
     typeof window !== 'undefined' && !!window.ServiceFormsManager
   );
   const [headerTab, setHeaderTab] = useState('list');
+  const [incidentsReady, setIncidentsReady] = useState(
+    typeof window !== 'undefined' && !!window.IncidentReportsPanel
+  );
+  const [incidentPrintReady, setIncidentPrintReady] = useState(
+    typeof window !== 'undefined' && !!window.IncidentReportPrint
+  );
+  const [deepLinkIncidentId, setDeepLinkIncidentId] = useState('');
+  const [incidentCreatePrefill, setIncidentCreatePrefill] = useState(null);
   const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
   const createJobCardMenuRef = useRef(null);
   const jobCardsListScrollRestoreFrameRef = useRef(null);
@@ -704,32 +712,42 @@ const ServiceAndMaintenance = () => {
     let currentJobCardId = null;
     
     // Fast route reading function
-    const getJobCardIdFromRoute = () => {
+    const getRouteSegments = () => {
       if (window.RouteState) {
         const route = window.RouteState.getRoute();
-        if (route.page === 'service-maintenance' && route.segments?.[0]) {
-          return route.segments[0];
+        if (route.page === 'service-maintenance' && Array.isArray(route.segments)) {
+          return route.segments;
         }
       }
-      // Fast fallback: check hash first (most common)
       const hash = window.location.hash || '';
       if (hash.includes('service-maintenance')) {
         const hashSegments = hash.replace('#', '').split('/').filter(Boolean);
         const idx = hashSegments.indexOf('service-maintenance');
-        if (idx >= 0 && hashSegments[idx + 1]) {
-          return hashSegments[idx + 1];
-        }
+        if (idx >= 0) return hashSegments.slice(idx + 1);
       }
-      // Check pathname
       const pathname = window.location.pathname || '';
       const segments = pathname.split('/').filter(Boolean);
       const idx = segments.indexOf('service-maintenance');
-      if (idx >= 0 && segments[idx + 1]) {
-        return segments[idx + 1];
-      }
-      return null;
+      if (idx >= 0) return segments.slice(idx + 1);
+      return [];
     };
-    
+
+    const getJobCardIdFromRoute = () => {
+      const segs = getRouteSegments();
+      if (!segs?.[0] || segs[0] === 'incidents') return null;
+      return segs[0];
+    };
+
+    const syncIncidentDeepLink = () => {
+      const segs = getRouteSegments();
+      if (segs?.[0] === 'incidents') {
+        setHeaderTab('incidents');
+        setDeepLinkIncidentId(segs[1] || '');
+      } else {
+        setDeepLinkIncidentId('');
+      }
+    };
+
     const loadJobCardFromUrl = async () => {
       if (isCancelled) return;
       
@@ -836,6 +854,7 @@ const ServiceAndMaintenance = () => {
     };
 
     // Load immediately
+    syncIncidentDeepLink();
     loadJobCardFromUrl();
 
     // Listen for route changes (optimized - only on actual route changes)
@@ -844,6 +863,7 @@ const ServiceAndMaintenance = () => {
       clearTimeout(routeChangeTimeout);
       routeChangeTimeout = setTimeout(() => {
         if (!isCancelled) {
+          syncIncidentDeepLink();
           const newJobCardId = getJobCardIdFromRoute();
           if (newJobCardId !== currentJobCardId) {
             currentJobCardId = null; // Reset to allow reload
@@ -2404,9 +2424,77 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
     setCreateJobCardMenuOpen(false);
   }, []);
 
+  useEffect(() => {
+    if (window.IncidentReportsPanel) {
+      setIncidentsReady(true);
+      return undefined;
+    }
+    const loadPanel = () => {
+      const isProduction =
+        typeof window.USE_PRODUCTION_BUILD !== 'undefined'
+          ? window.USE_PRODUCTION_BUILD === true
+          : true;
+      const baseDir = isProduction ? '/dist/src/' : '/src/';
+      const path = 'components/service-maintenance/IncidentReportsPanel.jsx';
+      const finalPath = isProduction
+        ? `${baseDir}${path}`.replace('.jsx', '.js')
+        : `${baseDir}${path}`;
+      const existing = document.querySelector(
+        'script[data-component-path="components/service-maintenance/IncidentReportsPanel.jsx"]'
+      );
+      if (existing) return;
+      const script = document.createElement('script');
+      if (isProduction) {
+        script.src = finalPath;
+        script.defer = true;
+      } else {
+        script.type = 'text/babel';
+        script.src = finalPath;
+      }
+      script.dataset.componentPath = 'components/service-maintenance/IncidentReportsPanel.jsx';
+      script.onload = () => setIncidentsReady(!!window.IncidentReportsPanel);
+      document.body.appendChild(script);
+    };
+    loadPanel();
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    if (window.IncidentReportPrint) {
+      setIncidentPrintReady(true);
+      return undefined;
+    }
+    const isProduction =
+      typeof window.USE_PRODUCTION_BUILD !== 'undefined'
+        ? window.USE_PRODUCTION_BUILD === true
+        : true;
+    const baseDir = isProduction ? '/dist/src/' : '/src/';
+    const path = 'incidentReport/IncidentReportPrintBundle.jsx';
+    const finalPath = isProduction
+      ? `${baseDir}${path}`.replace('.jsx', '.js')
+      : `${baseDir}${path}`;
+    const existing = document.querySelector(
+      'script[data-component-path="incidentReport/IncidentReportPrintBundle.jsx"]'
+    );
+    if (existing) return undefined;
+    const script = document.createElement('script');
+    if (isProduction) {
+      script.src = finalPath;
+      script.defer = true;
+    } else {
+      script.type = 'text/babel';
+      script.src = finalPath;
+    }
+    script.dataset.componentPath = 'incidentReport/IncidentReportPrintBundle.jsx';
+    script.onload = () => setIncidentPrintReady(!!window.IncidentReportPrint);
+    document.body.appendChild(script);
+    return undefined;
+  }, []);
+
   const headerTabs = useMemo(() => {
     const tabs = [
       { id: 'list', label: 'Job cards', icon: 'fa-clipboard-list' },
+      { id: 'incidents', label: 'Incidents', icon: 'fa-triangle-exclamation' },
       { id: 'tools', label: 'Tools & links', icon: 'fa-link' },
     ];
     if (isAdminUser) {
@@ -2716,11 +2804,35 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
             </div>
           )}
         </div>
-      ) : (
+      ) : headerTab === 'incidents' ? (
+        <div data-section="incident-reports-panel">
+          {incidentsReady && window.IncidentReportsPanel ? (
+            <window.IncidentReportsPanel
+              clients={clients}
+              users={users}
+              isDark={isDark}
+              initialIncidentId={deepLinkIncidentId}
+              createPrefill={incidentCreatePrefill}
+              onConsumeCreatePrefill={() => setIncidentCreatePrefill(null)}
+              onOpenJobCard={(jobCard) => {
+                if (jobCard?.id) handleOpenJobCardDetail(jobCard);
+              }}
+            />
+          ) : (
+            <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+              <div className={`mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-b-2 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
+              <p>Loading incident reports&hellip;</p>
+              {!incidentPrintReady ? (
+                <p className="mt-1 text-xs opacity-80">Loading PDF stationery&hellip;</p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : headerTab !== 'tools' && headerTab !== 'admin' ? (
         <p className={`px-1 text-center text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
           Switch to the <button type="button" className="font-medium underline" onClick={() => setHeaderTab('list')}>Job cards</button> tab to browse and search captures.
         </p>
-      )}
+      ) : null}
 
       {/* Full-area job card detail overlay (within main content, not over sidebar) */}
       {loadingJobCard && !selectedJobCard && (
@@ -2798,6 +2910,30 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     Admin only
                   </span>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedJobCard) return;
+                    setShowJobCardDetail(false);
+                    setHeaderTab('incidents');
+                    setIncidentCreatePrefill({
+                      clientId: selectedJobCard.clientId || '',
+                      clientName: selectedJobCard.clientName || '',
+                      siteId: selectedJobCard.siteId || '',
+                      siteName: selectedJobCard.siteName || '',
+                      jobCardId: selectedJobCard.id || '',
+                      jobCardNumber: selectedJobCard.jobCardNumber || ''
+                    });
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold shadow-sm ${
+                    isDark
+                      ? 'border-amber-700 bg-amber-950/40 text-amber-200 hover:bg-amber-900/40'
+                      : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  }`}
+                >
+                  <i className="fa-solid fa-triangle-exclamation" />
+                  Report incident
+                </button>
                 <button
                   type="button"
                   onClick={handleDownloadJobCardPdf}

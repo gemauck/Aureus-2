@@ -98,6 +98,18 @@ export const crmApi = {
     )
   },
 
+  getIncidentReportsForClient(token: string, clientId: string, limit = 40) {
+    const q = new URLSearchParams({
+      clientId,
+      page: '1',
+      pageSize: String(limit)
+    })
+    return request<{ incidentReports?: Array<Record<string, unknown>> }>(
+      `/api/incident-reports?${q}`,
+      { token }
+    ).then((d) => d.incidentReports || [])
+  },
+
   toggleStar(token: string, clientId: string) {
     return request<{ starred: boolean }>(`/api/starred-clients/${encodeURIComponent(clientId)}`, {
       method: 'PUT',

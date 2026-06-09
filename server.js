@@ -1924,6 +1924,24 @@ app.all('/api/clients/:id', async (req, res, next) => {
 // Job cards: nested paths (/api/jobcards/:id/forms, .../activity) require a broad match.
 // `/api/jobcards/:id?` does not match `/api/jobcards/abc/forms` in Express 4.
 // IMPORTANT: This must come BEFORE the catch-all route
+app.all(/^\/api\/incident-reports(?:\/.*)?$/, async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'incident-reports.js'))
+    if (!handler) {
+      console.error('❌ Incident reports handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Incident reports API error:', e)
+    return next(e)
+  }
+})
+
 app.all(/^\/api\/jobcards(?:\/.*)?$/, async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'jobcards.js'))

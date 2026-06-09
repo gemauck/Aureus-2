@@ -2192,6 +2192,63 @@ model JobCardActivity {
   @@index([actorUserId])
 }
 
+/// Field / office incident reports (Service & Maintenance); optionally linked to a job card.
+model IncidentReport {
+  id                  String                   @id @default(cuid())
+  incidentNumber      String                   @unique
+  status              String                   @default("draft")
+  clientId            String?
+  clientName          String                   @default("")
+  siteId              String                   @default("")
+  siteName            String                   @default("")
+  jobCardId           String?
+  jobCardNumber       String                   @default("")
+  incidentAt          DateTime?
+  locationDescription String                   @default("")
+  locationLatitude    String                   @default("")
+  locationLongitude   String                   @default("")
+  incidentType        String                   @default("")
+  severity            String                   @default("")
+  description         String                   @default("")
+  immediateActions    String                   @default("")
+  investigationNotes  String                   @default("")
+  correctiveActions   String                   @default("")
+  peopleInvolved      String                   @default("[]")
+  witnesses           String                   @default("")
+  equipmentInvolved   String                   @default("")
+  photos              String                   @default("[]")
+  reportedById        String?
+  reportedByName      String                   @default("")
+  ownerId             String?
+  submittedAt         DateTime?
+  closedAt            DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  activities          IncidentReportActivity[]
+
+  @@index([clientId])
+  @@index([jobCardId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([incidentAt])
+  @@index([createdAt])
+}
+
+model IncidentReportActivity {
+  id               String         @id @default(cuid())
+  incidentReportId String
+  incidentReport   IncidentReport @relation(fields: [incidentReportId], references: [id], onDelete: Cascade)
+  actorUserId      String?
+  actorName        String         @default("")
+  action           String
+  source           String         @default("web")
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+
+  @@index([incidentReportId])
+  @@index([createdAt])
+}
+
 /// Local cache of SafetyCulture inspection feed rows (optional detailJson for modal/answers).
 model SafetyCultureCachedInspection {
   id          String    @id @default(cuid())

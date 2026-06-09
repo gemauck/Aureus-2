@@ -45,7 +45,8 @@ import type {
   UserOption,
   VoiceClip,
   WizardFlow,
-  MediaItem
+  MediaItem,
+  IncidentPrefill
 } from './types'
 
 type WizardContextValue = {
@@ -91,6 +92,8 @@ type WizardContextValue = {
   startNewJobCard: () => void
   openPriorList: () => void
   openStockTake: () => void
+  openIncidentReport: (prefill?: IncidentPrefill) => void
+  incidentPrefill: IncidentPrefill | null
   goToStep: (index: number) => void
   handleNext: () => void
   handlePrevious: () => void
@@ -148,6 +151,7 @@ export function JobCardWizardProvider({
     ensureInventoryLoaded
   } = useWizardReferenceData(accessToken)
   const [wizardFlow, setWizardFlow] = useState<WizardFlow>(initialFlow || 'landing')
+  const [incidentPrefill, setIncidentPrefill] = useState<IncidentPrefill | null>(null)
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<JobCardFormData>(createEmptyFormData())
   const [editingMeta, setEditingMeta] = useState<EditingMeta | null>(null)
@@ -210,6 +214,15 @@ export function JobCardWizardProvider({
     setWizardFlow('stock_take')
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
+
+  const openIncidentReport = useCallback(
+    (prefill?: IncidentPrefill) => {
+      setIncidentPrefill(prefill || null)
+      void ensureReferenceDataLoaded()
+      setWizardFlow('incident_form')
+    },
+    [ensureReferenceDataLoaded]
+  )
 
   const initialFlowBootstrappedRef = useRef(false)
   useEffect(() => {
@@ -682,6 +695,8 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openIncidentReport,
+      incidentPrefill,
       goToStep,
       handleNext,
       handlePrevious,
@@ -734,6 +749,8 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openIncidentReport,
+      incidentPrefill,
       goToStep,
       handleNext,
       handlePrevious,
