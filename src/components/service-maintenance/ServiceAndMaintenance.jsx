@@ -600,8 +600,65 @@ const ServiceAndMaintenance = () => {
 
     injectScript('components/manufacturing/jobCardActivityDisplay.js');
     injectScript('components/manufacturing/JobCards.jsx', { isJsx: true });
+    injectScript('components/service-maintenance/IncidentReportsPanel.jsx', { isJsx: true });
+    injectScript('incidentReport/IncidentReportPrintBundle.jsx', { isJsx: true });
     return undefined;
   }, []);
+
+  // IncidentReportsPanel registers on load — mirror JobCards ready detection
+  useEffect(() => {
+    if (incidentsReady) return undefined;
+
+    let cancelled = false;
+    const markIncidentsReady = () => {
+      if (!cancelled && window.IncidentReportsPanel) {
+        setIncidentsReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    if (markIncidentsReady()) return undefined;
+
+    const onReady = () => {
+      markIncidentsReady();
+    };
+    window.addEventListener('incidentReportsPanelReady', onReady);
+
+    const interval = setInterval(() => {
+      if (markIncidentsReady()) clearInterval(interval);
+    }, 80);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('incidentReportsPanelReady', onReady);
+      clearInterval(interval);
+    };
+  }, [incidentsReady]);
+
+  useEffect(() => {
+    if (incidentPrintReady) return undefined;
+
+    let cancelled = false;
+    const markPrintReady = () => {
+      if (!cancelled && window.IncidentReportPrint) {
+        setIncidentPrintReady(true);
+        return true;
+      }
+      return false;
+    };
+
+    if (markPrintReady()) return undefined;
+
+    const interval = setInterval(() => {
+      if (markPrintReady()) clearInterval(interval);
+    }, 80);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [incidentPrintReady]);
 
   // JobCards.jsx registers on load and dispatches `jobcardsComponentReady` — prefer that over slow polling
   useEffect(() => {
@@ -2424,73 +2481,6 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
     setCreateJobCardMenuOpen(false);
   }, []);
 
-  useEffect(() => {
-    if (window.IncidentReportsPanel) {
-      setIncidentsReady(true);
-      return undefined;
-    }
-    const loadPanel = () => {
-      const isProduction =
-        typeof window.USE_PRODUCTION_BUILD !== 'undefined'
-          ? window.USE_PRODUCTION_BUILD === true
-          : true;
-      const baseDir = isProduction ? '/dist/src/' : '/src/';
-      const path = 'components/service-maintenance/IncidentReportsPanel.jsx';
-      const finalPath = isProduction
-        ? `${baseDir}${path}`.replace('.jsx', '.js')
-        : `${baseDir}${path}`;
-      const existing = document.querySelector(
-        'script[data-component-path="components/service-maintenance/IncidentReportsPanel.jsx"]'
-      );
-      if (existing) return;
-      const script = document.createElement('script');
-      if (isProduction) {
-        script.src = finalPath;
-        script.defer = true;
-      } else {
-        script.type = 'text/babel';
-        script.src = finalPath;
-      }
-      script.dataset.componentPath = 'components/service-maintenance/IncidentReportsPanel.jsx';
-      script.onload = () => setIncidentsReady(!!window.IncidentReportsPanel);
-      document.body.appendChild(script);
-    };
-    loadPanel();
-    return undefined;
-  }, []);
-
-  useEffect(() => {
-    if (window.IncidentReportPrint) {
-      setIncidentPrintReady(true);
-      return undefined;
-    }
-    const isProduction =
-      typeof window.USE_PRODUCTION_BUILD !== 'undefined'
-        ? window.USE_PRODUCTION_BUILD === true
-        : true;
-    const baseDir = isProduction ? '/dist/src/' : '/src/';
-    const path = 'incidentReport/IncidentReportPrintBundle.jsx';
-    const finalPath = isProduction
-      ? `${baseDir}${path}`.replace('.jsx', '.js')
-      : `${baseDir}${path}`;
-    const existing = document.querySelector(
-      'script[data-component-path="incidentReport/IncidentReportPrintBundle.jsx"]'
-    );
-    if (existing) return undefined;
-    const script = document.createElement('script');
-    if (isProduction) {
-      script.src = finalPath;
-      script.defer = true;
-    } else {
-      script.type = 'text/babel';
-      script.src = finalPath;
-    }
-    script.dataset.componentPath = 'incidentReport/IncidentReportPrintBundle.jsx';
-    script.onload = () => setIncidentPrintReady(!!window.IncidentReportPrint);
-    document.body.appendChild(script);
-    return undefined;
-  }, []);
-
   const headerTabs = useMemo(() => {
     const tabs = [
       { id: 'list', label: 'Job cards', icon: 'fa-clipboard-list' },
@@ -2808,6 +2798,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
         <div data-section="incident-reports-panel" className="relative min-h-[calc(100dvh-10rem)]">
           {incidentsReady && window.IncidentReportsPanel ? (
             <window.IncidentReportsPanel
+              key="incident-reports-panel"
               clients={clients}
               users={users}
               isDark={isDark}
@@ -2822,9 +2813,6 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
             <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
               <div className={`mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-b-2 ${isDark ? 'border-blue-400' : 'border-blue-500'}`} />
               <p>Loading incident reports&hellip;</p>
-              {!incidentPrintReady ? (
-                <p className="mt-1 text-xs opacity-80">Loading PDF stationery&hellip;</p>
-              ) : null}
             </div>
           )}
         </div>

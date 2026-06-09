@@ -254,7 +254,9 @@ function IncidentReportsPanel({
 }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selected, setSelected] = useState(null)
   const [showDetail, setShowDetail] = useState(false)
@@ -265,26 +267,47 @@ function IncidentReportsPanel({
 
   const token = window.storage?.getToken?.()
 
-  const loadRows = useCallback(async () => {
-    if (!token) return
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({ pageSize: '200' })
-      if (search.trim()) params.set('q', search.trim())
-      if (statusFilter !== 'all') params.set('status', statusFilter)
-      const res = await fetch(`/api/incident-reports?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      const data = await res.json()
-      const list = data?.incidentReports || data?.data?.incidentReports || []
-      setRows(Array.isArray(list) ? list : [])
-    } catch (e) {
-      console.error('Failed to load incident reports', e)
-      setRows([])
-    } finally {
-      setLoading(false)
-    }
-  }, [token, search, statusFilter])
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search), 350)
+    return () => window.clearTimeout(handle)
+  }, [search])
+
+  const loadRows = useCallback(
+    async (opts = {}) => {
+      const silent = opts.silent === true
+      if (!token) {
+        if (!silent) setLoading(false)
+        return
+      }
+      if (!silent) setLoading(true)
+      setLoadError('')
+      try {
+        const params = new URLSearchParams({ pageSize: '100' })
+        if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim())
+        if (statusFilter !== 'all') params.set('status', statusFilter)
+        const res = await fetch(`/api/incident-reports?${params}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          const msg =
+            data?.error?.message || data?.error || data?.message || `Failed to load (${res.status})`
+          setLoadError(String(msg))
+          if (!silent) setRows([])
+          return
+        }
+        const list = data?.incidentReports || data?.data?.incidentReports || []
+        setRows(Array.isArray(list) ? list : [])
+      } catch (e) {
+        console.error('Failed to load incident reports', e)
+        setLoadError(e?.message || 'Could not load incident reports')
+        if (!silent) setRows([])
+      } finally {
+        if (!silent) setLoading(false)
+      }
+    },
+    [token, debouncedSearch, statusFilter]
+  )
 
   useEffect(() => {
     void loadRows()
@@ -459,11 +482,24 @@ function IncidentReportsPanel({
         </button>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <div className={`rounded-xl border px-4 py-6 text-center text-sm ${isDark ? 'border-red-900/50 bg-red-950/20 text-red-300' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          <p>{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadRows()}
+            className="mt-3 text-xs font-semibold underline"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {loading && filteredRows.length === 0 && !loadError ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           Loading incident reports…
         </div>
-      ) : filteredRows.length === 0 ? (
+      ) : !loadError && filteredRows.length === 0 ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           No incident reports found.
         </div>
@@ -768,3 +804,6 @@ function IncidentReportsPanel({
 }
 
 window.IncidentReportsPanel = IncidentReportsPanel
+if (typeof window !== 'undefined') {
+  window.dispatchEvent(new CustomEvent('incidentReportsPanelReady'))
+}
