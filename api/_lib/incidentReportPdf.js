@@ -1,14 +1,14 @@
 import PDFDocument from 'pdfkit'
+import { incidentStatusLabel } from '../../src/incidentReport/constants.js'
 import { loadDocumentBranding } from './documentBranding.js'
-import { parseIncidentPeopleInvolved } from './incidentReportResolve.js'
 
 function billingBrandTextAlign(brandTextX, left) {
   return brandTextX > left ? 'right' : 'left'
 }
 
-function drawMetaCell(doc, x, y, cellW, label, value) {
-  doc.font('Helvetica-Bold').fontSize(8).fillColor('#6b7280').text(String(label || '').toUpperCase(), x, y, { width: cellW })
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(String(value ?? '—'), x, y + 12, { width: cellW })
+function displayValue(value) {
+  const text = String(value ?? '').trim()
+  return text || '—'
 }
 
 function formatPdfDateSast(value) {
@@ -21,60 +21,112 @@ function formatPdfDateSast(value) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
     timeZone: 'Africa/Johannesburg'
   })
 }
 
-function parsePhotosJson(raw) {
-  try {
-    if (!raw) return []
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+function severityFill(severity) {
+  const s = String(severity || '').trim().toLowerCase()
+  if (s === 'critical') return '#7f1d1d'
+  if (s === 'high') return '#fee2e2'
+  if (s === 'medium') return '#fef3c7'
+  if (s === 'low') return '#d1fae5'
+  return '#f3f4f6'
 }
 
-function photoItemUrl(item) {
-  if (!item) return ''
-  if (typeof item === 'string') return item
-  return String(item.url || item.uri || '').trim()
+function severityTextColor(severity) {
+  const s = String(severity || '').trim().toLowerCase()
+  if (s === 'critical') return '#ffffff'
+  if (s === 'high') return '#991b1b'
+  if (s === 'medium') return '#92400e'
+  if (s === 'low') return '#065f46'
+  return '#374151'
 }
 
-function photoItemIsImage(item) {
-  const url = photoItemUrl(item)
-  if (!url) return false
-  if (item?.kind === 'voice') return false
-  const mediaType = String(item?.mediaType || item?.mimeType || '').toLowerCase()
-  if (mediaType.includes('video') || mediaType.includes('audio')) return false
-  if (/^data:video\//i.test(url) || /^data:audio\//i.test(url)) return false
-  return /^data:image\//i.test(url) || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url)
+function drawTitleBand(doc, left, right, incidentNumber) {
+  const bandH = 42
+  const y = doc.y
+  doc.save()
+  doc.rect(left, y, right - left, bandH).fill('#1e3a5f')
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(14).text('INCIDENT REPORT', left + 16, y + 13, {
+    width: (right - left) * 0.55
+  })
+  doc.font('Helvetica').fontSize(8).text('REFERENCE', right - 150, y + 10, { width: 134, align: 'right' })
+  doc.font('Helvetica-Bold').fontSize(13).text(displayValue(incidentNumber), right - 150, y + 22, {
+    width: 134,
+    align: 'right'
+  })
+  doc.restore()
+  return y + bandH
 }
 
-async function loadImageBufferFromItem(item) {
-  const url = photoItemUrl(item)
-  if (!url || !photoItemIsImage(item)) return null
-  if (/^data:image\/(png|jpeg|jpg);base64,/i.test(url)) {
-    try {
-      const b64 = url.split(',')[1]
-      return Buffer.from(b64, 'base64')
-    } catch {
-      return null
+function drawSummaryRow(doc, left, right, y, cells, rowOptions = {}) {
+  const rowW = right - left
+  const colW = rowW / 4
+  const rowH = 46
+  let x = left
+  for (let i = 0; i < cells.length; i += 1) {
+    const cell = cells[i]
+    if (!cell) {
+      x += colW
+      continue
     }
+    doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text(String(cell.label || '').toUpperCase(), x + 10, y + 8, {
+      width: colW - 14
+    })
+    if (rowOptions.severityCol === i && typeof rowOptions.drawSeverity === 'function') {
+      rowOptions.drawSeverity(x + 10, y + 22)
+    } else {
+      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(String(cell.value ?? '—'), x + 10, y + 22, {
+        width: colW - 14
+      })
+    }
+    x += colW
   }
-  return null
+  doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(left, y + rowH).lineTo(right, y + rowH).stroke()
+  return y + rowH
 }
 
-function drawSection(doc, left, right, y, title, body) {
+function drawSeverityBadge(doc, x, y, severity) {
+  const text = displayValue(severity)
+  if (text === '—') {
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text('—', x, y)
+    return
+  }
+  const padX = 8
+  const textW = doc.widthOfString(text, { font: 'Helvetica-Bold', size: 9 })
+  const badgeW = textW + padX * 2
+  const badgeH = 16
+  doc.save()
+  doc.roundedRect(x, y - 2, badgeW, badgeH, 8).fill(severityFill(severity))
+  doc.fillColor(severityTextColor(severity)).font('Helvetica-Bold').fontSize(9).text(text, x + padX, y + 1)
+  doc.restore()
+}
+
+function drawNarrativeSection(doc, left, right, y, title, body) {
   const contentW = right - left
-  const text = String(body || '').trim() || '—'
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(12).text(title, left, y, { width: contentW })
-  let cy = y + 16
-  doc.font('Helvetica').fontSize(10).fillColor('#374151')
-  doc.text(text, left, cy, { width: contentW, lineGap: 2 })
-  return doc.y + 14
+  const text = String(body ?? '').trim()
+  const headH = 28
+  doc.save()
+  doc.rect(left, y, contentW, headH).fill('#f8fafc')
+  doc.strokeColor('#d1d5db').lineWidth(0.5).rect(left, y, contentW, headH).stroke()
+  doc.fillColor('#374151').font('Helvetica-Bold').fontSize(9).text(String(title || '').toUpperCase(), left + 12, y + 10, {
+    width: contentW - 24
+  })
+  doc.restore()
+
+  const bodyY = y + headH
+  const bodyPad = 12
+  doc.font('Helvetica').fontSize(10).fillColor(text ? '#1f2937' : '#9ca3af')
+  const rendered = text || 'Not recorded'
+  doc.text(rendered, left + bodyPad, bodyY + bodyPad, {
+    width: contentW - bodyPad * 2,
+    lineGap: 3
+  })
+  const bodyH = Math.max(56, doc.y - bodyY + bodyPad)
+  doc.strokeColor('#d1d5db').lineWidth(0.5).rect(left, bodyY, contentW, bodyH).stroke()
+  return bodyY + bodyH + 14
 }
 
 function drawPdfHeader(doc, companyName, letterhead) {
@@ -82,7 +134,7 @@ function drawPdfHeader(doc, companyName, letterhead) {
   const right = doc.page.width - doc.page.margins.right
   const headerTop = doc.page.margins.top
   let brandTextX = left
-  const logoH = 50
+  const logoH = 48
   if (
     letterhead.logoDataUrl &&
     /^data:image\/(png|jpeg|jpg);base64,/i.test(String(letterhead.logoDataUrl))
@@ -91,7 +143,7 @@ function drawPdfHeader(doc, companyName, letterhead) {
       const b64 = String(letterhead.logoDataUrl).split(',')[1]
       const imgBuf = Buffer.from(b64, 'base64')
       doc.image(imgBuf, left, headerTop, { height: logoH })
-      brandTextX = left + 115
+      brandTextX = left + 110
     } catch {
       brandTextX = left
     }
@@ -102,7 +154,7 @@ function drawPdfHeader(doc, companyName, letterhead) {
     align: billingBrandTextAlign(brandTextX, left)
   })
   const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : []
-  let ty = headerTop + 20
+  let ty = headerTop + 18
   doc.font('Helvetica').fontSize(9).fillColor('#4b5563')
   for (const line of addressLines) {
     const s = String(line || '').trim()
@@ -124,30 +176,20 @@ function drawPdfHeader(doc, companyName, letterhead) {
     })
     ty += 11
   }
-  const underlineY = Math.max(headerTop + logoH, ty) + 10
-  doc.strokeColor('#2563eb').lineWidth(2).moveTo(left, underlineY).lineTo(right, underlineY).stroke()
-  doc.fillColor('#1d4ed8').font('Helvetica-Bold').fontSize(16).text('INCIDENT REPORT', left, underlineY + 12, {
-    width: right - left
-  })
-  return underlineY + 36
+  return Math.max(headerTop + logoH, ty) + 12
 }
 
 /**
+ * Web form fields: client, site, type, severity, date, status, description, immediate actions.
  * @param {import('@prisma/client').PrismaClient} prismaClient
  * @param {object} incident
  */
 export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
   const { companyName, letterhead } = await loadDocumentBranding(prismaClient)
-  const people = parseIncidentPeopleInvolved(incident.peopleInvolved)
-  const photos = parsePhotosJson(incident.photos)
-  const imageBuffers = []
-  for (const item of photos.slice(0, 8)) {
-    const buf = await loadImageBufferFromItem(item)
-    if (buf) imageBuffers.push(buf)
-  }
+  const incidentNumber = displayValue(incident.incidentNumber || incident.id)
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 42 })
+    const doc = new PDFDocument({ size: 'A4', margin: 48 })
     const chunks = []
     doc.on('data', (chunk) => chunks.push(chunk))
     doc.on('end', () => resolve(Buffer.concat(chunks)))
@@ -157,86 +199,51 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
     const right = doc.page.width - doc.page.margins.right
     const contentW = right - left
     let y = drawPdfHeader(doc, companyName, letterhead)
+    doc.y = y
+    y = drawTitleBand(doc, left, right, incidentNumber)
 
-    const colW = contentW / 3
-    drawMetaCell(doc, left, y, colW - 6, 'Incident number', incident.incidentNumber || incident.id)
-    drawMetaCell(doc, left + colW, y, colW - 6, 'Client', incident.clientName || '—')
-    drawMetaCell(doc, left + colW * 2, y, colW - 6, 'Site', incident.siteName || '—')
-    y += 44
-    drawMetaCell(doc, left, y, colW - 6, 'Type', incident.incidentType || '—')
-    drawMetaCell(doc, left + colW, y, colW - 6, 'Severity', incident.severity || '—')
-    drawMetaCell(doc, left + colW * 2, y, colW - 6, 'Status', String(incident.status || 'draft').toUpperCase())
-    y += 44
-    drawMetaCell(doc, left, y, colW - 6, 'Incident date', formatPdfDateSast(incident.incidentAt))
-    drawMetaCell(doc, left + colW, y, colW - 6, 'Reported by', incident.reportedByName || '—')
-    drawMetaCell(
-      doc,
-      left + colW * 2,
-      y,
-      colW - 6,
-      'Linked job card',
-      incident.jobCardNumber || incident.jobCardId || '—'
-    )
-    y += 52
+    doc.strokeColor('#d1d5db').lineWidth(0.75).rect(left, y, contentW, 92).stroke()
+    const row1Y = y
+    const cellsRow1 = [
+      { label: 'Client', value: displayValue(incident.clientName) },
+      { label: 'Site', value: displayValue(incident.siteName) },
+      { label: 'Incident type', value: displayValue(incident.incidentType) },
+      { label: 'Severity', value: displayValue(incident.severity) }
+    ]
+    drawSummaryRow(doc, left, right, row1Y, cellsRow1, {
+      severityCol: 3,
+      drawSeverity: (x, badgeY) => drawSeverityBadge(doc, x, badgeY, incident.severity)
+    })
 
-    y = drawSection(doc, left, right, y, 'Description', incident.description)
-    y = drawSection(doc, left, right, y, 'Immediate actions', incident.immediateActions)
-    y = drawSection(doc, left, right, y, 'Investigation notes', incident.investigationNotes)
-    y = drawSection(doc, left, right, y, 'Corrective actions', incident.correctiveActions)
-    y = drawSection(doc, left, right, y, 'Equipment involved', incident.equipmentInvolved)
-    y = drawSection(doc, left, right, y, 'Witnesses', incident.witnesses)
+    const row2Y = row1Y + 46
+    drawSummaryRow(doc, left, right, row2Y, [
+      { label: 'Incident date & time', value: formatPdfDateSast(incident.incidentAt) },
+      { label: 'Status', value: incidentStatusLabel(incident.status) },
+      null,
+      null
+    ])
+    y += 92 + 18
 
-    if (people.length > 0) {
-      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(12).text('People involved', left, y, { width: contentW })
-      y = doc.y + 8
-      for (const person of people) {
-        const line = `${person.name || '—'}${person.role ? ` (${person.role})` : ''}${person.injured ? ' — INJURED' : ''}`
-        doc.font('Helvetica').fontSize(10).fillColor('#374151').text(line, left, y, { width: contentW })
-        y = doc.y + 4
-      }
-      y += 10
-    }
+    y = drawNarrativeSection(doc, left, right, y, 'Description', incident.description)
+    y = drawNarrativeSection(doc, left, right, y, 'Immediate actions', incident.immediateActions)
 
-    const locDesc = String(incident.locationDescription || '').trim()
-    const lat = String(incident.locationLatitude || '').trim()
-    const lng = String(incident.locationLongitude || '').trim()
-    if (locDesc || (lat && lng)) {
-      let locBody = locDesc
-      if (lat && lng) locBody += (locBody ? '\n' : '') + `Coordinates: ${lat}, ${lng}`
-      y = drawSection(doc, left, right, y, 'Location', locBody)
-    }
-
-    if (imageBuffers.length > 0) {
-      if (y > doc.page.height - 180) {
-        doc.addPage()
-        y = doc.page.margins.top
-      }
-      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(12).text('Evidence photos', left, y)
-      y = doc.y + 10
-      const imgW = (contentW - 12) / 2
-      let col = 0
-      for (const buf of imageBuffers) {
-        try {
-          const x = left + col * (imgW + 12)
-          doc.image(buf, x, y, { width: imgW, fit: [imgW, 120] })
-          col += 1
-          if (col >= 2) {
-            col = 0
-            y += 128
-          }
-        } catch {
-          // skip bad image
-        }
-      }
-      if (col > 0) y += 128
-    }
+    doc
+      .font('Helvetica-Oblique')
+      .fontSize(8)
+      .fillColor('#6b7280')
+      .text(
+        'This document contains operational incident information. Handle in accordance with company policy.',
+        left,
+        y + 8,
+        { width: contentW, align: 'center' }
+      )
 
     doc
       .font('Helvetica')
       .fontSize(8)
-      .fillColor('#6b7280')
+      .fillColor('#9ca3af')
       .text(
-        `${companyName} • Incident ${incident.incidentNumber || incident.id || ''} • Printed ${formatPdfDateSast(new Date())}`,
+        `${companyName} • Incident ${incidentNumber} • Printed ${formatPdfDateSast(new Date())}`,
         left,
         doc.page.height - 54,
         { width: contentW, align: 'center' }

@@ -18,155 +18,232 @@ export function formatIncidentPrintDate(value) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
     timeZone: 'Africa/Johannesburg'
   })
 }
 
-function parsePeople(raw) {
-  try {
-    if (!raw) return []
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+function displayValue(value) {
+  const text = String(value ?? '').trim()
+  return text || '—'
 }
 
-function photoUrl(item) {
-  if (!item) return ''
-  if (typeof item === 'string') return item
-  return String(item.url || item.uri || '').trim()
+function severityBadgeClass(severity) {
+  const s = String(severity || '').trim().toLowerCase()
+  if (s === 'critical') return 'badge badge-critical'
+  if (s === 'high') return 'badge badge-high'
+  if (s === 'medium') return 'badge badge-medium'
+  if (s === 'low') return 'badge badge-low'
+  return 'badge badge-neutral'
 }
 
-function isVisualPhoto(item) {
-  const url = photoUrl(item)
-  if (!url) return false
-  if (item?.kind === 'voice') return false
-  const mt = String(item?.mediaType || item?.mimeType || '').toLowerCase()
-  if (mt.includes('video') || mt.includes('audio')) return false
-  return !/^data:video\//i.test(url) && !/^data:audio\//i.test(url)
+function summaryCell(label, valueHtml) {
+  return `<td><div class="lbl">${escapeHtml(label)}</div><div class="val">${valueHtml}</div></td>`
+}
+
+function narrativeBlock(title, body) {
+  const text = String(body ?? '').trim()
+  const bodyClass = text ? 'narrative-body' : 'narrative-body empty'
+  const content = text ? escapeHtml(text) : 'Not recorded'
+  return `<div class="narrative">
+    <div class="narrative-head">${escapeHtml(title)}</div>
+    <div class="${bodyClass}">${content}</div>
+  </div>`
 }
 
 export const INCIDENT_PRINT_CSS = `
-  @page { size: A4; margin: 12mm; }
-  body { margin: 0; font-family: Arial, sans-serif; color: #1f2937; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    color: #1f2937;
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .sheet { width: 100%; }
-  .header { display: flex; justify-content: space-between; gap: 12px; border-bottom: 3px solid #2563eb; padding-bottom: 10px; margin-bottom: 12px; }
-  .brand-logo { max-height: 60px; max-width: 180px; object-fit: contain; }
-  .brand h1 { margin: 0; font-size: 19px; color: #111827; }
-  .brand-meta { font-size: 11px; color: #4b5563; margin-top: 4px; text-align: right; }
-  .doc-title { margin: 0 0 8px; color: #1d4ed8; font-size: 18px; letter-spacing: 0.3px; }
-  .meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
-  .meta-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; min-height: 56px; }
-  .label { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.4px; margin-bottom: 2px; }
-  .value { font-size: 12px; color: #111827; font-weight: 600; white-space: pre-wrap; }
-  .section { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; page-break-inside: avoid; }
-  .section h3 { margin: 0 0 6px; font-size: 13px; color: #111827; }
-  p { margin: 4px 0; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
-  .muted { color: #6b7280; font-style: italic; }
-  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-  th, td { border: 1px solid #d1d5db; padding: 6px; font-size: 11px; text-align: left; vertical-align: top; }
-  th { background: #f3f4f6; font-weight: 600; }
-  .image-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .image-grid img { width: 100%; height: auto; border: 1px solid #d1d5db; border-radius: 6px; }
-  .footer { margin-top: 16px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #6b7280; text-align: center; }
+  .letterhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 10px;
+  }
+  .letterhead-logo img { max-height: 52px; max-width: 160px; object-fit: contain; }
+  .letterhead-contact { text-align: right; font-size: 9pt; line-height: 1.45; color: #4b5563; }
+  .letterhead-contact h1 { margin: 0 0 4px; font-size: 14pt; color: #111827; font-weight: 700; }
+  .title-band {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: #fff;
+    padding: 14px 18px;
+    border-radius: 6px 6px 0 0;
+    margin-top: 6px;
+  }
+  .title-band h2 { margin: 0; font-size: 14pt; font-weight: 700; letter-spacing: 0.1em; }
+  .title-band .ref { text-align: right; }
+  .title-band .ref-label { font-size: 8pt; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.06em; }
+  .title-band .ref-value { font-size: 13pt; font-weight: 700; margin-top: 2px; }
+  .summary-panel {
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .summary-table { width: 100%; border-collapse: collapse; }
+  .summary-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: top;
+    width: 25%;
+  }
+  .summary-table tr:last-child td { border-bottom: none; }
+  .summary-table .lbl {
+    font-size: 8pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .summary-table .val { font-size: 10.5pt; font-weight: 600; color: #111827; }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 9pt;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .badge-low { background: #d1fae5; color: #065f46; }
+  .badge-medium { background: #fef3c7; color: #92400e; }
+  .badge-high { background: #fee2e2; color: #991b1b; }
+  .badge-critical { background: #7f1d1d; color: #fff; }
+  .badge-neutral { background: #f3f4f6; color: #374151; }
+  .badge-status { background: #e0e7ff; color: #3730a3; }
+  .narrative { margin-bottom: 14px; page-break-inside: avoid; }
+  .narrative-head {
+    background: #f8fafc;
+    border: 1px solid #d1d5db;
+    border-bottom: none;
+    padding: 8px 14px;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #374151;
+    border-radius: 6px 6px 0 0;
+  }
+  .narrative-body {
+    border: 1px solid #d1d5db;
+    border-radius: 0 0 6px 6px;
+    padding: 12px 14px;
+    min-height: 56px;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1f2937;
+    white-space: pre-wrap;
+  }
+  .narrative-body.empty { color: #9ca3af; font-style: italic; }
+  .confidential {
+    margin-top: 28px;
+    font-size: 8pt;
+    color: #6b7280;
+    text-align: center;
+    font-style: italic;
+  }
+  .doc-footer {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 8pt;
+    color: #9ca3af;
+    text-align: center;
+    line-height: 1.5;
+  }
 `
 
 /**
+ * Web form fields: client, site, type, severity, date, status, description, immediate actions.
  * @param {object} incident
- * @param {{ companyName?: string, letterhead?: object, imageSrcs?: string[], mapImageSrc?: string }} opts
+ * @param {{ companyName?: string, letterhead?: object }} opts
  */
 export function buildIncidentReportPrintHtml(incident, opts = {}) {
   const companyName = opts.companyName || 'Abcotronics'
   const letterhead = opts.letterhead || {}
   const addressLines = Array.isArray(letterhead.addressLines) ? letterhead.addressLines : []
   const logoMarkup = letterhead.logoDataUrl
-    ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Company logo" class="brand-logo" />`
+    ? `<img src="${escapeHtml(letterhead.logoDataUrl)}" alt="Company logo" />`
     : ''
-  const people = parsePeople(incident.peopleInvolved)
-  const peopleTable =
-    people.length > 0
-      ? `<table><thead><tr><th>Name</th><th>Role</th><th>Injured</th></tr></thead><tbody>${people
-          .map(
-            (p) =>
-              `<tr><td>${escapeHtml(p.name || '—')}</td><td>${escapeHtml(p.role || '—')}</td><td>${p.injured ? 'Yes' : 'No'}</td></tr>`
-          )
-          .join('')}</tbody></table>`
-      : '<p class="muted">No people recorded.</p>'
-
-  const imageSrcs = Array.isArray(opts.imageSrcs) ? opts.imageSrcs.filter(Boolean) : []
-  const imageMarkup =
-    imageSrcs.length > 0
-      ? `<div class="image-grid">${imageSrcs
-          .map((src) => `<img src="${escapeHtml(src)}" alt="Evidence" />`)
-          .join('')}</div>`
-      : '<p class="muted">No photos attached.</p>'
-
-  const lat = String(incident.locationLatitude || '').trim()
-  const lng = String(incident.locationLongitude || '').trim()
-  const mapMarkup = opts.mapImageSrc
-    ? `<div class="image-grid"><img src="${escapeHtml(opts.mapImageSrc)}" alt="Map" /></div>`
-    : ''
-
-  const section = (title, body) =>
-    `<section class="section"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body || '—')}</p></section>`
+  const incidentNumber = displayValue(incident.incidentNumber || incident.id)
+  const severity = displayValue(incident.severity)
+  const severityHtml =
+    severity === '—'
+      ? '—'
+      : `<span class="${severityBadgeClass(severity)}">${escapeHtml(severity)}</span>`
+  const statusLabel = incidentStatusLabel(incident.status)
+  const statusHtml = `<span class="badge badge-status">${escapeHtml(statusLabel)}</span>`
+  const printedAt = formatIncidentPrintDate(new Date())
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Incident ${escapeHtml(incident.incidentNumber || incident.id || '')}</title>
+  <title>Incident ${escapeHtml(incidentNumber)}</title>
   <style>${INCIDENT_PRINT_CSS}</style>
 </head>
 <body>
   <div class="sheet">
-    <div class="header">
-      <div>${logoMarkup}</div>
-      <div class="brand">
+    <div class="letterhead">
+      <div class="letterhead-logo">${logoMarkup}</div>
+      <div class="letterhead-contact">
         <h1>${escapeHtml(companyName)}</h1>
-        <div class="brand-meta">
-          ${addressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
-          ${letterhead.phone ? `<div>Tel: ${escapeHtml(letterhead.phone)}</div>` : ''}
-          ${letterhead.email ? `<div>Email: ${escapeHtml(letterhead.email)}</div>` : ''}
-          ${letterhead.vatNumber ? `<div>VAT: ${escapeHtml(letterhead.vatNumber)}</div>` : ''}
-        </div>
+        ${addressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
+        ${letterhead.phone ? `<div>Tel: ${escapeHtml(letterhead.phone)}</div>` : ''}
+        ${letterhead.email ? `<div>Email: ${escapeHtml(letterhead.email)}</div>` : ''}
+        ${letterhead.vatNumber ? `<div>VAT: ${escapeHtml(letterhead.vatNumber)}</div>` : ''}
       </div>
     </div>
-    <h2 class="doc-title">INCIDENT REPORT</h2>
-    <div class="meta-grid">
-      <div class="meta-card"><div class="label">Incident number</div><div class="value">${escapeHtml(incident.incidentNumber || incident.id || '—')}</div></div>
-      <div class="meta-card"><div class="label">Client</div><div class="value">${escapeHtml(incident.clientName || '—')}</div></div>
-      <div class="meta-card"><div class="label">Site</div><div class="value">${escapeHtml(incident.siteName || '—')}</div></div>
-      <div class="meta-card"><div class="label">Type</div><div class="value">${escapeHtml(incident.incidentType || '—')}</div></div>
-      <div class="meta-card"><div class="label">Severity</div><div class="value">${escapeHtml(incident.severity || '—')}</div></div>
-      <div class="meta-card"><div class="label">Status</div><div class="value">${escapeHtml(incidentStatusLabel(incident.status).toUpperCase())}</div></div>
-      <div class="meta-card"><div class="label">Incident date</div><div class="value">${escapeHtml(formatIncidentPrintDate(incident.incidentAt))}</div></div>
-      <div class="meta-card"><div class="label">Reported by</div><div class="value">${escapeHtml(incident.reportedByName || '—')}</div></div>
-      <div class="meta-card"><div class="label">Linked job card</div><div class="value">${escapeHtml(incident.jobCardNumber || incident.jobCardId || '—')}</div></div>
+
+    <div class="title-band">
+      <h2>INCIDENT REPORT</h2>
+      <div class="ref">
+        <div class="ref-label">Reference</div>
+        <div class="ref-value">${escapeHtml(incidentNumber)}</div>
+      </div>
     </div>
-    ${section('Description', incident.description)}
-    ${section('Immediate actions', incident.immediateActions)}
-    ${section('Investigation notes', incident.investigationNotes)}
-    ${section('Corrective actions', incident.correctiveActions)}
-    ${section('Equipment involved', incident.equipmentInvolved)}
-    <section class="section"><h3>People involved</h3>${peopleTable}</section>
-    ${section('Witnesses', incident.witnesses)}
-    <section class="section">
-      <h3>Location</h3>
-      <p>${escapeHtml(incident.locationDescription || '—')}</p>
-      ${lat && lng ? `<p><strong>Coordinates:</strong> ${escapeHtml(lat)}, ${escapeHtml(lng)}</p>` : ''}
-      ${mapMarkup}
-    </section>
-    <section class="section"><h3>Evidence photos</h3>${imageMarkup}</section>
-    <div class="footer">${escapeHtml(companyName)} • Incident ${escapeHtml(incident.incidentNumber || incident.id || '')}</div>
+
+    <div class="summary-panel">
+      <table class="summary-table">
+        <tr>
+          ${summaryCell('Client', escapeHtml(displayValue(incident.clientName)))}
+          ${summaryCell('Site', escapeHtml(displayValue(incident.siteName)))}
+          ${summaryCell('Incident type', escapeHtml(displayValue(incident.incidentType)))}
+          ${summaryCell('Severity', severityHtml)}
+        </tr>
+        <tr>
+          ${summaryCell('Incident date & time', escapeHtml(formatIncidentPrintDate(incident.incidentAt)))}
+          ${summaryCell('Status', statusHtml)}
+          <td colspan="2"></td>
+        </tr>
+      </table>
+    </div>
+
+    ${narrativeBlock('Description', incident.description)}
+    ${narrativeBlock('Immediate actions', incident.immediateActions)}
+
+    <div class="confidential">This document contains operational incident information. Handle in accordance with company policy.</div>
+    <div class="doc-footer">${escapeHtml(companyName)} &bull; Incident ${escapeHtml(incidentNumber)} &bull; Printed ${escapeHtml(printedAt)}</div>
   </div>
 </body>
 </html>`
 }
 
+/** @deprecated Photos are not part of the web incident form; kept for API compatibility. */
 export function partitionIncidentPhotosForPrint(photos) {
-  const list = Array.isArray(photos) ? photos : []
-  return list.filter(isVisualPhoto)
+  return []
 }

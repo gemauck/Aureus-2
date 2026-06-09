@@ -172,15 +172,7 @@ function IncidentReportsPanel({
     }
     try {
       setDownloadingPdf(true)
-      let incident = { ...selected }
-      const pr = await fetch(`/api/incident-reports/${encodeURIComponent(incident.id)}/photos`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (pr.ok) {
-        const pd = await pr.json()
-        const photos = pd?.photos || pd?.data?.photos
-        if (Array.isArray(photos)) incident = { ...incident, photos }
-      }
+      const incident = { ...selected }
 
       let companyName = 'Abcotronics'
       let letterhead = {}
@@ -200,39 +192,9 @@ function IncidentReportsPanel({
       }
 
       const buildHtml = window.IncidentReportPrint?.buildIncidentReportPrintHtml
-      const partition = window.IncidentReportPrint?.partitionIncidentPhotosForPrint
-      const visual = typeof partition === 'function' ? partition(incident.photos || []) : []
-      const imageSrcs = visual
-        .map((item) => (typeof item === 'string' ? item : item?.url || ''))
-        .filter((url) => typeof url === 'string' && url.trim())
-        .slice(0, 12)
-
-      const lat = String(incident.locationLatitude || '').trim()
-      const lng = String(incident.locationLongitude || '').trim()
-      let mapImageSrc = ''
-      if (lat && lng) {
-        const mapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${encodeURIComponent(
-          `${lat},${lng}`
-        )}&zoom=15&size=900x360&markers=${encodeURIComponent(`${lat},${lng},red-pushpin`)}`
-        try {
-          const mr = await fetch(mapUrl)
-          if (mr.ok) {
-            const blob = await mr.blob()
-            mapImageSrc = await new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result || '')
-              reader.onerror = reject
-              reader.readAsDataURL(blob)
-            })
-          }
-        } catch {
-          // optional map
-        }
-      }
-
       const html =
         typeof buildHtml === 'function'
-          ? buildHtml(incident, { companyName, letterhead, imageSrcs, mapImageSrc })
+          ? buildHtml(incident, { companyName, letterhead })
           : `<html><body><pre>${escapeHtml(JSON.stringify(incident, null, 2))}</pre></body></html>`
 
       printWin.document.write(html)
@@ -437,12 +399,12 @@ function IncidentReportsPanel({
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
+                ['Client', selected.clientName],
+                ['Site', selected.siteName],
                 ['Type', selected.incidentType],
                 ['Severity', selected.severity],
                 ['Status', selected.status],
-                ['Incident date', formatDate(selected.incidentAt)],
-                ['Reported by', selected.reportedByName],
-                ['Linked job card', selected.jobCardNumber || '—']
+                ['Incident date', formatDate(selected.incidentAt)]
               ].map(([label, value]) => (
                 <div key={label} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                   <div className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{label}</div>
@@ -450,23 +412,9 @@ function IncidentReportsPanel({
                 </div>
               ))}
             </div>
-            {selected.jobCardId && typeof onOpenJobCard === 'function' ? (
-              <button
-                type="button"
-                onClick={() => onOpenJobCard({ id: selected.jobCardId, jobCardNumber: selected.jobCardNumber })}
-                className="text-xs font-medium text-indigo-600 underline"
-              >
-                Open linked job card {selected.jobCardNumber || selected.jobCardId}
-              </button>
-            ) : null}
             {[
               ['Description', selected.description],
-              ['Immediate actions', selected.immediateActions],
-              ['Investigation notes', selected.investigationNotes],
-              ['Corrective actions', selected.correctiveActions],
-              ['Equipment involved', selected.equipmentInvolved],
-              ['Witnesses', selected.witnesses],
-              ['Location', selected.locationDescription]
+              ['Immediate actions', selected.immediateActions]
             ].map(([title, body]) => (
               <section key={title} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{title}</h3>
