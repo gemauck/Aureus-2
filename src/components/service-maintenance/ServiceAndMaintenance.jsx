@@ -457,6 +457,7 @@ const ServiceAndMaintenance = () => {
     typeof window !== 'undefined' && !!window.IncidentReportPrint
   );
   const [deepLinkIncidentId, setDeepLinkIncidentId] = useState('');
+  const [openNewIncidentForm, setOpenNewIncidentForm] = useState(false);
   const [incidentCreatePrefill, setIncidentCreatePrefill] = useState(null);
   const [prefetchedIncidents, setPrefetchedIncidents] = useState(null);
   const prefetchedIncidentsRef = useRef(null);
@@ -948,9 +949,16 @@ const ServiceAndMaintenance = () => {
       const segs = getRouteSegments();
       if (segs?.[0] === 'incidents') {
         setHeaderTab('incidents');
-        setDeepLinkIncidentId(segs[1] || '');
+        if (segs[1] === 'new') {
+          setDeepLinkIncidentId('');
+          setOpenNewIncidentForm(true);
+        } else {
+          setOpenNewIncidentForm(false);
+          setDeepLinkIncidentId(segs[1] || '');
+        }
       } else {
         setDeepLinkIncidentId('');
+        setOpenNewIncidentForm(false);
       }
     };
 
@@ -2955,11 +2963,13 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
               isDark={isDark}
               isAdminUser={isAdminUser}
               initialIncidentId={deepLinkIncidentId}
+              initialOpenNew={openNewIncidentForm}
               createPrefill={incidentCreatePrefill}
               initialRows={Array.isArray(prefetchedIncidents) ? prefetchedIncidents : null}
               skipInitialFetch={Array.isArray(prefetchedIncidents)}
               onConsumeCreatePrefill={() => setIncidentCreatePrefill(null)}
               onConsumeInitialIncidentId={() => setDeepLinkIncidentId('')}
+              onConsumeInitialOpenNew={() => setOpenNewIncidentForm(false)}
               onOpenJobCard={(jobCard) => {
                 if (jobCard?.id) handleOpenJobCardDetail(jobCard);
               }}

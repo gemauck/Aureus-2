@@ -23,21 +23,6 @@ function formatLocation(incident) {
   return ''
 }
 
-function formatPeopleInvolved(people) {
-  const rows = Array.isArray(people) ? people : []
-  const lines = rows
-    .map((person) => {
-      const name = String(person?.name || '').trim()
-      const role = String(person?.role || '').trim()
-      const injured = person?.injured ? ' (injured)' : ''
-      if (!name && !role) return ''
-      if (name && role) return `${name} — ${role}${injured}`
-      return `${name || role}${injured}`
-    })
-    .filter(Boolean)
-  return lines.join('\n')
-}
-
 function parseIncidentPhotos(raw) {
   try {
     if (!raw) return []

@@ -1547,6 +1547,22 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     );
 };
 
+function navigateServiceMaintenance(subpath = []) {
+    if (window.RouteState?.setPageSubpath) {
+        window.RouteState.setPageSubpath('service-maintenance', subpath, {
+            replace: false,
+            preserveSearch: false,
+            preserveHash: false
+        });
+    } else {
+        window.dispatchEvent(
+            new CustomEvent('navigateToPage', {
+                detail: { page: 'service-maintenance', subpath }
+            })
+        );
+    }
+}
+
 /** Recent job cards (Service & Maintenance) — list + navigate to detail. */
 function normalizeJobCardStatusKey(statusRaw) {
     return String(statusRaw || 'draft')
@@ -1714,19 +1730,7 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark, autoRefre
     const openJobCard = (jc) => {
         const id = jc?.id;
         if (!id) return;
-        if (window.RouteState?.setPageSubpath) {
-            window.RouteState.setPageSubpath('service-maintenance', [String(id)], {
-                replace: false,
-                preserveSearch: false,
-                preserveHash: false
-            });
-        } else {
-            window.dispatchEvent(
-                new CustomEvent('navigateToPage', {
-                    detail: { page: 'service-maintenance', subpath: [String(id)] }
-                })
-            );
-        }
+        navigateServiceMaintenance([String(id)]);
     };
 
     return (
@@ -1841,23 +1845,24 @@ function RecentJobCardsWidget({ cardBase, headerText, subText, isDark, autoRefre
                     })}
                 </ul>
             )}
-            <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex-shrink-0 text-left ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className={`mt-2 sm:mt-3 pt-2 sm:pt-3 border-t flex flex-col gap-2 flex-shrink-0 pr-24 sm:pr-28 text-left ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
                 <button
                     type="button"
                     style={{ textAlign: 'left' }}
-                    onClick={() => {
-                        if (window.RouteState?.setPageSubpath) {
-                            window.RouteState.setPageSubpath('service-maintenance', [], {
-                                replace: false,
-                                preserveSearch: false,
-                                preserveHash: false
-                            });
-                        } else {
-                            window.dispatchEvent(
-                                new CustomEvent('navigateToPage', { detail: { page: 'service-maintenance', subpath: [] } })
-                            );
-                        }
-                    }}
+                    onClick={() => navigateServiceMaintenance(['incidents', 'new'])}
+                    className={`djw-footer-btn w-full min-h-[44px] sm:min-h-0 text-left flex items-center justify-start rounded-lg border px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-semibold touch-manipulation transition-colors ${
+                        isDark
+                            ? 'border-amber-700/50 text-amber-200 bg-amber-950/30 hover:bg-amber-900/40 active:bg-amber-900/50'
+                            : 'border-amber-200 text-amber-900 bg-amber-50 hover:bg-amber-100 active:bg-amber-100/80'
+                    }`}
+                >
+                    <i className="fa-solid fa-triangle-exclamation mr-2 text-[11px]" aria-hidden />
+                    New incident report
+                </button>
+                <button
+                    type="button"
+                    style={{ textAlign: 'left' }}
+                    onClick={() => navigateServiceMaintenance([])}
                     className={`djw-footer-btn w-full min-h-[44px] sm:min-h-0 text-left flex items-center justify-start rounded-lg border px-3 py-2.5 sm:py-2 text-sm sm:text-xs font-semibold touch-manipulation transition-colors ${
                         isDark
                             ? 'border-primary-700/50 text-primary-200 bg-gray-800/50 hover:bg-gray-800 active:bg-gray-800/90'
@@ -3522,7 +3527,7 @@ const DashboardLive = () => {
 
     // Customizable widgets UI
     return (
-        <div className="erp-module-root space-y-6">
+        <div className="erp-module-root space-y-6 pb-24">
             <div className="flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-start sm:gap-8">
                 <div className="shrink-0 sm:pt-0.5">
                     <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Welcome, {userName}</h2>

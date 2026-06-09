@@ -441,9 +441,11 @@ function IncidentReportsPanel({
   isAdminUser = false,
   onOpenJobCard,
   initialIncidentId = '',
+  initialOpenNew = false,
   createPrefill = null,
   onConsumeCreatePrefill,
   onConsumeInitialIncidentId,
+  onConsumeInitialOpenNew,
   initialRows = null,
   skipInitialFetch = false
 }) {
@@ -570,6 +572,15 @@ function IncidentReportsPanel({
       if (typeof onConsumeInitialIncidentId === 'function') onConsumeInitialIncidentId()
     })
   }, [initialIncidentId, openIncidentById, onConsumeInitialIncidentId])
+
+  useEffect(() => {
+    if (!initialOpenNew) return
+    setSelected(null)
+    setShowDetail(false)
+    setForm({ ...emptyForm(), authorName: currentUserName() })
+    setShowForm(true)
+    if (typeof onConsumeInitialOpenNew === 'function') onConsumeInitialOpenNew()
+  }, [initialOpenNew, onConsumeInitialOpenNew])
 
   const handleDownloadPdf = useCallback(async () => {
     if (!selected || downloadingPdf) return
@@ -862,9 +873,20 @@ function IncidentReportsPanel({
     isDark ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-300 bg-white text-gray-900'
   }`
 
+  const openNewIncidentForm = () => {
+    setSelected(null)
+    setShowDetail(false)
+    setForm({ ...emptyForm(), authorName: currentUserName() })
+    setShowForm(true)
+  }
+
   return (
     <div className="relative min-h-[calc(100dvh-10rem)] w-full space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={`sticky top-0 z-20 flex flex-wrap items-center gap-2 py-1 ${
+          isDark ? 'bg-gray-950/95' : 'bg-[#f8fafc]/95'
+        } backdrop-blur-sm`}
+      >
         <input
           type="search"
           value={search}
@@ -890,15 +912,11 @@ function IncidentReportsPanel({
         </select>
         <button
           type="button"
-          onClick={() => {
-            setSelected(null)
-            setForm(emptyForm())
-            setShowForm(true)
-          }}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+          onClick={openNewIncidentForm}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
         >
           <i className="fa-solid fa-plus" />
-          New incident
+          New incident report
         </button>
       </div>
 
@@ -964,7 +982,7 @@ function IncidentReportsPanel({
       )}
 
       {showDetail && selected ? (
-        <div className={`absolute inset-0 z-40 flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
+        <div className={`fixed inset-0 z-[90] flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
           <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -1089,8 +1107,12 @@ function IncidentReportsPanel({
               ['Equipment / vehicle involved', selected.equipmentInvolved],
               ['Relevant tanks / mobile bowsers', selected.relevantTanksMobileBowsers],
               ['Description', selected.description],
-              ['Immediate actions', selected.immediateActions]
-            ].map(([title, body]) => (
+              ['Immediate actions', selected.immediateActions],
+              ['Investigation notes', selected.investigationNotes],
+              ['Corrective / follow-up actions', selected.correctiveActions]
+            ]
+              .filter(([, body]) => String(body || '').trim())
+              .map(([title, body]) => (
               <section key={title} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{title}</h3>
                 <p className={`mt-2 whitespace-pre-wrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{body || '—'}</p>
@@ -1107,7 +1129,7 @@ function IncidentReportsPanel({
       ) : null}
 
       {showForm ? (
-        <div className={`absolute inset-0 z-50 flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
+        <div className={`fixed inset-0 z-[100] flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
           <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <div className="flex items-center gap-3">
               <button
