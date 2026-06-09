@@ -580,7 +580,20 @@ function IncidentReportsPanel({
     }
     try {
       setDownloadingPdf(true)
-      const incident = { ...selected }
+      let incident = { ...selected }
+      if (token && selected.id) {
+        try {
+          const res = await fetch(`/api/incident-reports/${encodeURIComponent(selected.id)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          const data = await res.json().catch(() => ({}))
+          if (res.ok) {
+            incident = data?.incidentReport || data?.data?.incidentReport || incident
+          }
+        } catch (error) {
+          console.warn('Could not refresh incident before PDF', error)
+        }
+      }
 
       let companyName = 'Abcotronics'
       let letterhead = {}
@@ -608,7 +621,26 @@ function IncidentReportsPanel({
       printWin.document.write(html)
       printWin.document.close()
       printWin.focus()
-      await new Promise((resolve) => setTimeout(resolve, 400))
+      await new Promise((resolve) => {
+        const imgs = printWin.document.querySelectorAll('img')
+        if (!imgs.length) {
+          setTimeout(resolve, 400)
+          return
+        }
+        let pending = imgs.length
+        const finish = () => {
+          pending -= 1
+          if (pending <= 0) setTimeout(resolve, 150)
+        }
+        imgs.forEach((img) => {
+          if (img.complete) finish()
+          else {
+            img.onload = finish
+            img.onerror = finish
+          }
+        })
+        setTimeout(resolve, 4000)
+      })
       printWin.print()
       printWin.close()
     } catch (error) {

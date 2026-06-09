@@ -12,6 +12,31 @@ function displayValue(value) {
   return text || '—'
 }
 
+function formatLocation(incident) {
+  const desc = String(incident?.locationDescription || '').trim()
+  const lat = String(incident?.locationLatitude || '').trim()
+  const lng = String(incident?.locationLongitude || '').trim()
+  if (desc && lat && lng) return `${desc} (${lat}, ${lng})`
+  if (desc) return desc
+  if (lat && lng) return `${lat}, ${lng}`
+  return ''
+}
+
+function formatPeopleInvolved(people) {
+  const rows = Array.isArray(people) ? people : []
+  const lines = rows
+    .map((person) => {
+      const name = String(person?.name || '').trim()
+      const role = String(person?.role || '').trim()
+      const injured = person?.injured ? ' (injured)' : ''
+      if (!name && !role) return ''
+      if (name && role) return `${name} — ${role}${injured}`
+      return `${name || role}${injured}`
+    })
+    .filter(Boolean)
+  return lines.join('\n')
+}
+
 function formatPdfDateSast(value) {
   if (!value) return '—'
   const dt = value instanceof Date ? value : new Date(value)
@@ -187,7 +212,7 @@ function drawSignOffSection(doc, left, right, y, incident) {
   const technicianName = displayValue(incident.technicianName)
   const draftedAt = formatPdfDateSast(incident.createdAt)
   const submittedAt = formatPdfDateSast(incident.submittedAt)
-  const sectionH = sig ? 130 : 88
+  const sectionH = 130
 
   doc.save()
   doc.rect(left, y, contentW, 28).fill('#f8fafc')
@@ -209,15 +234,17 @@ function drawSignOffSection(doc, left, right, y, incident) {
   doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SUBMITTED', left + colW + 12, dateY)
   doc.fillColor('#111827').font('Helvetica').fontSize(9).text(submittedAt, left + colW + 12, dateY + 11)
 
+  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SIGNATURE', left + 12, dateY + 28)
   if (sig && /^data:image\/(png|jpeg|jpg);base64,/i.test(sig)) {
     try {
       const b64 = sig.split(',')[1]
       const imgBuf = Buffer.from(b64, 'base64')
-      doc.image(imgBuf, left + 12, dateY + 28, { fit: [140, 44] })
-      doc.fillColor('#6b7280').font('Helvetica').fontSize(7.5).text('Signature', left + 12, dateY + 74)
+      doc.image(imgBuf, left + 12, dateY + 38, { fit: [160, 52] })
     } catch {
-      /* skip bad signature image */
+      doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(9).text('Not signed', left + 12, dateY + 42)
     }
+  } else {
+    doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(9).text('Not signed', left + 12, dateY + 42)
   }
 
   doc.restore()
@@ -225,7 +252,7 @@ function drawSignOffSection(doc, left, right, y, incident) {
 }
 
 /**
- * Web form fields: client, site, type, severity, date, status, description, immediate actions.
+ * Full incident report PDF (summary, narratives, author sign-off with signature).
  * @param {import('@prisma/client').PrismaClient} prismaClient
  * @param {object} incident
  */
@@ -271,16 +298,21 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
     const row3Y = row2Y + 46
     drawSummaryRow(doc, left, right, row3Y, [
       { label: 'Linked job cards', value: displayValue(formatLinkedJobCardLabels(incident)) },
-      null,
-      null,
-      null
+      { label: 'Draft recorded', value: formatPdfDateSast(incident.createdAt) },
+      { label: 'Submitted', value: formatPdfDateSast(incident.submittedAt) },
+      { label: 'Location', value: displayValue(formatLocation(incident)) }
     ])
     y += 138 + 18
 
+    y = drawNarrativeSection(doc, left, right, y, 'Equipment / vehicle involved', incident.equipmentInvolved)
+    y = drawNarrativeSection(doc, left, right, y, 'Witnesses', incident.witnesses)
+    y = drawNarrativeSection(doc, left, right, y, 'People involved', formatPeopleInvolved(incident.peopleInvolved))
     y = drawNarrativeSection(doc, left, right, y, 'Relevant assets', incident.relevantAssets)
     y = drawNarrativeSection(doc, left, right, y, 'Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)
     y = drawNarrativeSection(doc, left, right, y, 'Description', incident.description)
     y = drawNarrativeSection(doc, left, right, y, 'Immediate actions', incident.immediateActions)
+    y = drawNarrativeSection(doc, left, right, y, 'Investigation notes', incident.investigationNotes)
+    y = drawNarrativeSection(doc, left, right, y, 'Corrective / follow-up actions', incident.correctiveActions)
     y = drawSignOffSection(doc, left, right, y, incident)
 
     doc

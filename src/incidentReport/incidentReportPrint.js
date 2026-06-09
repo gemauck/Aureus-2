@@ -62,6 +62,39 @@ function narrativeBlock(title, body) {
   </div>`
 }
 
+function formatLocation(incident) {
+  const desc = String(incident?.locationDescription || '').trim()
+  const lat = String(incident?.locationLatitude || '').trim()
+  const lng = String(incident?.locationLongitude || '').trim()
+  if (desc && lat && lng) return `${desc} (${lat}, ${lng})`
+  if (desc) return desc
+  if (lat && lng) return `${lat}, ${lng}`
+  return ''
+}
+
+function formatPeopleInvolved(people) {
+  const rows = Array.isArray(people) ? people : []
+  const lines = rows
+    .map((person) => {
+      const name = String(person?.name || '').trim()
+      const role = String(person?.role || '').trim()
+      const injured = person?.injured ? ' (injured)' : ''
+      if (!name && !role) return ''
+      if (name && role) return `${name} — ${role}${injured}`
+      return `${name || role}${injured}`
+    })
+    .filter(Boolean)
+  return lines.join('\n')
+}
+
+function signatureBlockHtml(signature) {
+  const sig = String(signature || '').trim()
+  if (sig.startsWith('data:image/')) {
+    return `<div class="signoff-signature"><div class="lbl">Signature</div><img src="${escapeHtml(sig)}" alt="Author signature" /></div>`
+  }
+  return `<div class="signoff-signature"><div class="lbl">Signature</div><div class="val signature-empty">Not signed</div></div>`
+}
+
 export const INCIDENT_PRINT_CSS = `
   @page { size: A4; margin: 14mm 14mm 16mm; }
   * { box-sizing: border-box; }
@@ -215,11 +248,12 @@ export const INCIDENT_PRINT_CSS = `
   .signoff-field .lbl { font-size: 8pt; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
   .signoff-field .val { font-size: 10.5pt; font-weight: 600; color: #111827; }
   .signoff-signature { grid-column: 1 / -1; margin-top: 4px; }
-  .signoff-signature img { max-height: 56px; max-width: 220px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
+  .signoff-signature img { max-height: 72px; max-width: 280px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
+  .signature-empty { color: #9ca3af; font-style: italic; font-weight: 400; }
 `
 
 /**
- * Web form fields: client, site, type, severity, date, status, description, immediate actions.
+ * Full incident report print layout (summary, narratives, photos, author sign-off).
  * @param {object} incident
  * @param {{ companyName?: string, letterhead?: object }} opts
  */
@@ -284,17 +318,22 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
         </tr>
         <tr>
           ${summaryCell('Linked job cards', escapeHtml(formatLinkedJobCards(incident)))}
-          ${summaryCell('', '—')}
-          ${summaryCell('', '—')}
-          ${summaryCell('', '—')}
+          ${summaryCell('Draft recorded', escapeHtml(formatIncidentPrintDate(incident.createdAt)))}
+          ${summaryCell('Submitted', escapeHtml(formatIncidentPrintDate(incident.submittedAt)))}
+          ${summaryCell('Location', escapeHtml(displayValue(formatLocation(incident))))}
         </tr>
       </table>
     </div>
 
+    ${narrativeBlock('Equipment / vehicle involved', incident.equipmentInvolved)}
+    ${narrativeBlock('Witnesses', incident.witnesses)}
+    ${narrativeBlock('People involved', formatPeopleInvolved(incident.peopleInvolved))}
     ${narrativeBlock('Relevant assets', incident.relevantAssets)}
     ${narrativeBlock('Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)}
     ${narrativeBlock('Description', incident.description)}
     ${narrativeBlock('Immediate actions', incident.immediateActions)}
+    ${narrativeBlock('Investigation notes', incident.investigationNotes)}
+    ${narrativeBlock('Corrective / follow-up actions', incident.correctiveActions)}
     ${incidentPhotoGalleryHtml(incident.photos)}
 
     <div class="signoff">
@@ -316,11 +355,7 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
           <div class="lbl">Submitted</div>
           <div class="val">${escapeHtml(formatIncidentPrintDate(incident.submittedAt))}</div>
         </div>
-        ${
-          String(incident.authorSignature || '').startsWith('data:image/')
-            ? `<div class="signoff-signature"><div class="lbl">Signature</div><img src="${escapeHtml(incident.authorSignature)}" alt="Author signature" /></div>`
-            : ''
-        }
+        ${signatureBlockHtml(incident.authorSignature)}
       </div>
     </div>
 
@@ -378,4 +413,13 @@ function incidentPhotoGalleryHtml(photos) {
     })
     .join('')
   return `<div class="narrative"><div class="narrative-head">Photos</div><div class="photo-grid">${tiles}</div></div>`
+}
+
+if (typeof window !== 'undefined') {
+  window.IncidentReportPrint = {
+    buildIncidentReportPrintHtml,
+    partitionIncidentPhotosForPrint,
+    escapeHtml,
+    formatIncidentPrintDate
+  }
 }

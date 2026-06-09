@@ -1,4 +1,4 @@
-// Browser bundle — exposes print helpers for incident PDF (Service & Maintenance).
+// Browser bundle — keep in sync with incidentReportPrint.js (Service & Maintenance PDF download).
 (function () {
   const INCIDENT_STATUS_OPTIONS = [
     { value: 'draft', label: 'Draft' },
@@ -6,6 +6,12 @@
     { value: 'under_investigation', label: 'Under investigation' },
     { value: 'closed', label: 'Closed' }
   ]
+
+  function incidentStatusLabel(status) {
+    const normalized = String(status || 'draft').toLowerCase().replace(/\s+/g, '_')
+    const hit = INCIDENT_STATUS_OPTIONS.find((o) => o.value === normalized)
+    return hit?.label || String(status || 'draft')
+  }
 
   function escapeHtml(str) {
     return String(str ?? '')
@@ -30,15 +36,20 @@
     })
   }
 
-  function incidentStatusLabel(status) {
-    const normalized = String(status || 'draft').toLowerCase().replace(/\s+/g, '_')
-    const hit = INCIDENT_STATUS_OPTIONS.find((o) => o.value === normalized)
-    return hit?.label || String(status || 'draft')
-  }
-
   function displayValue(value) {
     const text = String(value ?? '').trim()
     return text || '—'
+  }
+
+  function formatLinkedJobCards(incident) {
+    const links =
+      Array.isArray(incident?.linkedJobCards) && incident.linkedJobCards.length
+        ? incident.linkedJobCards
+        : incident?.jobCardId
+          ? [{ jobCardNumber: incident.jobCardNumber, id: incident.jobCardId }]
+          : []
+    const labels = links.map((row) => String(row?.jobCardNumber || row?.id || '').trim()).filter(Boolean)
+    return labels.length ? labels.join(', ') : '—'
   }
 
   function severityBadgeClass(severity) {
@@ -62,6 +73,39 @@
       <div class="narrative-head">${escapeHtml(title)}</div>
       <div class="${bodyClass}">${content}</div>
     </div>`
+  }
+
+  function formatLocation(incident) {
+    const desc = String(incident?.locationDescription || '').trim()
+    const lat = String(incident?.locationLatitude || '').trim()
+    const lng = String(incident?.locationLongitude || '').trim()
+    if (desc && lat && lng) return `${desc} (${lat}, ${lng})`
+    if (desc) return desc
+    if (lat && lng) return `${lat}, ${lng}`
+    return ''
+  }
+
+  function formatPeopleInvolved(people) {
+    const rows = Array.isArray(people) ? people : []
+    const lines = rows
+      .map((person) => {
+        const name = String(person?.name || '').trim()
+        const role = String(person?.role || '').trim()
+        const injured = person?.injured ? ' (injured)' : ''
+        if (!name && !role) return ''
+        if (name && role) return `${name} — ${role}${injured}`
+        return `${name || role}${injured}`
+      })
+      .filter(Boolean)
+    return lines.join('\n')
+  }
+
+  function signatureBlockHtml(signature) {
+    const sig = String(signature || '').trim()
+    if (sig.startsWith('data:image/')) {
+      return `<div class="signoff-signature"><div class="lbl">Signature</div><img src="${escapeHtml(sig)}" alt="Author signature" /></div>`
+    }
+    return `<div class="signoff-signature"><div class="lbl">Signature</div><div class="val signature-empty">Not signed</div></div>`
   }
 
   const INCIDENT_PRINT_CSS = `
@@ -162,6 +206,24 @@
     white-space: pre-wrap;
   }
   .narrative-body.empty { color: #9ca3af; font-style: italic; }
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 12px;
+  }
+  .photo-tile img, .photo-tile video {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+  .photo-cap { margin-top: 4px; font-size: 8pt; color: #6b7280; }
   .confidential {
     margin-top: 28px;
     font-size: 8pt;
@@ -178,7 +240,78 @@
     text-align: center;
     line-height: 1.5;
   }
+  .signoff {
+    margin-top: 18px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  .signoff-head {
+    background: #f8fafc;
+    padding: 8px 14px;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #374151;
+    border-bottom: 1px solid #d1d5db;
+  }
+  .signoff-body { padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+  .signoff-field .lbl { font-size: 8pt; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+  .signoff-field .val { font-size: 10.5pt; font-weight: 600; color: #111827; }
+  .signoff-signature { grid-column: 1 / -1; margin-top: 4px; }
+  .signoff-signature img { max-height: 72px; max-width: 280px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
+  .signature-empty { color: #9ca3af; font-style: italic; font-weight: 400; }
 `
+
+  function partitionIncidentPhotosForPrint(photos) {
+    const rows = []
+    const raw = (() => {
+      try {
+        if (!photos) return []
+        if (Array.isArray(photos)) return photos
+        return typeof photos === 'string' ? JSON.parse(photos) : []
+      } catch {
+        return []
+      }
+    })()
+    raw.forEach((entry, idx) => {
+      let url = ''
+      if (typeof entry === 'string') url = entry.trim()
+      else if (entry && typeof entry === 'object') {
+        url = String(entry.url || entry.thumbUrl || entry.dataUrl || '').trim()
+      }
+      if (!url) return
+      const isVideo = /^data:video\//i.test(url) || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)
+      rows.push({
+        entry,
+        url,
+        thumbUrl:
+          entry && typeof entry === 'object'
+            ? String(entry.thumbUrl || entry.previewUrl || url)
+            : url,
+        isVideo,
+        label: entry && typeof entry === 'object' && entry.name ? String(entry.name) : `Photo ${idx + 1}`
+      })
+    })
+    return rows
+  }
+
+  function incidentPhotoGalleryHtml(photos) {
+    const rows = partitionIncidentPhotosForPrint(photos)
+    if (!rows.length) return ''
+    const tiles = rows
+      .map((row) => {
+        const src = escapeHtml(row.thumbUrl || row.url)
+        if (row.isVideo) {
+          return `<div class="photo-tile"><video src="${escapeHtml(row.url)}" controls style="max-width:100%;max-height:180px"></video><div class="photo-cap">${escapeHtml(row.label)}</div></div>`
+        }
+        return `<div class="photo-tile"><a href="${escapeHtml(row.url)}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeHtml(row.label)}" /></a><div class="photo-cap">${escapeHtml(row.label)}</div></div>`
+      })
+      .join('')
+    return `<div class="narrative"><div class="narrative-head">Photos</div><div class="photo-grid">${tiles}</div></div>`
+  }
 
   function buildIncidentReportPrintHtml(incident, opts = {}) {
     const companyName = opts.companyName || 'Abcotronics'
@@ -236,23 +369,57 @@
         <tr>
           ${summaryCell('Incident date & time', escapeHtml(formatIncidentPrintDate(incident.incidentAt)))}
           ${summaryCell('Status', statusHtml)}
-          <td colspan="2"></td>
+          ${summaryCell('Technician', escapeHtml(displayValue(incident.technicianName)))}
+          ${summaryCell('Author', escapeHtml(displayValue(incident.authorName)))}
+        </tr>
+        <tr>
+          ${summaryCell('Linked job cards', escapeHtml(formatLinkedJobCards(incident)))}
+          ${summaryCell('Draft recorded', escapeHtml(formatIncidentPrintDate(incident.createdAt)))}
+          ${summaryCell('Submitted', escapeHtml(formatIncidentPrintDate(incident.submittedAt)))}
+          ${summaryCell('Location', escapeHtml(displayValue(formatLocation(incident))))}
         </tr>
       </table>
     </div>
 
+    ${narrativeBlock('Equipment / vehicle involved', incident.equipmentInvolved)}
+    ${narrativeBlock('Witnesses', incident.witnesses)}
+    ${narrativeBlock('People involved', formatPeopleInvolved(incident.peopleInvolved))}
+    ${narrativeBlock('Relevant assets', incident.relevantAssets)}
+    ${narrativeBlock('Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)}
     ${narrativeBlock('Description', incident.description)}
     ${narrativeBlock('Immediate actions', incident.immediateActions)}
+    ${narrativeBlock('Investigation notes', incident.investigationNotes)}
+    ${narrativeBlock('Corrective / follow-up actions', incident.correctiveActions)}
+    ${incidentPhotoGalleryHtml(incident.photos)}
+
+    <div class="signoff">
+      <div class="signoff-head">Author sign-off</div>
+      <div class="signoff-body">
+        <div class="signoff-field">
+          <div class="lbl">Author</div>
+          <div class="val">${escapeHtml(displayValue(incident.authorName))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Technician involved</div>
+          <div class="val">${escapeHtml(displayValue(incident.technicianName))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Draft recorded</div>
+          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.createdAt))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Submitted</div>
+          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.submittedAt))}</div>
+        </div>
+        ${signatureBlockHtml(incident.authorSignature)}
+      </div>
+    </div>
 
     <div class="confidential">This document contains operational incident information. Handle in accordance with company policy.</div>
     <div class="doc-footer">${escapeHtml(companyName)} &bull; Incident ${escapeHtml(incidentNumber)} &bull; Printed ${escapeHtml(printedAt)}</div>
   </div>
 </body>
 </html>`
-  }
-
-  function partitionIncidentPhotosForPrint() {
-    return []
   }
 
   window.IncidentReportPrint = {
