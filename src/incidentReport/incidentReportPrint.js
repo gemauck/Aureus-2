@@ -244,7 +244,7 @@ export const INCIDENT_PRINT_CSS = `
   .badge-critical { background: #7f1d1d; color: #fff; }
   .badge-neutral { background: #f3f4f6; color: #374151; }
   .badge-status { background: #e0e7ff; color: #3730a3; }
-  .narrative { margin-bottom: 14px; page-break-inside: avoid; }
+  .narrative { margin-bottom: 14px; }
   .narrative-head {
     background: #f8fafc;
     border: 1px solid #d1d5db;
@@ -256,6 +256,8 @@ export const INCIDENT_PRINT_CSS = `
     letter-spacing: 0.06em;
     color: #374151;
     border-radius: 6px 6px 0 0;
+    break-after: avoid;
+    page-break-after: avoid;
   }
   .narrative-body {
     border: 1px solid #d1d5db;
@@ -266,6 +268,8 @@ export const INCIDENT_PRINT_CSS = `
     line-height: 1.55;
     color: #1f2937;
     white-space: pre-wrap;
+    break-inside: auto;
+    page-break-inside: auto;
   }
   .narrative-body.empty { color: #9ca3af; font-style: italic; }
   .photo-grid {
