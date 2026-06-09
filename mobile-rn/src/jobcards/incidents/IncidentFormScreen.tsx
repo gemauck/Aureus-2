@@ -70,8 +70,13 @@ export function IncidentFormScreen() {
   const [clientId, setClientId] = useState(incidentPrefill?.clientId || '')
   const [clientName, setClientName] = useState(incidentPrefill?.clientName || '')
   const [siteName, setSiteName] = useState(incidentPrefill?.siteName || '')
-  const [jobCardId, setJobCardId] = useState(incidentPrefill?.jobCardId || '')
-  const [jobCardNumber, setJobCardNumber] = useState(incidentPrefill?.jobCardNumber || '')
+  const [linkedJobCards, setLinkedJobCards] = useState(
+    incidentPrefill?.linkedJobCards?.length
+      ? incidentPrefill.linkedJobCards
+      : incidentPrefill?.jobCardId
+        ? [{ id: incidentPrefill.jobCardId, jobCardNumber: incidentPrefill.jobCardNumber || '' }]
+        : []
+  )
   const [incidentAt, setIncidentAt] = useState(toDatetimeLocal())
   const [incidentType, setIncidentType] = useState('')
   const [severity, setSeverity] = useState('')
@@ -101,8 +106,13 @@ export function IncidentFormScreen() {
       setClientId(prefill.clientId || '')
       setClientName(prefill.clientName || '')
       setSiteName(prefill.siteName || '')
-      setJobCardId(prefill.jobCardId || '')
-      setJobCardNumber(prefill.jobCardNumber || '')
+      setLinkedJobCards(
+        prefill.linkedJobCards?.length
+          ? prefill.linkedJobCards
+          : prefill.jobCardId
+            ? [{ id: prefill.jobCardId, jobCardNumber: prefill.jobCardNumber || '' }]
+            : []
+      )
       if (prefill.incidentAt) setIncidentAt(toDatetimeLocal(prefill.incidentAt))
       setIncidentType(prefill.incidentType || '')
       setSeverity(prefill.severity || '')
@@ -141,8 +151,16 @@ export function IncidentFormScreen() {
         setClientId(row.clientId || '')
         setClientName(row.clientName || '')
         setSiteName(row.siteName || '')
-        setJobCardId(row.jobCardId || '')
-        setJobCardNumber(row.jobCardNumber || '')
+        setLinkedJobCards(
+          row.linkedJobCards?.length
+            ? row.linkedJobCards.map((link) => ({
+                id: link.id || link.jobCardId || '',
+                jobCardNumber: link.jobCardNumber || ''
+              }))
+            : row.jobCardId
+              ? [{ id: row.jobCardId, jobCardNumber: row.jobCardNumber || '' }]
+              : []
+        )
         setIncidentAt(toDatetimeLocal(row.incidentAt))
         setIncidentType(row.incidentType || '')
         setSeverity(row.severity || '')
@@ -174,8 +192,9 @@ export function IncidentFormScreen() {
       clientId: clientId || null,
       clientName,
       siteName,
-      jobCardId: jobCardId || null,
-      jobCardNumber,
+      jobCardIds: linkedJobCards.map((row) => row.id).filter(Boolean),
+      jobCardId: linkedJobCards[0]?.id || null,
+      jobCardNumber: linkedJobCards[0]?.jobCardNumber || '',
       incidentAt: incidentAt ? new Date(incidentAt).toISOString() : new Date().toISOString(),
       incidentType,
       severity,
@@ -196,8 +215,7 @@ export function IncidentFormScreen() {
       clientId,
       clientName,
       siteName,
-      jobCardId,
-      jobCardNumber,
+      linkedJobCards,
       incidentAt,
       incidentType,
       severity,
@@ -312,8 +330,10 @@ export function IncidentFormScreen() {
           }}
         />
         <Field label="Site name" value={siteName} onChangeText={setSiteName} styles={styles} />
-        {jobCardNumber ? (
-          <Text style={styles.linked}>Linked job card: {jobCardNumber}</Text>
+        {linkedJobCards.length ? (
+          <Text style={styles.linked}>
+            Linked job cards: {linkedJobCards.map((row) => row.jobCardNumber || row.id).join(', ')}
+          </Text>
         ) : null}
         <ChipRow label="Incident type" options={INCIDENT_TYPES} value={incidentType} onSelect={setIncidentType} styles={styles} jc={jc} />
         <ChipRow label="Severity" options={SEVERITIES} value={severity} onSelect={setSeverity} styles={styles} jc={jc} />

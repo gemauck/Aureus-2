@@ -458,6 +458,8 @@ const ServiceAndMaintenance = () => {
   );
   const [deepLinkIncidentId, setDeepLinkIncidentId] = useState('');
   const [incidentCreatePrefill, setIncidentCreatePrefill] = useState(null);
+  const [prefetchedIncidents, setPrefetchedIncidents] = useState(null);
+  const incidentsPrefetchStartedRef = useRef(false);
   const [jobCardIncidentDraftPrompt, setJobCardIncidentDraftPrompt] = useState(null);
   const [reportingIncidentFromJobCard, setReportingIncidentFromJobCard] = useState(false);
   const [createJobCardMenuOpen, setCreateJobCardMenuOpen] = useState(false);
@@ -474,6 +476,43 @@ const ServiceAndMaintenance = () => {
     }
     return document.scrollingElement || document.documentElement || document.body;
   }, []);
+
+  const prefetchIncidentReports = useCallback(async () => {
+    if (prefetchedIncidents !== null) return prefetchedIncidents;
+    if (incidentsPrefetchStartedRef.current) return null;
+    const token = window.storage?.getToken?.();
+    if (!token) return null;
+
+    incidentsPrefetchStartedRef.current = true;
+    try {
+      const res = await fetch('/api/incident-reports?pageSize=100', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPrefetchedIncidents([]);
+        return [];
+      }
+      const list = data?.incidentReports || data?.data?.incidentReports || [];
+      const rows = Array.isArray(list) ? list : [];
+      setPrefetchedIncidents(rows);
+      return rows;
+    } catch (error) {
+      console.warn('Failed to prefetch incident reports', error);
+      setPrefetchedIncidents([]);
+      return [];
+    }
+  }, [prefetchedIncidents]);
+
+  useEffect(() => {
+    void prefetchIncidentReports();
+  }, [prefetchIncidentReports]);
+
+  useEffect(() => {
+    if (headerTab === 'incidents' || deepLinkIncidentId) {
+      void prefetchIncidentReports();
+    }
+  }, [headerTab, deepLinkIncidentId, prefetchIncidentReports]);
 
   const handleReportIncidentFromJobCard = useCallback(async () => {
     if (!selectedJobCard || reportingIncidentFromJobCard) return;
@@ -520,6 +559,9 @@ const ServiceAndMaintenance = () => {
               siteName: jobCardForPrefill.siteName || '',
               jobCardId: jobCardForPrefill.id || '',
               jobCardNumber: jobCardForPrefill.jobCardNumber || '',
+              linkedJobCards: jobCardForPrefill.id
+                ? [{ id: jobCardForPrefill.id, jobCardNumber: jobCardForPrefill.jobCardNumber || '' }]
+                : [],
               description: String(jobCardForPrefill.reasonForVisit || '').trim(),
               immediateActions: String(jobCardForPrefill.actionsTaken || '').trim(),
               investigationNotes: String(jobCardForPrefill.diagnosis || '').trim(),
@@ -2715,6 +2757,8 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setHeaderTab(tab.id)}
+                onMouseEnter={tab.id === 'incidents' ? () => { void prefetchIncidentReports(); } : undefined}
+                onFocus={tab.id === 'incidents' ? () => { void prefetchIncidentReports(); } : undefined}
                 className={`inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
                   active
                     ? isDark

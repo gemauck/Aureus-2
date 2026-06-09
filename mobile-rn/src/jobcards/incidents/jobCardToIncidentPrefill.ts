@@ -1,5 +1,5 @@
 import type { EditingMeta, JobCardFormData } from '../types'
-import type { IncidentPerson } from './incidentApi'
+import type { IncidentPerson, LinkedJobCard } from './incidentApi'
 
 const HEADING_PREFIX = 'Heading:'
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:'
@@ -132,6 +132,7 @@ export type IncidentPrefillPayload = {
   siteName?: string
   jobCardId?: string
   jobCardNumber?: string
+  linkedJobCards?: LinkedJobCard[]
   incidentAt?: string
   locationDescription?: string
   locationLatitude?: string
@@ -170,13 +171,18 @@ export function buildIncidentPrefillFromJobCard(
     createdAt: editingMeta?.createdAt
   }
 
+  const jobCardId = editingMeta?.serverJobCardId || editingMeta?.localId || ''
+  const jobCardNumber = String(editingMeta?.jobCardNumber || '').trim()
+  const linkedJobCards = jobCardId ? [{ id: jobCardId, jobCardId, jobCardNumber }] : []
+
   return {
     clientId: formData.clientId || '',
     clientName: String(formData.clientName || '').trim(),
     siteId: formData.siteId || '',
     siteName: String(formData.siteName || '').trim(),
-    jobCardId: editingMeta?.serverJobCardId || editingMeta?.localId || '',
-    jobCardNumber: String(editingMeta?.jobCardNumber || '').trim(),
+    jobCardId,
+    jobCardNumber,
+    linkedJobCards,
     incidentAt: toDatetimeLocal(pickIncidentAt(timingSource)),
     locationDescription: buildLocationDescription(formData),
     locationLatitude: String(formData.latitude || '').trim(),

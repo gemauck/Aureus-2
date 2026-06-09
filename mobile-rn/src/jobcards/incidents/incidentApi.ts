@@ -6,6 +6,12 @@ export type IncidentPerson = {
   injured: boolean
 }
 
+export type LinkedJobCard = {
+  id: string
+  jobCardId?: string
+  jobCardNumber: string
+}
+
 export type IncidentReport = {
   id: string
   incidentNumber: string
@@ -16,6 +22,7 @@ export type IncidentReport = {
   siteName: string
   jobCardId?: string | null
   jobCardNumber: string
+  linkedJobCards?: LinkedJobCard[]
   incidentAt?: string | null
   incidentType: string
   severity: string

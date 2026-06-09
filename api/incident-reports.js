@@ -8,12 +8,19 @@ import { computeNextIncidentNumber } from './_lib/incidentReportNumber.js'
 import {
   enrichIncidentRowsSiteNames,
   resolveIncidentSiteFields,
-  serializeIncidentPeopleInvolved,
-  validateIncidentJobCardLink
+  serializeIncidentPeopleInvolved
 } from './_lib/incidentReportResolve.js'
 import { insertIncidentReportActivityFromRequest } from './_lib/incidentReportActivity.js'
 import { buildIncidentReportPdfBuffer } from './_lib/incidentReportPdf.js'
 import { normalizeIncidentStatus } from './_lib/incidentReportConstants.js'
+import {
+  attachLinkedJobCardsToIncidentRow,
+  legacyJobCardFieldsFromLinks,
+  loadLinkedJobCardsByIncidentIds,
+  parseJobCardIdsFromBody,
+  syncIncidentJobCardLinks,
+  validateIncidentJobCardLinks
+} from './_lib/incidentReportJobCards.js'
 
 function incidentMutateRole(user) {
   if (isAdminRole(user?.role)) return true
@@ -72,13 +79,23 @@ const LIST_SELECT = {
   updatedAt: true
 }
 
-function formatIncidentRow(row) {
+function formatIncidentRow(row, linkedJobCards) {
   if (!row) return row
-  return {
+  const formatted = {
     ...row,
     peopleInvolved: row.peopleInvolved !== undefined ? parseJson(row.peopleInvolved, []) : undefined,
     photos: row.photos !== undefined ? parseJson(row.photos, []) : undefined
   }
+  return attachLinkedJobCardsToIncidentRow(formatted, linkedJobCards)
+}
+
+async function enrichIncidentRowsWithJobCardLinks(prisma, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows
+  const linkMap = await loadLinkedJobCardsByIncidentIds(
+    prisma,
+    rows.map((row) => row.id)
+  )
+  return rows.map((row) => formatIncidentRow(row, linkMap.get(row.id)))
 }
 
 function getPagination(allowLargePageSize = false) {
@@ -105,12 +122,19 @@ function normalizeSignature(value) {
   return sig.length > 600_000 ? '' : sig
 }
 
+async function resolveIncidentJobCardLinksForBody(body, clientId) {
+  const jobCardIds = parseJobCardIdsFromBody(body)
+  if (jobCardIds === null) return { links: [], legacy: legacyJobCardFieldsFromLinks([]) }
+  const linkCheck = await validateIncidentJobCardLinks(prisma, jobCardIds, clientId)
+  if (!linkCheck.ok) throw new Error(linkCheck.error)
+  const links = linkCheck.links || []
+  return { links, legacy: legacyJobCardFieldsFromLinks(links) }
+}
+
 async function buildIncidentCreateData(body, req) {
   const userId = req.user?.sub || req.user?.id || null
   const clientId = body.clientId != null && String(body.clientId).trim() !== '' ? String(body.clientId).trim() : null
-  const jobCardId = body.jobCardId != null && String(body.jobCardId).trim() !== '' ? String(body.jobCardId).trim() : null
-  const linkCheck = await validateIncidentJobCardLink(prisma, jobCardId, clientId)
-  if (!linkCheck.ok) throw new Error(linkCheck.error)
+  const { links, legacy } = await resolveIncidentJobCardLinksForBody(body, clientId)
 
   const siteFields = await resolveIncidentSiteFields(prisma, body.siteId, body.siteName)
   const status = normalizeIncidentStatus(body.status, 'draft')
@@ -121,8 +145,9 @@ async function buildIncidentCreateData(body, req) {
     clientName: String(body.clientName || '').trim(),
     siteId: siteFields.siteId,
     siteName: siteFields.siteName,
-    jobCardId,
-    jobCardNumber: linkCheck.jobCardNumber || String(body.jobCardNumber || '').trim(),
+    jobCardId: legacy.jobCardId,
+    jobCardNumber: legacy.jobCardNumber || String(body.jobCardNumber || '').trim(),
+    _jobCardLinks: links,
     incidentAt,
     locationDescription: String(body.locationDescription || '').trim(),
     locationLatitude: String(body.locationLatitude || '').trim(),
@@ -166,14 +191,16 @@ async function buildIncidentUpdateData(body, existing) {
     data.siteId = siteFields.siteId
     data.siteName = siteFields.siteName
   }
-  if (body.jobCardId !== undefined) {
-    const jobCardId =
-      body.jobCardId != null && String(body.jobCardId).trim() !== '' ? String(body.jobCardId).trim() : null
+  const jobCardIds = parseJobCardIdsFromBody(body)
+  if (jobCardIds !== null) {
     const clientId = data.clientId !== undefined ? data.clientId : existing.clientId
-    const linkCheck = await validateIncidentJobCardLink(prisma, jobCardId, clientId)
+    const linkCheck = await validateIncidentJobCardLinks(prisma, jobCardIds, clientId)
     if (!linkCheck.ok) throw new Error(linkCheck.error)
-    data.jobCardId = jobCardId
-    data.jobCardNumber = linkCheck.jobCardNumber || ''
+    const links = linkCheck.links || []
+    const legacy = legacyJobCardFieldsFromLinks(links)
+    data.jobCardId = legacy.jobCardId
+    data.jobCardNumber = legacy.jobCardNumber
+    data._jobCardLinks = links
   }
   if (body.incidentAt !== undefined) data.incidentAt = parseOptionalDate(body.incidentAt)
   if (body.locationDescription !== undefined) data.locationDescription = String(body.locationDescription || '').trim()
@@ -238,7 +265,12 @@ async function handler(req, res) {
 
       const where = {}
       if (clientId) where.clientId = clientId
-      if (jobCardId) where.jobCardId = jobCardId
+      if (jobCardId) {
+        where.AND = Array.isArray(where.AND) ? where.AND : []
+        where.AND.push({
+          OR: [{ jobCardId }, { jobCardLinks: { some: { jobCardId } } }]
+        })
+      }
       if (status && status !== 'all') where.status = status
       if (mine && owner) where.ownerId = String(owner)
       if (q) {
@@ -267,8 +299,9 @@ async function handler(req, res) {
         })
       ])
       const enriched = await enrichIncidentRowsSiteNames(prisma, rows)
+      const withLinks = await enrichIncidentRowsWithJobCardLinks(prisma, enriched)
       return ok(res, {
-        incidentReports: enriched.map(formatIncidentRow),
+        incidentReports: withLinks,
         pagination: {
           page,
           pageSize,
@@ -289,12 +322,18 @@ async function handler(req, res) {
     try {
       const body = req.body || (await parseJsonBody(req))
       const createData = await buildIncidentCreateData(body, req)
+      const jobCardLinks = createData._jobCardLinks || []
+      delete createData._jobCardLinks
       let incident
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const incidentNumber = await computeNextIncidentNumber(prisma)
         try {
-          incident = await prisma.incidentReport.create({
-            data: { incidentNumber, ...createData }
+          incident = await prisma.$transaction(async (tx) => {
+            const created = await tx.incidentReport.create({
+              data: { incidentNumber, ...createData }
+            })
+            await syncIncidentJobCardLinks(tx, created.id, jobCardLinks)
+            return created
           })
           break
         } catch (err) {
@@ -306,7 +345,8 @@ async function handler(req, res) {
       void insertIncidentReportActivityFromRequest(req, incident.id, 'created', {
         incidentNumber: incident.incidentNumber
       })
-      return created(res, { incidentReport: formatIncidentRow(incident) })
+      const [formatted] = await enrichIncidentRowsWithJobCardLinks(prisma, [incident])
+      return created(res, { incidentReport: formatted })
     } catch (error) {
       console.error('Failed to create incident report:', error)
       if (error.message && error.message.includes('job card')) return badRequest(res, error.message)
@@ -319,7 +359,8 @@ async function handler(req, res) {
       const row = await prisma.incidentReport.findUnique({ where: { id } })
       if (!row) return notFound(res, 'Incident report not found')
       const [enriched] = await enrichIncidentRowsSiteNames(prisma, [row])
-      return ok(res, { incidentReport: formatIncidentRow(enriched) })
+      const [formatted] = await enrichIncidentRowsWithJobCardLinks(prisma, [enriched])
+      return ok(res, { incidentReport: formatted })
     } catch (error) {
       return serverError(res, 'Failed to get incident report', error.message)
     }
@@ -332,12 +373,28 @@ async function handler(req, res) {
       if (!canMutateIncident(existing, req.user)) return forbidden(res, 'Not allowed to update this incident report')
       const body = req.body || (await parseJsonBody(req))
       const updateData = await buildIncidentUpdateData(body || {}, existing)
-      if (Object.keys(updateData).length === 0) return badRequest(res, 'No valid fields to update')
-      const incident = await prisma.incidentReport.update({ where: { id }, data: updateData })
-      void insertIncidentReportActivityFromRequest(req, incident.id, 'updated', {
-        fields: Object.keys(updateData)
+      const jobCardLinks = updateData._jobCardLinks
+      delete updateData._jobCardLinks
+      if (Object.keys(updateData).length === 0 && jobCardLinks === undefined) {
+        return badRequest(res, 'No valid fields to update')
+      }
+      const incident = await prisma.$transaction(async (tx) => {
+        const updated = Object.keys(updateData).length
+          ? await tx.incidentReport.update({ where: { id }, data: updateData })
+          : existing
+        if (jobCardLinks !== undefined) {
+          await syncIncidentJobCardLinks(tx, id, jobCardLinks)
+        }
+        return updated
       })
-      return ok(res, { incidentReport: formatIncidentRow(incident) })
+      void insertIncidentReportActivityFromRequest(req, incident.id, 'updated', {
+        fields: [
+          ...Object.keys(updateData),
+          ...(jobCardLinks !== undefined ? ['linkedJobCards'] : [])
+        ]
+      })
+      const [formatted] = await enrichIncidentRowsWithJobCardLinks(prisma, [incident])
+      return ok(res, { incidentReport: formatted })
     } catch (error) {
       if (error.message && error.message.includes('job card')) return badRequest(res, error.message)
       return serverError(res, 'Failed to update incident report', error.message)
@@ -372,7 +429,8 @@ async function handler(req, res) {
     try {
       const row = await prisma.incidentReport.findUnique({ where: { id } })
       if (!row) return notFound(res, 'Incident report not found')
-      const pdfBuffer = await buildIncidentReportPdfBuffer(prisma, row)
+      const [formatted] = await enrichIncidentRowsWithJobCardLinks(prisma, [row])
+      const pdfBuffer = await buildIncidentReportPdfBuffer(prisma, formatted)
       const filename = `${String(row.incidentNumber || row.id).replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/pdf')

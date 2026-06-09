@@ -2165,6 +2165,7 @@ model JobCard {
   completedByName           String                       @default("")
   completedBy               User?                        @relation("JobCardCompletedBy", fields: [completedByUserId], references: [id])
   activities                JobCardActivity[]
+  incidentLinks             IncidentReportJobCard[]
 
   @@index([clientId])
   @@index([ownerId])
@@ -2230,6 +2231,7 @@ model IncidentReport {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
   activities          IncidentReportActivity[]
+  jobCardLinks        IncidentReportJobCard[]
 
   @@index([clientId])
   @@index([jobCardId])
@@ -2237,6 +2239,21 @@ model IncidentReport {
   @@index([status])
   @@index([incidentAt])
   @@index([createdAt])
+}
+
+/// Many-to-many link between incident reports and job cards.
+model IncidentReportJobCard {
+  id               String         @id @default(cuid())
+  incidentReportId String
+  incidentReport   IncidentReport @relation(fields: [incidentReportId], references: [id], onDelete: Cascade)
+  jobCardId        String
+  jobCard          JobCard        @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  jobCardNumber    String         @default("")
+  createdAt        DateTime       @default(now())
+
+  @@unique([incidentReportId, jobCardId])
+  @@index([incidentReportId])
+  @@index([jobCardId])
 }
 
 model IncidentReportActivity {

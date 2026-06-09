@@ -96,6 +96,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/manufacturing/PurchaseOrderFromDocumentWizard.jsx',
         './src/components/manufacturing/PurchaseOrderFromDocumentStandalone.jsx',
         './src/components/manufacturing/Manufacturing.jsx',
+        './src/components/service-maintenance/IncidentReportsPanel.jsx',
         './src/components/service-maintenance/ServiceAndMaintenance.jsx',
         
         // Helpdesk

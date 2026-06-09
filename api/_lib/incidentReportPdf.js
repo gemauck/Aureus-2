@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit'
 import { incidentStatusLabel } from './incidentReportConstants.js'
 import { loadDocumentBranding } from './documentBranding.js'
+import { formatLinkedJobCardLabels } from './incidentReportJobCards.js'
 
 function billingBrandTextAlign(brandTextX, left) {
   return brandTextX > left ? 'right' : 'left'
@@ -246,7 +247,7 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
     doc.y = y
     y = drawTitleBand(doc, left, right, incidentNumber)
 
-    doc.strokeColor('#d1d5db').lineWidth(0.75).rect(left, y, contentW, 92).stroke()
+    doc.strokeColor('#d1d5db').lineWidth(0.75).rect(left, y, contentW, 138).stroke()
     const row1Y = y
     const cellsRow1 = [
       { label: 'Client', value: displayValue(incident.clientName) },
@@ -266,7 +267,15 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
       { label: 'Technician', value: displayValue(incident.technicianName) },
       { label: 'Author', value: displayValue(incident.authorName) }
     ])
-    y += 92 + 18
+
+    const row3Y = row2Y + 46
+    drawSummaryRow(doc, left, right, row3Y, [
+      { label: 'Linked job cards', value: displayValue(formatLinkedJobCardLabels(incident)) },
+      null,
+      null,
+      null
+    ])
+    y += 138 + 18
 
     y = drawNarrativeSection(doc, left, right, y, 'Relevant assets', incident.relevantAssets)
     y = drawNarrativeSection(doc, left, right, y, 'Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)

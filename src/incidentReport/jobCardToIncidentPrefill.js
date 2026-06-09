@@ -174,13 +174,18 @@ export function buildIncidentPrefillFromJobCard(jobCard, opts = {}) {
   const tankLines = formatStockLines(stockUsed, true)
   const authorName = String(opts.authorName || jobCard.completedByName || '').trim()
 
+  const jobCardId = jobCard.id || jobCard.serverJobCardId || ''
+  const jobCardNumber = String(jobCard.jobCardNumber || '').trim()
+  const linkedJobCards = jobCardId ? [{ id: jobCardId, jobCardId, jobCardNumber }] : []
+
   return {
     clientId: jobCard.clientId || '',
     clientName: String(jobCard.clientName || '').trim(),
     siteId: jobCard.siteId || '',
     siteName: String(jobCard.siteName || '').trim(),
-    jobCardId: jobCard.id || jobCard.serverJobCardId || '',
-    jobCardNumber: String(jobCard.jobCardNumber || '').trim(),
+    jobCardId,
+    jobCardNumber,
+    linkedJobCards,
     incidentAt: toDatetimeLocalValue(pickIncidentAt(jobCard)),
     locationDescription: buildLocationDescription(jobCard),
     locationLatitude: String(jobCard.locationLatitude || jobCard.latitude || '').trim(),

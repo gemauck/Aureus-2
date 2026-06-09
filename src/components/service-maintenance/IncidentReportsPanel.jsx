@@ -70,12 +70,36 @@ function currentUserName() {
   return String(user?.name || user?.email || '').trim()
 }
 
+function normalizeLinkedJobCards(source) {
+  if (!source || typeof source !== 'object') return []
+  if (Array.isArray(source.linkedJobCards) && source.linkedJobCards.length) {
+    return source.linkedJobCards
+      .map((row) => ({
+        id: String(row?.id || row?.jobCardId || '').trim(),
+        jobCardNumber: String(row?.jobCardNumber || '').trim()
+      }))
+      .filter((row) => row.id)
+  }
+  const legacyId = String(source.jobCardId || '').trim()
+  if (legacyId) {
+    return [{ id: legacyId, jobCardNumber: String(source.jobCardNumber || '').trim() }]
+  }
+  return []
+}
+
+function linkedJobCardsToPayload(links) {
+  return (Array.isArray(links) ? links : [])
+    .map((row) => String(row?.id || '').trim())
+    .filter(Boolean)
+}
+
 function emptyForm() {
   return {
     clientId: '',
     clientName: '',
     siteId: '',
     siteName: '',
+    linkedJobCards: [],
     jobCardId: '',
     jobCardNumber: '',
     incidentAt: new Date().toISOString().slice(0, 16),
@@ -261,10 +285,12 @@ function IncidentReportsPanel({
   initialIncidentId = '',
   createPrefill = null,
   onConsumeCreatePrefill,
-  onConsumeInitialIncidentId
+  onConsumeInitialIncidentId,
+  initialRows = null,
+  skipInitialFetch = false
 }) {
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState(() => (Array.isArray(initialRows) ? initialRows : []))
+  const [loading, setLoading] = useState(() => !(skipInitialFetch && Array.isArray(initialRows)))
   const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -275,6 +301,9 @@ function IncidentReportsPanel({
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [clientJobCards, setClientJobCards] = useState([])
+  const [clientJobCardsLoading, setClientJobCardsLoading] = useState(false)
+  const [jobCardPickerId, setJobCardPickerId] = useState('')
 
   const token = window.storage?.getToken?.()
 
@@ -321,15 +350,30 @@ function IncidentReportsPanel({
   )
 
   useEffect(() => {
+    if (Array.isArray(initialRows)) {
+      setRows(initialRows)
+      setLoading(false)
+    }
+  }, [initialRows])
+
+  useEffect(() => {
+    if (skipInitialFetch && Array.isArray(initialRows)) {
+      void loadRows({ silent: true })
+      return
+    }
     void loadRows()
-  }, [loadRows])
+  }, [loadRows, skipInitialFetch, initialRows])
 
   useEffect(() => {
     if (!createPrefill) return
     setSelected(null)
+    const linkedJobCards = normalizeLinkedJobCards(createPrefill)
     setForm({
       ...emptyForm(),
       ...createPrefill,
+      linkedJobCards,
+      jobCardId: linkedJobCards[0]?.id || createPrefill.jobCardId || '',
+      jobCardNumber: linkedJobCards[0]?.jobCardNumber || createPrefill.jobCardNumber || '',
       authorName: createPrefill.authorName || currentUserName(),
       incidentAt: prefillIncidentAtLocal(createPrefill.incidentAt),
       peopleInvolved: Array.isArray(createPrefill.peopleInvolved) && createPrefill.peopleInvolved.length
@@ -416,15 +460,96 @@ function IncidentReportsPanel({
     }
   }, [selected, downloadingPdf, token])
 
+  const loadClientJobCards = useCallback(
+    async (clientId) => {
+      const cid = String(clientId || '').trim()
+      if (!token || !cid) {
+        setClientJobCards([])
+        return
+      }
+      setClientJobCardsLoading(true)
+      try {
+        const params = new URLSearchParams({ clientId: cid, pageSize: '200' })
+        const res = await fetch(`/api/jobcards?${params}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setClientJobCards([])
+          return
+        }
+        const list = data?.jobCards || data?.data?.jobCards || []
+        setClientJobCards(
+          Array.isArray(list)
+            ? list
+                .map((row) => ({
+                  id: String(row?.id || '').trim(),
+                  jobCardNumber: String(row?.jobCardNumber || '').trim()
+                }))
+                .filter((row) => row.id)
+            : []
+        )
+      } catch (e) {
+        console.error('Failed to load job cards for incident link picker', e)
+        setClientJobCards([])
+      } finally {
+        setClientJobCardsLoading(false)
+      }
+    },
+    [token]
+  )
+
+  useEffect(() => {
+    if (!showForm) return
+    void loadClientJobCards(form.clientId)
+  }, [showForm, form.clientId, loadClientJobCards])
+
+  const addLinkedJobCard = useCallback((jobCard) => {
+    const id = String(jobCard?.id || '').trim()
+    if (!id) return
+    setForm((f) => {
+      const existing = Array.isArray(f.linkedJobCards) ? f.linkedJobCards : []
+      if (existing.some((row) => row.id === id)) return f
+      const next = [
+        ...existing,
+        { id, jobCardNumber: String(jobCard?.jobCardNumber || '').trim() }
+      ]
+      return {
+        ...f,
+        linkedJobCards: next,
+        jobCardId: next[0]?.id || '',
+        jobCardNumber: next[0]?.jobCardNumber || ''
+      }
+    })
+    setJobCardPickerId('')
+  }, [])
+
+  const removeLinkedJobCard = useCallback((jobCardId) => {
+    const id = String(jobCardId || '').trim()
+    if (!id) return
+    setForm((f) => {
+      const next = (Array.isArray(f.linkedJobCards) ? f.linkedJobCards : []).filter((row) => row.id !== id)
+      return {
+        ...f,
+        linkedJobCards: next,
+        jobCardId: next[0]?.id || '',
+        jobCardNumber: next[0]?.jobCardNumber || ''
+      }
+    })
+  }, [])
+
   const saveForm = useCallback(async (statusOverride) => {
     if (!token || saving) return
     setSaving(true)
     try {
+      const linkedJobCards = Array.isArray(form.linkedJobCards) ? form.linkedJobCards : []
       const payload = {
         ...form,
         status: statusOverride || form.status,
+        jobCardIds: linkedJobCardsToPayload(linkedJobCards),
         peopleInvolved: (form.peopleInvolved || []).filter((p) => p.name || p.role)
       }
+      delete payload.linkedJobCards
       const isEdit = Boolean(selected?.id)
       const url = isEdit
         ? `/api/incident-reports/${encodeURIComponent(selected.id)}`
@@ -586,9 +711,13 @@ function IncidentReportsPanel({
               <button
                 type="button"
                 onClick={() => {
+                  const linkedJobCards = normalizeLinkedJobCards(selected)
                   setForm({
                     ...emptyForm(),
                     ...selected,
+                    linkedJobCards,
+                    jobCardId: linkedJobCards[0]?.id || selected.jobCardId || '',
+                    jobCardNumber: linkedJobCards[0]?.jobCardNumber || selected.jobCardNumber || '',
                     incidentAt: selected.incidentAt
                       ? new Date(selected.incidentAt).toISOString().slice(0, 16)
                       : '',
@@ -636,6 +765,28 @@ function IncidentReportsPanel({
                 </div>
               ))}
             </div>
+            {normalizeLinkedJobCards(selected).length ? (
+              <section className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Linked job cards</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {normalizeLinkedJobCards(selected).map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => {
+                        if (typeof onOpenJobCard === 'function') onOpenJobCard({ id: row.id, jobCardNumber: row.jobCardNumber })
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                        isDark ? 'border-indigo-700/50 bg-indigo-950/30 text-indigo-200 hover:bg-indigo-900/40' : 'border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100'
+                      }`}
+                    >
+                      <i className="fa-solid fa-clipboard-list" />
+                      {row.jobCardNumber || row.id}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
             {[
               ['Relevant assets', selected.relevantAssets],
               ['Relevant tanks / mobile bowsers', selected.relevantTanksMobileBowsers],
@@ -741,6 +892,66 @@ function IncidentReportsPanel({
               Site name
               <input className={`${inputCls} mt-1`} value={form.siteName} onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))} />
             </label>
+            <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Linked job cards</div>
+              <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                Link one or more job cards related to this incident.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(form.linkedJobCards || []).map((row) => (
+                  <span
+                    key={row.id}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+                      isDark ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white text-gray-800'
+                    }`}
+                  >
+                    <span>{row.jobCardNumber || row.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeLinkedJobCard(row.id)}
+                      className={isDark ? 'text-gray-400 hover:text-red-300' : 'text-gray-500 hover:text-red-600'}
+                      aria-label={`Remove ${row.jobCardNumber || row.id}`}
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  </span>
+                ))}
+                {!form.linkedJobCards?.length ? (
+                  <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No job cards linked yet.</span>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="min-w-[220px] flex-1 text-xs font-medium">
+                  Add job card
+                  <select
+                    className={`${inputCls} mt-1`}
+                    value={jobCardPickerId}
+                    disabled={!form.clientId || clientJobCardsLoading}
+                    onChange={(e) => {
+                      const nextId = e.target.value
+                      setJobCardPickerId(nextId)
+                      const picked = clientJobCards.find((row) => row.id === nextId)
+                      if (picked) addLinkedJobCard(picked)
+                    }}
+                  >
+                    <option value="">
+                      {!form.clientId
+                        ? 'Select a client first'
+                        : clientJobCardsLoading
+                          ? 'Loading job cards…'
+                          : 'Choose a job card'}
+                    </option>
+                    {clientJobCards
+                      .filter((row) => !(form.linkedJobCards || []).some((linked) => linked.id === row.id))
+                      .map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.jobCardNumber || row.id}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+            </div>
             <label className="block text-xs font-medium">
               Location
               <input className={`${inputCls} mt-1`} value={form.locationDescription} onChange={(e) => setForm((f) => ({ ...f, locationDescription: e.target.value }))} placeholder="Site location or address" />

@@ -28,6 +28,17 @@ function displayValue(value) {
   return text || '—'
 }
 
+function formatLinkedJobCards(incident) {
+  const links =
+    Array.isArray(incident?.linkedJobCards) && incident.linkedJobCards.length
+      ? incident.linkedJobCards
+      : incident?.jobCardId
+        ? [{ jobCardNumber: incident.jobCardNumber, id: incident.jobCardId }]
+        : []
+  const labels = links.map((row) => String(row?.jobCardNumber || row?.id || '').trim()).filter(Boolean)
+  return labels.length ? labels.join(', ') : '—'
+}
+
 function severityBadgeClass(severity) {
   const s = String(severity || '').trim().toLowerCase()
   if (s === 'critical') return 'badge badge-critical'
@@ -252,6 +263,12 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
           ${summaryCell('Status', statusHtml)}
           ${summaryCell('Technician', escapeHtml(displayValue(incident.technicianName)))}
           ${summaryCell('Author', escapeHtml(displayValue(incident.authorName)))}
+        </tr>
+        <tr>
+          ${summaryCell('Linked job cards', escapeHtml(formatLinkedJobCards(incident)))}
+          ${summaryCell('', '—')}
+          ${summaryCell('', '—')}
+          ${summaryCell('', '—')}
         </tr>
       </table>
     </div>

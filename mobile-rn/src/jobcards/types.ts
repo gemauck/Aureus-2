@@ -13,6 +13,7 @@ export type IncidentPrefill = {
   siteName?: string
   jobCardId?: string
   jobCardNumber?: string
+  linkedJobCards?: Array<{ id: string; jobCardId?: string; jobCardNumber?: string }>
   incidentAt?: string
   locationDescription?: string
   locationLatitude?: string
