@@ -13,13 +13,23 @@ import * as FileSystem from 'expo-file-system'
 import { Share } from 'react-native'
 import { apiUrl } from '../../config'
 import { ModuleHeader } from '../../components/shell/ModuleHeader'
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { DateTimeField } from '../components/DateTimeField'
 import { useJobCardWizard } from '../WizardContext'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
 import { incidentApi } from './incidentApi'
-import type { IncidentPrefill } from '../types'
+import {
+  getPendingIncident,
+  isLocalIncidentId,
+  localIncidentId,
+  upsertPendingIncident
+} from './incidentOfflineStore'
+import { syncOnePendingIncident } from './incidentSync'
+import { useJobCardSync } from '../JobCardSyncContext'
+import { PhotoPickerSection } from '../media/PhotoPickerSection'
+import type { IncidentPrefill, MediaItem } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -53,11 +63,46 @@ function toDatetimeLocal(value?: string | null) {
   return dt.toISOString().slice(0, 16)
 }
 
+function photosToMediaItems(raw: unknown[] | undefined): MediaItem[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry, idx) => {
+      if (typeof entry === 'string') {
+        const url = entry.trim()
+        return url ? { url, thumbUrl: url, name: `Photo ${idx + 1}` } : null
+      }
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>
+        const url = String(obj.url || obj.dataUrl || '').trim()
+        if (!url) return null
+        return {
+          url,
+          thumbUrl: String(obj.thumbUrl || obj.previewUrl || url),
+          name: String(obj.name || `Photo ${idx + 1}`),
+          mediaType: typeof obj.mediaType === 'string' ? obj.mediaType : undefined
+        }
+      }
+      return null
+    })
+    .filter((item): item is MediaItem => Boolean(item?.url))
+}
+
+function mediaItemsToIncidentPhotos(items: MediaItem[]) {
+  return items.map((item) => ({
+    kind: item.mediaType === 'video' ? 'video' : 'imageMedia',
+    name: item.name || 'Photo',
+    url: item.url,
+    thumbUrl: item.thumbUrl || item.url,
+    ...(item.mediaType ? { mediaType: item.mediaType } : {})
+  }))
+}
+
 export function IncidentFormScreen() {
   const styles = useThemedStyles(createStyles)
   const { jc } = useTheme()
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
+  const { bumpLocalDrafts } = useJobCardSync()
   const {
     clients,
     setWizardFlow,
@@ -93,7 +138,11 @@ export function IncidentFormScreen() {
   const [authorName, setAuthorName] = useState(user?.name || user?.email || '')
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState(editingIncidentId || '')
+  const [localDraftId, setLocalDraftId] = useState(
+    editingIncidentId && isLocalIncidentId(editingIncidentId) ? editingIncidentId : ''
+  )
   const [incidentNumber, setIncidentNumber] = useState('')
+  const [photos, setPhotos] = useState<MediaItem[]>(() => photosToMediaItems(incidentPrefill?.photos))
   const [sharingPdf, setSharingPdf] = useState(false)
 
   const clientOptions = useMemo(
@@ -127,15 +176,72 @@ export function IncidentFormScreen() {
       setRelevantTanksMobileBowsers(prefill.relevantTanksMobileBowsers || '')
       setTechnicianName(prefill.technicianName || '')
       setAuthorName(prefill.authorName || user?.name || user?.email || '')
+      setPhotos(photosToMediaItems(prefill.photos))
     },
     [user]
   )
 
   useEffect(() => {
-    if (!editingIncidentId || !accessToken) {
+    if (!editingIncidentId) {
       if (incidentPrefill) {
         applyIncidentPrefill(incidentPrefill)
       }
+      setLoading(false)
+      return
+    }
+    if (isLocalIncidentId(editingIncidentId)) {
+      let cancelled = false
+      void (async () => {
+        setLoading(true)
+        try {
+          const pending = await getPendingIncident(editingIncidentId)
+          if (cancelled || !pending) {
+            if (!cancelled) {
+              Alert.alert('Not found', 'This offline draft is no longer on the device.')
+              setWizardFlow('incident_list')
+            }
+            return
+          }
+          const p = pending.payload
+          setSavedId(pending.serverId || pending.id)
+          setLocalDraftId(pending.id)
+          setIncidentNumber(pending.displayLabel || '')
+          setClientId(String(p.clientId || ''))
+          setClientName(String(p.clientName || ''))
+          setSiteName(String(p.siteName || ''))
+          const linkedIds = Array.isArray(p.jobCardIds) ? (p.jobCardIds as string[]) : []
+          setLinkedJobCards(
+            linkedIds.length
+              ? linkedIds.map((id, i) => ({
+                  id,
+                  jobCardNumber: i === 0 ? String(p.jobCardNumber || '') : ''
+                }))
+              : []
+          )
+          setIncidentAt(toDatetimeLocal(p.incidentAt as string))
+          setIncidentType(String(p.incidentType || ''))
+          setSeverity(String(p.severity || ''))
+          setStatus(String(p.status || 'draft'))
+          setDescription(String(p.description || ''))
+          setImmediateActions(String(p.immediateActions || ''))
+          setInvestigationNotes(String(p.investigationNotes || ''))
+          setCorrectiveActions(String(p.correctiveActions || ''))
+          setLocationDescription(String(p.locationDescription || ''))
+          setEquipmentInvolved(String(p.equipmentInvolved || ''))
+          setRelevantAssets(String(p.relevantAssets || ''))
+          setRelevantTanksMobileBowsers(String(p.relevantTanksMobileBowsers || ''))
+          setTechnicianName(String(p.technicianName || ''))
+          setAuthorName(String(p.authorName || user?.name || user?.email || ''))
+          setPhotos(photosToMediaItems(Array.isArray(p.photos) ? (p.photos as unknown[]) : []))
+        } finally {
+          if (!cancelled) setLoading(false)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
+    if (!accessToken) {
       setLoading(false)
       return
     }
@@ -175,6 +281,7 @@ export function IncidentFormScreen() {
         setRelevantTanksMobileBowsers(row.relevantTanksMobileBowsers || '')
         setTechnicianName(row.technicianName || '')
         setAuthorName(row.authorName || user?.name || user?.email || '')
+        setPhotos(photosToMediaItems(row.photos))
       } catch (e) {
         Alert.alert('Load failed', e instanceof Error ? e.message : 'Could not load incident')
         setWizardFlow('incident_list')
@@ -209,6 +316,7 @@ export function IncidentFormScreen() {
       technicianName,
       authorName,
       reportedByName: authorName || user?.name || user?.email || '',
+      photos: mediaItemsToIncidentPhotos(photos),
       status
     }),
     [
@@ -229,13 +337,13 @@ export function IncidentFormScreen() {
       relevantTanksMobileBowsers,
       technicianName,
       authorName,
+      photos,
       status,
       user
     ]
   )
 
   const save = useCallback(async () => {
-    if (!accessToken) return
     if (!clientId && !clientName.trim()) {
       Alert.alert('Client required', 'Select a client before saving.')
       return
@@ -244,29 +352,87 @@ export function IncidentFormScreen() {
       Alert.alert('Description required', 'Describe what happened.')
       return
     }
-    if (!isOnline) {
-      Alert.alert('Offline', 'Incident reports require an internet connection to save.')
-      return
-    }
     setSaving(true)
     try {
       const payload = buildPayload()
-      const res = savedId
-        ? await incidentApi.patch(accessToken, savedId, payload)
-        : await incidentApi.create(accessToken, payload)
-      const row = res.incidentReport
-      if (row?.id) setSavedId(row.id)
-      if (row?.incidentNumber) setIncidentNumber(row.incidentNumber)
+      const draftId = localDraftId || localIncidentId()
+      const serverId =
+        savedId && !isLocalIncidentId(savedId) ? savedId : editingIncidentId && !isLocalIncidentId(editingIncidentId) ? editingIncidentId : null
+
+      if (isOnline && accessToken) {
+        try {
+          const res = serverId
+            ? await incidentApi.patch(accessToken, serverId, payload)
+            : await incidentApi.create(accessToken, payload)
+          const row = res.incidentReport
+          if (row?.id) {
+            setSavedId(row.id)
+            setLocalDraftId('')
+          }
+          if (row?.incidentNumber) setIncidentNumber(row.incidentNumber)
+          Alert.alert(
+            'Saved',
+            row?.incidentNumber ? `Incident ${row.incidentNumber} saved.` : 'Incident report saved.'
+          )
+          return
+        } catch {
+          /* fall through to local queue */
+        }
+      }
+
+      await upsertPendingIncident({
+        id: draftId,
+        serverId,
+        payload,
+        synced: false,
+        savedAt: new Date().toISOString(),
+        displayLabel: incidentNumber || 'Pending sync'
+      })
+      setSavedId(serverId || draftId)
+      setLocalDraftId(draftId)
+      bumpLocalDrafts()
       Alert.alert(
-        'Saved',
-        row?.incidentNumber ? `Incident ${row.incidentNumber} saved.` : 'Incident report saved.'
+        'Saved offline',
+        isOnline
+          ? 'Could not reach the server. This incident will sync when connectivity returns.'
+          : 'Incident saved on this device. It will sync when you reconnect.'
       )
+      if (isOnline && accessToken) {
+        const pending = await getPendingIncident(draftId)
+        if (pending) {
+          const syncResult = await syncOnePendingIncident(accessToken, pending)
+          if (syncResult.ok && syncResult.serverId) {
+            setSavedId(syncResult.serverId)
+            setLocalDraftId('')
+            if (syncResult.incidentNumber) setIncidentNumber(syncResult.incidentNumber)
+            bumpLocalDrafts()
+            Alert.alert(
+              'Synced',
+              syncResult.incidentNumber
+                ? `Incident ${syncResult.incidentNumber} saved.`
+                : 'Incident report synced.'
+            )
+          }
+        }
+      }
     } catch (e) {
       Alert.alert('Save failed', e instanceof Error ? e.message : 'Could not save incident report')
     } finally {
       setSaving(false)
     }
-  }, [accessToken, buildPayload, clientId, clientName, description, isOnline, savedId])
+  }, [
+    accessToken,
+    buildPayload,
+    bumpLocalDrafts,
+    clientId,
+    clientName,
+    description,
+    editingIncidentId,
+    incidentNumber,
+    isOnline,
+    localDraftId,
+    savedId
+  ])
 
   const sharePdf = useCallback(async () => {
     if (!accessToken || !savedId) {
@@ -314,10 +480,11 @@ export function IncidentFormScreen() {
   return (
     <View style={styles.root}>
       <ModuleHeader
-        title={incidentNumber || 'Incident report'}
+        title={incidentNumber || (localDraftId ? 'Offline draft' : 'Incident report')}
         subtitle="Record site incidents"
         onBack={() => setWizardFlow(editingIncidentId ? 'incident_list' : 'landing')}
       />
+      <OfflineBanner visible={!isOnline} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SearchableSelect
           label="Client"
@@ -357,6 +524,8 @@ export function IncidentFormScreen() {
         <Field label="Equipment / vehicle involved" value={equipmentInvolved} onChangeText={setEquipmentInvolved} styles={styles} />
         <Field label="Relevant assets" value={relevantAssets} onChangeText={setRelevantAssets} multiline styles={styles} />
         <Field label="Relevant tanks / mobile bowsers" value={relevantTanksMobileBowsers} onChangeText={setRelevantTanksMobileBowsers} multiline styles={styles} />
+        <Text style={styles.sectionLabel}>Photos</Text>
+        <PhotoPickerSection photos={photos} onChange={setPhotos} />
         <Field label="Technician involved" value={technicianName} onChangeText={setTechnicianName} styles={styles} />
         <Field label="Author (person completing report)" value={authorName} onChangeText={setAuthorName} styles={styles} />
 
@@ -448,6 +617,7 @@ function createStyles(jc: JcTheme) {
     content: { padding: 16, paddingBottom: 40, gap: 12 },
     field: { gap: 6 },
     label: { fontSize: 12, fontWeight: '600', color: jc.textMuted },
+    sectionLabel: { fontSize: 12, fontWeight: '700', color: jc.text, marginTop: 4 },
     input: {
       borderWidth: 1,
       borderColor: jc.border,

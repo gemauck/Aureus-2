@@ -66,14 +66,20 @@ export function VisitStep() {
     setVoiceAttachments,
     saveDraftQuiet,
     openIncidentReport,
-    openIncidentForEdit
+    openIncidentForEdit,
+    sectionWorkMedia,
+    selectedPhotos
   } = useJobCardWizard()
   const afterTranscription = () => void saveDraftQuiet({ forceDraft: true })
   const [mapOpen, setMapOpen] = React.useState(false)
 
   const handleReportIncident = useCallback(async () => {
     const authorName = String(user?.name || user?.email || '').trim()
-    const prefill = buildIncidentPrefillFromJobCard(formData, editingMeta, { authorName })
+    const prefill = buildIncidentPrefillFromJobCard(formData, editingMeta, {
+      authorName,
+      sectionWorkMedia,
+      selectedPhotos
+    })
     const serverJobCardId = editingMeta?.serverJobCardId
 
     const openNew = () => openIncidentReport(prefill)
@@ -104,7 +110,7 @@ export function VisitStep() {
     } catch {
       openNew()
     }
-  }, [accessToken, editingMeta, formData, openIncidentForEdit, openIncidentReport, user])
+  }, [accessToken, editingMeta, formData, openIncidentForEdit, openIncidentReport, sectionWorkMedia, selectedPhotos, user])
 
   const categoryOptions = useMemo(
     () => JOB_CARD_CALL_OUT_CATEGORY_OPTIONS.map((opt: string) => ({ value: opt, label: opt })),

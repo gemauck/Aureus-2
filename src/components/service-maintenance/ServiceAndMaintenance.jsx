@@ -549,6 +549,14 @@ const ServiceAndMaintenance = () => {
       if (token && selectedJobCard.id && helpers?.fetchJobCardForPrefill) {
         const full = await helpers.fetchJobCardForPrefill(token, selectedJobCard.id);
         if (full?.id) jobCardForPrefill = full;
+      } else if (token && selectedJobCard.id && helpers?.fetchJobCardPhotosForPrefill) {
+        const jcPhotos = await helpers.fetchJobCardPhotosForPrefill(token, selectedJobCard.id);
+        if (jcPhotos.length) jobCardForPrefill = { ...jobCardForPrefill, photos: jcPhotos };
+      } else if (selectedJobCard.photos?.length && helpers?.photosForIncidentFromJobCard) {
+        jobCardForPrefill = {
+          ...jobCardForPrefill,
+          photos: helpers.photosForIncidentFromJobCard(selectedJobCard.photos)
+        };
       }
 
       const buildPrefill = helpers?.buildIncidentPrefillFromJobCard;
@@ -741,6 +749,7 @@ const ServiceAndMaintenance = () => {
     }
     injectScript('components/service-maintenance/IncidentReportsPanel.jsx', { isJsx: true });
     injectScript('incidentReport/IncidentReportPrintBundle.jsx', { isJsx: true });
+    injectScript('incidentReport/incidentPhotos.js');
     injectScript('incidentReport/jobCardToIncidentPrefill.js');
     return undefined;
   }, []);

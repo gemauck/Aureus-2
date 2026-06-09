@@ -18,6 +18,15 @@ import { jobcardsApi } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { useLocationInventory } from '../hooks/useLocationInventory'
 import { useJobCardWizard } from '../WizardContext'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useJobCardSync } from '../JobCardSyncContext'
+import {
+  clearLocalDraft,
+  queuePendingSubmit,
+  readLocalDraft,
+  saveLocalDraft
+} from './stockTakeOfflineStore'
+import { syncOnePendingStockTakeSubmit } from './stockTakeSync'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -27,6 +36,7 @@ export function StockTakeScreen() {
   const { jc } = useTheme()
   const { accessToken } = useAuth()
   const { isOnline } = useNetwork()
+  const { bumpLocalDrafts } = useJobCardSync()
   const { stockLocations, setWizardFlow, ensureInventoryLoaded } = useJobCardWizard()
   const [locationId, setLocationId] = useState('')
   const { rows, loading: stockLoading, error: stockError } = useLocationInventory(
@@ -53,6 +63,33 @@ export function StockTakeScreen() {
   useEffect(() => {
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const draft = await readLocalDraft()
+      if (cancelled || !draft?.locationId) return
+      setLocationId(draft.locationId)
+      if (draft.sessionId) setSessionId(draft.sessionId)
+      if (draft.counts && Object.keys(draft.counts).length) setCounts(draft.counts)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!locationId) return undefined
+    const timer = setTimeout(() => {
+      void saveLocalDraft({
+        locationId,
+        counts,
+        sessionId: sessionId || undefined,
+        savedAt: new Date().toISOString()
+      })
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [locationId, counts, sessionId])
 
   const applySessionLines = useCallback((lines: Array<{ sku?: string; countedQty?: number }>) => {
     setCounts((prev) => {
@@ -175,9 +212,19 @@ export function StockTakeScreen() {
   }))
 
   const saveDraft = useCallback(async () => {
-    if (!accessToken || !locationId) return
+    if (!locationId) return
     setSaving(true)
     try {
+      await saveLocalDraft({
+        locationId,
+        counts,
+        sessionId: sessionId || undefined,
+        savedAt: new Date().toISOString()
+      })
+      if (!isOnline || !accessToken) {
+        Alert.alert('Saved offline', 'Counts saved on this device. They will sync when you reconnect.')
+        return
+      }
       const lines = Object.entries(counts)
         .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
         .map(([sku, countedQty]) => ({
@@ -203,29 +250,124 @@ export function StockTakeScreen() {
       }
       Alert.alert('Saved', 'Stock-take draft saved.')
     } catch (e) {
-      Alert.alert('Save failed', e instanceof Error ? e.message : 'Could not save')
+      Alert.alert(
+        'Saved offline',
+        e instanceof Error
+          ? `${e.message} Counts are stored on this device.`
+          : 'Could not reach server. Counts are stored on this device.'
+      )
     } finally {
       setSaving(false)
     }
-  }, [accessToken, locationId, counts, sessionId])
+  }, [accessToken, locationId, counts, sessionId, isOnline])
 
   const submitForReview = useCallback(async () => {
-    if (!accessToken || !sessionId) {
-      Alert.alert('Save first', 'Save a draft before submitting for review.')
+    if (!locationId) {
+      Alert.alert('Location required', 'Select a stock location first.')
+      return
+    }
+    const hasCounts = Object.values(counts).some((v) => String(v).trim() !== '')
+    if (!hasCounts) {
+      Alert.alert('Counts required', 'Enter at least one counted quantity before submitting.')
       return
     }
     setSaving(true)
     try {
+      await saveLocalDraft({
+        locationId,
+        counts,
+        sessionId: sessionId || undefined,
+        savedAt: new Date().toISOString()
+      })
+      if (!isOnline || !accessToken) {
+        await queuePendingSubmit({ locationId, counts, sessionId: sessionId || undefined })
+        bumpLocalDrafts()
+        Alert.alert(
+          'Queued offline',
+          'Stock-take will submit for review when you reconnect.'
+        )
+        await clearLocalDraft()
+        setWizardFlow('landing')
+        return
+      }
       await saveDraft()
-      await jobcardsApi.stockTakeSubmit(accessToken, sessionId)
+      let activeSessionId = sessionId
+      if (!activeSessionId) {
+        const lines = Object.entries(counts)
+          .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
+          .map(([sku, countedQty]) => ({
+            sku,
+            countedQty: parseFloat(countedQty) || 0
+          }))
+        const res = (await jobcardsApi.stockTakeCreate(accessToken, {
+          locationId,
+          description: `Stock take ${new Date().toLocaleDateString()}`,
+          lines,
+          status: 'draft'
+        })) as {
+          id?: string
+          submission?: { id?: string }
+          data?: { submission?: { id?: string } }
+        }
+        activeSessionId = String(res?.id || res?.submission?.id || res?.data?.submission?.id || '')
+        if (!activeSessionId) {
+          Alert.alert('Submit failed', 'Could not create stock-take session.')
+          return
+        }
+        setSessionId(activeSessionId)
+      }
+      await jobcardsApi.stockTakeSubmit(accessToken, activeSessionId)
+      await clearLocalDraft()
       Alert.alert('Submitted', 'Stock-take submitted for review.')
       setWizardFlow('landing')
     } catch (e) {
-      Alert.alert('Submit failed', e instanceof Error ? e.message : 'Could not submit')
+      const pendingId = await queuePendingSubmit({
+        locationId,
+        counts,
+        sessionId: sessionId || undefined
+      })
+      bumpLocalDrafts()
+      if (isOnline && accessToken) {
+        const result = await syncOnePendingStockTakeSubmit(
+          accessToken,
+          {
+            id: pendingId,
+            locationId,
+            counts,
+            sessionId: sessionId || undefined,
+            savedAt: new Date().toISOString()
+          },
+          { submitForReview: true }
+        )
+        if (result.ok) {
+          await clearLocalDraft()
+          bumpLocalDrafts()
+          Alert.alert('Submitted', 'Stock-take submitted for review.')
+          setWizardFlow('landing')
+          return
+        }
+      }
+      Alert.alert(
+        'Queued offline',
+        e instanceof Error
+          ? `${e.message} Submission queued for when you reconnect.`
+          : 'Submission queued for when you reconnect.'
+      )
+      await clearLocalDraft()
+      setWizardFlow('landing')
     } finally {
       setSaving(false)
     }
-  }, [accessToken, sessionId, saveDraft, setWizardFlow])
+  }, [
+    accessToken,
+    bumpLocalDrafts,
+    counts,
+    isOnline,
+    locationId,
+    saveDraft,
+    sessionId,
+    setWizardFlow
+  ])
 
   const clearScanFilter = useCallback(() => {
     setScanFilterSku('')
@@ -296,6 +438,7 @@ export function StockTakeScreen() {
         </Pressable>
         <Text style={styles.title}>Stock-Take</Text>
       </View>
+      <OfflineBanner visible={!isOnline} />
 
       <View style={styles.panel}>
         <SearchableSelect
@@ -382,8 +525,8 @@ export function StockTakeScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          style={[styles.footerBtn, (!isOnline || saving) && styles.disabled]}
-          disabled={!isOnline || saving || !locationId}
+          style={[styles.footerBtn, (saving || !locationId) && styles.disabled]}
+          disabled={saving || !locationId}
           onPress={() => void saveDraft()}
         >
           {saving ? (
@@ -393,8 +536,8 @@ export function StockTakeScreen() {
           )}
         </Pressable>
         <Pressable
-          style={[styles.footerBtn, styles.submitBtn, (!isOnline || saving) && styles.disabled]}
-          disabled={!isOnline || saving}
+          style={[styles.footerBtn, styles.submitBtn, (saving || !locationId) && styles.disabled]}
+          disabled={saving || !locationId}
           onPress={() => void submitForReview()}
         >
           <Text style={styles.footerBtnText}>Submit for review</Text>

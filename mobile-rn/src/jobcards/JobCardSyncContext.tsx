@@ -11,6 +11,10 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { useAuth } from '../state/AuthContext'
 import { getOfflineStore, migrateLegacyOfflineQueue } from './offlineStore'
+import { listUnsyncedPendingIncidents } from './incidents/incidentOfflineStore'
+import { syncAllPendingIncidents } from './incidents/incidentSync'
+import { listPendingSubmits } from './stockTake/stockTakeOfflineStore'
+import { syncAllPendingStockTakeSubmits } from './stockTake/stockTakeSync'
 
 type SyncEngine = Awaited<ReturnType<typeof getSyncEngine>>
 
@@ -67,8 +71,12 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
 
   const refreshUnsyncedCount = useCallback(async () => {
     const offlineStore = await getOfflineStore()
-    const list = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-    setUnsyncedCount(list.length)
+    const [jobCards, incidents, stockTakes] = await Promise.all([
+      offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
+      listUnsyncedPendingIncidents(),
+      listPendingSubmits()
+    ])
+    setUnsyncedCount(jobCards.length + incidents.length + stockTakes.length)
   }, [])
 
   const bumpLocalDrafts = useCallback(() => {
@@ -112,15 +120,38 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
   const runAutoSyncPendingJobCards = useCallback(async () => {
     if (!accessTokenRef.current || !isOnlineRef.current) return { synced: 0, failed: 0 }
 
+    const token = accessTokenRef.current
     const offlineStore = await getOfflineStore()
-    const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-    if (!pending.length) return { synced: 0, failed: 0 }
+    const [pendingCards, pendingIncidents, pendingStockTakes] = await Promise.all([
+      offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
+      listUnsyncedPendingIncidents(),
+      listPendingSubmits()
+    ])
+    if (!pendingCards.length && !pendingIncidents.length && !pendingStockTakes.length) {
+      return { synced: 0, failed: 0 }
+    }
 
-    const engine = await ensureSyncEngine()
     const result = await withSyncLock(async () => {
-      const batch = await engine.runAutoSyncPendingJobCards(pending)
+      let synced = 0
+      let failed = 0
+      if (pendingCards.length) {
+        const engine = await ensureSyncEngine()
+        const batch = await engine.runAutoSyncPendingJobCards(pendingCards)
+        synced += batch.synced
+        failed += batch.failed
+      }
+      if (pendingIncidents.length) {
+        const batch = await syncAllPendingIncidents(token, pendingIncidents)
+        synced += batch.synced
+        failed += batch.failed
+      }
+      if (pendingStockTakes.length) {
+        const batch = await syncAllPendingStockTakeSubmits(token)
+        synced += batch.synced
+        failed += batch.failed
+      }
       await refreshUnsyncedCount()
-      return batch
+      return { synced, failed }
     })
     if (!result) {
       // Another sync (e.g. immediate save) holds the lock — retry shortly.
@@ -146,8 +177,17 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       if (cancelled) return
       void (async () => {
         const offlineStore = await getOfflineStore()
-        const pending = await offlineStore.listUnsyncedLocalPendingJobCardsAsync()
-        if (!pending.length || cancelled) return
+        const [pendingCards, pendingIncidents, pendingStockTakes] = await Promise.all([
+          offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
+          listUnsyncedPendingIncidents(),
+          listPendingSubmits()
+        ])
+        if (
+          (!pendingCards.length && !pendingIncidents.length && !pendingStockTakes.length) ||
+          cancelled
+        ) {
+          return
+        }
         await runAutoSyncPendingJobCards()
       })()
     }, 1200)

@@ -1,5 +1,6 @@
 import type { EditingMeta, JobCardFormData } from '../types'
 import type { IncidentPerson, LinkedJobCard } from './incidentApi'
+import type { JobCardFormData, MediaItem, SectionWorkMedia, EditingMeta } from '../types'
 
 const HEADING_PREFIX = 'Heading:'
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:'
@@ -150,13 +151,72 @@ export type IncidentPrefillPayload = {
   technicianName?: string
   authorName?: string
   peopleInvolved?: IncidentPerson[]
+  photos?: unknown[]
   status?: string
+}
+
+function photoEntryUrl(entry: unknown): string {
+  if (!entry) return ''
+  if (typeof entry === 'string') return entry.trim()
+  if (typeof entry !== 'object') return ''
+  const obj = entry as Record<string, unknown>
+  if (obj.kind === 'signature' || obj.kind === 'voice') return ''
+  return String(obj.url || obj.thumbUrl || obj.dataUrl || '').trim()
+}
+
+function photosForIncidentFromWizardMedia(
+  formPhotos: JobCardFormData['photos'],
+  sectionWorkMedia?: SectionWorkMedia,
+  selectedPhotos?: MediaItem[]
+): unknown[] {
+  const out: unknown[] = []
+  const seen = new Set<string>()
+  const push = (entry: unknown) => {
+    const url = photoEntryUrl(entry)
+    if (!url || seen.has(url)) return
+    seen.add(url)
+    if (typeof entry === 'string') {
+      out.push({ kind: 'imageMedia', name: 'Job card photo', url: entry, thumbUrl: entry })
+      return
+    }
+    out.push(entry)
+  }
+
+  for (const entry of formPhotos || []) push(entry)
+  for (const item of selectedPhotos || []) {
+    push({
+      kind: 'imageMedia',
+      name: item.name || 'Job card photo',
+      url: item.url,
+      thumbUrl: item.thumbUrl || item.previewUrl || item.url,
+      mediaType: item.mediaType
+    })
+  }
+  if (sectionWorkMedia) {
+    for (const sec of ['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const) {
+      for (const item of sectionWorkMedia[sec] || []) {
+        push({
+          kind: 'sectionMedia',
+          section: sec,
+          name: item.name || 'Job card photo',
+          url: item.url,
+          thumbUrl: item.thumbUrl || item.url,
+          mediaType: item.mediaType
+        })
+      }
+    }
+  }
+  return out
 }
 
 export function buildIncidentPrefillFromJobCard(
   formData: JobCardFormData,
   editingMeta: EditingMeta | null | undefined,
-  opts: { authorName?: string } = {}
+  opts: {
+    authorName?: string
+    sectionWorkMedia?: SectionWorkMedia
+    selectedPhotos?: MediaItem[]
+  } = {}
 ): IncidentPrefillPayload {
   const stockUsed = Array.isArray(formData.stockUsed) ? formData.stockUsed : []
   const tankLines = stockUsed
@@ -200,6 +260,7 @@ export function buildIncidentPrefillFromJobCard(
     technicianName: buildTechnicianName(formData),
     authorName: String(opts.authorName || formData.agentName || '').trim(),
     peopleInvolved: buildPeopleInvolved(formData),
+    photos: photosForIncidentFromWizardMedia(formData.photos, opts.sectionWorkMedia, opts.selectedPhotos),
     status: 'draft'
   }
 }

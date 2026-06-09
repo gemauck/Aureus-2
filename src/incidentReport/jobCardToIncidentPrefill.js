@@ -157,7 +157,14 @@ function buildRelevantAssets(jobCard) {
 }
 
 function normalizePhotos(jobCard) {
-  return parseJsonArray(jobCard?.photos, [])
+  const helpers = typeof window !== 'undefined' ? window.IncidentPhotos : null
+  const raw = parseJsonArray(jobCard?.photos, [])
+  if (helpers?.photosForIncidentFromJobCard) return helpers.photosForIncidentFromJobCard(raw)
+  return raw.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return true
+    const kind = String(entry.kind || '')
+    return kind !== 'signature' && kind !== 'voice'
+  })
 }
 
 /**
@@ -218,15 +225,50 @@ export async function fetchJobCardForPrefill(token, jobCardId) {
   const id = String(jobCardId || '').trim()
   if (!token || !id) return null
   try {
-    const res = await fetch(`/api/jobcards/${encodeURIComponent(id)}?omitPhotos=1`, {
+    const headers = { Authorization: `Bearer ${token}` }
+    const [detailRes, photosRes] = await Promise.all([
+      fetch(`/api/jobcards/${encodeURIComponent(id)}?omitPhotos=1`, { headers }),
+      fetch(`/api/jobcards/${encodeURIComponent(id)}/photos`, { headers })
+    ])
+    const data = await detailRes.json().catch(() => ({}))
+    if (!detailRes.ok) return null
+    const row = data?.jobCard || data?.data?.jobCard || data?.data
+    if (!row || !row.id) return null
+    const photosData = await photosRes.json().catch(() => ({}))
+    const photos =
+      photosRes.ok && Array.isArray(photosData?.photos)
+        ? photosData.photos
+        : parseJsonArray(row.photos, [])
+    const helpers = typeof window !== 'undefined' ? window.IncidentPhotos : null
+    row.photos = helpers?.photosForIncidentFromJobCard
+      ? helpers.photosForIncidentFromJobCard(photos)
+      : photos
+    return row
+  } catch {
+    return null
+  }
+}
+
+/**
+ * @param {string} token
+ * @param {string} jobCardId
+ * @returns {Promise<object[]>}
+ */
+export async function fetchJobCardPhotosForPrefill(token, jobCardId) {
+  const id = String(jobCardId || '').trim()
+  if (!token || !id) return []
+  try {
+    const res = await fetch(`/api/jobcards/${encodeURIComponent(id)}/photos`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return null
-    const row = data?.jobCard || data?.data?.jobCard || data?.data
-    return row && row.id ? row : null
+    if (!res.ok || !Array.isArray(data?.photos)) return []
+    const helpers = typeof window !== 'undefined' ? window.IncidentPhotos : null
+    return helpers?.photosForIncidentFromJobCard
+      ? helpers.photosForIncidentFromJobCard(data.photos)
+      : data.photos
   } catch {
-    return null
+    return []
   }
 }
 
@@ -288,6 +330,7 @@ if (typeof window !== 'undefined') {
   window.IncidentJobCardPrefill = {
     buildIncidentPrefillFromJobCard,
     fetchJobCardForPrefill,
+    fetchJobCardPhotosForPrefill,
     fetchDraftIncidentsForJobCard,
     waitForIncidentPrefillHelpers,
     pickIncidentAt,

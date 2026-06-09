@@ -93,6 +93,162 @@ function linkedJobCardsToPayload(links) {
     .filter(Boolean)
 }
 
+function incidentPhotoHelpers() {
+  return typeof window !== 'undefined' ? window.IncidentPhotos || {} : {}
+}
+
+function normalizeIncidentPhotos(raw) {
+  const helpers = incidentPhotoHelpers()
+  if (helpers.parseIncidentPhotosArray) return helpers.parseIncidentPhotosArray(raw)
+  return Array.isArray(raw) ? raw : []
+}
+
+function mergeFormPhotos(existing, incoming) {
+  const helpers = incidentPhotoHelpers()
+  if (helpers.mergeIncidentPhotos) return helpers.mergeIncidentPhotos(existing, incoming)
+  return [...normalizeIncidentPhotos(existing), ...normalizeIncidentPhotos(incoming)]
+}
+
+const INCIDENT_IMAGE_MAX_BYTES = 4 * 1024 * 1024
+const INCIDENT_IMAGE_MAX_DIMENSION = 1920
+
+function dataUrlApproxBytes(dataUrl) {
+  const s = String(dataUrl || '')
+  const idx = s.indexOf(',')
+  if (idx < 0) return s.length
+  return Math.ceil(((s.length - idx - 1) * 3) / 4)
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Read failed'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function compressIncidentImageDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const maxSide = Math.max(img.width, img.height)
+      const scale = maxSide > INCIDENT_IMAGE_MAX_DIMENSION ? INCIDENT_IMAGE_MAX_DIMENSION / maxSide : 1
+      const width = Math.max(1, Math.round(img.width * scale))
+      const height = Math.max(1, Math.round(img.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(dataUrl)
+        return
+      }
+      ctx.drawImage(img, 0, 0, width, height)
+      let quality = 0.82
+      let out = canvas.toDataURL('image/jpeg', quality)
+      while (dataUrlApproxBytes(out) > INCIDENT_IMAGE_MAX_BYTES && quality > 0.45) {
+        quality -= 0.08
+        out = canvas.toDataURL('image/jpeg', quality)
+      }
+      resolve(out)
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
+async function buildIncidentThumbDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const maxSide = 320
+      const scale = Math.max(img.width, img.height) > maxSide ? maxSide / Math.max(img.width, img.height) : 1
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.width * scale))
+      canvas.height = Math.max(1, Math.round(img.height * scale))
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(dataUrl)
+        return
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.62))
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
+function incidentPhotoDisplayUrl(entry) {
+  const helpers = incidentPhotoHelpers()
+  return helpers.incidentPhotoThumbUrl
+    ? helpers.incidentPhotoThumbUrl(entry)
+    : helpers.incidentPhotoUrl
+      ? helpers.incidentPhotoUrl(entry)
+      : typeof entry === 'string'
+        ? entry
+        : String(entry?.url || '')
+}
+
+function incidentPhotoFullUrl(entry) {
+  const helpers = incidentPhotoHelpers()
+  return helpers.incidentPhotoUrl
+    ? helpers.incidentPhotoUrl(entry)
+    : typeof entry === 'string'
+      ? entry
+      : String(entry?.url || '')
+}
+
+function incidentPhotoIsVideo(entry) {
+  const helpers = incidentPhotoHelpers()
+  if (helpers.incidentPhotoIsVideo) return helpers.incidentPhotoIsVideo(entry)
+  const url = incidentPhotoFullUrl(entry)
+  return /^data:video\//i.test(url)
+}
+
+function IncidentPhotoGallery({ photos, isDark, onRemove, readOnly = false }) {
+  const rows = normalizeIncidentPhotos(photos)
+  if (!rows.length) {
+    return (
+      <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>No photos attached yet.</p>
+    )
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {rows.map((entry, idx) => {
+        const src = incidentPhotoDisplayUrl(entry)
+        const full = incidentPhotoFullUrl(entry)
+        const isVideo = incidentPhotoIsVideo(entry)
+        return (
+          <div
+            key={`${full || idx}-${idx}`}
+            className={`relative overflow-hidden rounded-lg border ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}
+          >
+            {isVideo ? (
+              <video src={full} controls className="h-28 w-full object-cover" />
+            ) : (
+              <a href={full} target="_blank" rel="noopener noreferrer">
+                <img src={src || full} alt="" className="h-28 w-full object-cover" />
+              </a>
+            )}
+            {!readOnly && typeof onRemove === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onRemove(idx)}
+                className="absolute right-1 top-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                aria-label="Remove photo"
+              >
+                <i className="fa-solid fa-xmark text-xs" />
+              </button>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function emptyForm() {
   return {
     clientId: '',
@@ -102,6 +258,7 @@ function emptyForm() {
     linkedJobCards: [],
     jobCardId: '',
     jobCardNumber: '',
+    photos: [],
     incidentAt: new Date().toISOString().slice(0, 16),
     incidentType: '',
     severity: '',
@@ -306,6 +463,8 @@ function IncidentReportsPanel({
   const [clientJobCards, setClientJobCards] = useState([])
   const [clientJobCardsLoading, setClientJobCardsLoading] = useState(false)
   const [jobCardPickerId, setJobCardPickerId] = useState('')
+  const [photoUploadBusy, setPhotoUploadBusy] = useState(false)
+  const photoInputRef = useRef(null)
 
   const token = window.storage?.getToken?.()
 
@@ -374,6 +533,7 @@ function IncidentReportsPanel({
       linkedJobCards,
       jobCardId: linkedJobCards[0]?.id || createPrefill.jobCardId || '',
       jobCardNumber: linkedJobCards[0]?.jobCardNumber || createPrefill.jobCardNumber || '',
+      photos: normalizeIncidentPhotos(createPrefill.photos),
       authorName: createPrefill.authorName || currentUserName(),
       incidentAt: prefillIncidentAtLocal(createPrefill.incidentAt),
       peopleInvolved: Array.isArray(createPrefill.peopleInvolved) && createPrefill.peopleInvolved.length
@@ -504,24 +664,81 @@ function IncidentReportsPanel({
     void loadClientJobCards(form.clientId)
   }, [showForm, form.clientId, loadClientJobCards])
 
-  const addLinkedJobCard = useCallback((jobCard) => {
-    const id = String(jobCard?.id || '').trim()
-    if (!id) return
-    setForm((f) => {
-      const existing = Array.isArray(f.linkedJobCards) ? f.linkedJobCards : []
-      if (existing.some((row) => row.id === id)) return f
-      const next = [
-        ...existing,
-        { id, jobCardNumber: String(jobCard?.jobCardNumber || '').trim() }
-      ]
-      return {
+  const addLinkedJobCard = useCallback(
+    async (jobCard) => {
+      const id = String(jobCard?.id || '').trim()
+      if (!id) return
+      setForm((f) => {
+        const existing = Array.isArray(f.linkedJobCards) ? f.linkedJobCards : []
+        if (existing.some((row) => row.id === id)) return f
+        const next = [
+          ...existing,
+          { id, jobCardNumber: String(jobCard?.jobCardNumber || '').trim() }
+        ]
+        return {
+          ...f,
+          linkedJobCards: next,
+          jobCardId: next[0]?.id || '',
+          jobCardNumber: next[0]?.jobCardNumber || ''
+        }
+      })
+      setJobCardPickerId('')
+      if (!token) return
+      const helpers = window.IncidentJobCardPrefill
+      const jcPhotos = helpers?.fetchJobCardPhotosForPrefill
+        ? await helpers.fetchJobCardPhotosForPrefill(token, id)
+        : []
+      if (!jcPhotos.length) return
+      setForm((f) => ({
         ...f,
-        linkedJobCards: next,
-        jobCardId: next[0]?.id || '',
-        jobCardNumber: next[0]?.jobCardNumber || ''
+        photos: mergeFormPhotos(f.photos, jcPhotos)
+      }))
+    },
+    [token]
+  )
+
+  const handleIncidentPhotoUpload = useCallback(async (event) => {
+    const files = Array.from(event.target.files || [])
+    const input = event.target
+    if (!files.length) return
+    setPhotoUploadBusy(true)
+    try {
+      const next = normalizeIncidentPhotos(form.photos)
+      for (const file of files) {
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name)
+        const maxBytes = isVideo ? 24 * 1024 * 1024 : INCIDENT_IMAGE_MAX_BYTES
+        if (file.size > maxBytes) {
+          window.alert(`${file.name} is too large.`)
+          continue
+        }
+        const rawUrl = await readFileAsDataUrl(file)
+        if (isVideo) {
+          next.push(rawUrl)
+          continue
+        }
+        const url = await compressIncidentImageDataUrl(rawUrl)
+        const thumbUrl = await buildIncidentThumbDataUrl(url)
+        next.push({
+          kind: 'imageMedia',
+          name: file.name || 'Photo',
+          url,
+          thumbUrl: thumbUrl || url
+        })
       }
-    })
-    setJobCardPickerId('')
+      setForm((f) => ({ ...f, photos: next }))
+    } catch (e) {
+      window.alert(e?.message || 'Failed to add photo')
+    } finally {
+      setPhotoUploadBusy(false)
+      if (input) input.value = ''
+    }
+  }, [form.photos])
+
+  const removeIncidentPhoto = useCallback((index) => {
+    setForm((f) => ({
+      ...f,
+      photos: normalizeIncidentPhotos(f.photos).filter((_, i) => i !== index)
+    }))
   }, [])
 
   const removeLinkedJobCard = useCallback((jobCardId) => {
@@ -681,8 +898,7 @@ function IncidentReportsPanel({
               key={row.id}
               type="button"
               onClick={() => {
-                setSelected(row)
-                setShowDetail(true)
+                void openIncidentById(row.id)
               }}
               className={`w-full rounded-lg border px-3 py-3 text-left transition hover:border-indigo-300 ${
                 isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
@@ -746,6 +962,7 @@ function IncidentReportsPanel({
                     linkedJobCards,
                     jobCardId: linkedJobCards[0]?.id || selected.jobCardId || '',
                     jobCardNumber: linkedJobCards[0]?.jobCardNumber || selected.jobCardNumber || '',
+                    photos: normalizeIncidentPhotos(selected.photos),
                     incidentAt: selected.incidentAt
                       ? new Date(selected.incidentAt).toISOString().slice(0, 16)
                       : '',
@@ -825,6 +1042,14 @@ function IncidentReportsPanel({
                       {row.jobCardNumber || row.id}
                     </button>
                   ))}
+                </div>
+              </section>
+            ) : null}
+            {normalizeIncidentPhotos(selected.photos).length ? (
+              <section className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Photos</h3>
+                <div className="mt-2">
+                  <IncidentPhotoGallery photos={selected.photos} isDark={isDark} readOnly />
                 </div>
               </section>
             ) : null}
@@ -991,6 +1216,42 @@ function IncidentReportsPanel({
                       ))}
                   </select>
                 </label>
+              </div>
+            </div>
+            <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className={`text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Photos</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => void handleIncidentPhotoUpload(e)}
+                  />
+                  <button
+                    type="button"
+                    disabled={saving || photoUploadBusy}
+                    onClick={() => photoInputRef.current?.click()}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-60 ${
+                      isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <i className={`fa-solid ${photoUploadBusy ? 'fa-spinner fa-spin' : 'fa-camera'} mr-1`} />
+                    {photoUploadBusy ? 'Adding…' : 'Add photos'}
+                  </button>
+                </div>
+              </div>
+              <p className={`mt-1 text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                Attach site photos or videos. Photos from linked job cards are copied automatically.
+              </p>
+              <div className="mt-3">
+                <IncidentPhotoGallery
+                  photos={form.photos}
+                  isDark={isDark}
+                  onRemove={removeIncidentPhoto}
+                />
               </div>
             </div>
             <label className="block text-xs font-medium">

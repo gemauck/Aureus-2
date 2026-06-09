@@ -14,6 +14,12 @@ import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
 import { useJobCardWizard } from '../WizardContext'
 import { incidentApi, type IncidentReport } from './incidentApi'
+import {
+  cacheIncidentList,
+  listUnsyncedPendingIncidents,
+  pendingToListRow,
+  readCachedIncidentList
+} from './incidentOfflineStore'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -48,18 +54,50 @@ export function IncidentListScreen() {
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
-    if (!accessToken) return
+    const pendingRows = (await listUnsyncedPendingIncidents()).map(pendingToListRow)
+    if (!accessToken) {
+      setRows(pendingRows)
+      setError(pendingRows.length ? '' : 'Sign in to load incident reports.')
+      return
+    }
     if (!isOnline) {
-      setError('Connect to the internet to load incident reports.')
-      setRows([])
+      const cached = await readCachedIncidentList()
+      const merged = [
+        ...pendingRows,
+        ...cached.filter((row) => !pendingRows.some((p) => p.id === row.id))
+      ]
+      setRows(merged)
+      setError(
+        merged.length
+          ? ''
+          : 'No cached incidents on this device. Connect once while online to load your list.'
+      )
       return
     }
     setError('')
     try {
       const res = await incidentApi.list(accessToken, { mine: '1' })
-      setRows(res.incidentReports || [])
+      const serverRows = res.incidentReports || []
+      await cacheIncidentList(serverRows)
+      const merged = [
+        ...pendingRows,
+        ...serverRows.filter((row) => !pendingRows.some((p) => p.id === row.id))
+      ]
+      setRows(merged)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load incidents')
+      const cached = await readCachedIncidentList()
+      const merged = [
+        ...pendingRows,
+        ...cached.filter((row) => !pendingRows.some((p) => p.id === row.id))
+      ]
+      setRows(merged)
+      setError(
+        merged.length
+          ? 'Showing saved copies — could not refresh from server.'
+          : e instanceof Error
+            ? e.message
+            : 'Could not load incidents'
+      )
     }
   }, [accessToken, isOnline])
 
@@ -122,7 +160,9 @@ export function IncidentListScreen() {
               <View style={styles.cardTop}>
                 <Text style={styles.cardTitle}>{item.incidentNumber || item.id}</Text>
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{statusLabel(item.status)}</Text>
+                  <Text style={styles.badgeText}>
+                    {String(item.id).startsWith('local-') ? 'Pending sync' : statusLabel(item.status)}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.cardSub}>

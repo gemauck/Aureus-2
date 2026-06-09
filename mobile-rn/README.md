@@ -83,7 +83,7 @@ Open **Service & Maintenance** from the menu, or **Job cards** → **Report inci
 | Share PDF (server-generated) | ✅ |
 | Report from CRM client (Service & Maintenance tab) | ✅ |
 
-Incident reports require an internet connection to save and download PDFs.
+Incident reports can be **created and edited offline** (queued on device, synced on reconnect). PDF download still requires connectivity. Stock-take counts can be entered offline; drafts auto-save locally and submissions queue until online.
 
 ## Pilot modules (existing shells)
 

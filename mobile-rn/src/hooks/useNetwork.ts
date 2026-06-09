@@ -11,7 +11,7 @@ export function computeNetworkOnline(state: NetInfoState): boolean {
 }
 
 export function useNetwork() {
-  const [isOnline, setIsOnline] = useState(true)
+  const [isOnline, setIsOnline] = useState(false)
 
   useEffect(() => {
     void NetInfo.fetch().then((state) => {

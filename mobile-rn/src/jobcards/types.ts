@@ -14,6 +14,7 @@ export type IncidentPrefill = {
   jobCardId?: string
   jobCardNumber?: string
   linkedJobCards?: Array<{ id: string; jobCardId?: string; jobCardNumber?: string }>
+  photos?: unknown[]
   incidentAt?: string
   locationDescription?: string
   locationLatitude?: string

@@ -160,6 +160,24 @@ export const INCIDENT_PRINT_CSS = `
     white-space: pre-wrap;
   }
   .narrative-body.empty { color: #9ca3af; font-style: italic; }
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    border: 1px solid #d1d5db;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 12px;
+  }
+  .photo-tile img, .photo-tile video {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+  .photo-cap { margin-top: 4px; font-size: 8pt; color: #6b7280; }
   .confidential {
     margin-top: 28px;
     font-size: 8pt;
@@ -277,6 +295,7 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
     ${narrativeBlock('Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)}
     ${narrativeBlock('Description', incident.description)}
     ${narrativeBlock('Immediate actions', incident.immediateActions)}
+    ${incidentPhotoGalleryHtml(incident.photos)}
 
     <div class="signoff">
       <div class="signoff-head">Author sign-off</div>
@@ -312,7 +331,51 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
 </html>`
 }
 
-/** @deprecated Photos are not part of the web incident form; kept for API compatibility. */
+/** Photos attached to incident reports (print/PDF). */
 export function partitionIncidentPhotosForPrint(photos) {
-  return []
+  const rows = []
+  const raw = (() => {
+    try {
+      if (!photos) return []
+      if (Array.isArray(photos)) return photos
+      return typeof photos === 'string' ? JSON.parse(photos) : []
+    } catch {
+      return []
+    }
+  })()
+  raw.forEach((entry, idx) => {
+    let url = ''
+    if (typeof entry === 'string') url = entry.trim()
+    else if (entry && typeof entry === 'object') {
+      url = String(entry.url || entry.thumbUrl || entry.dataUrl || '').trim()
+    }
+    if (!url) return
+    const isVideo = /^data:video\//i.test(url) || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)
+    rows.push({
+      entry,
+      url,
+      thumbUrl:
+        entry && typeof entry === 'object'
+          ? String(entry.thumbUrl || entry.previewUrl || url)
+          : url,
+      isVideo,
+      label: entry && typeof entry === 'object' && entry.name ? String(entry.name) : `Photo ${idx + 1}`
+    })
+  })
+  return rows
+}
+
+function incidentPhotoGalleryHtml(photos) {
+  const rows = partitionIncidentPhotosForPrint(photos)
+  if (!rows.length) return ''
+  const tiles = rows
+    .map((row) => {
+      const src = escapeHtml(row.thumbUrl || row.url)
+      if (row.isVideo) {
+        return `<div class="photo-tile"><video src="${escapeHtml(row.url)}" controls style="max-width:100%;max-height:180px"></video><div class="photo-cap">${escapeHtml(row.label)}</div></div>`
+      }
+      return `<div class="photo-tile"><a href="${escapeHtml(row.url)}" target="_blank" rel="noopener"><img src="${src}" alt="${escapeHtml(row.label)}" /></a><div class="photo-cap">${escapeHtml(row.label)}</div></div>`
+    })
+    .join('')
+  return `<div class="narrative"><div class="narrative-head">Photos</div><div class="photo-grid">${tiles}</div></div>`
 }
