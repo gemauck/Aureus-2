@@ -41,6 +41,34 @@ export function ServiceMaintenanceScreen({ navigation }: Props) {
 
           <Pressable
             style={styles.featureCard}
+            onPress={() => navigation.navigate('JobCards', { initialFlow: 'incident_form' })}
+          >
+            <View style={[styles.featureIcon, { backgroundColor: erp.warningSoft }]}>
+              <FontAwesome5 name="exclamation-triangle" size={22} color={erp.warning} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.featureTitle}>Report incident</Text>
+              <Text style={styles.featureSub}>Record a site incident in the field</Text>
+            </View>
+            <FontAwesome5 name="chevron-right" size={14} color={erp.textSubtle} />
+          </Pressable>
+
+          <Pressable
+            style={styles.featureCard}
+            onPress={() => navigation.navigate('JobCards', { initialFlow: 'incident_list' })}
+          >
+            <View style={[styles.featureIcon, { backgroundColor: '#fef3c7' }]}>
+              <FontAwesome5 name="file-alt" size={22} color="#b45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.featureTitle}>Incident reports</Text>
+              <Text style={styles.featureSub}>View and edit your submitted incidents</Text>
+            </View>
+            <FontAwesome5 name="chevron-right" size={14} color={erp.textSubtle} />
+          </Pressable>
+
+          <Pressable
+            style={styles.featureCard}
             onPress={() => void Linking.openURL(`${API_BASE_URL}/service-maintenance`)}
           >
             <View style={[styles.featureIcon, { backgroundColor: erp.warningSoft }]}>

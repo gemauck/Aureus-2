@@ -7,6 +7,7 @@ import { PriorListScreen } from './PriorListScreen'
 import { WizardScreen } from './WizardScreen'
 import { StockTakeScreen } from '../stockTake/StockTakeScreen'
 import { IncidentFormScreen } from '../incidents/IncidentFormScreen'
+import { IncidentListScreen } from '../incidents/IncidentListScreen'
 
 type Props = {
   route: RouteProp<RootStackParamList, 'JobCards'>
@@ -23,6 +24,8 @@ function JobCardsFlowRouter() {
       return <StockTakeScreen />
     case 'incident_form':
       return <IncidentFormScreen />
+    case 'incident_list':
+      return <IncidentListScreen />
     case 'landing':
     default:
       return <LandingScreen />
@@ -32,8 +35,15 @@ function JobCardsFlowRouter() {
 export function JobCardsRootScreen({ route }: Props) {
   const jobCardId = route.params?.jobCardId
   const initialFlow = route.params?.initialFlow
+  const incidentPrefill = route.params?.incidentPrefill
+  const incidentId = route.params?.incidentId
   return (
-    <JobCardWizardProvider initialJobCardId={jobCardId} initialFlow={initialFlow}>
+    <JobCardWizardProvider
+      initialJobCardId={jobCardId}
+      initialFlow={initialFlow}
+      initialIncidentPrefill={incidentPrefill}
+      initialIncidentId={incidentId}
+    >
       <JobCardsFlowRouter />
     </JobCardWizardProvider>
   )

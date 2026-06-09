@@ -59,6 +59,10 @@ const LIST_SELECT = {
   incidentType: true,
   severity: true,
   description: true,
+  relevantAssets: true,
+  relevantTanksMobileBowsers: true,
+  technicianName: true,
+  authorName: true,
   reportedById: true,
   reportedByName: true,
   ownerId: true,
@@ -94,6 +98,13 @@ function getPagination(allowLargePageSize = false) {
   }
 }
 
+function normalizeSignature(value) {
+  const sig = String(value ?? '').trim()
+  if (!sig) return ''
+  if (!sig.startsWith('data:image/')) return ''
+  return sig.length > 600_000 ? '' : sig
+}
+
 async function buildIncidentCreateData(body, req) {
   const userId = req.user?.sub || req.user?.id || null
   const clientId = body.clientId != null && String(body.clientId).trim() !== '' ? String(body.clientId).trim() : null
@@ -125,6 +136,11 @@ async function buildIncidentCreateData(body, req) {
     peopleInvolved: serializeIncidentPeopleInvolved(body.peopleInvolved),
     witnesses: String(body.witnesses || '').trim(),
     equipmentInvolved: String(body.equipmentInvolved || '').trim(),
+    relevantAssets: String(body.relevantAssets || '').trim(),
+    relevantTanksMobileBowsers: String(body.relevantTanksMobileBowsers || '').trim(),
+    technicianName: String(body.technicianName || '').trim(),
+    authorName: String(body.authorName || req.user?.name || '').trim(),
+    authorSignature: normalizeSignature(body.authorSignature),
     photos: JSON.stringify(Array.isArray(body.photos) ? body.photos : parseJson(body.photos, [])),
     reportedById: body.reportedById ? String(body.reportedById) : userId,
     reportedByName: String(body.reportedByName || req.user?.name || '').trim(),
@@ -172,6 +188,13 @@ async function buildIncidentUpdateData(body, existing) {
   if (body.peopleInvolved !== undefined) data.peopleInvolved = serializeIncidentPeopleInvolved(body.peopleInvolved)
   if (body.witnesses !== undefined) data.witnesses = String(body.witnesses || '').trim()
   if (body.equipmentInvolved !== undefined) data.equipmentInvolved = String(body.equipmentInvolved || '').trim()
+  if (body.relevantAssets !== undefined) data.relevantAssets = String(body.relevantAssets || '').trim()
+  if (body.relevantTanksMobileBowsers !== undefined) {
+    data.relevantTanksMobileBowsers = String(body.relevantTanksMobileBowsers || '').trim()
+  }
+  if (body.technicianName !== undefined) data.technicianName = String(body.technicianName || '').trim()
+  if (body.authorName !== undefined) data.authorName = String(body.authorName || '').trim()
+  if (body.authorSignature !== undefined) data.authorSignature = normalizeSignature(body.authorSignature)
   if (body.photos !== undefined) {
     data.photos = JSON.stringify(Array.isArray(body.photos) ? body.photos : parseJson(body.photos, []))
   }
@@ -225,7 +248,11 @@ async function handler(req, res) {
           { siteName: { contains: q, mode: 'insensitive' } },
           { description: { contains: q, mode: 'insensitive' } },
           { incidentType: { contains: q, mode: 'insensitive' } },
-          { reportedByName: { contains: q, mode: 'insensitive' } }
+          { reportedByName: { contains: q, mode: 'insensitive' } },
+          { technicianName: { contains: q, mode: 'insensitive' } },
+          { authorName: { contains: q, mode: 'insensitive' } },
+          { relevantAssets: { contains: q, mode: 'insensitive' } },
+          { relevantTanksMobileBowsers: { contains: q, mode: 'insensitive' } }
         ]
       }
 

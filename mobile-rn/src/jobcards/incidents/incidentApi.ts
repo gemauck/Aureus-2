@@ -26,6 +26,11 @@ export type IncidentReport = {
   peopleInvolved?: IncidentPerson[]
   witnesses: string
   equipmentInvolved: string
+  relevantAssets: string
+  relevantTanksMobileBowsers: string
+  technicianName: string
+  authorName: string
+  authorSignature?: string
   locationDescription: string
   locationLatitude: string
   locationLongitude: string

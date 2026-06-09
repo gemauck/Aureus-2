@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,7 @@ import { Share } from 'react-native'
 import { apiUrl } from '../../config'
 import { ModuleHeader } from '../../components/shell/ModuleHeader'
 import { SearchableSelect } from '../components/SearchableSelect'
+import { DateTimeField } from '../components/DateTimeField'
 import { useJobCardWizard } from '../WizardContext'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
@@ -37,27 +38,52 @@ const INCIDENT_TYPES = [
 
 const SEVERITIES = ['Low', 'Medium', 'High', 'Critical']
 
+const STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'under_investigation', label: 'Under investigation' },
+  { value: 'closed', label: 'Closed' }
+]
+
+function toDatetimeLocal(value?: string | null) {
+  if (!value) return new Date().toISOString().slice(0, 16)
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return new Date().toISOString().slice(0, 16)
+  return dt.toISOString().slice(0, 16)
+}
+
 export function IncidentFormScreen() {
   const styles = useThemedStyles(createStyles)
   const { jc } = useTheme()
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
-  const { clients, setWizardFlow, incidentPrefill } = useJobCardWizard()
+  const {
+    clients,
+    setWizardFlow,
+    incidentPrefill,
+    editingIncidentId,
+    openIncidentList
+  } = useJobCardWizard()
 
+  const [loading, setLoading] = useState(Boolean(editingIncidentId))
   const [clientId, setClientId] = useState(incidentPrefill?.clientId || '')
   const [clientName, setClientName] = useState(incidentPrefill?.clientName || '')
   const [siteName, setSiteName] = useState(incidentPrefill?.siteName || '')
   const [jobCardId, setJobCardId] = useState(incidentPrefill?.jobCardId || '')
   const [jobCardNumber, setJobCardNumber] = useState(incidentPrefill?.jobCardNumber || '')
+  const [incidentAt, setIncidentAt] = useState(toDatetimeLocal())
   const [incidentType, setIncidentType] = useState('')
   const [severity, setSeverity] = useState('')
+  const [status, setStatus] = useState('draft')
   const [description, setDescription] = useState('')
   const [immediateActions, setImmediateActions] = useState('')
-  const [equipmentInvolved, setEquipmentInvolved] = useState('')
-  const [witnesses, setWitnesses] = useState('')
-  const [locationDescription, setLocationDescription] = useState('')
+  const [relevantAssets, setRelevantAssets] = useState('')
+  const [relevantTanksMobileBowsers, setRelevantTanksMobileBowsers] = useState('')
+  const [technicianName, setTechnicianName] = useState('')
+  const [authorName, setAuthorName] = useState(user?.name || user?.email || '')
   const [saving, setSaving] = useState(false)
-  const [savedId, setSavedId] = useState('')
+  const [savedId, setSavedId] = useState(editingIncidentId || '')
+  const [incidentNumber, setIncidentNumber] = useState('')
   const [sharingPdf, setSharingPdf] = useState(false)
 
   const clientOptions = useMemo(
@@ -65,22 +91,71 @@ export function IncidentFormScreen() {
     [clients]
   )
 
+  useEffect(() => {
+    if (!editingIncidentId || !accessToken) {
+      if (incidentPrefill) {
+        setClientId(incidentPrefill.clientId || '')
+        setClientName(incidentPrefill.clientName || '')
+        setSiteName(incidentPrefill.siteName || '')
+        setJobCardId(incidentPrefill.jobCardId || '')
+        setJobCardNumber(incidentPrefill.jobCardNumber || '')
+      }
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      try {
+        const res = await incidentApi.get(accessToken, editingIncidentId)
+        const row = res.incidentReport
+        if (cancelled || !row) return
+        setSavedId(row.id)
+        setIncidentNumber(row.incidentNumber || '')
+        setClientId(row.clientId || '')
+        setClientName(row.clientName || '')
+        setSiteName(row.siteName || '')
+        setJobCardId(row.jobCardId || '')
+        setJobCardNumber(row.jobCardNumber || '')
+        setIncidentAt(toDatetimeLocal(row.incidentAt))
+        setIncidentType(row.incidentType || '')
+        setSeverity(row.severity || '')
+        setStatus(row.status || 'draft')
+        setDescription(row.description || '')
+        setImmediateActions(row.immediateActions || '')
+        setRelevantAssets(row.relevantAssets || '')
+        setRelevantTanksMobileBowsers(row.relevantTanksMobileBowsers || '')
+        setTechnicianName(row.technicianName || '')
+        setAuthorName(row.authorName || user?.name || user?.email || '')
+      } catch (e) {
+        Alert.alert('Load failed', e instanceof Error ? e.message : 'Could not load incident')
+        setWizardFlow('incident_list')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, editingIncidentId, incidentPrefill, setWizardFlow])
+
   const buildPayload = useCallback(
-    (status: 'draft' | 'submitted') => ({
+    () => ({
       clientId: clientId || null,
       clientName,
       siteName,
       jobCardId: jobCardId || null,
       jobCardNumber,
-      incidentAt: new Date().toISOString(),
+      incidentAt: incidentAt ? new Date(incidentAt).toISOString() : new Date().toISOString(),
       incidentType,
       severity,
       description,
       immediateActions,
-      equipmentInvolved,
-      witnesses,
-      locationDescription,
-      reportedByName: user?.name || user?.email || '',
+      relevantAssets,
+      relevantTanksMobileBowsers,
+      technicianName,
+      authorName,
+      reportedByName: authorName || user?.name || user?.email || '',
       status
     }),
     [
@@ -89,53 +164,53 @@ export function IncidentFormScreen() {
       siteName,
       jobCardId,
       jobCardNumber,
+      incidentAt,
       incidentType,
       severity,
       description,
       immediateActions,
-      equipmentInvolved,
-      witnesses,
-      locationDescription,
+      relevantAssets,
+      relevantTanksMobileBowsers,
+      technicianName,
+      authorName,
+      status,
       user
     ]
   )
 
-  const save = useCallback(
-    async (status: 'draft' | 'submitted') => {
-      if (!accessToken) return
-      if (!clientId && !clientName.trim()) {
-        Alert.alert('Client required', 'Select a client before saving.')
-        return
-      }
-      if (!description.trim()) {
-        Alert.alert('Description required', 'Describe what happened.')
-        return
-      }
-      if (!isOnline) {
-        Alert.alert('Offline', 'Incident reports require an internet connection to save.')
-        return
-      }
-      setSaving(true)
-      try {
-        const payload = buildPayload(status)
-        const res = savedId
-          ? await incidentApi.patch(accessToken, savedId, payload)
-          : await incidentApi.create(accessToken, payload)
-        const row = res.incidentReport
-        if (row?.id) setSavedId(row.id)
-        Alert.alert(
-          status === 'submitted' ? 'Submitted' : 'Saved',
-          row?.incidentNumber ? `Incident ${row.incidentNumber} saved.` : 'Incident report saved.'
-        )
-        if (status === 'submitted') setWizardFlow('landing')
-      } catch (e) {
-        Alert.alert('Save failed', e instanceof Error ? e.message : 'Could not save incident report')
-      } finally {
-        setSaving(false)
-      }
-    },
-    [accessToken, buildPayload, clientId, clientName, description, isOnline, savedId, setWizardFlow]
-  )
+  const save = useCallback(async () => {
+    if (!accessToken) return
+    if (!clientId && !clientName.trim()) {
+      Alert.alert('Client required', 'Select a client before saving.')
+      return
+    }
+    if (!description.trim()) {
+      Alert.alert('Description required', 'Describe what happened.')
+      return
+    }
+    if (!isOnline) {
+      Alert.alert('Offline', 'Incident reports require an internet connection to save.')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = buildPayload()
+      const res = savedId
+        ? await incidentApi.patch(accessToken, savedId, payload)
+        : await incidentApi.create(accessToken, payload)
+      const row = res.incidentReport
+      if (row?.id) setSavedId(row.id)
+      if (row?.incidentNumber) setIncidentNumber(row.incidentNumber)
+      Alert.alert(
+        'Saved',
+        row?.incidentNumber ? `Incident ${row.incidentNumber} saved.` : 'Incident report saved.'
+      )
+    } catch (e) {
+      Alert.alert('Save failed', e instanceof Error ? e.message : 'Could not save incident report')
+    } finally {
+      setSaving(false)
+    }
+  }, [accessToken, buildPayload, clientId, clientName, description, isOnline, savedId])
 
   const sharePdf = useCallback(async () => {
     if (!accessToken || !savedId) {
@@ -156,21 +231,36 @@ export function IncidentFormScreen() {
       await Share.share({
         url: result.uri,
         title: 'Incident report PDF',
-        message: 'Incident report PDF'
+        message: incidentNumber ? `Incident ${incidentNumber}` : 'Incident report PDF'
       })
     } catch (e) {
       Alert.alert('PDF failed', e instanceof Error ? e.message : 'Could not download PDF')
     } finally {
       setSharingPdf(false)
     }
-  }, [accessToken, isOnline, savedId])
+  }, [accessToken, incidentNumber, isOnline, savedId])
+
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <ModuleHeader
+          title="Incident report"
+          subtitle="Loading…"
+          onBack={() => setWizardFlow(editingIncidentId ? 'incident_list' : 'landing')}
+        />
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={jc.primary} size="large" />
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.root}>
       <ModuleHeader
-        title="Incident report"
+        title={incidentNumber || 'Incident report'}
         subtitle="Record site incidents"
-        onBack={() => setWizardFlow('landing')}
+        onBack={() => setWizardFlow(editingIncidentId ? 'incident_list' : 'landing')}
       />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <SearchableSelect
@@ -183,24 +273,37 @@ export function IncidentFormScreen() {
             setClientName(hit?.name || '')
           }}
         />
-        <Field label="Site" value={siteName} onChangeText={setSiteName} styles={styles} />
+        <Field label="Site name" value={siteName} onChangeText={setSiteName} styles={styles} />
         {jobCardNumber ? (
           <Text style={styles.linked}>Linked job card: {jobCardNumber}</Text>
         ) : null}
-        <ChipRow label="Type" options={INCIDENT_TYPES} value={incidentType} onSelect={setIncidentType} styles={styles} jc={jc} />
+        <ChipRow label="Incident type" options={INCIDENT_TYPES} value={incidentType} onSelect={setIncidentType} styles={styles} jc={jc} />
         <ChipRow label="Severity" options={SEVERITIES} value={severity} onSelect={setSeverity} styles={styles} jc={jc} />
-        <Field label="What happened" value={description} onChangeText={setDescription} multiline styles={styles} />
+        <View style={styles.field}>
+          <Text style={styles.label}>Incident date & time</Text>
+          <DateTimeField value={incidentAt} onChange={setIncidentAt} />
+        </View>
+        <ChipRow
+          label="Status"
+          options={STATUS_OPTIONS.map((o) => o.label)}
+          value={STATUS_OPTIONS.find((o) => o.value === status)?.label || ''}
+          onSelect={(label) => {
+            const hit = STATUS_OPTIONS.find((o) => o.label === label)
+            if (hit) setStatus(hit.value)
+          }}
+          styles={styles}
+          jc={jc}
+        />
+        <Field label="Description" value={description} onChangeText={setDescription} multiline styles={styles} />
         <Field label="Immediate actions" value={immediateActions} onChangeText={setImmediateActions} multiline styles={styles} />
-        <Field label="Equipment involved" value={equipmentInvolved} onChangeText={setEquipmentInvolved} styles={styles} />
-        <Field label="Witnesses" value={witnesses} onChangeText={setWitnesses} multiline styles={styles} />
-        <Field label="Location" value={locationDescription} onChangeText={setLocationDescription} multiline styles={styles} />
+        <Field label="Relevant assets" value={relevantAssets} onChangeText={setRelevantAssets} multiline styles={styles} />
+        <Field label="Relevant tanks / mobile bowsers" value={relevantTanksMobileBowsers} onChangeText={setRelevantTanksMobileBowsers} multiline styles={styles} />
+        <Field label="Technician involved" value={technicianName} onChangeText={setTechnicianName} styles={styles} />
+        <Field label="Author (person completing report)" value={authorName} onChangeText={setAuthorName} styles={styles} />
 
         <View style={styles.actions}>
-          <Pressable style={[styles.btn, styles.btnSecondary]} disabled={saving} onPress={() => void save('draft')}>
-            <Text style={styles.btnSecondaryText}>{saving ? 'Saving…' : 'Save draft'}</Text>
-          </Pressable>
-          <Pressable style={[styles.btn, styles.btnPrimary]} disabled={saving} onPress={() => void save('submitted')}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Submit</Text>}
+          <Pressable style={[styles.btn, styles.btnSecondary]} disabled={saving} onPress={() => void save()}>
+            <Text style={styles.btnSecondaryText}>{saving ? 'Saving…' : 'Save incident'}</Text>
           </Pressable>
         </View>
         {savedId ? (
@@ -208,6 +311,9 @@ export function IncidentFormScreen() {
             <Text style={styles.btnPrimaryText}>{sharingPdf ? 'Preparing PDF…' : 'Share PDF'}</Text>
           </Pressable>
         ) : null}
+        <Pressable style={styles.linkBtn} onPress={() => openIncidentList()}>
+          <Text style={styles.linkBtnText}>View all incident reports</Text>
+        </Pressable>
       </ScrollView>
     </View>
   )
@@ -279,6 +385,7 @@ function ChipRow({
 function createStyles(jc: JcTheme) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: jc.background },
+    loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     content: { padding: 16, paddingBottom: 40, gap: 12 },
     field: { gap: 6 },
     label: { fontSize: 12, fontWeight: '600', color: jc.textMuted },
@@ -305,9 +412,8 @@ function createStyles(jc: JcTheme) {
     },
     chipText: { fontSize: 12, color: jc.text },
     chipTextActive: { color: '#fff', fontWeight: '600' },
-    actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
+    actions: { marginTop: 8 },
     btn: {
-      flex: 1,
       borderRadius: 10,
       paddingVertical: 14,
       alignItems: 'center',
@@ -317,6 +423,8 @@ function createStyles(jc: JcTheme) {
     btnSecondary: { borderWidth: 1, borderColor: jc.border, backgroundColor: jc.surface },
     btnPdf: { backgroundColor: jc.primaryDark, marginTop: 4 },
     btnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-    btnSecondaryText: { color: jc.text, fontWeight: '600', fontSize: 14 }
+    btnSecondaryText: { color: jc.text, fontWeight: '600', fontSize: 14 },
+    linkBtn: { alignItems: 'center', paddingVertical: 8 },
+    linkBtnText: { color: jc.primary, fontWeight: '600', fontSize: 13 }
   })
 }

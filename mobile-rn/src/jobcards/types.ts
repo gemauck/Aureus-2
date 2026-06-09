@@ -1,4 +1,10 @@
-export type WizardFlow = 'landing' | 'prior_list' | 'form' | 'stock_take' | 'incident_form'
+export type WizardFlow =
+  | 'landing'
+  | 'prior_list'
+  | 'form'
+  | 'stock_take'
+  | 'incident_form'
+  | 'incident_list'
 
 export type IncidentPrefill = {
   clientId?: string

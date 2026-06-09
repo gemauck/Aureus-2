@@ -2,7 +2,7 @@ const ReactGlobal =
   (typeof window !== 'undefined' && window.React) ||
   (typeof React !== 'undefined' && React) ||
   {}
-const { useState, useEffect, useMemo, useCallback } = ReactGlobal
+const { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } = ReactGlobal
 
 const INCIDENT_STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
@@ -55,6 +55,11 @@ function statusBadgeClasses(status, isDark) {
   return isDark ? 'bg-gray-800 text-gray-100 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200'
 }
 
+function currentUserName() {
+  const user = typeof window !== 'undefined' ? window.storage?.getUser?.() : null
+  return String(user?.name || user?.email || '').trim()
+}
+
 function emptyForm() {
   return {
     clientId: '',
@@ -72,12 +77,170 @@ function emptyForm() {
     correctiveActions: '',
     witnesses: '',
     equipmentInvolved: '',
+    relevantAssets: '',
+    relevantTanksMobileBowsers: '',
+    technicianName: '',
+    authorName: currentUserName(),
+    authorSignature: '',
     locationDescription: '',
     locationLatitude: '',
     locationLongitude: '',
     peopleInvolved: [{ name: '', role: '', injured: false }],
     status: 'draft'
   }
+}
+
+function IncidentSignaturePad({ value, onChange, isDark, disabled = false }) {
+  const canvasRef = useRef(null)
+  const wrapperRef = useRef(null)
+  const drawingRef = useRef(false)
+  const lockedRef = useRef(false)
+  const [hasInk, setHasInk] = useState(false)
+  const [locked, setLocked] = useState(Boolean(value))
+
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    const wrapper = wrapperRef.current
+    if (!canvas || !wrapper) return
+    const ratio = window.devicePixelRatio || 1
+    const width = wrapper.clientWidth || 320
+    const height = 160
+    canvas.width = width * ratio
+    canvas.height = height * ratio
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    const ctx = canvas.getContext('2d')
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(ratio, ratio)
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
+    ctx.lineWidth = 2.5
+    ctx.strokeStyle = '#111827'
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+  }, [])
+
+  const restoreImage = useCallback(
+    (dataUrl) => {
+      const canvas = canvasRef.current
+      if (!canvas || !dataUrl || !String(dataUrl).startsWith('data:image')) return
+      const img = new Image()
+      img.onload = () => {
+        resizeCanvas()
+        const ctx = canvas.getContext('2d')
+        const ratio = window.devicePixelRatio || 1
+        ctx.drawImage(img, 0, 0, canvas.width / ratio, canvas.height / ratio)
+        setHasInk(true)
+        setLocked(true)
+        lockedRef.current = true
+      }
+      img.src = dataUrl
+    },
+    [resizeCanvas]
+  )
+
+  useLayoutEffect(() => {
+    resizeCanvas()
+    if (value) restoreImage(value)
+  }, [resizeCanvas, restoreImage, value])
+
+  const getPos = (event) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    const rect = canvas.getBoundingClientRect()
+    const pointer = event.touches ? event.touches[0] : event
+    return { x: pointer.clientX - rect.left, y: pointer.clientY - rect.top }
+  }
+
+  const startDraw = (event) => {
+    if (disabled || lockedRef.current) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    drawingRef.current = true
+    const ctx = canvas.getContext('2d')
+    const { x, y } = getPos(event)
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    event.preventDefault()
+  }
+
+  const draw = (event) => {
+    if (disabled || lockedRef.current || !drawingRef.current) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const { x, y } = getPos(event)
+    ctx.lineTo(x, y)
+    ctx.stroke()
+    setHasInk(true)
+    event.preventDefault()
+  }
+
+  const endDraw = () => {
+    drawingRef.current = false
+  }
+
+  const saveSignature = () => {
+    if (!hasInk || !canvasRef.current) return
+    const dataUrl = canvasRef.current.toDataURL('image/png')
+    onChange(dataUrl)
+    setLocked(true)
+    lockedRef.current = true
+  }
+
+  const clearSignature = () => {
+    onChange('')
+    setLocked(false)
+    lockedRef.current = false
+    setHasInk(false)
+    resizeCanvas()
+  }
+
+  const borderCls = isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-300 bg-white'
+
+  return (
+    <div className="space-y-2">
+      <div ref={wrapperRef} className={`relative overflow-hidden rounded-lg border-2 ${borderCls}`}>
+        <canvas
+          ref={canvasRef}
+          className={`block w-full touch-none ${locked || disabled ? 'pointer-events-none opacity-0' : ''}`}
+          style={{ touchAction: 'none', height: '160px' }}
+          onPointerDown={startDraw}
+          onPointerMove={draw}
+          onPointerUp={endDraw}
+          onPointerLeave={endDraw}
+        />
+        {locked && value ? (
+          <img src={value} alt="Saved signature" className="pointer-events-none absolute inset-0 h-full w-full object-contain p-2" />
+        ) : null}
+        {!hasInk && !locked ? (
+          <div className={`pointer-events-none absolute inset-0 flex items-center justify-center text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+            Sign here with mouse or finger
+          </div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {!locked ? (
+          <button
+            type="button"
+            disabled={disabled || !hasInk}
+            onClick={saveSignature}
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Save signature
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={clearSignature}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${isDark ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-700'}`}
+        >
+          Clear signature
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function IncidentReportsPanel({
@@ -212,12 +375,13 @@ function IncidentReportsPanel({
     }
   }, [selected, downloadingPdf, token])
 
-  const saveForm = useCallback(async () => {
+  const saveForm = useCallback(async (statusOverride) => {
     if (!token || saving) return
     setSaving(true)
     try {
       const payload = {
         ...form,
+        status: statusOverride || form.status,
         peopleInvolved: (form.peopleInvolved || []).filter((p) => p.name || p.role)
       }
       const isEdit = Boolean(selected?.id)
@@ -374,6 +538,8 @@ function IncidentReportsPanel({
                     incidentAt: selected.incidentAt
                       ? new Date(selected.incidentAt).toISOString().slice(0, 16)
                       : '',
+                    authorName: selected.authorName || currentUserName(),
+                    authorSignature: selected.authorSignature || '',
                     peopleInvolved: Array.isArray(selected.peopleInvolved) && selected.peopleInvolved.length
                       ? selected.peopleInvolved
                       : [{ name: '', role: '', injured: false }]
@@ -404,7 +570,11 @@ function IncidentReportsPanel({
                 ['Type', selected.incidentType],
                 ['Severity', selected.severity],
                 ['Status', selected.status],
-                ['Incident date', formatDate(selected.incidentAt)]
+                ['Incident date', formatDate(selected.incidentAt)],
+                ['Technician', selected.technicianName],
+                ['Author', selected.authorName],
+                ['Draft recorded', formatDate(selected.createdAt)],
+                ['Submitted', formatDate(selected.submittedAt)]
               ].map(([label, value]) => (
                 <div key={label} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                   <div className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{label}</div>
@@ -413,6 +583,8 @@ function IncidentReportsPanel({
               ))}
             </div>
             {[
+              ['Relevant assets', selected.relevantAssets],
+              ['Relevant tanks / mobile bowsers', selected.relevantTanksMobileBowsers],
               ['Description', selected.description],
               ['Immediate actions', selected.immediateActions]
             ].map(([title, body]) => (
@@ -421,6 +593,12 @@ function IncidentReportsPanel({
                 <p className={`mt-2 whitespace-pre-wrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{body || '—'}</p>
               </section>
             ))}
+            {selected.authorSignature ? (
+              <section className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Author signature</h3>
+                <img src={selected.authorSignature} alt="Author signature" className="mt-2 max-h-24 max-w-xs rounded border border-gray-200 bg-white object-contain p-2" />
+              </section>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -510,6 +688,35 @@ function IncidentReportsPanel({
               <input className={`${inputCls} mt-1`} value={form.siteName} onChange={(e) => setForm((f) => ({ ...f, siteName: e.target.value }))} />
             </label>
             <label className="block text-xs font-medium">
+              Relevant assets
+              <textarea className={`${inputCls} mt-1`} rows={2} value={form.relevantAssets} onChange={(e) => setForm((f) => ({ ...f, relevantAssets: e.target.value }))} placeholder="Equipment, vehicles, or plant involved" />
+            </label>
+            <label className="block text-xs font-medium">
+              Relevant tanks / mobile bowsers
+              <textarea className={`${inputCls} mt-1`} rows={2} value={form.relevantTanksMobileBowsers} onChange={(e) => setForm((f) => ({ ...f, relevantTanksMobileBowsers: e.target.value }))} placeholder="Tank IDs, bowser numbers, or locations" />
+            </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-medium">
+                Technician involved
+                <input
+                  list="incident-technicians"
+                  className={`${inputCls} mt-1`}
+                  value={form.technicianName}
+                  onChange={(e) => setForm((f) => ({ ...f, technicianName: e.target.value }))}
+                  placeholder="Technician name"
+                />
+                <datalist id="incident-technicians">
+                  {users.map((u) => (
+                    <option key={u.id} value={u.name || u.email || u.id} />
+                  ))}
+                </datalist>
+              </label>
+              <label className="block text-xs font-medium">
+                Author (person completing report)
+                <input className={`${inputCls} mt-1`} value={form.authorName} onChange={(e) => setForm((f) => ({ ...f, authorName: e.target.value }))} placeholder="Your name" />
+              </label>
+            </div>
+            <label className="block text-xs font-medium">
               Description
               <textarea className={`${inputCls} mt-1`} rows={4} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
             </label>
@@ -527,10 +734,31 @@ function IncidentReportsPanel({
                 ))}
               </select>
             </label>
+            <div className={`rounded-lg border p-3 text-xs ${isDark ? 'border-gray-800 bg-gray-900 text-gray-400' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
+              <div><span className="font-semibold">Draft timing:</span> saved automatically when you create or update a draft.</div>
+              <div className="mt-1"><span className="font-semibold">Submission timing:</span> recorded when status is set to Submitted.</div>
+            </div>
+            <div>
+              <div className={`mb-2 text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>Author signature</div>
+              <IncidentSignaturePad
+                value={form.authorSignature}
+                onChange={(sig) => setForm((f) => ({ ...f, authorSignature: sig }))}
+                isDark={isDark}
+                disabled={saving}
+              />
+            </div>
           </div>
-          <div className={`flex shrink-0 items-center border-t px-6 py-4 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+          <div className={`flex shrink-0 flex-wrap items-center gap-3 border-t px-6 py-4 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <button type="button" disabled={saving} onClick={() => void saveForm()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
               {saving ? 'Saving…' : 'Save incident'}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveForm('submitted')}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold ${isDark ? 'border-sky-700 text-sky-300' : 'border-sky-200 bg-sky-50 text-sky-800'}`}
+            >
+              Save & submit
             </button>
           </div>
         </div>

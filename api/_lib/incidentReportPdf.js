@@ -1,5 +1,5 @@
 import PDFDocument from 'pdfkit'
-import { incidentStatusLabel } from '../../src/incidentReport/constants.js'
+import { incidentStatusLabel } from './incidentReportConstants.js'
 import { loadDocumentBranding } from './documentBranding.js'
 
 function billingBrandTextAlign(brandTextX, left) {
@@ -179,6 +179,50 @@ function drawPdfHeader(doc, companyName, letterhead) {
   return Math.max(headerTop + logoH, ty) + 12
 }
 
+function drawSignOffSection(doc, left, right, y, incident) {
+  const contentW = right - left
+  const sig = String(incident.authorSignature || '').trim()
+  const authorName = displayValue(incident.authorName)
+  const technicianName = displayValue(incident.technicianName)
+  const draftedAt = formatPdfDateSast(incident.createdAt)
+  const submittedAt = formatPdfDateSast(incident.submittedAt)
+  const sectionH = sig ? 130 : 88
+
+  doc.save()
+  doc.rect(left, y, contentW, 28).fill('#f8fafc')
+  doc.strokeColor('#d1d5db').lineWidth(0.5).rect(left, y, contentW, sectionH).stroke()
+  doc.fillColor('#374151').font('Helvetica-Bold').fontSize(9).text('AUTHOR SIGN-OFF', left + 12, y + 10)
+
+  const metaY = y + 36
+  const colW = contentW / 2
+  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('AUTHOR', left + 12, metaY)
+  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(authorName, left + 12, metaY + 12, { width: colW - 20 })
+  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('TECHNICIAN INVOLVED', left + colW + 12, metaY)
+  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text(technicianName, left + colW + 12, metaY + 12, {
+    width: colW - 20
+  })
+
+  const dateY = metaY + 34
+  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('DRAFT RECORDED', left + 12, dateY)
+  doc.fillColor('#111827').font('Helvetica').fontSize(9).text(draftedAt, left + 12, dateY + 11)
+  doc.fillColor('#6b7280').font('Helvetica-Bold').fontSize(7.5).text('SUBMITTED', left + colW + 12, dateY)
+  doc.fillColor('#111827').font('Helvetica').fontSize(9).text(submittedAt, left + colW + 12, dateY + 11)
+
+  if (sig && /^data:image\/(png|jpeg|jpg);base64,/i.test(sig)) {
+    try {
+      const b64 = sig.split(',')[1]
+      const imgBuf = Buffer.from(b64, 'base64')
+      doc.image(imgBuf, left + 12, dateY + 28, { fit: [140, 44] })
+      doc.fillColor('#6b7280').font('Helvetica').fontSize(7.5).text('Signature', left + 12, dateY + 74)
+    } catch {
+      /* skip bad signature image */
+    }
+  }
+
+  doc.restore()
+  return y + sectionH + 14
+}
+
 /**
  * Web form fields: client, site, type, severity, date, status, description, immediate actions.
  * @param {import('@prisma/client').PrismaClient} prismaClient
@@ -219,13 +263,16 @@ export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
     drawSummaryRow(doc, left, right, row2Y, [
       { label: 'Incident date & time', value: formatPdfDateSast(incident.incidentAt) },
       { label: 'Status', value: incidentStatusLabel(incident.status) },
-      null,
-      null
+      { label: 'Technician', value: displayValue(incident.technicianName) },
+      { label: 'Author', value: displayValue(incident.authorName) }
     ])
     y += 92 + 18
 
+    y = drawNarrativeSection(doc, left, right, y, 'Relevant assets', incident.relevantAssets)
+    y = drawNarrativeSection(doc, left, right, y, 'Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)
     y = drawNarrativeSection(doc, left, right, y, 'Description', incident.description)
     y = drawNarrativeSection(doc, left, right, y, 'Immediate actions', incident.immediateActions)
+    y = drawSignOffSection(doc, left, right, y, incident)
 
     doc
       .font('Helvetica-Oblique')

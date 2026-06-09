@@ -93,7 +93,10 @@ type WizardContextValue = {
   openPriorList: () => void
   openStockTake: () => void
   openIncidentReport: (prefill?: IncidentPrefill) => void
+  openIncidentList: () => void
+  openIncidentForEdit: (incidentId: string) => void
   incidentPrefill: IncidentPrefill | null
+  editingIncidentId: string | null
   goToStep: (index: number) => void
   handleNext: () => void
   handlePrevious: () => void
@@ -120,11 +123,15 @@ const WizardContext = createContext<WizardContextValue | undefined>(undefined)
 export function JobCardWizardProvider({
   children,
   initialJobCardId,
-  initialFlow
+  initialFlow,
+  initialIncidentPrefill,
+  initialIncidentId
 }: {
   children: React.ReactNode
   initialJobCardId?: string
   initialFlow?: WizardFlow
+  initialIncidentPrefill?: IncidentPrefill
+  initialIncidentId?: string
 }) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
@@ -151,7 +158,10 @@ export function JobCardWizardProvider({
     ensureInventoryLoaded
   } = useWizardReferenceData(accessToken)
   const [wizardFlow, setWizardFlow] = useState<WizardFlow>(initialFlow || 'landing')
-  const [incidentPrefill, setIncidentPrefill] = useState<IncidentPrefill | null>(null)
+  const [incidentPrefill, setIncidentPrefill] = useState<IncidentPrefill | null>(
+    initialIncidentPrefill || null
+  )
+  const [editingIncidentId, setEditingIncidentId] = useState<string | null>(initialIncidentId || null)
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<JobCardFormData>(createEmptyFormData())
   const [editingMeta, setEditingMeta] = useState<EditingMeta | null>(null)
@@ -217,7 +227,22 @@ export function JobCardWizardProvider({
 
   const openIncidentReport = useCallback(
     (prefill?: IncidentPrefill) => {
+      setEditingIncidentId(null)
       setIncidentPrefill(prefill || null)
+      void ensureReferenceDataLoaded()
+      setWizardFlow('incident_form')
+    },
+    [ensureReferenceDataLoaded]
+  )
+
+  const openIncidentList = useCallback(() => {
+    setWizardFlow('incident_list')
+  }, [])
+
+  const openIncidentForEdit = useCallback(
+    (incidentId: string) => {
+      setIncidentPrefill(null)
+      setEditingIncidentId(incidentId)
       void ensureReferenceDataLoaded()
       setWizardFlow('incident_form')
     },
@@ -233,8 +258,28 @@ export function JobCardWizardProvider({
     } else if (initialFlow === 'prior_list') {
       initialFlowBootstrappedRef.current = true
       openPriorList()
+    } else if (initialFlow === 'incident_list') {
+      initialFlowBootstrappedRef.current = true
+      openIncidentList()
+    } else if (initialFlow === 'incident_form') {
+      initialFlowBootstrappedRef.current = true
+      if (initialIncidentId) {
+        openIncidentForEdit(initialIncidentId)
+      } else {
+        openIncidentReport(initialIncidentPrefill || undefined)
+      }
     }
-  }, [initialFlow, initialJobCardId, openStockTake, openPriorList])
+  }, [
+    initialFlow,
+    initialJobCardId,
+    initialIncidentId,
+    initialIncidentPrefill,
+    openStockTake,
+    openPriorList,
+    openIncidentList,
+    openIncidentReport,
+    openIncidentForEdit
+  ])
 
   const validateStep = useCallback(
     (stepIndex: number) =>
@@ -696,7 +741,10 @@ export function JobCardWizardProvider({
       openPriorList,
       openStockTake,
       openIncidentReport,
+      openIncidentList,
+      openIncidentForEdit,
       incidentPrefill,
+      editingIncidentId,
       goToStep,
       handleNext,
       handlePrevious,
@@ -750,7 +798,10 @@ export function JobCardWizardProvider({
       openPriorList,
       openStockTake,
       openIncidentReport,
+      openIncidentList,
+      openIncidentForEdit,
       incidentPrefill,
+      editingIncidentId,
       goToStep,
       handleNext,
       handlePrevious,

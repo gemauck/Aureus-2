@@ -89,6 +89,21 @@ export function navigateJobCards(
   navigateRoot(navigation, 'JobCards', params)
 }
 
+export function navigateIncidentReport(
+  navigation: Pick<RootNavigation, 'navigate'>,
+  opts?: NonNullable<RootStackParamList['JobCards']>
+) {
+  navigateJobCards(navigation, {
+    initialFlow: 'incident_form',
+    incidentId: opts?.incidentId,
+    incidentPrefill: opts?.incidentPrefill
+  })
+}
+
+export function navigateIncidentList(navigation: Pick<RootNavigation, 'navigate'>) {
+  navigateJobCards(navigation, { initialFlow: 'incident_list' })
+}
+
 export function navigateProjects(
   navigation: Pick<RootNavigation, 'navigate'>,
   screen: 'ProjectDetail' | 'ProjectsHome',

@@ -165,6 +165,28 @@ export const INCIDENT_PRINT_CSS = `
     text-align: center;
     line-height: 1.5;
   }
+  .signoff {
+    margin-top: 18px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  .signoff-head {
+    background: #f8fafc;
+    padding: 8px 14px;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #374151;
+    border-bottom: 1px solid #d1d5db;
+  }
+  .signoff-body { padding: 12px 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+  .signoff-field .lbl { font-size: 8pt; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+  .signoff-field .val { font-size: 10.5pt; font-weight: 600; color: #111827; }
+  .signoff-signature { grid-column: 1 / -1; margin-top: 4px; }
+  .signoff-signature img { max-height: 56px; max-width: 220px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; }
 `
 
 /**
@@ -228,13 +250,43 @@ export function buildIncidentReportPrintHtml(incident, opts = {}) {
         <tr>
           ${summaryCell('Incident date & time', escapeHtml(formatIncidentPrintDate(incident.incidentAt)))}
           ${summaryCell('Status', statusHtml)}
-          <td colspan="2"></td>
+          ${summaryCell('Technician', escapeHtml(displayValue(incident.technicianName)))}
+          ${summaryCell('Author', escapeHtml(displayValue(incident.authorName)))}
         </tr>
       </table>
     </div>
 
+    ${narrativeBlock('Relevant assets', incident.relevantAssets)}
+    ${narrativeBlock('Relevant tanks / mobile bowsers', incident.relevantTanksMobileBowsers)}
     ${narrativeBlock('Description', incident.description)}
     ${narrativeBlock('Immediate actions', incident.immediateActions)}
+
+    <div class="signoff">
+      <div class="signoff-head">Author sign-off</div>
+      <div class="signoff-body">
+        <div class="signoff-field">
+          <div class="lbl">Author</div>
+          <div class="val">${escapeHtml(displayValue(incident.authorName))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Technician involved</div>
+          <div class="val">${escapeHtml(displayValue(incident.technicianName))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Draft recorded</div>
+          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.createdAt))}</div>
+        </div>
+        <div class="signoff-field">
+          <div class="lbl">Submitted</div>
+          <div class="val">${escapeHtml(formatIncidentPrintDate(incident.submittedAt))}</div>
+        </div>
+        ${
+          String(incident.authorSignature || '').startsWith('data:image/')
+            ? `<div class="signoff-signature"><div class="lbl">Signature</div><img src="${escapeHtml(incident.authorSignature)}" alt="Author signature" /></div>`
+            : ''
+        }
+      </div>
+    </div>
 
     <div class="confidential">This document contains operational incident information. Handle in accordance with company policy.</div>
     <div class="doc-footer">${escapeHtml(companyName)} &bull; Incident ${escapeHtml(incidentNumber)} &bull; Printed ${escapeHtml(printedAt)}</div>

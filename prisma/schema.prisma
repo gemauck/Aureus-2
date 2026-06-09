@@ -2216,6 +2216,11 @@ model IncidentReport {
   peopleInvolved      String                   @default("[]")
   witnesses           String                   @default("")
   equipmentInvolved   String                   @default("")
+  relevantAssets      String                   @default("")
+  relevantTanksMobileBowsers String            @default("")
+  technicianName      String                   @default("")
+  authorName          String                   @default("")
+  authorSignature     String                   @default("") @db.Text
   photos              String                   @default("[]")
   reportedById        String?
   reportedByName      String                   @default("")

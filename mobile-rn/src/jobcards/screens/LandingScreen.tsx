@@ -20,6 +20,7 @@ export function LandingScreen() {
     openPriorList,
     openStockTake,
     openIncidentReport,
+    openIncidentList,
     runSyncNow,
     openingCardId
   } = useJobCardWizard()
@@ -81,6 +82,13 @@ export function LandingScreen() {
           subtitle="Record a site incident with optional job card link."
           tint={jc.accentOrange}
           onPress={() => openIncidentReport()}
+        />
+        <MenuButton
+          icon="≡"
+          title="Incident reports"
+          subtitle="View and edit incidents you have reported."
+          tint={jc.accentOrange}
+          onPress={openIncidentList}
         />
 
         {unsyncedCount > 0 ? (

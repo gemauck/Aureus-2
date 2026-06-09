@@ -1,7 +1,20 @@
 export type RootStackParamList = {
   Login: undefined
   Dashboard: undefined
-  JobCards: { jobCardId?: string; initialFlow?: 'landing' | 'prior_list' | 'form' | 'stock_take' } | undefined
+  JobCards:
+    | {
+        jobCardId?: string
+        initialFlow?:
+          | 'landing'
+          | 'prior_list'
+          | 'form'
+          | 'stock_take'
+          | 'incident_form'
+          | 'incident_list'
+        incidentPrefill?: import('../jobcards/types').IncidentPrefill
+        incidentId?: string
+      }
+    | undefined
   Clients:
     | {
         screen?: keyof import('../crm/navigation').CrmStackParamList
