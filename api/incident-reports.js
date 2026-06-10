@@ -21,6 +21,10 @@ import {
   syncIncidentJobCardLinks,
   validateIncidentJobCardLinks
 } from './_lib/incidentReportJobCards.js'
+import {
+  loadJobCardPhotosForIncident,
+  parseIncidentPhotosArray
+} from './_lib/incidentReportPhotos.js'
 
 function incidentMutateRole(user) {
   if (isAdminRole(user?.role)) return true
@@ -143,6 +147,15 @@ async function buildIncidentCreateData(body, req) {
   const siteFields = await resolveIncidentSiteFields(prisma, body.siteId, body.siteName)
   const status = normalizeIncidentStatus(body.status, 'draft')
   const incidentAt = parseOptionalDate(body.incidentAt) || new Date()
+  let photos = parseIncidentPhotosArray(
+    Array.isArray(body.photos) ? body.photos : body.photos
+  )
+  if (!photos.length && links.length) {
+    photos = await loadJobCardPhotosForIncident(
+      prisma,
+      links.map((link) => link.id)
+    )
+  }
 
   return {
     clientId,
@@ -170,7 +183,7 @@ async function buildIncidentCreateData(body, req) {
     technicianName: String(body.technicianName || '').trim(),
     authorName: String(body.authorName || req.user?.name || '').trim(),
     authorSignature: normalizeSignature(body.authorSignature),
-    photos: JSON.stringify(Array.isArray(body.photos) ? body.photos : parseJson(body.photos, [])),
+    photos: JSON.stringify(photos),
     reportedById: body.reportedById ? String(body.reportedById) : userId,
     reportedByName: String(body.reportedByName || req.user?.name || '').trim(),
     ownerId: body.ownerId ? String(body.ownerId) : userId,
@@ -227,7 +240,17 @@ async function buildIncidentUpdateData(body, existing) {
   if (body.authorName !== undefined) data.authorName = String(body.authorName || '').trim()
   if (body.authorSignature !== undefined) data.authorSignature = normalizeSignature(body.authorSignature)
   if (body.photos !== undefined) {
-    data.photos = JSON.stringify(Array.isArray(body.photos) ? body.photos : parseJson(body.photos, []))
+    let photos = parseIncidentPhotosArray(Array.isArray(body.photos) ? body.photos : body.photos)
+    if (!photos.length) {
+      const linkIds =
+        jobCardIds !== null
+          ? jobCardIds
+          : (await loadLinkedJobCardsByIncidentIds(prisma, [existing.id])).get(existing.id)?.map((row) => row.id) || []
+      if (linkIds.length) {
+        photos = await loadJobCardPhotosForIncident(prisma, linkIds)
+      }
+    }
+    data.photos = JSON.stringify(photos)
   }
   if (body.reportedById !== undefined) {
     data.reportedById = body.reportedById ? String(body.reportedById) : null

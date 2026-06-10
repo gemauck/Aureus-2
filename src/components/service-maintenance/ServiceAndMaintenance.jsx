@@ -550,13 +550,25 @@ const ServiceAndMaintenance = () => {
       if (token && selectedJobCard.id && helpers?.fetchJobCardForPrefill) {
         const full = await helpers.fetchJobCardForPrefill(token, selectedJobCard.id);
         if (full?.id) jobCardForPrefill = full;
-      } else if (token && selectedJobCard.id && helpers?.fetchJobCardPhotosForPrefill) {
+      }
+      if (token && selectedJobCard.id && helpers?.fetchJobCardPhotosForPrefill) {
         const jcPhotos = await helpers.fetchJobCardPhotosForPrefill(token, selectedJobCard.id);
-        if (jcPhotos.length) jobCardForPrefill = { ...jobCardForPrefill, photos: jcPhotos };
-      } else if (selectedJobCard.photos?.length && helpers?.photosForIncidentFromJobCard) {
+        if (jcPhotos.length) {
+          const mergePhotos = window.IncidentPhotos?.mergeIncidentPhotos;
+          jobCardForPrefill = {
+            ...jobCardForPrefill,
+            photos: mergePhotos
+              ? mergePhotos(jobCardForPrefill.photos, jcPhotos)
+              : jcPhotos
+          };
+        }
+      } else if (selectedJobCard.photos?.length) {
+        const normalize = window.IncidentPhotos?.photosForIncidentFromJobCard;
         jobCardForPrefill = {
           ...jobCardForPrefill,
-          photos: helpers.photosForIncidentFromJobCard(selectedJobCard.photos)
+          photos: normalize
+            ? normalize(selectedJobCard.photos)
+            : selectedJobCard.photos
         };
       }
 
@@ -579,6 +591,7 @@ const ServiceAndMaintenance = () => {
               immediateActions: String(jobCardForPrefill.actionsTaken || '').trim(),
               investigationNotes: String(jobCardForPrefill.diagnosis || '').trim(),
               correctiveActions: String(jobCardForPrefill.futureWorkRequired || '').trim(),
+              photos: Array.isArray(jobCardForPrefill.photos) ? jobCardForPrefill.photos : [],
               status: 'draft'
             };
         setShowJobCardDetail(false);
@@ -2954,7 +2967,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
           )}
         </div>
       ) : headerTab === 'incidents' ? (
-        <div data-section="incident-reports-panel" className="relative min-h-[calc(100dvh-10rem)] overflow-hidden">
+        <div data-section="incident-reports-panel" className="relative">
           {incidentsReady && window.IncidentReportsPanel ? (
             <window.IncidentReportsPanel
               key="incident-reports-panel"

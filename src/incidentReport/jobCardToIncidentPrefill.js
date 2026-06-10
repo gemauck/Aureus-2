@@ -1,6 +1,11 @@
 const HEADING_PREFIX = 'Heading:'
 const PROJECT_ASSOCIATION_PREFIX = 'Project Association:'
 
+function unwrapApiPayload(json) {
+  if (!json || typeof json !== 'object') return json
+  return json.data !== undefined && json.data !== null ? json.data : json
+}
+
 function parseJsonArray(raw, defaultValue = []) {
   try {
     if (!raw) return defaultValue
@@ -230,15 +235,15 @@ export async function fetchJobCardForPrefill(token, jobCardId) {
       fetch(`/api/jobcards/${encodeURIComponent(id)}?omitPhotos=1`, { headers }),
       fetch(`/api/jobcards/${encodeURIComponent(id)}/photos`, { headers })
     ])
-    const data = await detailRes.json().catch(() => ({}))
+    const data = unwrapApiPayload(await detailRes.json().catch(() => ({})))
     if (!detailRes.ok) return null
-    const row = data?.jobCard || data?.data?.jobCard || data?.data
+    const row = data?.jobCard || data
     if (!row || !row.id) return null
-    const photosData = await photosRes.json().catch(() => ({}))
-    const photos =
-      photosRes.ok && Array.isArray(photosData?.photos)
-        ? photosData.photos
-        : parseJsonArray(row.photos, [])
+    const photosData = unwrapApiPayload(await photosRes.json().catch(() => ({})))
+    const photosPayload = photosRes.ok ? photosData?.photos : null
+    const photos = Array.isArray(photosPayload)
+      ? photosPayload
+      : parseJsonArray(row.photos, [])
     const helpers = typeof window !== 'undefined' ? window.IncidentPhotos : null
     row.photos = helpers?.photosForIncidentFromJobCard
       ? helpers.photosForIncidentFromJobCard(photos)
@@ -261,12 +266,12 @@ export async function fetchJobCardPhotosForPrefill(token, jobCardId) {
     const res = await fetch(`/api/jobcards/${encodeURIComponent(id)}/photos`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    const data = await res.json().catch(() => ({}))
+    const data = unwrapApiPayload(await res.json().catch(() => ({})))
     if (!res.ok || !Array.isArray(data?.photos)) return []
     const helpers = typeof window !== 'undefined' ? window.IncidentPhotos : null
     return helpers?.photosForIncidentFromJobCard
       ? helpers.photosForIncidentFromJobCard(data.photos)
-      : data.photos
+      : normalizePhotos({ photos: data.photos })
   } catch {
     return []
   }
@@ -285,9 +290,9 @@ export async function fetchDraftIncidentsForJobCard(token, jobCardId) {
     const res = await fetch(`/api/incident-reports?${params}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    const data = await res.json().catch(() => ({}))
+    const data = unwrapApiPayload(await res.json().catch(() => ({})))
     if (!res.ok) return []
-    const list = data?.incidentReports || data?.data?.incidentReports || []
+    const list = data?.incidentReports || []
     return Array.isArray(list) ? list : []
   } catch {
     return []

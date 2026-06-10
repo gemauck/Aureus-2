@@ -526,11 +526,32 @@ function IncidentReportsPanel({
     void loadRows({ silent })
   }, [loadRows, skipInitialFetch, initialRows, debouncedSearch, statusFilter])
 
+  const enrichIncidentPhotosFromJobCards = useCallback(
+    async (incidentRow) => {
+      if (!token || !incidentRow) return incidentRow
+      if (normalizeIncidentPhotos(incidentRow.photos).length) return incidentRow
+      const helpers = window.IncidentJobCardPrefill
+      const linked = normalizeLinkedJobCards(incidentRow)
+      if (!linked.length || !helpers?.fetchJobCardPhotosForPrefill) return incidentRow
+      const merged = []
+      for (const link of linked) {
+        const jcPhotos = await helpers.fetchJobCardPhotosForPrefill(token, link.id)
+        if (jcPhotos.length) merged.push(...jcPhotos)
+      }
+      if (!merged.length) return incidentRow
+      const photos = window.IncidentPhotos?.mergeIncidentPhotos
+        ? window.IncidentPhotos.mergeIncidentPhotos(merged)
+        : mergeFormPhotos([], merged)
+      return { ...incidentRow, photos }
+    },
+    [token]
+  )
+
   useEffect(() => {
     if (!createPrefill) return
     setSelected(null)
     const linkedJobCards = normalizeLinkedJobCards(createPrefill)
-    setForm({
+    const baseForm = {
       ...emptyForm(),
       ...createPrefill,
       linkedJobCards,
@@ -542,10 +563,33 @@ function IncidentReportsPanel({
       peopleInvolved: Array.isArray(createPrefill.peopleInvolved) && createPrefill.peopleInvolved.length
         ? createPrefill.peopleInvolved
         : [{ name: '', role: '', injured: false }]
-    })
+    }
+    setForm(baseForm)
     setShowForm(true)
     if (typeof onConsumeCreatePrefill === 'function') onConsumeCreatePrefill()
-  }, [createPrefill, onConsumeCreatePrefill])
+
+    if (!token || normalizeIncidentPhotos(baseForm.photos).length || !linkedJobCards.length) return undefined
+    let cancelled = false
+    void (async () => {
+      const helpers = window.IncidentJobCardPrefill
+      if (!helpers?.fetchJobCardPhotosForPrefill) return
+      const merged = []
+      for (const link of linkedJobCards) {
+        const jcPhotos = await helpers.fetchJobCardPhotosForPrefill(token, link.id)
+        if (jcPhotos.length) merged.push(...jcPhotos)
+      }
+      if (cancelled || !merged.length) return
+      setForm((prev) => ({
+        ...prev,
+        photos: window.IncidentPhotos?.mergeIncidentPhotos
+          ? window.IncidentPhotos.mergeIncidentPhotos(prev.photos, merged)
+          : mergeFormPhotos(prev.photos, merged)
+      }))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [createPrefill, onConsumeCreatePrefill, token])
 
   const openIncidentById = useCallback(
     async (id) => {
@@ -557,14 +601,15 @@ function IncidentReportsPanel({
         const data = await res.json()
         const row = data?.incidentReport || data?.data?.incidentReport
         if (row) {
-          setSelected(row)
+          const enriched = await enrichIncidentPhotosFromJobCards(row)
+          setSelected(enriched)
           setShowDetail(true)
         }
       } catch (e) {
         console.error('Failed to open incident', e)
       }
     },
-    [token]
+    [token, enrichIncidentPhotosFromJobCards]
   )
 
   useEffect(() => {
@@ -617,8 +662,9 @@ function IncidentReportsPanel({
       }
     }
 
+    incident = await enrichIncidentPhotosFromJobCards(incident)
     return { incident, companyName, letterhead }
-  }, [selected, token])
+  }, [selected, token, enrichIncidentPhotosFromJobCards])
 
   const handleDownloadPdf = useCallback(async () => {
     if (!selected || downloadingPdf) return
@@ -910,15 +956,16 @@ function IncidentReportsPanel({
     setShowForm(true)
   }
 
-  const overlayOpen = Boolean((showDetail && selected) || showForm)
+  const detailOpen = Boolean(showDetail && selected)
+  const panelShell = `flex max-h-[min(72rem,calc(100dvh-12rem))] flex-col overflow-hidden rounded-xl border shadow-sm ${
+    isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'
+  }`
 
   return (
-    <div
-      className={`relative min-h-[calc(100dvh-10rem)] w-full ${overlayOpen ? 'overflow-hidden' : 'space-y-3'}`}
-    >
-      {!overlayOpen ? (
+    <div className="relative w-full space-y-3">
+      {!detailOpen && !showForm ? (
       <div
-        className={`sticky top-0 z-20 flex flex-wrap items-center gap-2 py-1 ${
+        className={`sticky top-0 z-10 flex flex-wrap items-center gap-2 py-1 ${
           isDark ? 'bg-gray-950/95' : 'bg-[#f8fafc]/95'
         } backdrop-blur-sm`}
       >
@@ -956,7 +1003,7 @@ function IncidentReportsPanel({
       </div>
       ) : null}
 
-      {!overlayOpen && loadError ? (
+      {!detailOpen && !showForm && loadError ? (
         <div className={`rounded-xl border px-4 py-6 text-center text-sm ${isDark ? 'border-red-900/50 bg-red-950/20 text-red-300' : 'border-red-200 bg-red-50 text-red-700'}`}>
           <p>{loadError}</p>
           <button
@@ -969,15 +1016,15 @@ function IncidentReportsPanel({
         </div>
       ) : null}
 
-      {!overlayOpen && loading && filteredRows.length === 0 && !loadError ? (
+      {!detailOpen && !showForm && loading && filteredRows.length === 0 && !loadError ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           Loading incident reports…
         </div>
-      ) : !overlayOpen && !loadError && filteredRows.length === 0 ? (
+      ) : !detailOpen && !showForm && !loadError && filteredRows.length === 0 ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           No incident reports found.
         </div>
-      ) : !overlayOpen ? (
+      ) : !detailOpen && !showForm ? (
         <div className="space-y-2">
           {filteredRows.map((row) => (
             <button
@@ -1017,18 +1064,31 @@ function IncidentReportsPanel({
         </div>
       ) : null}
 
-      {showDetail && selected ? (
-        <div className={`absolute inset-0 z-50 flex min-h-0 flex-col overflow-hidden ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
-          <div className={`flex shrink-0 items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
-            <div>
-              <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                {selected.incidentNumber || 'Incident report'}
-              </h2>
-              <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                {selected.clientName || '—'}
-              </p>
+      {detailOpen ? (
+        <div className={panelShell}>
+          <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetail(false)
+                  setSelected(null)
+                }}
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isDark ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                aria-label="Back to incidents"
+              >
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+              <div className="min-w-0">
+                <h2 className={`truncate text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  {selected.incidentNumber || 'Incident report'}
+                </h2>
+                <p className={`truncate text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                  {selected.clientName || '—'}
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={handleDownloadPdf}
@@ -1088,19 +1148,9 @@ function IncidentReportsPanel({
                   {deleting ? 'Deleting…' : 'Delete'}
                 </button>
               ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDetail(false)
-                  setSelected(null)
-                }}
-                className={`rounded-lg border px-3 py-2 text-xs font-medium ${isDark ? 'border-gray-700 text-gray-200' : 'border-gray-200 text-gray-700'}`}
-              >
-                Close
-              </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ['Client', selected.clientName],
@@ -1176,8 +1226,8 @@ function IncidentReportsPanel({
       ) : null}
 
       {showForm ? (
-        <div className={`absolute inset-0 z-[60] flex min-h-0 flex-col overflow-hidden ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
-          <div className={`flex shrink-0 items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+        <div className={panelShell}>
+          <div className={`flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -1204,7 +1254,7 @@ function IncidentReportsPanel({
               Cancel
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
             <label className="block text-xs font-medium">
               Client
               <select

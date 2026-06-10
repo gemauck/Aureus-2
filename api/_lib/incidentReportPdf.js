@@ -3,6 +3,12 @@ import { incidentStatusLabel } from './incidentReportConstants.js'
 import { loadDocumentBranding } from './documentBranding.js'
 import { formatLinkedJobCardLabels } from './incidentReportJobCards.js'
 import { getAppUrl } from './getAppUrl.js'
+import {
+  incidentPhotoIsVideo,
+  incidentPhotoUrl,
+  parseIncidentPhotosArray,
+  resolveIncidentPhotosWithJobCardFallback
+} from './incidentReportPhotos.js'
 
 function billingBrandTextAlign(brandTextX, left) {
   return brandTextX > left ? 'right' : 'left'
@@ -21,42 +27,6 @@ function formatLocation(incident) {
   if (desc) return desc
   if (lat && lng) return `${lat}, ${lng}`
   return ''
-}
-
-function parseIncidentPhotos(raw) {
-  try {
-    if (!raw) return []
-    if (Array.isArray(raw)) return raw
-    return typeof raw === 'string' ? JSON.parse(raw) : []
-  } catch {
-    return typeof raw === 'string' && raw.trim() ? [raw] : []
-  }
-}
-
-function incidentPhotoUrl(entry) {
-  if (!entry) return ''
-  if (typeof entry === 'string') return String(entry).trim()
-  if (typeof entry !== 'object') return ''
-  if (entry.kind === 'safetyCultureMedia' && entry.mediaId && entry.token) {
-    const params = new URLSearchParams({
-      media_id: String(entry.mediaId),
-      token: String(entry.token)
-    })
-    if (entry.issueId != null) params.set('issue_id', String(entry.issueId))
-    return `/api/safety-culture/media/proxy?${params}`
-  }
-  return String(entry.url || entry.thumbUrl || entry.dataUrl || entry.previewUrl || '').trim()
-}
-
-function incidentPhotoIsVideo(entry) {
-  const url = incidentPhotoUrl(entry)
-  if (!url) return false
-  if (typeof entry === 'object' && entry) {
-    const mt = String(entry.mediaType || entry.mimeType || '').toLowerCase()
-    if (mt.includes('video')) return true
-    if (entry.kind === 'video') return true
-  }
-  return /^data:video\//i.test(url) || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)
 }
 
 async function fetchImageBufferForPdf(url, timeoutMs = 8000) {
@@ -93,7 +63,7 @@ async function fetchImageBufferForPdf(url, timeoutMs = 8000) {
 }
 
 async function loadIncidentPhotoBuffers(photosInput, { maxImages = 12 } = {}) {
-  const photos = parseIncidentPhotos(photosInput)
+  const photos = parseIncidentPhotosArray(photosInput)
   const out = []
   for (const entry of photos) {
     if (out.length >= maxImages) break
@@ -414,7 +384,8 @@ function drawSignOffSection(doc, left, right, y, incident) {
 export async function buildIncidentReportPdfBuffer(prismaClient, incident) {
   const { companyName, letterhead } = await loadDocumentBranding(prismaClient)
   const incidentNumber = displayValue(incident.incidentNumber || incident.id)
-  const photoRows = await loadIncidentPhotoBuffers(incident.photos)
+  const resolvedPhotos = await resolveIncidentPhotosWithJobCardFallback(prismaClient, incident)
+  const photoRows = await loadIncidentPhotoBuffers(resolvedPhotos)
   const summaryCells = buildSummaryCells(incident)
 
   return new Promise((resolve, reject) => {
