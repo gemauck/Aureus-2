@@ -910,8 +910,13 @@ function IncidentReportsPanel({
     setShowForm(true)
   }
 
+  const overlayOpen = Boolean((showDetail && selected) || showForm)
+
   return (
-    <div className="relative min-h-[calc(100dvh-10rem)] w-full space-y-3">
+    <div
+      className={`relative min-h-[calc(100dvh-10rem)] w-full ${overlayOpen ? 'overflow-hidden' : 'space-y-3'}`}
+    >
+      {!overlayOpen ? (
       <div
         className={`sticky top-0 z-20 flex flex-wrap items-center gap-2 py-1 ${
           isDark ? 'bg-gray-950/95' : 'bg-[#f8fafc]/95'
@@ -949,8 +954,9 @@ function IncidentReportsPanel({
           New incident report
         </button>
       </div>
+      ) : null}
 
-      {loadError ? (
+      {!overlayOpen && loadError ? (
         <div className={`rounded-xl border px-4 py-6 text-center text-sm ${isDark ? 'border-red-900/50 bg-red-950/20 text-red-300' : 'border-red-200 bg-red-50 text-red-700'}`}>
           <p>{loadError}</p>
           <button
@@ -963,15 +969,15 @@ function IncidentReportsPanel({
         </div>
       ) : null}
 
-      {loading && filteredRows.length === 0 && !loadError ? (
+      {!overlayOpen && loading && filteredRows.length === 0 && !loadError ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           Loading incident reports…
         </div>
-      ) : !loadError && filteredRows.length === 0 ? (
+      ) : !overlayOpen && !loadError && filteredRows.length === 0 ? (
         <div className={`rounded-xl border px-4 py-10 text-center text-sm ${isDark ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
           No incident reports found.
         </div>
-      ) : (
+      ) : !overlayOpen ? (
         <div className="space-y-2">
           {filteredRows.map((row) => (
             <button
@@ -1009,11 +1015,11 @@ function IncidentReportsPanel({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
 
       {showDetail && selected ? (
-        <div className={`fixed inset-0 z-[90] flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
-          <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+        <div className={`absolute inset-0 z-50 flex min-h-0 flex-col overflow-hidden ${isDark ? 'bg-gray-950/95' : 'bg-white'} backdrop-blur-sm`}>
+          <div className={`flex shrink-0 items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <div>
               <h2 className={`text-base font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                 {selected.incidentNumber || 'Incident report'}
@@ -1094,7 +1100,7 @@ function IncidentReportsPanel({
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ['Client', selected.clientName],
@@ -1109,7 +1115,7 @@ function IncidentReportsPanel({
               ].map(([label, value]) => (
                 <div key={label} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                   <div className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>{label}</div>
-                  <div className={`mt-1 text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{value || '—'}</div>
+                  <div className={`mt-1 text-sm font-medium break-words ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{value || '—'}</div>
                 </div>
               ))}
             </div>
@@ -1156,7 +1162,7 @@ function IncidentReportsPanel({
               .map(([title, body]) => (
               <section key={title} className={`rounded-lg border p-3 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{title}</h3>
-                <p className={`mt-2 whitespace-pre-wrap text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{body || '—'}</p>
+                <p className={`mt-2 whitespace-pre-wrap break-words text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{body || '—'}</p>
               </section>
             ))}
             {selected.authorSignature ? (
@@ -1170,8 +1176,8 @@ function IncidentReportsPanel({
       ) : null}
 
       {showForm ? (
-        <div className={`fixed inset-0 z-[100] flex flex-col ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
-          <div className={`flex items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
+        <div className={`absolute inset-0 z-[60] flex min-h-0 flex-col overflow-hidden ${isDark ? 'bg-gray-950/95' : 'bg-white'}`}>
+          <div className={`flex shrink-0 items-center justify-between border-b px-6 py-4 shadow-sm ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'}`}>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -1198,7 +1204,7 @@ function IncidentReportsPanel({
               Cancel
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <label className="block text-xs font-medium">
               Client
               <select
