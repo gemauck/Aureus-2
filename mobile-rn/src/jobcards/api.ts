@@ -21,9 +21,12 @@ function unwrapList<T>(data: unknown, key: string): T[] {
 
 function filterActiveClients(list: ClientOption[]): ClientOption[] {
   return list.filter((c) => {
-    const status = (c.status || 'active').toLowerCase()
+    const rawStatus = String(c.status || (c as { engagementStage?: string }).engagementStage || 'active')
+      .trim()
+      .toLowerCase()
     const type = (c.type || 'client').toLowerCase()
-    return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type)
+    const isInactive = rawStatus === 'inactive'
+    return !isInactive && (type === 'client' || !c.type)
   })
 }
 

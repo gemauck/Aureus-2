@@ -15,7 +15,11 @@ async function handler(req, res) {
     // Client model has no `status` field (use engagementStage in CRM); public form expects legacy `status` for filtering
     const clients = await prisma.client.findMany({
       where: {
-        type: 'client'
+        OR: [
+          { type: 'client' },
+          { type: { equals: null } },
+          { type: '' }
+        ]
       },
       select: {
         id: true,

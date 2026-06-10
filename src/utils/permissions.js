@@ -228,6 +228,39 @@ export const ROLE_PERMISSIONS = {
     }
 };
 
+/** Module keys set via Users → Permissions (access_*). Legacy role grants use view_/edit_ keys instead. */
+function isExplicitModulePermission(permission) {
+    return (
+        typeof permission === 'string' &&
+        (permission.startsWith('access_') || permission === PERMISSIONS.MANAGE_HR_ADMIN)
+    );
+}
+
+function customPermissionsUseModuleKeys(customPermissions) {
+    return Array.isArray(customPermissions) && customPermissions.some(isExplicitModulePermission);
+}
+
+/** Legacy granular grants that imply module access when stored as custom permissions. */
+const PERMISSION_ALIASES = {
+    [PERMISSIONS.ACCESS_CRM]: [
+        PERMISSIONS.VIEW_CLIENTS,
+        PERMISSIONS.EDIT_CLIENTS,
+        PERMISSIONS.MANAGE_LEADS
+    ],
+    [PERMISSIONS.ACCESS_PROJECTS]: [
+        PERMISSIONS.VIEW_PROJECTS,
+        PERMISSIONS.EDIT_PROJECTS,
+        PERMISSIONS.VIEW_ALL
+    ],
+    [PERMISSIONS.ACCESS_REPORTS]: [PERMISSIONS.VIEW_REPORTS],
+    [PERMISSIONS.ACCESS_MANUFACTURING]: [
+        PERMISSIONS.VIEW_MANUFACTURING,
+        PERMISSIONS.EDIT_MANUFACTURING,
+        PERMISSIONS.MANAGE_MANUFACTURING
+    ],
+    [PERMISSIONS.ACCESS_TEAM]: [PERMISSIONS.VIEW_TEAM, PERMISSIONS.MANAGE_TEAM]
+};
+
 // Permission checking utility
 export class PermissionChecker {
     constructor(user) {
@@ -365,9 +398,17 @@ export class PermissionChecker {
             if (this.customPermissions.includes(permission)) {
                 return true;
             }
-            // If custom permissions are set but don't include this permission, deny access
-            // This allows admins to restrict users by setting specific permissions
-            return false;
+            // Legacy aliases (e.g. view_clients → access_crm)
+            const aliases = PERMISSION_ALIASES[permission];
+            if (aliases?.some((alias) => this.customPermissions.includes(alias))) {
+                return true;
+            }
+            // Legacy-only custom permissions (view_assigned, time_tracking, etc.) must not
+            // block default module access — only explicit access_* module keys restrict menus.
+            if (customPermissionsUseModuleKeys(this.customPermissions)) {
+                return false;
+            }
+            // Fall through to public / role permissions below
         }
         
         // If no custom permissions are set, fall back to role-based and public permissions
