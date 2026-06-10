@@ -212,8 +212,8 @@ if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile
     fi
   done
   if [ "${ota_ok}" -eq 0 ]; then
-    echo "ERROR: Mobile OTA publish failed — devices will not receive JS updates until this is fixed."
-    exit 1
+    echo "WARN: Mobile OTA publish failed — devices will not receive JS updates until this is fixed."
+    echo "      Continuing web deploy (PM2 restart)…"
   fi
 fi
 
