@@ -5,6 +5,8 @@ import {
   DEFAULT_INVENTORY_LABEL_PRESET_KEY,
   INVENTORY_LABEL_PRESETS,
   buildInventoryLabelHtmlDocument,
+  buildSingleInventoryLabelHtmlDocument,
+  clampSheetPositionIndex,
   getInventoryLabelPreset,
   inventoryLabelPdfFilename,
   chunkInventoryLabelItems,
@@ -140,7 +142,7 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
     .text(sku, textX, textY + nameH + gap, { width: textColW, align: 'left', ellipsis: true })
 }
 
-async function renderSheetPdfKit(doc, preset, items) {
+async function renderSheetPdfKit(doc, preset, items, sheetPositionIndex) {
   const perPage = qrLabelsPerPage(preset)
   const pages = chunkInventoryLabelItems(items, perPage)
   const metrics = sheetLayoutMetrics(preset)
@@ -150,6 +152,23 @@ async function renderSheetPdfKit(doc, preset, items) {
   const rowPitch = mmToPt(metrics.rowPitch)
   const originX = mmToPt(metrics.marginLeft)
   const originY = mmToPt(metrics.marginTop)
+
+  const singleAtSlot =
+    items.length === 1 &&
+    sheetPositionIndex !== undefined &&
+    sheetPositionIndex !== null &&
+    preset.mode === 'sheet'
+
+  if (singleAtSlot) {
+    const idx = clampSheetPositionIndex(preset, sheetPositionIndex)
+    const col = idx % preset.cols
+    const row = Math.floor(idx / preset.cols)
+    const x = originX + col * pitchX
+    const y = originY + row * rowPitch
+    const qrBuffer = await resolveQrBuffer(items[0], preset)
+    drawLabelCell(doc, preset, items[0], qrBuffer, x, y, labelW, labelH)
+    return
+  }
 
   for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
     if (pageIdx > 0) doc.addPage({ size: 'A4', margin: 0 })
@@ -192,7 +211,13 @@ async function renderFlexPdfKit(doc, preset, items) {
   }
 }
 
-async function buildInventoryLabelPdfKitBuffer({ preset, items, locationLabel, presetKey }) {
+async function buildInventoryLabelPdfKitBuffer({
+  preset,
+  items,
+  locationLabel,
+  presetKey,
+  sheetPositionIndex
+}) {
   return new Promise((resolve, reject) => {
     const title = locationLabel
       ? `Inventory labels — ${locationLabel}`
@@ -211,7 +236,7 @@ async function buildInventoryLabelPdfKitBuffer({ preset, items, locationLabel, p
     const run = async () => {
       try {
         if (preset.mode === 'sheet') {
-          await renderSheetPdfKit(doc, preset, items)
+          await renderSheetPdfKit(doc, preset, items, sheetPositionIndex)
         } else {
           await renderFlexPdfKit(doc, preset, items)
         }
@@ -229,6 +254,7 @@ async function buildInventoryLabelPdfKitBuffer({ preset, items, locationLabel, p
  * @param {object} opts
  * @param {string} opts.presetKey
  * @param {string} [opts.locationLabel]
+ * @param {number} [opts.sheetPositionIndex] — 0-based slot on a precut sheet (single-label print)
  * @param {Array<{ inventoryItemId: string, sku?: string, name?: string, qrDataUrl?: string }>} opts.items
  */
 export async function buildInventoryLabelPdfBuffer(opts) {
@@ -236,6 +262,7 @@ export async function buildInventoryLabelPdfBuffer(opts) {
   const preset = getInventoryLabelPreset(presetKey)
   const items = Array.isArray(opts?.items) ? opts.items : []
   const locationLabel = String(opts?.locationLabel || '').trim()
+  const sheetPositionIndex = opts?.sheetPositionIndex
 
   if (!items.length) {
     throw new Error('No label items supplied')
@@ -257,11 +284,24 @@ export async function buildInventoryLabelPdfBuffer(opts) {
     }
   })
 
-  const html = buildInventoryLabelHtmlDocument({
-    presetKey,
-    items: normalized,
-    locationLabel
-  })
+  const singleAtSlot =
+    normalized.length === 1 &&
+    preset.mode === 'sheet' &&
+    sheetPositionIndex !== undefined &&
+    sheetPositionIndex !== null
+
+  const html = singleAtSlot
+    ? buildSingleInventoryLabelHtmlDocument({
+        presetKey,
+        item: normalized[0],
+        sheetPositionIndex,
+        locationLabel
+      })
+    : buildInventoryLabelHtmlDocument({
+        presetKey,
+        items: normalized,
+        locationLabel
+      })
   const htmlPdf = await renderHtmlToPdf(html)
   if (htmlPdf && htmlPdf.length > 0) {
     return htmlPdf
@@ -271,6 +311,7 @@ export async function buildInventoryLabelPdfBuffer(opts) {
     preset,
     items: normalized,
     locationLabel,
-    presetKey
+    presetKey,
+    sheetPositionIndex
   })
 }

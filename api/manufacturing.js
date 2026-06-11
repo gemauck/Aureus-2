@@ -2710,10 +2710,15 @@ async function handler(req, res) {
         if (!items.length) {
           return badRequest(res, 'items array is required')
         }
+        const sheetPositionIndex =
+          body.sheetPositionIndex !== undefined && body.sheetPositionIndex !== null
+            ? Number(body.sheetPositionIndex)
+            : undefined
         const pdfBuffer = await buildInventoryLabelPdfBuffer({
           presetKey,
           locationLabel: body.locationLabel || body.location || '',
-          items
+          items,
+          sheetPositionIndex
         })
         const filename = inventoryLabelPdfFilename({
           locationLabel: body.locationLabel || body.location || '',

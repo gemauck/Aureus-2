@@ -427,6 +427,48 @@ export function buildInventoryLabelHtmlDocument({ presetKey, items, locationLabe
   )
 }
 
+/** One label for stock labeling — optional sheet slot for partially used sticker sheets. */
+export function buildSingleInventoryLabelHtmlDocument({
+  presetKey,
+  item,
+  sheetPositionIndex = 0,
+  locationLabel
+}) {
+  const preset = getInventoryLabelPreset(presetKey)
+  const css = buildInventoryLabelCss(preset)
+  let body = ''
+
+  if (preset.mode === 'sheet') {
+    const perPage = qrLabelsPerPage(preset) || 1
+    const idx = Math.max(0, Math.min(Number(sheetPositionIndex) || 0, perPage - 1))
+    body =
+      '<div class="erp-qr-sheet-page">' + renderLabelCellHtml(preset, item, idx) + '</div>'
+  } else {
+    body = '<div class="erp-qr-flex-grid">' + renderLabelCellHtml(preset, item) + '</div>'
+  }
+
+  const sku = escapeHtml(item?.sku || '—')
+  const title = locationLabel
+    ? 'Inventory label — ' + escapeHtml(locationLabel)
+    : 'Inventory label — ' + sku
+
+  return (
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' +
+    title +
+    '</title><style>' +
+    css +
+    '</style></head><body><div id="erp-stock-qr-print-root">' +
+    body +
+    '</div></body></html>'
+  )
+}
+
+export function clampSheetPositionIndex(preset, sheetPositionIndex) {
+  if (!preset || preset.mode !== 'sheet') return 0
+  const perPage = qrLabelsPerPage(preset) || 1
+  return Math.max(0, Math.min(Number(sheetPositionIndex) || 0, perPage - 1))
+}
+
 export function inventoryLabelPdfFilename({ locationLabel, presetKey }) {
   const part = String(locationLabel || 'labels')
     .trim()

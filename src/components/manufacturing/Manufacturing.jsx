@@ -14056,6 +14056,165 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     const [skuLedgerMovements, setSkuLedgerMovements] = useState(null);
     const [skuLedgerLoading, setSkuLedgerLoading] = useState(false);
     const [wacExporting, setWacExporting] = useState(false);
+    const [showPrintLabelModal, setShowPrintLabelModal] = useState(false);
+    const [printLabelPresetKey, setPrintLabelPresetKey] = useState(
+      () => window.DEFAULT_INVENTORY_LABEL_PRESET_KEY || 'rf2470x37'
+    );
+    const [printLabelSheetPosition, setPrintLabelSheetPosition] = useState(0);
+    const [printLabelQrDataUrl, setPrintLabelQrDataUrl] = useState('');
+    const [printLabelQrLoading, setPrintLabelQrLoading] = useState(false);
+    const [printLabelBusy, setPrintLabelBusy] = useState(false);
+    const [printLabelError, setPrintLabelError] = useState('');
+
+    const printLabelPreset = useMemo(() => {
+      if (typeof window.getInventoryLabelPreset === 'function') {
+        return window.getInventoryLabelPreset(printLabelPresetKey);
+      }
+      return { mode: 'sheet', cols: 3, rows: 8, apiSize: 'sm', label: printLabelPresetKey };
+    }, [printLabelPresetKey]);
+
+    const printLabelPresetGroups = useMemo(
+      () =>
+        Array.isArray(window.INVENTORY_LABEL_PRESET_GROUPS)
+          ? window.INVENTORY_LABEL_PRESET_GROUPS
+          : [
+              { id: 'sheet', label: 'Precut A4 stickers (SA)' },
+              { id: 'flex', label: 'Plain A4 (flexible grid)' }
+            ],
+      [showPrintLabelModal]
+    );
+
+    const printLabelPresetKeys = useMemo(() => {
+      const presets = window.INVENTORY_LABEL_PRESETS || {};
+      return Object.keys(presets);
+    }, [showPrintLabelModal]);
+
+    useEffect(() => {
+      if (!showPrintLabelModal) return;
+      const itemId = getInventoryItemId(item);
+      if (!itemId) return;
+      const apiSize = printLabelPreset?.apiSize || 'md';
+      let cancelled = false;
+      setPrintLabelQrLoading(true);
+      setPrintLabelError('');
+      void (async () => {
+        try {
+          const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+          const token = window.storage?.getToken?.();
+          const headers = {};
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const res = await fetch(
+            `${apiBase}/api/manufacturing/inventory/${encodeURIComponent(itemId)}/qr?size=${encodeURIComponent(apiSize)}`,
+            { headers }
+          );
+          if (!res.ok) throw new Error('Could not load QR image for label');
+          const blob = await res.blob();
+          if (cancelled) return;
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+          });
+          if (!cancelled) setPrintLabelQrDataUrl(String(dataUrl || ''));
+        } catch (e) {
+          if (!cancelled) {
+            setPrintLabelQrDataUrl('');
+            setPrintLabelError(e.message || 'Could not load QR for label');
+          }
+        } finally {
+          if (!cancelled) setPrintLabelQrLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [showPrintLabelModal, printLabelPresetKey, item, printLabelPreset?.apiSize]);
+
+    useEffect(() => {
+      if (printLabelPreset.mode !== 'sheet') return;
+      const perPage = (printLabelPreset.cols || 1) * (printLabelPreset.rows || 1);
+      if (printLabelSheetPosition >= perPage) setPrintLabelSheetPosition(0);
+    }, [printLabelPreset, printLabelSheetPosition]);
+
+    const handlePrintSingleLabel = () => {
+      if (!printLabelQrDataUrl) {
+        setPrintLabelError('QR image is not ready yet.');
+        return;
+      }
+      if (typeof window.buildSingleInventoryLabelHtmlDocument !== 'function') {
+        setPrintLabelError('Label layout is not ready. Refresh the page and try again.');
+        return;
+      }
+      const html = window.buildSingleInventoryLabelHtmlDocument({
+        presetKey: printLabelPresetKey,
+        item: { sku: item.sku, name: item.name, qrDataUrl: printLabelQrDataUrl },
+        sheetPositionIndex: printLabelPreset.mode === 'sheet' ? printLabelSheetPosition : undefined,
+        locationLabel: item.sku
+      });
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+      if (!printWindow) {
+        setPrintLabelError('Pop-up blocked. Allow pop-ups for this site to print.');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+    };
+
+    const handleDownloadSingleLabelPdf = async () => {
+      const itemId = getInventoryItemId(item);
+      if (!itemId || printLabelBusy || !printLabelQrDataUrl) return;
+      setPrintLabelBusy(true);
+      setPrintLabelError('');
+      try {
+        const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+        const token = window.storage?.getToken?.();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const body = {
+          presetKey: printLabelPresetKey,
+          locationLabel: item.sku,
+          items: [
+            {
+              inventoryItemId: itemId,
+              sku: item.sku,
+              name: item.name,
+              qrDataUrl: printLabelQrDataUrl
+            }
+          ]
+        };
+        if (printLabelPreset.mode === 'sheet') {
+          body.sheetPositionIndex = printLabelSheetPosition;
+        }
+        const res = await fetch(`${apiBase}/api/manufacturing/inventory-labels/pdf`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || 'PDF download failed');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `inventory-label-${item.sku || 'item'}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        setPrintLabelError(e.message || 'Failed to download PDF');
+      } finally {
+        setPrintLabelBusy(false);
+      }
+    };
 
     useEffect(() => {
       if (!item?.sku) {
@@ -14519,6 +14678,18 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             <div className="flex items-center gap-2">
               {!isEditingInventoryItem ? (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrintLabelError('');
+                      setPrintLabelSheetPosition(0);
+                      setShowPrintLabelModal(true);
+                    }}
+                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <i className="fas fa-print"></i>
+                    Print label
+                  </button>
                   <button
                     onClick={() => {
                       clearInventoryThumbSuggest();
@@ -15589,6 +15760,152 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             );
           })()}
         </div>
+
+        {showPrintLabelModal ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+            <div
+              className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="erp-print-label-title"
+            >
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+                <h2 id="erp-print-label-title" className="text-lg font-semibold text-gray-900">
+                  Print stock label
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintLabelModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                  aria-label="Close"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-gray-600">
+                  Print one QR label for <span className="font-medium text-gray-900">{item.name}</span>{' '}
+                  (<span className="font-mono">{item.sku}</span>). For precut sticker sheets, pick the sheet type
+                  and the slot to use on a partially used sheet.
+                </p>
+                <div>
+                  <label htmlFor="erp-print-label-preset" className="block text-sm font-medium text-gray-700 mb-1">
+                    Label layout
+                  </label>
+                  <select
+                    id="erp-print-label-preset"
+                    value={printLabelPresetKey}
+                    onChange={(e) => setPrintLabelPresetKey(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {printLabelPresetGroups.map((grp) => (
+                      <optgroup key={grp.id} label={grp.label}>
+                        {printLabelPresetKeys
+                          .filter((key) => {
+                            const presets = window.INVENTORY_LABEL_PRESETS || {};
+                            return (presets[key]?.group || 'sheet') === grp.id;
+                          })
+                          .map((key) => {
+                            const presets = window.INVENTORY_LABEL_PRESETS || {};
+                            return (
+                              <option key={key} value={key}>
+                                {presets[key]?.label || key}
+                              </option>
+                            );
+                          })}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                {printLabelPreset.mode === 'sheet' ? (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Sticker position on sheet</p>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Click the slot where this label should print (top-left is 1). Use this when reusing a
+                      partially used sticker sheet.
+                    </p>
+                    <div
+                      className="inline-grid gap-1 border border-gray-200 rounded-lg p-2 bg-gray-50"
+                      style={{
+                        gridTemplateColumns: `repeat(${printLabelPreset.cols || 1}, minmax(0, 1fr))`
+                      }}
+                    >
+                      {Array.from(
+                        { length: (printLabelPreset.cols || 1) * (printLabelPreset.rows || 1) },
+                        (_, index) => {
+                          const selected = printLabelSheetPosition === index;
+                          return (
+                            <button
+                              key={index}
+                              type="button"
+                              title={`Position ${index + 1}`}
+                              onClick={() => setPrintLabelSheetPosition(index)}
+                              className={
+                                'min-w-[2.25rem] h-8 text-xs font-medium rounded border transition-colors ' +
+                                (selected
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:bg-blue-50')
+                              }
+                            >
+                              {index + 1}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      Load matching A4 precut stickers and print at <strong>100%</strong> with{' '}
+                      <strong>no scaling</strong>. For consistent sizing, use Download PDF and print the PDF at
+                      100%.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Plain A4 layout — one label per print. Trim or use your own label stock as needed.
+                  </p>
+                )}
+                {printLabelQrLoading ? (
+                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                    <i className="fas fa-spinner fa-spin"></i>
+                    Preparing QR image…
+                  </p>
+                ) : null}
+                {printLabelError ? (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {printLabelError}
+                  </p>
+                ) : null}
+              </div>
+              <div className="p-4 border-t border-gray-200 flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintLabelModal(false)}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadSingleLabelPdf()}
+                  disabled={printLabelBusy || printLabelQrLoading || !printLabelQrDataUrl}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <i className="fas fa-file-pdf"></i>
+                  {printLabelBusy ? 'Preparing…' : 'Download PDF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintSingleLabel}
+                  disabled={printLabelQrLoading || !printLabelQrDataUrl}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <i className="fas fa-print"></i>
+                  Print
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   };
