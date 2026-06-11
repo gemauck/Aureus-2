@@ -5563,7 +5563,7 @@ const getAssigneeColor = (identifier, users) => {
         }
         const selectWrapClass = TU
             ? TU.getStatusSelectWrap(isMonthlyDataReview ? resolveMonthlyDataReviewStatusKey(status) : status, statusOptions)
-            : (statusConfig?.selectWrap || 'bg-white border-slate-200 text-slate-500');
+            : (statusConfig?.selectWrap || 'bg-white border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300');
         
         const handleCellClick = (e) => {
             // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
@@ -6182,52 +6182,52 @@ const getAssigneeColor = (identifier, users) => {
         };
         
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-section-modal="true">
-                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
+            <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-60 flex items-center justify-center z-50 p-4" data-section-modal="true">
+                <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-600">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
                             {editingSection ? 'Edit Section' : 'Add New Section'}
                         </h2>
-                        <button onClick={() => setShowSectionModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                        <button onClick={() => setShowSectionModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                             <i className="fas fa-times text-sm"></i>
                         </button>
                     </div>
                     
                     <form onSubmit={handleSubmit} className="p-4 space-y-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Section Name *</label>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Section Name *</label>
                             <input
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-sky-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                                 placeholder="e.g., Financial Documents"
                                 required
                             />
                         </div>
                         
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Description (Optional)</label>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description (Optional)</label>
                             <textarea
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400"
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-sky-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                                 rows="2"
                                 placeholder="Brief description..."
                             ></textarea>
                         </div>
                         
-                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-600">
                             <button
                                 type="button"
                                 onClick={() => setShowSectionModal(false)}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                                className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
+                                className="px-3 py-1.5 text-xs bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600"
                             >
                                 {editingSection ? 'Update' : 'Add'} Section
                             </button>
@@ -7993,13 +7993,13 @@ Abcotronics`;
         };
         
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-xl">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
+            <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-60 flex items-center justify-center z-50 p-4">
+                <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xl border border-gray-200 dark:border-gray-600">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
                             {editingDocument ? 'Edit Document' : 'Add Document'}
                         </h2>
-                        <button onClick={() => setShowDocumentModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                        <button onClick={() => setShowDocumentModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                             <i className="fas fa-times text-sm"></i>
                         </button>
                     </div>
@@ -10352,24 +10352,24 @@ Abcotronics`;
                 });
                 
                 return (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setExpandedDescriptionId(null)}>
-                        <div className="modal-panel bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                                <h2 className="text-base font-semibold text-gray-900">{foundDocName} - Description</h2>
+                    <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setExpandedDescriptionId(null)}>
+                        <div className="modal-panel bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-600" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{foundDocName} - Description</h2>
                                 <button 
                                     onClick={() => setExpandedDescriptionId(null)} 
-                                    className="text-gray-400 hover:text-gray-600 p-1"
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
                                 >
                                     <i className="fas fa-times text-sm"></i>
                                 </button>
                             </div>
                             <div className="p-4 overflow-y-auto">
-                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{desc}</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{desc}</p>
                             </div>
-                            <div className="flex justify-end px-4 py-3 border-t border-gray-200">
+                            <div className="flex justify-end px-4 py-3 border-t border-gray-200 dark:border-gray-600">
                                 <button
                                     onClick={() => setExpandedDescriptionId(null)}
-                                    className="px-3 py-1.5 text-xs bg-sky-200 text-sky-800 rounded-lg hover:bg-sky-300"
+                                    className="px-3 py-1.5 text-xs bg-sky-200 dark:bg-sky-700 text-sky-800 dark:text-sky-100 rounded-lg hover:bg-sky-300 dark:hover:bg-sky-600"
                                 >
                                     Close
                                 </button>

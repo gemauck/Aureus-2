@@ -6,7 +6,7 @@ const { memo } = React;
 
 const TRACKER_CELL_CV_STYLE = { contentVisibility: 'auto', containIntrinsicSize: '0 88px' };
 const TRACKER_PAGE_SHELL_CLASS = 'space-y-4 rounded-2xl bg-slate-50/60 p-1 sm:p-2 dark:bg-slate-950/40';
-const TRACKER_HEADER_GRADIENT = 'linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #eef2ff 100%)';
+const TRACKER_HEADER_CLASS = 'rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-indigo-50 p-4 shadow-sm md:p-5 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30';
 const TRACKER_STATUS_SELECT_DEFAULT = 'bg-white border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-600';
 
 const POSITIVE_STATUS = /^(checked|collected|done|reviewed-in-order|not-required|available-on-request|available)$/;
@@ -19,7 +19,7 @@ const softenCellColor = (cellColor) => {
         .replace(/border-l-4\s+border-[^\s]+/g, '')
         .replace(/shadow-sm/g, '')
         .replace(/\bborder\s+border-[^\s]+/g, '')
-        .trim() || 'bg-slate-50/90';
+        .trim() || 'bg-slate-50/90 dark:bg-slate-800/50';
 };
 
 const inferSelectWrap = (value) => {
@@ -98,10 +98,7 @@ const TrackerHeader = ({
     exportButton,
     toolbar
 }) => (
-    <div
-        className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm md:p-5 dark:border-slate-700 dark:bg-slate-900"
-        style={{ backgroundImage: TRACKER_HEADER_GRADIENT }}
-    >
+    <div className={TRACKER_HEADER_CLASS}>
         <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex items-start gap-3 min-w-0">
