@@ -192,30 +192,28 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
             const offlineUserTasksKey = `offline_user_tasks_${userId}`;
             const offlineProjectTasksKey = `offline_project_tasks_${userId}`;
 
-            // Show cached tasks immediately while the API refreshes in the background.
-            let showedCachedTasks = false;
-            try {
-                const cachedProjectRaw = localStorage.getItem(offlineProjectTasksKey);
-                const cachedUserRaw = localStorage.getItem(offlineUserTasksKey);
-                if (cachedProjectRaw) {
-                    const parsed = JSON.parse(cachedProjectRaw);
-                    if (Array.isArray(parsed)) {
-                        setProjectTasks(parsed);
-                        showedCachedTasks = showedCachedTasks || parsed.length > 0;
+            const applyCachedTasks = () => {
+                try {
+                    const cachedProjectRaw = localStorage.getItem(offlineProjectTasksKey);
+                    const cachedUserRaw = localStorage.getItem(offlineUserTasksKey);
+                    if (cachedProjectRaw) {
+                        const parsed = JSON.parse(cachedProjectRaw);
+                        if (Array.isArray(parsed)) setProjectTasks(parsed);
                     }
-                }
-                if (cachedUserRaw) {
-                    const parsed = JSON.parse(cachedUserRaw);
-                    if (Array.isArray(parsed)) {
-                        setUserTasks(parsed);
-                        showedCachedTasks = showedCachedTasks || parsed.length > 0;
+                    if (cachedUserRaw) {
+                        const parsed = JSON.parse(cachedUserRaw);
+                        if (Array.isArray(parsed)) setUserTasks(parsed);
                     }
+                } catch (cacheErr) {
+                    warnTaskDebug('Could not read cached dashboard tasks:', cacheErr);
                 }
-                if (showedCachedTasks) {
-                    setIsLoading(false);
-                }
-            } catch (cacheErr) {
-                warnTaskDebug('Could not read cached dashboard tasks:', cacheErr);
+            };
+
+            // Offline only: show last cached snapshot (avoid flashing stale tasks when online).
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                applyCachedTasks();
+                setIsLoading(false);
+                return;
             }
             
             // Helper function to add timeout to promises
@@ -259,19 +257,14 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                     ? data.tasks
                                     : [];
                             logTaskDebug('📋 Parsed project tasks:', tasks.length, tasks);
-                            // Save to localStorage for offline use
-                            if (tasks.length > 0) {
-                                try {
-                                    const user = window.storage?.getUser?.();
-                                    const userId = user?.id || user?.email || 'anonymous';
-                                    const projectTasksKey = `offline_project_tasks_${userId}`;
-                                    localStorage.setItem(projectTasksKey, JSON.stringify(tasks));
-                                    logTaskDebug('💾 Saved project tasks to localStorage:', tasks.length);
-                                } catch (e) {
-                                    warnTaskDebug('Error saving project tasks to localStorage:', e);
-                                }
-                            } else {
-                                warnTaskDebug('⚠️ No project tasks found in API response');
+                            try {
+                                const user = window.storage?.getUser?.();
+                                const userId = user?.id || user?.email || 'anonymous';
+                                const projectTasksKey = `offline_project_tasks_${userId}`;
+                                localStorage.setItem(projectTasksKey, JSON.stringify(tasks));
+                                logTaskDebug('💾 Saved project tasks to localStorage:', tasks.length);
+                            } catch (e) {
+                                warnTaskDebug('Error saving project tasks to localStorage:', e);
                             }
                             
                             return {
@@ -312,13 +305,11 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                         ? data.items
                                         : [];
                             
-                            // Save to localStorage for next time
-                            if (apiTasks.length > 0) {
-                                try {
-                                    localStorage.setItem(offlineUserTasksKey, JSON.stringify(apiTasks));
-                                } catch (e) {
-                                    warnTaskDebug('Error saving tasks to localStorage:', e);
-                                }
+                            // Save to localStorage for offline use
+                            try {
+                                localStorage.setItem(offlineUserTasksKey, JSON.stringify(apiTasks));
+                            } catch (e) {
+                                warnTaskDebug('Error saving tasks to localStorage:', e);
                             }
                             
                             return {
@@ -358,6 +349,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                 setIsLoading(false);
             }).catch(err => {
                 console.error('Error loading tasks:', err);
+                applyCachedTasks();
                 setError('Failed to load some tasks');
                 setIsLoading(false);
             });
@@ -512,7 +504,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     };
 
     return (
-        <div className={`${cardBase} border rounded-xl p-3 sm:p-5 flex flex-col h-full shadow-sm`}>
+        <div className={`dashboard-my-tasks-widget ${cardBase} border rounded-xl p-3 sm:p-5 flex flex-col h-full shadow-sm`}>
             <div className="flex items-center justify-between mb-2 flex-shrink-0">
                 <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
                 <i className="fas fa-tasks text-teal-500 opacity-70"></i>
@@ -535,59 +527,81 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                 </div>
             ) : (
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <div className="space-y-1 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
+                    <div className="space-y-2 lg:space-y-1 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
                         {allTasks.map(task => {
                             const dueDateInfo = getDueDateStatus(task.dueDate);
                             const isProjectTask = task.type === 'project';
                             const isUserTask = task.type === 'user';
                             
                             return (
-                                <div
+                                <button
+                                    type="button"
                                     key={task.id || `task-${Math.random()}`}
                                     onClick={() => handleTaskClick(task)}
-                                    className={`py-1.5 px-2 rounded-md ${isDark ? 'bg-gray-800 border border-gray-800 hover:bg-gray-750 hover:border-gray-700' : 'bg-gray-50 border border-gray-100 hover:bg-gray-100 hover:border-gray-200'} cursor-pointer transition-all duration-200`}
+                                    className={`dmt-row-btn w-full text-left rounded-xl lg:rounded-md px-3 py-3 lg:py-1.5 lg:px-2 touch-manipulation transition-colors ${
+                                        isDark
+                                            ? 'border border-gray-700/80 bg-gray-800/35 lg:bg-gray-800 lg:border-gray-800 active:bg-gray-800/80 lg:hover:bg-gray-750'
+                                            : 'border border-gray-200/90 bg-white lg:bg-gray-50 lg:border-gray-100 active:bg-gray-50 lg:hover:bg-gray-100'
+                                    }`}
                                     title={isProjectTask ? `Click to view project: ${task.project?.name || 'Unknown'}` : 'Click to view in My Tasks'}
                                 >
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className={`text-[10px] leading-none px-1 py-0.5 rounded shrink-0 ${getStatusColor(task.status)}`}>
-                                            {task.status || 'todo'}
-                                        </span>
-                                        <p className={`text-xs ${headerText} font-medium truncate flex-1 min-w-0 leading-tight`} title={task.title || task.name}>
-                                            {task.title || task.name}
-                                        </p>
-                                        {(task.startDate || dueDateInfo) && (
-                                            <span className="shrink-0 text-[10px] leading-none">
-                                                {dueDateInfo ? (
-                                                    <span className={dueDateInfo.color}>
-                                                        <i className="fas fa-calendar-alt mr-0.5"></i>
-                                                        {dueDateInfo.text}
-                                                    </span>
-                                                ) : task.startDate && (() => {
-                                                    const d = new Date(task.startDate);
-                                                    return !Number.isNaN(d.getTime()) ? (
-                                                        <span className={subText}>
-                                                            <i className="fas fa-play-circle mr-0.5"></i>
-                                                            {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <span
+                                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                                dueDateInfo?.text === 'Overdue' ? 'bg-red-500' : 'bg-teal-500'
+                                            }`}
+                                            aria-hidden="true"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                                <p
+                                                    className={`text-sm lg:text-xs ${headerText} font-semibold lg:font-medium flex-1 min-w-0 leading-snug lg:truncate`}
+                                                    title={task.title || task.name}
+                                                >
+                                                    {task.title || task.name}
+                                                </p>
+                                                <span
+                                                    className={`shrink-0 text-[10px] leading-none px-2 py-1 rounded-full font-semibold ${getStatusColor(task.status)}`}
+                                                >
+                                                    {task.status || 'todo'}
+                                                </span>
+                                            </div>
+                                            {(isProjectTask || isUserTask) && (
+                                                <p
+                                                    className={`text-xs lg:text-[10px] ${subText} mt-1 leading-snug lg:truncate`}
+                                                    title={[task.project?.name, task.project?.clientName].filter(Boolean).join(' · ') || 'My Task'}
+                                                >
+                                                    {isProjectTask && task.project?.name && (
+                                                        <>{task.project.name}</>
+                                                    )}
+                                                    {isProjectTask && task.project?.clientName && (
+                                                        <>{task.project?.name ? ' · ' : ''}{task.project.clientName}</>
+                                                    )}
+                                                    {isUserTask && 'Personal task'}
+                                                </p>
+                                            )}
+                                            {(task.startDate || dueDateInfo) && (
+                                                <p className="mt-1 text-[11px] lg:text-[10px] leading-none">
+                                                    {dueDateInfo ? (
+                                                        <span className={dueDateInfo.color}>
+                                                            <i className="fas fa-calendar-alt mr-1" aria-hidden="true" />
+                                                            {dueDateInfo.text}
                                                         </span>
-                                                    ) : null;
-                                                })()}
-                                            </span>
-                                        )}
+                                                    ) : task.startDate && (() => {
+                                                        const d = new Date(task.startDate);
+                                                        return !Number.isNaN(d.getTime()) ? (
+                                                            <span className={subText}>
+                                                                <i className="fas fa-play-circle mr-1" aria-hidden="true" />
+                                                                {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <i className="fas fa-chevron-right text-[10px] text-gray-300 dark:text-gray-600 mt-1 shrink-0" aria-hidden="true" />
                                     </div>
-                                    {(isProjectTask || isUserTask) && (
-                                        <p className={`text-[10px] ${subText} truncate mt-0.5 leading-tight`} title={[task.project?.name, task.project?.clientName].filter(Boolean).join(' · ') || 'My Task'}>
-                                            {isProjectTask && task.project?.name && (
-                                                <><i className="fas fa-project-diagram mr-0.5 opacity-60"></i>{task.project.name}</>
-                                            )}
-                                            {isProjectTask && task.project?.clientName && (
-                                                <>{task.project?.name ? ' · ' : ''}{task.project.clientName}</>
-                                            )}
-                                            {isUserTask && (
-                                                <><i className="fas fa-check-square mr-0.5 opacity-60"></i>My Task</>
-                                            )}
-                                        </p>
-                                    )}
-                                </div>
+                                </button>
                             );
                         })}
                     </div>
@@ -1178,7 +1192,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     const activeWorkingMonth = monthPickerCandidates[clampedPickerIndex] || monthPickerCandidates[0] || null;
 
     React.useEffect(() => {
-        if (!m || !trackerIdsKey || !projects?.length) {
+        if (!projectsNetworkSynced || !m || !trackerIdsKey || !projects?.length) {
             return;
         }
         const cache = readProgressSectionsCache();
@@ -1193,10 +1207,10 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         if (Object.keys(fromCache).length) {
             setSectionDetails((prev) => ({ ...fromCache, ...prev }));
         }
-    }, [m, trackerIdsKey, projectsDataVersionKey]);
+    }, [m, trackerIdsKey, projectsDataVersionKey, projectsNetworkSynced]);
 
     React.useEffect(() => {
-        if (!m || !trackerIdsKey || !activeWorkingMonth) {
+        if (!projectsNetworkSynced || !m || !trackerIdsKey || !activeWorkingMonth) {
             setHydrationLoading(false);
             return;
         }
@@ -1261,7 +1275,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         return () => {
             cancelled = true;
         };
-    }, [m, trackerIdsKey, projectsDataVersionKey, projects, activeWorkingMonth]);
+    }, [m, trackerIdsKey, projectsDataVersionKey, projects, activeWorkingMonth, projectsNetworkSynced]);
 
     const mergedProjects = React.useMemo(() => {
         if (!m || !projects) return [];
@@ -1382,9 +1396,27 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         return { docL, compL, dataL, cmtL };
     };
 
+    const renderMetricTile = (label, color, percent, href, title) => (
+        <a href={href} className="dlwm-metric-tile block min-w-0 touch-manipulation" title={title}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-center" style={{ color }}>
+                {label}
+            </div>
+            <div className={`text-sm font-bold tabular-nums text-center ${headerText}`}>{fmtPct(percent)}</div>
+            <div className={`h-1.5 rounded-full ${barBg} mt-1 overflow-hidden`}>
+                <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                        width: `${percent != null ? Math.min(100, percent) : 0}%`,
+                        background: color
+                    }}
+                />
+            </div>
+        </a>
+    );
+
     return (
         <div
-            className={`${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col h-full min-h-0 min-w-0 w-full max-w-full`}
+            className={`dashboard-lwm-progress-widget ${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col h-full min-h-0 min-w-0 w-full max-w-full`}
         >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3 mb-3 min-w-0 text-left flex-shrink-0">
                 <div className="min-w-0 flex-1 text-left">
@@ -1460,8 +1492,55 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
                 </p>
             ) : (
-                <div className={`overflow-x-auto flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
-                    <table data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
+                <>
+                    <div className={`lg:hidden flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
+                        {rows.map((row) => {
+                            const { docL, compL, dataL, cmtL } = renderRowLinks(row);
+                            const rowCardBg = isDark
+                                ? 'border-gray-700/90 bg-gray-800/35'
+                                : 'border-gray-200/90 bg-slate-50/90';
+                            const hasComment = row.comments && String(row.comments).trim();
+                            return (
+                                <div
+                                    key={String(row.id)}
+                                    className={`dlwm-project-card rounded-xl border p-3 shadow-sm ${rowCardBg}`}
+                                >
+                                    <a href={docL} className="block mb-3 min-w-0">
+                                        <div className={`text-sm font-bold leading-snug ${headerText}`}>{row.name}</div>
+                                        {row.client ? (
+                                            <div className={`text-xs ${subText} mt-1 leading-snug`} title={row.client}>
+                                                {row.client}
+                                            </div>
+                                        ) : null}
+                                    </a>
+                                    <div className="dash-lwm-progress-metrics dash-lwm-progress-metrics--triple">
+                                        {renderMetricTile('Docs', '#3b82f6', row.doc.percent, docL, 'Open document collection')}
+                                        {renderMetricTile('Comp.', '#8b5cf6', row.compliance.percent, compL, 'Open compliance review')}
+                                        {renderMetricTile('Data', '#10b981', row.data.percent, dataL, 'Open monthly data review')}
+                                    </div>
+                                    <a
+                                        href={cmtL}
+                                        className={`block mt-3 pt-3 border-t ${borderSep} min-w-0`}
+                                        title="Open progress tracker (comments)"
+                                    >
+                                        <div className={`text-[10px] font-semibold uppercase tracking-wide ${tableHead} mb-1`}>
+                                            Comment
+                                        </div>
+                                        {hasComment ? (
+                                            <p className={`text-xs leading-snug line-clamp-3 ${subText} whitespace-pre-wrap break-words`}>
+                                                {row.comments}
+                                            </p>
+                                        ) : (
+                                            <span className="text-xs text-gray-400">—</span>
+                                        )}
+                                    </a>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className={`hidden lg:block overflow-x-auto flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
+                    <table data-keep-table="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
                         <colgroup>
                             <col className="w-[36%]" />
                             <col className="w-[16%]" />
@@ -1556,7 +1635,8 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                             })}
                         </tbody>
                     </table>
-                </div>
+                    </div>
+                </>
             )}
         </div>
     );
@@ -2486,10 +2566,7 @@ const DashboardLive = () => {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [projectsNetworkSynced, setProjectsNetworkSynced] = useState(() => {
-        const projects = readDashboardOfflinePayload().projects;
-        return Array.isArray(projects) && projects.length > 0;
-    });
+    const [projectsNetworkSynced, setProjectsNetworkSynced] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('connecting');
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
@@ -3457,7 +3534,7 @@ const DashboardLive = () => {
         }
     }, []);
 
-    // Initial load — render cached data first, refresh quietly in background.
+    // Initial load — wait for network projects before showing progress (offline cache used only on failure).
     useEffect(() => {
         loadDashboardData({ showLoading: false });
     }, [loadDashboardData]);
@@ -3547,8 +3624,28 @@ const DashboardLive = () => {
 
     // Customizable widgets UI
     return (
-        <div className="erp-module-root space-y-6 pb-24">
-            <div className="flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-start sm:gap-8">
+        <div className="erp-module-root dashboard-live-root space-y-4 lg:space-y-6 pb-24">
+            <div className="dashboard-mobile-hero lg:hidden rounded-2xl bg-slate-900 text-white px-4 py-4 shadow-lg">
+                <h2 className="text-2xl font-extrabold tracking-tight leading-tight">Welcome back, {userName}</h2>
+                <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+                    Your ERP at a glance — tap any card to jump in.
+                </p>
+            </div>
+            {editMode ? (
+                <div
+                    className={`lg:hidden rounded-lg border px-3 py-2.5 text-sm leading-relaxed ${isDark ? 'border-blue-800 bg-blue-950/40 text-blue-100' : 'border-blue-200 bg-blue-50 text-blue-900'}`}
+                    role="status"
+                >
+                    <span className="inline-flex w-full min-w-0 items-start gap-2">
+                        <i className="mt-0.5 shrink-0 opacity-80 fas fa-mobile-alt" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                            Editing the <strong className="font-semibold">phone</strong> widget layout. Drag tiles to
+                            reorder; drag the corner to change tile height.
+                        </span>
+                    </span>
+                </div>
+            ) : null}
+            <div className="hidden lg:flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-start sm:gap-8">
                 <div className="shrink-0 sm:pt-0.5">
                     <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Welcome, {userName}</h2>
                 </div>
