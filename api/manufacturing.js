@@ -2714,11 +2714,14 @@ async function handler(req, res) {
           body.sheetPositionIndex !== undefined && body.sheetPositionIndex !== null
             ? Number(body.sheetPositionIndex)
             : undefined
+        const quantity =
+          body.quantity !== undefined && body.quantity !== null ? Number(body.quantity) : undefined
         const pdfBuffer = await buildInventoryLabelPdfBuffer({
           presetKey,
           locationLabel: body.locationLabel || body.location || '',
           items,
-          sheetPositionIndex
+          sheetPositionIndex,
+          quantity
         })
         const filename = inventoryLabelPdfFilename({
           locationLabel: body.locationLabel || body.location || '',

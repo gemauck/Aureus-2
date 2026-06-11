@@ -427,24 +427,63 @@ export function buildInventoryLabelHtmlDocument({ presetKey, items, locationLabe
   )
 }
 
-/** One label for stock labeling — optional sheet slot for partially used sticker sheets. */
-export function buildSingleInventoryLabelHtmlDocument({
+/** Slot placements when repeating one label from a start index across sheet pages. */
+export function computeRepeatedSheetSlotPlacements(preset, quantity, sheetPositionIndex) {
+  const perPage = qrLabelsPerPage(preset) || 1
+  const start = clampSheetPositionIndex(preset, sheetPositionIndex)
+  const qty = Math.max(1, Number(quantity) || 1)
+  const pageSlots = {}
+  for (let i = 0; i < qty; i++) {
+    const globalSlot = start + i
+    const pageIdx = Math.floor(globalSlot / perPage)
+    const slotOnPage = globalSlot % perPage
+    if (!pageSlots[pageIdx]) pageSlots[pageIdx] = []
+    pageSlots[pageIdx].push(slotOnPage)
+  }
+  const sheetCount = Object.keys(pageSlots).length
+  return { perPage, start, qty, pageSlots, sheetCount }
+}
+
+/** One or more copies of the same label — optional sheet start slot for partially used sheets. */
+export function buildRepeatedInventoryLabelHtmlDocument({
   presetKey,
   item,
+  quantity = 1,
   sheetPositionIndex = 0,
   locationLabel
 }) {
   const preset = getInventoryLabelPreset(presetKey)
   const css = buildInventoryLabelCss(preset)
+  const qty = Math.max(1, Number(quantity) || 1)
   let body = ''
 
   if (preset.mode === 'sheet') {
-    const perPage = qrLabelsPerPage(preset) || 1
-    const idx = Math.max(0, Math.min(Number(sheetPositionIndex) || 0, perPage - 1))
-    body =
-      '<div class="erp-qr-sheet-page">' + renderLabelCellHtml(preset, item, idx) + '</div>'
+    const { pageSlots } = computeRepeatedSheetSlotPlacements(preset, qty, sheetPositionIndex)
+    const pageIndices = Object.keys(pageSlots)
+      .map(Number)
+      .sort(function (a, b) {
+        return a - b
+      })
+    body = pageIndices
+      .map(function (pageIdx) {
+        return (
+          '<div class="erp-qr-sheet-page">' +
+          pageSlots[pageIdx]
+            .map(function (slot) {
+              return renderLabelCellHtml(preset, item, slot)
+            })
+            .join('') +
+          '</div>'
+        )
+      })
+      .join('')
   } else {
-    body = '<div class="erp-qr-flex-grid">' + renderLabelCellHtml(preset, item) + '</div>'
+    body =
+      '<div class="erp-qr-flex-grid">' +
+      Array.from({ length: qty }, function () {
+        return renderLabelCellHtml(preset, item)
+      }).join('') +
+      '</div>'
   }
 
   const sku = escapeHtml(item?.sku || '—')
@@ -461,6 +500,22 @@ export function buildSingleInventoryLabelHtmlDocument({
     body +
     '</div></body></html>'
   )
+}
+
+/** One label for stock labeling — optional sheet slot for partially used sticker sheets. */
+export function buildSingleInventoryLabelHtmlDocument({
+  presetKey,
+  item,
+  sheetPositionIndex = 0,
+  locationLabel
+}) {
+  return buildRepeatedInventoryLabelHtmlDocument({
+    presetKey,
+    item,
+    quantity: 1,
+    sheetPositionIndex,
+    locationLabel
+  })
 }
 
 export function clampSheetPositionIndex(preset, sheetPositionIndex) {

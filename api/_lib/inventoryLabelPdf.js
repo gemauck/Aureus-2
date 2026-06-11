@@ -5,8 +5,10 @@ import {
   DEFAULT_INVENTORY_LABEL_PRESET_KEY,
   INVENTORY_LABEL_PRESETS,
   buildInventoryLabelHtmlDocument,
+  buildRepeatedInventoryLabelHtmlDocument,
   buildSingleInventoryLabelHtmlDocument,
   clampSheetPositionIndex,
+  computeRepeatedSheetSlotPlacements,
   getInventoryLabelPreset,
   inventoryLabelPdfFilename,
   chunkInventoryLabelItems,
@@ -142,7 +144,33 @@ function drawLabelCell(doc, preset, item, qrBuffer, xPt, yPt, cellWidthPt, cellH
     .text(sku, textX, textY + nameH + gap, { width: textColW, align: 'left', ellipsis: true })
 }
 
-async function renderSheetPdfKit(doc, preset, items, sheetPositionIndex) {
+async function renderRepeatedSheetPdfKit(doc, preset, item, quantity, sheetPositionIndex) {
+  const metrics = sheetLayoutMetrics(preset)
+  const labelW = mmToPt(metrics.labelW)
+  const labelH = mmToPt(metrics.labelH)
+  const pitchX = mmToPt(metrics.colPitch)
+  const rowPitch = mmToPt(metrics.rowPitch)
+  const originX = mmToPt(metrics.marginLeft)
+  const originY = mmToPt(metrics.marginTop)
+  const { pageSlots } = computeRepeatedSheetSlotPlacements(preset, quantity, sheetPositionIndex)
+  const pageIndices = Object.keys(pageSlots)
+    .map(Number)
+    .sort((a, b) => a - b)
+  const qrBuffer = await resolveQrBuffer(item, preset)
+
+  for (let pi = 0; pi < pageIndices.length; pi++) {
+    if (pi > 0) doc.addPage({ size: 'A4', margin: 0 })
+    for (const slotOnPage of pageSlots[pageIndices[pi]]) {
+      const col = slotOnPage % preset.cols
+      const row = Math.floor(slotOnPage / preset.cols)
+      const x = originX + col * pitchX
+      const y = originY + row * rowPitch
+      drawLabelCell(doc, preset, item, qrBuffer, x, y, labelW, labelH)
+    }
+  }
+}
+
+async function renderSheetPdfKit(doc, preset, items, sheetPositionIndex, quantity) {
   const perPage = qrLabelsPerPage(preset)
   const pages = chunkInventoryLabelItems(items, perPage)
   const metrics = sheetLayoutMetrics(preset)
@@ -153,20 +181,15 @@ async function renderSheetPdfKit(doc, preset, items, sheetPositionIndex) {
   const originX = mmToPt(metrics.marginLeft)
   const originY = mmToPt(metrics.marginTop)
 
-  const singleAtSlot =
+  const repeatedFromSlot =
     items.length === 1 &&
     sheetPositionIndex !== undefined &&
     sheetPositionIndex !== null &&
     preset.mode === 'sheet'
 
-  if (singleAtSlot) {
-    const idx = clampSheetPositionIndex(preset, sheetPositionIndex)
-    const col = idx % preset.cols
-    const row = Math.floor(idx / preset.cols)
-    const x = originX + col * pitchX
-    const y = originY + row * rowPitch
-    const qrBuffer = await resolveQrBuffer(items[0], preset)
-    drawLabelCell(doc, preset, items[0], qrBuffer, x, y, labelW, labelH)
+  if (repeatedFromSlot) {
+    const qty = Math.max(1, Number(quantity) || 1)
+    await renderRepeatedSheetPdfKit(doc, preset, items[0], qty, sheetPositionIndex)
     return
   }
 
@@ -216,7 +239,8 @@ async function buildInventoryLabelPdfKitBuffer({
   items,
   locationLabel,
   presetKey,
-  sheetPositionIndex
+  sheetPositionIndex,
+  quantity
 }) {
   return new Promise((resolve, reject) => {
     const title = locationLabel
@@ -236,7 +260,15 @@ async function buildInventoryLabelPdfKitBuffer({
     const run = async () => {
       try {
         if (preset.mode === 'sheet') {
-          await renderSheetPdfKit(doc, preset, items, sheetPositionIndex)
+          await renderSheetPdfKit(doc, preset, items, sheetPositionIndex, quantity)
+        } else if (
+          items.length === 1 &&
+          quantity !== undefined &&
+          quantity !== null &&
+          Number(quantity) > 1
+        ) {
+          const copies = Array.from({ length: Math.max(1, Number(quantity) || 1) }, () => items[0])
+          await renderFlexPdfKit(doc, preset, copies)
         } else {
           await renderFlexPdfKit(doc, preset, items)
         }
@@ -254,7 +286,8 @@ async function buildInventoryLabelPdfKitBuffer({
  * @param {object} opts
  * @param {string} opts.presetKey
  * @param {string} [opts.locationLabel]
- * @param {number} [opts.sheetPositionIndex] — 0-based slot on a precut sheet (single-label print)
+ * @param {number} [opts.sheetPositionIndex] — 0-based slot on a precut sheet (repeated-label print)
+ * @param {number} [opts.quantity] — copies of the same label (default: items.length)
  * @param {Array<{ inventoryItemId: string, sku?: string, name?: string, qrDataUrl?: string }>} opts.items
  */
 export async function buildInventoryLabelPdfBuffer(opts) {
@@ -263,11 +296,20 @@ export async function buildInventoryLabelPdfBuffer(opts) {
   const items = Array.isArray(opts?.items) ? opts.items : []
   const locationLabel = String(opts?.locationLabel || '').trim()
   const sheetPositionIndex = opts?.sheetPositionIndex
+  const quantity = Math.max(
+    1,
+    Math.min(
+      opts?.quantity !== undefined && opts?.quantity !== null
+        ? Number(opts.quantity) || 1
+        : items.length || 1,
+      MAX_ITEMS_PER_REQUEST
+    )
+  )
 
   if (!items.length) {
     throw new Error('No label items supplied')
   }
-  if (items.length > MAX_ITEMS_PER_REQUEST) {
+  if (quantity > MAX_ITEMS_PER_REQUEST) {
     throw new Error(`Too many labels (max ${MAX_ITEMS_PER_REQUEST})`)
   }
 
@@ -284,16 +326,18 @@ export async function buildInventoryLabelPdfBuffer(opts) {
     }
   })
 
-  const singleAtSlot =
+  const repeatedSameItem =
     normalized.length === 1 &&
-    preset.mode === 'sheet' &&
-    sheetPositionIndex !== undefined &&
-    sheetPositionIndex !== null
+    (quantity > 1 ||
+      (preset.mode === 'sheet' &&
+        sheetPositionIndex !== undefined &&
+        sheetPositionIndex !== null))
 
-  const html = singleAtSlot
-    ? buildSingleInventoryLabelHtmlDocument({
+  const html = repeatedSameItem
+    ? buildRepeatedInventoryLabelHtmlDocument({
         presetKey,
         item: normalized[0],
+        quantity,
         sheetPositionIndex,
         locationLabel
       })
@@ -312,6 +356,7 @@ export async function buildInventoryLabelPdfBuffer(opts) {
     items: normalized,
     locationLabel,
     presetKey,
-    sheetPositionIndex
+    sheetPositionIndex,
+    quantity
   })
 }

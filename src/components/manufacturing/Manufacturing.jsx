@@ -14061,6 +14061,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       () => window.DEFAULT_INVENTORY_LABEL_PRESET_KEY || 'rf2470x37'
     );
     const [printLabelSheetPosition, setPrintLabelSheetPosition] = useState(0);
+    const [printLabelQuantity, setPrintLabelQuantity] = useState(1);
     const [printLabelQrDataUrl, setPrintLabelQrDataUrl] = useState('');
     const [printLabelQrLoading, setPrintLabelQrLoading] = useState(false);
     const [printLabelBusy, setPrintLabelBusy] = useState(false);
@@ -14137,21 +14138,69 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       if (printLabelSheetPosition >= perPage) setPrintLabelSheetPosition(0);
     }, [printLabelPreset, printLabelSheetPosition]);
 
+    const printLabelQuantityClamped = Math.max(1, Math.min(Number(printLabelQuantity) || 1, 400));
+
+    const printLabelSheetPlacements = useMemo(() => {
+      if (
+        printLabelPreset.mode !== 'sheet' ||
+        typeof window.computeRepeatedSheetSlotPlacements !== 'function'
+      ) {
+        return { firstSheetSlots: new Set(), sheetCount: 1, qty: printLabelQuantityClamped };
+      }
+      const result = window.computeRepeatedSheetSlotPlacements(
+        printLabelPreset,
+        printLabelQuantityClamped,
+        printLabelSheetPosition
+      );
+      const firstSheetSlots = new Set(result.pageSlots[0] || []);
+      return { firstSheetSlots, sheetCount: result.sheetCount, qty: result.qty };
+    }, [
+      printLabelPreset,
+      printLabelQuantityClamped,
+      printLabelSheetPosition
+    ]);
+
+    const printLabelLayoutSummary = useMemo(() => {
+      const qty = printLabelQuantityClamped;
+      if (qty === 1) return '1 label';
+      if (printLabelPreset.mode !== 'sheet') return `${qty} labels`;
+      const { sheetCount, firstSheetSlots } = printLabelSheetPlacements;
+      if (sheetCount === 1) return `${qty} labels on 1 sheet`;
+      return `${qty} labels across ${sheetCount} sheets (${firstSheetSlots.size} on the first sheet)`;
+    }, [printLabelQuantityClamped, printLabelPreset.mode, printLabelSheetPlacements]);
+
+    const buildPrintLabelHtml = () => {
+      const labelItem = { sku: item.sku, name: item.name, qrDataUrl: printLabelQrDataUrl };
+      if (typeof window.buildRepeatedInventoryLabelHtmlDocument === 'function') {
+        return window.buildRepeatedInventoryLabelHtmlDocument({
+          presetKey: printLabelPresetKey,
+          item: labelItem,
+          quantity: printLabelQuantityClamped,
+          sheetPositionIndex: printLabelPreset.mode === 'sheet' ? printLabelSheetPosition : undefined,
+          locationLabel: item.sku
+        });
+      }
+      if (typeof window.buildSingleInventoryLabelHtmlDocument === 'function') {
+        return window.buildSingleInventoryLabelHtmlDocument({
+          presetKey: printLabelPresetKey,
+          item: labelItem,
+          sheetPositionIndex: printLabelPreset.mode === 'sheet' ? printLabelSheetPosition : undefined,
+          locationLabel: item.sku
+        });
+      }
+      return null;
+    };
+
     const handlePrintSingleLabel = () => {
       if (!printLabelQrDataUrl) {
         setPrintLabelError('QR image is not ready yet.');
         return;
       }
-      if (typeof window.buildSingleInventoryLabelHtmlDocument !== 'function') {
+      const html = buildPrintLabelHtml();
+      if (!html) {
         setPrintLabelError('Label layout is not ready. Refresh the page and try again.');
         return;
       }
-      const html = window.buildSingleInventoryLabelHtmlDocument({
-        presetKey: printLabelPresetKey,
-        item: { sku: item.sku, name: item.name, qrDataUrl: printLabelQrDataUrl },
-        sheetPositionIndex: printLabelPreset.mode === 'sheet' ? printLabelSheetPosition : undefined,
-        locationLabel: item.sku
-      });
       const printWindow = window.open('', '_blank', 'noopener,noreferrer');
       if (!printWindow) {
         setPrintLabelError('Pop-up blocked. Allow pop-ups for this site to print.');
@@ -14188,6 +14237,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
             }
           ]
         };
+        body.quantity = printLabelQuantityClamped;
         if (printLabelPreset.mode === 'sheet') {
           body.sheetPositionIndex = printLabelSheetPosition;
         }
@@ -14683,6 +14733,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     onClick={() => {
                       setPrintLabelError('');
                       setPrintLabelSheetPosition(0);
+                      setPrintLabelQuantity(1);
                       setShowPrintLabelModal(true);
                     }}
                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
@@ -15784,10 +15835,25 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
               </div>
               <div className="p-4 space-y-4">
                 <p className="text-sm text-gray-600">
-                  Print one QR label for <span className="font-medium text-gray-900">{item.name}</span>{' '}
-                  (<span className="font-mono">{item.sku}</span>). For precut sticker sheets, pick the sheet type
-                  and the slot to use on a partially used sheet.
+                  Print QR labels for <span className="font-medium text-gray-900">{item.name}</span>{' '}
+                  (<span className="font-mono">{item.sku}</span>). For precut sticker sheets, pick the sheet type,
+                  starting slot, and how many copies to print.
                 </p>
+                <div>
+                  <label htmlFor="erp-print-label-qty" className="block text-sm font-medium text-gray-700 mb-1">
+                    Number of labels
+                  </label>
+                  <input
+                    id="erp-print-label-qty"
+                    type="number"
+                    min={1}
+                    max={400}
+                    value={printLabelQuantity}
+                    onChange={(e) => setPrintLabelQuantity(e.target.value)}
+                    className="w-full max-w-[8rem] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">{printLabelLayoutSummary}</p>
+                </div>
                 <div>
                   <label htmlFor="erp-print-label-preset" className="block text-sm font-medium text-gray-700 mb-1">
                     Label layout
@@ -15821,8 +15887,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   <div>
                     <p className="text-sm font-medium text-gray-700 mb-1">Sticker position on sheet</p>
                     <p className="text-xs text-gray-500 mb-2">
-                      Click the slot where this label should print (top-left is 1). Use this when reusing a
-                      partially used sticker sheet.
+                      Click the first slot to use (top-left is 1). Additional copies fill the rest of the sheet,
+                      then continue on new sheets if needed.
                     </p>
                     <div
                       className="inline-grid gap-1 border border-gray-200 rounded-lg p-2 bg-gray-50"
@@ -15833,7 +15899,9 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                       {Array.from(
                         { length: (printLabelPreset.cols || 1) * (printLabelPreset.rows || 1) },
                         (_, index) => {
-                          const selected = printLabelSheetPosition === index;
+                          const isStart = printLabelSheetPosition === index;
+                          const isFilled =
+                            !isStart && printLabelSheetPlacements.firstSheetSlots.has(index);
                           return (
                             <button
                               key={index}
@@ -15842,9 +15910,11 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                               onClick={() => setPrintLabelSheetPosition(index)}
                               className={
                                 'min-w-[2.25rem] h-8 text-xs font-medium rounded border transition-colors ' +
-                                (selected
+                                (isStart
                                   ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:bg-blue-50')
+                                  : isFilled
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:bg-blue-50')
                               }
                             >
                               {index + 1}
@@ -15853,6 +15923,13 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                         }
                       )}
                     </div>
+                    {printLabelSheetPlacements.sheetCount > 1 ? (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Labels that do not fit on the first sheet will print on{' '}
+                        {printLabelSheetPlacements.sheetCount - 1} additional blank sheet
+                        {printLabelSheetPlacements.sheetCount - 1 === 1 ? '' : 's'} (from slot 1).
+                      </p>
+                    ) : null}
                     <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                       Load matching A4 precut stickers and print at <strong>100%</strong> with{' '}
                       <strong>no scaling</strong>. For consistent sizing, use Download PDF and print the PDF at
@@ -15861,7 +15938,8 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </div>
                 ) : (
                   <p className="text-xs text-gray-500">
-                    Plain A4 layout — one label per print. Trim or use your own label stock as needed.
+                    Plain A4 layout — prints the requested number of labels in a grid. Trim or use your own
+                    label stock as needed.
                   </p>
                 )}
                 {printLabelQrLoading ? (
