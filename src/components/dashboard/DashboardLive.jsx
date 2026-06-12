@@ -3590,9 +3590,17 @@ const DashboardLive = () => {
     // Customizable widgets UI
     return (
         <div className="erp-module-root dashboard-live-root space-y-4 lg:space-y-6 pb-24">
-            <div className="dashboard-mobile-hero lg:hidden rounded-2xl bg-slate-900 text-white px-4 py-4 shadow-lg">
-                <h2 className="text-2xl font-extrabold tracking-tight leading-tight">Welcome back, {userName}</h2>
-                <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+            <div
+                className={`dashboard-mobile-hero lg:hidden rounded-2xl border px-4 py-4 shadow-sm ${
+                    isDark
+                        ? 'bg-slate-900 text-white border-slate-800 shadow-lg'
+                        : 'bg-white text-gray-900 border-gray-200'
+                }`}
+            >
+                <h2 className={`text-2xl font-extrabold tracking-tight leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Welcome back, {userName}
+                </h2>
+                <p className={`text-sm mt-2 leading-relaxed ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                     Your ERP at a glance — tap any card to jump in.
                 </p>
             </div>
