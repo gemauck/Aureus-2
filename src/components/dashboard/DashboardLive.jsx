@@ -1418,27 +1418,6 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         return `${label} for ${monthLabel}: ${fmtPct(metric?.percent)} (${ratio})`;
     };
 
-    const renderMetricTile = (label, color, metric, href, monthLabel) => (
-        <a href={href} className="dlwm-metric-tile block min-w-0 touch-manipulation" title={metricTitle(label, metric, monthLabel)}>
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-center" style={{ color }}>
-                {label}
-            </div>
-            <div className={`text-sm font-bold tabular-nums text-center ${headerText}`}>{fmtPct(metric?.percent)}</div>
-            {Number(metric?.total) > 0 ? (
-                <div className={`text-[10px] tabular-nums text-center ${subText}`}>{fmtRatio(metric.completed, metric.total)}</div>
-            ) : null}
-            <div className={`h-1.5 rounded-full ${barBg} mt-1 overflow-hidden`}>
-                <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                        width: `${metric?.percent != null ? Math.min(100, metric.percent) : 0}%`,
-                        background: color
-                    }}
-                />
-            </div>
-        </a>
-    );
-
     return (
         <div
             className={`dashboard-lwm-progress-widget ${cardBase} border rounded-xl p-3 sm:p-5 shadow-sm flex flex-col h-full min-h-0 min-w-0 w-full max-w-full`}
@@ -1517,55 +1496,8 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                     No projects are opted into the monthly progress tracker. Enable &quot;Include in progress tracker&quot; on a project, or open Projects to review.
                 </p>
             ) : (
-                <>
-                    <div className={`lg:hidden flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
-                        {rows.map((row) => {
-                            const { docL, compL, dataL, cmtL } = renderRowLinks(row);
-                            const rowCardBg = isDark
-                                ? 'border-gray-700/90 bg-gray-800/35'
-                                : 'border-gray-200/90 bg-slate-50/90';
-                            const hasComment = row.comments && String(row.comments).trim();
-                            return (
-                                <div
-                                    key={String(row.id)}
-                                    className={`dlwm-project-card rounded-xl border p-3 shadow-sm ${rowCardBg}`}
-                                >
-                                    <a href={docL} className="block mb-3 min-w-0">
-                                        <div className={`text-sm font-bold leading-snug ${headerText}`}>{row.name}</div>
-                                        {showClientForRow(row) ? (
-                                            <div className={`text-xs ${subText} mt-1 leading-snug`} title={row.client}>
-                                                {row.client}
-                                            </div>
-                                        ) : null}
-                                    </a>
-                                    <div className="dash-lwm-progress-metrics dash-lwm-progress-metrics--triple">
-                                        {renderMetricTile('Docs', '#3b82f6', row.doc, docL, activeWorkingMonth.shortLabel)}
-                                        {renderMetricTile('Comp.', '#8b5cf6', row.compliance, compL, activeWorkingMonth.shortLabel)}
-                                        {renderMetricTile('Data', '#10b981', row.data, dataL, activeWorkingMonth.shortLabel)}
-                                    </div>
-                                    <a
-                                        href={cmtL}
-                                        className={`block mt-3 pt-3 border-t ${borderSep} min-w-0`}
-                                        title="Open progress tracker (comments)"
-                                    >
-                                        <div className={`text-[10px] font-semibold uppercase tracking-wide ${tableHead} mb-1`}>
-                                            Comment
-                                        </div>
-                                        {hasComment ? (
-                                            <p className={`text-xs leading-snug line-clamp-3 ${subText} whitespace-pre-wrap break-words`}>
-                                                {row.comments}
-                                            </p>
-                                        ) : (
-                                            <span className="text-xs text-gray-400">—</span>
-                                        )}
-                                    </a>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <div className={`hidden lg:block overflow-x-auto flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
-                    <table data-keep-table="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
+                <div className={`dashboard-lwm-progress-table-wrap overflow-x-auto flex-1 min-h-0 overflow-y-auto border-t ${borderSep} pt-3 min-w-0`}>
+                    <table data-keep-table="true" data-keep-visible="true" className="w-full text-left text-xs border-collapse min-w-0 table-fixed">
                         <colgroup>
                             <col className="w-[36%]" />
                             <col className="w-[16%]" />
@@ -1669,8 +1601,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                             })}
                         </tbody>
                     </table>
-                    </div>
-                </>
+                </div>
             )}
         </div>
     );
