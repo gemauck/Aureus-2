@@ -1396,17 +1396,27 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
         return { docL, compL, dataL, cmtL };
     };
 
-    const renderMetricTile = (label, color, percent, href, title) => (
-        <a href={href} className="dlwm-metric-tile block min-w-0 touch-manipulation" title={title}>
+    const metricTitle = (label, metric, monthLabel) => {
+        const completed = Number(metric?.completed) || 0;
+        const total = Number(metric?.total) || 0;
+        const ratio = total > 0 ? `${completed}/${total} complete` : 'no checklist items';
+        return `${label} for ${monthLabel}: ${fmtPct(metric?.percent)} (${ratio})`;
+    };
+
+    const renderMetricTile = (label, color, metric, href, monthLabel) => (
+        <a href={href} className="dlwm-metric-tile block min-w-0 touch-manipulation" title={metricTitle(label, metric, monthLabel)}>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-center" style={{ color }}>
                 {label}
             </div>
-            <div className={`text-sm font-bold tabular-nums text-center ${headerText}`}>{fmtPct(percent)}</div>
+            <div className={`text-sm font-bold tabular-nums text-center ${headerText}`}>{fmtPct(metric?.percent)}</div>
+            {Number(metric?.total) > 0 ? (
+                <div className={`text-[10px] tabular-nums text-center ${subText}`}>{fmtRatio(metric.completed, metric.total)}</div>
+            ) : null}
             <div className={`h-1.5 rounded-full ${barBg} mt-1 overflow-hidden`}>
                 <div
                     className="h-full rounded-full transition-all"
                     style={{
-                        width: `${percent != null ? Math.min(100, percent) : 0}%`,
+                        width: `${metric?.percent != null ? Math.min(100, metric.percent) : 0}%`,
                         background: color
                     }}
                 />
@@ -1514,9 +1524,9 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                         ) : null}
                                     </a>
                                     <div className="dash-lwm-progress-metrics dash-lwm-progress-metrics--triple">
-                                        {renderMetricTile('Docs', '#3b82f6', row.doc.percent, docL, 'Open document collection')}
-                                        {renderMetricTile('Comp.', '#8b5cf6', row.compliance.percent, compL, 'Open compliance review')}
-                                        {renderMetricTile('Data', '#10b981', row.data.percent, dataL, 'Open monthly data review')}
+                                        {renderMetricTile('Docs', '#3b82f6', row.doc, docL, activeWorkingMonth.shortLabel)}
+                                        {renderMetricTile('Comp.', '#8b5cf6', row.compliance, compL, activeWorkingMonth.shortLabel)}
+                                        {renderMetricTile('Data', '#10b981', row.data, dataL, activeWorkingMonth.shortLabel)}
                                     </div>
                                     <a
                                         href={cmtL}
@@ -1576,8 +1586,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                             ) : null}
                                         </td>
                                         <td className="py-2 pr-2 text-center align-top">
-                                            <a href={docL} className="block" title="Open document collection">
+                                            <a href={docL} className="block" title={metricTitle('Docs', row.doc, activeWorkingMonth.shortLabel)}>
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.doc.percent)}</div>
+                                                {row.doc.total > 0 ? (
+                                                    <div className={`text-[10px] tabular-nums ${subText}`}>{fmtRatio(row.doc.completed, row.doc.total)}</div>
+                                                ) : null}
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
                                                 <div
                                                     className="h-full rounded-full transition-all"
@@ -1590,8 +1603,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                             </a>
                                         </td>
                                         <td className="py-2 pr-2 text-center align-top">
-                                            <a href={compL} className="block" title="Open compliance review">
+                                            <a href={compL} className="block" title={metricTitle('Comp.', row.compliance, activeWorkingMonth.shortLabel)}>
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.compliance.percent)}</div>
+                                                {row.compliance.total > 0 ? (
+                                                    <div className={`text-[10px] tabular-nums ${subText}`}>{fmtRatio(row.compliance.completed, row.compliance.total)}</div>
+                                                ) : null}
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
                                                 <div
                                                     className="h-full rounded-full"
@@ -1604,8 +1620,11 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                             </a>
                                         </td>
                                         <td className="py-2 pr-2 text-center align-top">
-                                            <a href={dataL} className="block" title="Open monthly data review">
+                                            <a href={dataL} className="block" title={metricTitle('Data', row.data, activeWorkingMonth.shortLabel)}>
                                                 <div className={`font-semibold ${headerText}`}>{fmtPct(row.data.percent)}</div>
+                                                {row.data.total > 0 ? (
+                                                    <div className={`text-[10px] tabular-nums ${subText}`}>{fmtRatio(row.data.completed, row.data.total)}</div>
+                                                ) : null}
                                                 <div className={`h-1.5 rounded-full ${barBg} mt-0.5 overflow-hidden`}>
                                                 <div
                                                     className="h-full rounded-full"

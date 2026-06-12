@@ -239,6 +239,32 @@ function shouldExcludeFromMonthlyDataReviewPercent(sectionName, docName) {
     return postSectionPattern.test(section) || postSectionPattern.test(doc);
 }
 
+/** Same row ordering as ProjectProgressTracker / MonthlyDocumentCollectionTracker grids. */
+function getSectionDocList(section) {
+    if (Array.isArray(section?.documents)) return section.documents;
+    if (Array.isArray(section?.items)) return section.items;
+    return [];
+}
+
+function getOrderedDocumentRowsForSection(section) {
+    const docs = getSectionDocList(section);
+    const roots = docs.filter((d) => !d?.parentId);
+    const result = [];
+    roots.forEach((root) => {
+        result.push({ doc: root, isSubRow: false });
+        docs.filter((d) => d?.parentId === root.id).forEach((child) => {
+            result.push({ doc: child, isSubRow: true });
+        });
+    });
+    return result;
+}
+
+function isNonActionableParentRow(section, doc, isSubRow) {
+    if (isSubRow) return false;
+    const docs = getSectionDocList(section);
+    return docs.some((d) => d?.parentId === doc?.id);
+}
+
 function normalizeDocumentCollectionStatusKey(raw) {
     if (raw == null || raw === '') return '';
     if (typeof raw === 'object' && raw !== null) {
@@ -276,8 +302,10 @@ export function getDocumentCollectionProgressForMonth(project, monthName, year) 
     let total = 0;
     let completed = 0;
     yearSections.forEach((section) => {
-        const docs = Array.isArray(section?.documents) ? section.documents : [];
-        docs.forEach((doc) => {
+        getOrderedDocumentRowsForSection(section).forEach(({ doc, isSubRow }) => {
+            if (isNonActionableParentRow(section, doc, isSubRow)) {
+                return;
+            }
             total += 1;
             const rawStatus =
                 (isoMonthKey ? doc?.collectionStatus?.[isoMonthKey] : null) ??
@@ -319,10 +347,10 @@ export function getReviewProgressForMonth(project, monthName, year, reviewType) 
     let total = 0;
     let completed = 0;
     yearSections.forEach((section) => {
-        const docs = Array.isArray(section?.documents)
-            ? section.documents
-            : (Array.isArray(section?.items) ? section.items : []);
-        docs.forEach((doc) => {
+        getOrderedDocumentRowsForSection(section).forEach(({ doc, isSubRow }) => {
+            if (isNonActionableParentRow(section, doc, isSubRow)) {
+                return;
+            }
             if (reviewType === 'monthlyDataReview' && shouldExcludeFromMonthlyDataReviewPercent(section?.name, doc?.name)) {
                 return;
             }

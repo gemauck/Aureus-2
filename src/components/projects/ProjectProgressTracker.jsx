@@ -1029,10 +1029,14 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return null;
     };
 
+    const getSectionDocList = (section) => {
+        if (Array.isArray(section?.documents)) return section.documents;
+        if (Array.isArray(section?.items)) return section.items;
+        return [];
+    };
+
     const getOrderedDocumentRowsForSection = (section) => {
-        const docs = Array.isArray(section?.documents)
-            ? section.documents
-            : (Array.isArray(section?.items) ? section.items : []);
+        const docs = getSectionDocList(section);
         const roots = docs.filter((d) => !d?.parentId);
         const result = [];
         roots.forEach((root) => {
@@ -1045,9 +1049,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     };
 
     const isNonActionableParentRow = (section, doc, isSubRow) => (
-        !isSubRow &&
-        Array.isArray(section?.documents) &&
-        section.documents.some((d) => d?.parentId === doc?.id)
+        !isSubRow && getSectionDocList(section).some((d) => d?.parentId === doc?.id)
     );
 
     const getReviewProgressForMonth = (project, monthName, reviewType) => {
