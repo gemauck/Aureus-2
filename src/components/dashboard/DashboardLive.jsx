@@ -569,14 +569,26 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                             {(isProjectTask || isUserTask) && (
                                                 <p
                                                     className={`text-xs lg:text-[10px] ${subText} mt-1 leading-snug lg:truncate`}
-                                                    title={[task.project?.name, task.project?.clientName].filter(Boolean).join(' · ') || 'My Task'}
+                                                    title={(() => {
+                                                        const name = task.project?.name;
+                                                        const client = task.project?.clientName;
+                                                        const m = window.projectProgressMonthMetrics;
+                                                        const showClient = client && (!m || m.shouldShowClientSubtitle(name, client));
+                                                        return [name, showClient ? client : null].filter(Boolean).join(' · ') || 'My Task';
+                                                    })()}
                                                 >
                                                     {isProjectTask && task.project?.name && (
                                                         <>{task.project.name}</>
                                                     )}
-                                                    {isProjectTask && task.project?.clientName && (
-                                                        <>{task.project?.name ? ' · ' : ''}{task.project.clientName}</>
-                                                    )}
+                                                    {isProjectTask && task.project?.clientName && (() => {
+                                                        const m = window.projectProgressMonthMetrics;
+                                                        if (m && !m.shouldShowClientSubtitle(task.project?.name, task.project.clientName)) {
+                                                            return null;
+                                                        }
+                                                        return (
+                                                            <>{task.project?.name ? ' · ' : ''}{task.project.clientName}</>
+                                                        );
+                                                    })()}
                                                     {isUserTask && 'Personal task'}
                                                 </p>
                                             )}
@@ -1330,6 +1342,9 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
 
     const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
     const fmtRatio = (completed, total) => `${Number(completed) || 0}/${Number(total) || 0}`;
+    const showClientForRow = (row) => (
+        row?.client && (!m || m.shouldShowClientSubtitle(row.name, row.client))
+    );
 
     if (!m || !monthPickerCandidates.length || !activeWorkingMonth) {
         return (
@@ -1517,7 +1532,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                 >
                                     <a href={docL} className="block mb-3 min-w-0">
                                         <div className={`text-sm font-bold leading-snug ${headerText}`}>{row.name}</div>
-                                        {row.client ? (
+                                        {showClientForRow(row) ? (
                                             <div className={`text-xs ${subText} mt-1 leading-snug`} title={row.client}>
                                                 {row.client}
                                             </div>
@@ -1579,7 +1594,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
                                             >
                                                 {row.name}
                                             </a>
-                                            {row.client ? (
+                                            {showClientForRow(row) ? (
                                                 <div className={`text-[10px] ${subText} truncate`} title={row.client}>
                                                     {row.client}
                                                 </div>

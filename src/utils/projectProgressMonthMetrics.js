@@ -82,7 +82,48 @@ export function isIncludedInProgressTracker(value) {
 
 export function filterProjectsForProgressTracker(projects) {
     if (!Array.isArray(projects)) return [];
-    return projects.filter((p) => p && isIncludedInProgressTracker(p.includeInProgressTracker));
+    const seen = new Set();
+    return projects.filter((p) => {
+        if (!p || !isIncludedInProgressTracker(p.includeInProgressTracker)) return false;
+        const id = p.id != null ? String(p.id) : '';
+        if (id) {
+            if (seen.has(id)) return false;
+            seen.add(id);
+        }
+        return true;
+    });
+}
+
+/** Strip legal suffixes so "Barberton Mines (Pty) Ltd" matches project titles that already name the site. */
+function normalizeClientLabelForCompare(value) {
+    return String(value || '')
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .replace(/\b(?:pty|ltd|limited|inc|corp|co)\b\.?/gi, ' ')
+        .replace(/[^a-z0-9]+/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+/** True when client subtitle would repeat the project title (e.g. Barberton project + Barberton client). */
+export function clientNameRedundantWithProject(projectName, clientName) {
+    const project = normalizeClientLabelForCompare(projectName);
+    const client = normalizeClientLabelForCompare(clientName);
+    if (!client) return true;
+    if (!project) return false;
+    if (project.includes(client) || client.includes(project)) return true;
+    const clientWords = client.split(' ').filter(Boolean);
+    if (clientWords.length >= 2) {
+        const stem = clientWords.slice(0, 2).join(' ');
+        if (stem.length >= 6 && project.includes(stem)) return true;
+    }
+    return false;
+}
+
+export function shouldShowClientSubtitle(projectName, clientName) {
+    const client = String(clientName || '').trim();
+    if (!client) return false;
+    return !clientNameRedundantWithProject(projectName, client);
 }
 
 export function normalizeProjectMonthlyProgress(project) {
@@ -472,6 +513,8 @@ const projectProgressMonthMetrics = {
     getLastWorkingMonth,
     isIncludedInProgressTracker,
     filterProjectsForProgressTracker,
+    clientNameRedundantWithProject,
+    shouldShowClientSubtitle,
     normalizeProjectMonthlyProgress,
     getDocumentCollectionProgressForMonth,
     getReviewProgressForMonth,
