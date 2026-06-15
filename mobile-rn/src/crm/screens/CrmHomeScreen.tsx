@@ -106,7 +106,6 @@ export function CrmHomeScreen({ navigation }: Props) {
           setClients(cachedClients || [])
           setLeads(cachedLeads || [])
           setGroups(cachedGroups || [])
-          setError(offlineListMessage(true))
           return true
         }
         setClients([])

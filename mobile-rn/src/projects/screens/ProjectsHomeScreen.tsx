@@ -116,7 +116,6 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         setStarredIds(starred)
         if (cached?.length) {
           setProjects(cached)
-          setError(offlineListMessage(true))
           return true
         }
         setProjects([])
@@ -160,7 +159,6 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         if (cached?.length) {
           setAllTasks(cached)
           setTasksLoaded(true)
-          setError(offlineListMessage(true))
           return true
         }
         return false

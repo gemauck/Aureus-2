@@ -39,12 +39,10 @@ import {
   formatDateTime,
   formatRelative,
   parseDriveLinks,
-  progressPercent,
   PROJECT_STATUS_EDIT,
   projectTasks,
   stripHtml,
   summarizeDocumentCollection,
-  taskCompletionStats,
   TASK_STATUSES,
   webProjectUrl
 } from '../utils'
@@ -101,6 +99,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   const [creatingNote, setCreatingNote] = useState(false)
   const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>('list')
   const [activityFilter, setActivityFilter] = useState('all')
+  const [showStatusPicker, setShowStatusPicker] = useState(false)
   const tabScrollRef = useRef<ScrollView>(null)
   const tabIndex = DETAIL_TABS.findIndex((t) => t.key === tab)
 
@@ -179,8 +178,6 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
     () => (project ? summarizeDocumentCollection(project.documentSections) : null),
     [project]
   )
-  const taskStats = useMemo(() => taskCompletionStats(tasks), [tasks])
-
   const filteredActivity = useMemo(() => {
     const entries = activity.length ? activity : project?.activityLog || []
     if (activityFilter === 'all') return entries
@@ -271,7 +268,6 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
   if (!project) return null
 
-  const pct = progressPercent(project)
   const documents: ProjectDocument[] = project.documents || []
   const team = project.team || []
 
@@ -283,7 +279,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
           <Text style={styles.backText}>Projects</Text>
         </Pressable>
         <View style={styles.headerBody}>
-          <Text style={styles.title} numberOfLines={3}>
+          <Text style={styles.title} numberOfLines={2}>
             {project.name || 'Unnamed'}
           </Text>
           <View style={styles.headerMeta}>
@@ -300,50 +296,53 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
         </Pressable>
       </View>
 
-      <ScrollView
-        ref={tabScrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabBar}
-        contentContainerStyle={styles.tabBarContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {DETAIL_TABS.map((t) => {
-          const active = tab === t.key
-          const badge =
-            t.key === 'tasks'
-              ? tasks.length
-              : t.key === 'notes'
-                ? notes.length
-                : t.key === 'processes'
-                  ? processes.length
-                  : 0
-          return (
-            <Pressable
-              key={t.key}
-              style={[styles.detailTab, active && styles.detailTabActive]}
-              onPress={() => setTab(t.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-            >
-              <FontAwesome5 name={t.icon} size={12} color={active ? erp.primary : erp.textMuted} />
-              <Text
-                style={[styles.detailTabText, active && styles.detailTabTextActive]}
-                numberOfLines={1}
+      <View style={styles.tabBarWrap}>
+        <ScrollView
+          ref={tabScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator
+          style={styles.tabBar}
+          contentContainerStyle={styles.tabBarContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {DETAIL_TABS.map((t) => {
+            const active = tab === t.key
+            const badge =
+              t.key === 'tasks'
+                ? tasks.length
+                : t.key === 'notes'
+                  ? notes.length
+                  : t.key === 'processes'
+                    ? processes.length
+                    : 0
+            return (
+              <Pressable
+                key={t.key}
+                style={[styles.detailTab, active && styles.detailTabActive]}
+                onPress={() => setTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
               >
-                {t.label}
-              </Text>
-              {badge > 0 ? (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>{badge > 99 ? '99+' : badge}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-          )
-        })}
-      </ScrollView>
+                <FontAwesome5 name={t.icon} size={11} color={active ? erp.primary : erp.textMuted} />
+                <Text
+                  style={[styles.detailTabText, active && styles.detailTabTextActive]}
+                  numberOfLines={1}
+                >
+                  {t.label}
+                </Text>
+                {badge > 0 ? (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+      </View>
 
       <ScrollView
+        style={styles.bodyScroll}
         contentContainerStyle={styles.body}
         refreshControl={
           <RefreshControl
@@ -360,37 +359,16 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
         {tab === 'overview' ? (
           <View style={styles.section}>
-            <View style={styles.highlightCard}>
-              <Text style={styles.highlightLabel}>Progress</Text>
-              <Text style={styles.highlightValue}>{pct}%</Text>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${pct}%` }]} />
-              </View>
-              <Text style={styles.taskStatLine}>
-                {taskStats.done}/{taskStats.total} tasks done
-                {taskStats.overdue > 0 ? ` · ${taskStats.overdue} overdue` : ''}
-              </Text>
-            </View>
-
             <Text style={styles.sectionLabel}>Project status</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
+            <Pressable
+              style={styles.statusSelect}
+              onPress={() => setShowStatusPicker(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Change project status"
             >
-              {PROJECT_STATUS_EDIT.map((st) => {
-                const active = project.status === st
-                return (
-                  <Pressable
-                    key={st}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => void updateProjectStatus(st)}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{st}</Text>
-                  </Pressable>
-                )
-              })}
-            </ScrollView>
+              <ProjectStatusBadge label={project.status || 'Active'} />
+              <FontAwesome5 name="chevron-down" size={12} color={erp.textMuted} />
+            </Pressable>
 
             {docSummary && project.hasDocumentCollectionProcess ? (
               <DocumentCollectionSummary summary={docSummary} projectId={projectId} />
@@ -696,6 +674,35 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
         ) : null}
       </ScrollView>
 
+      <Modal
+        visible={showStatusPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusPicker(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowStatusPicker(false)}>
+          <Pressable style={styles.statusPickerSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Project status</Text>
+            {PROJECT_STATUS_EDIT.map((st) => {
+              const active = project.status === st
+              return (
+                <Pressable
+                  key={st}
+                  style={[styles.statusPickerRow, active && styles.statusPickerRowActive]}
+                  onPress={() => {
+                    setShowStatusPicker(false)
+                    void updateProjectStatus(st)
+                  }}
+                >
+                  <ProjectStatusBadge label={st} compact />
+                  {active ? <FontAwesome5 name="check" size={14} color={erp.primary} /> : null}
+                </Pressable>
+              )
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal visible={showNewTask} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -779,17 +786,18 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   inlineError: { color: erp.danger, fontWeight: '600', marginBottom: 8 },
   backLink: { color: erp.primary, fontWeight: '700', marginTop: 8 },
   header: {
-    paddingTop: 12,
+    flexShrink: 0,
+    paddingTop: 10,
     paddingHorizontal: erp.space.lg,
-    paddingBottom: 12,
+    paddingBottom: 10,
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
     borderBottomColor: erp.border
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   backText: { color: erp.primary, fontWeight: '700', fontSize: 15 },
-  headerBody: { gap: 8 },
-  title: { fontSize: 22, fontWeight: '800', color: erp.text, lineHeight: 28 },
+  headerBody: { gap: 6, paddingRight: 72 },
+  title: { fontSize: 20, fontWeight: '800', color: erp.text, lineHeight: 26 },
   headerMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   client: { fontSize: 13, color: erp.textMuted, fontWeight: '600' },
   webBtn: {
@@ -807,27 +815,30 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     backgroundColor: erp.surface
   },
   webBtnText: { fontSize: 12, fontWeight: '700', color: erp.primary },
-  tabBar: {
-    flexGrow: 0,
+  tabBarWrap: {
+    flexShrink: 0,
     backgroundColor: erp.surface,
     borderBottomWidth: 1,
     borderBottomColor: erp.border
   },
+  tabBar: { flexGrow: 0 },
   tabBarContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: erp.space.lg
+    paddingHorizontal: erp.space.lg,
+    paddingVertical: 2
   },
+  bodyScroll: { flex: 1 },
   detailTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flexShrink: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 12
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   detailTabActive: { borderBottomWidth: 2, borderBottomColor: erp.primary },
-  detailTabText: { fontSize: 13, fontWeight: '700', color: erp.textMuted },
+  detailTabText: { fontSize: 12, fontWeight: '700', color: erp.textMuted },
   detailTabTextActive: { color: erp.primary },
   tabBadge: {
     backgroundColor: erp.primarySoft,
@@ -840,23 +851,34 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   tabBadgeText: { fontSize: 10, fontWeight: '800', color: erp.primary },
   body: { padding: erp.space.lg, paddingBottom: 40 },
   section: { gap: 12 },
-  highlightCard: {
-    backgroundColor: erp.primarySoft,
-    borderRadius: erp.radius.lg,
-    padding: 16,
+  statusSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: erp.surface,
+    borderRadius: erp.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: erp.primaryMuted
+    borderColor: erp.border
   },
-  highlightLabel: { fontSize: 12, fontWeight: '700', color: erp.primary, textTransform: 'uppercase' },
-  highlightValue: { fontSize: 28, fontWeight: '800', color: erp.text, marginTop: 4 },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    marginTop: 12,
-    overflow: 'hidden'
+  statusPickerSheet: {
+    backgroundColor: erp.surface,
+    borderTopLeftRadius: erp.radius.xl,
+    borderTopRightRadius: erp.radius.xl,
+    padding: erp.space.lg,
+    paddingBottom: 32
   },
-  progressFill: { height: '100%', backgroundColor: erp.primary, borderRadius: 999 },
+  statusPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: erp.border
+  },
+  statusPickerRowActive: { backgroundColor: erp.primarySoft },
   infoRow: {
     backgroundColor: erp.surface,
     borderRadius: erp.radius.md,
@@ -880,7 +902,6 @@ function createStyles({ erp }: { erp: ErpTheme }) {
   },
   processChipText: { fontWeight: '700', color: erp.text },
   processPurpose: { fontSize: 11, color: erp.textSubtle, marginTop: 2, lineHeight: 15 },
-  taskStatLine: { fontSize: 12, color: erp.textMuted, marginTop: 10, fontWeight: '600' },
   sectionLabel: { fontSize: 12, fontWeight: '800', color: erp.textMuted, textTransform: 'uppercase' },
   driveRow: {
     flexDirection: 'row',

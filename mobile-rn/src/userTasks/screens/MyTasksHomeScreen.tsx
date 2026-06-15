@@ -83,7 +83,6 @@ export function MyTasksHomeScreen({ navigation }: Props) {
         const cached = await readCachedMyTasks()
         if (cached?.length) {
           setTasks(cached)
-          setError(offlineListMessage(true))
           return true
         }
         setTasks([])
