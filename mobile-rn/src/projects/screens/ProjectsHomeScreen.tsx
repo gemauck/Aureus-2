@@ -82,7 +82,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
   const { accessToken, user } = useAuth()
   const { isOnline } = useNetwork()
   const [tab, setTab] = useState<ProjectsTab>('projects')
-  const [listView, setListView] = useState<ProjectListView>('list')
+  const [listView, setListView] = useState<ProjectListView>('client')
   const [sortKey, setSortKey] = useState<ProjectSortKey>('name')
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [allTasks, setAllTasks] = useState<ProjectTask[]>([])
