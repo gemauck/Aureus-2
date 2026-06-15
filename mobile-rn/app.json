@@ -2,7 +2,7 @@
   "expo": {
     "name": "Abcotronics ERP",
     "slug": "abcotronics-erp-mobile",
-    "version": "0.4.3",
+    "version": "0.4.4",
     "orientation": "portrait",
     "scheme": "abcotronics",
     "userInterfaceStyle": "automatic",

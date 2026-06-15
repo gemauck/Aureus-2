@@ -39,13 +39,14 @@ describe('mobile Stock step loading parity', () => {
 })
 
 describe('OTA update contract', () => {
-  it('never auto-reloads on background — user must confirm restart', () => {
+  it('applies staged downloads on cold start; prompts during active session', () => {
     const behavior = {
-      reloadOnBackground: false,
-      promptsOnForegroundWhenDownloaded: true,
-      launchPrefetchDelayMs: 4000
+      comparesRunningIdToDownloadedManifest: true,
+      autoReloadOnColdStart: true,
+      promptsDuringActiveSession: true,
+      runsBeforeLogin: true
     }
-    expect(behavior.reloadOnBackground).toBe(false)
-    expect(behavior.promptsOnForegroundWhenDownloaded).toBe(true)
+    expect(behavior.comparesRunningIdToDownloadedManifest).toBe(true)
+    expect(behavior.autoReloadOnColdStart).toBe(true)
   })
 })

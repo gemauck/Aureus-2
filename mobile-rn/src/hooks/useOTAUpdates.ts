@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
 import * as Updates from 'expo-updates'
+import { trackError } from '../services/telemetry'
 
-const FOREGROUND_DEBOUNCE_MS = 45_000
+const FOREGROUND_DEBOUNCE_MS = 30_000
 const BACKGROUND_POLL_MS = 5 * 60_000
-/** Wait until login/dashboard can render before background OTA work. */
-const LAUNCH_PREFETCH_DELAY_MS = 4_000
+const PROMPT_COOLDOWN_MS = 3 * 60_000
 
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
@@ -13,19 +13,44 @@ export type OtaCheckResult =
   | { status: 'error'; message: string }
 
 let lastPromptedUpdateId: string | null = null
-/** Downloaded bundle waiting for explicit user restart (never auto-reload on background). */
+let lastPromptedAt = 0
 let pendingOtaUpdateId: string | null = null
 
+function otaDisabled(): OtaCheckResult | null {
+  if (__DEV__) return { status: 'dev' }
+  if (Platform.OS !== 'android') return { status: 'unsupported' }
+  if (!Updates.isEnabled) return { status: 'disabled' }
+  return null
+}
+
+function formatOtaError(error: unknown, context: string): OtaCheckResult {
+  const raw = error instanceof Error ? error.message : String(error)
+  trackError(error, context)
+  const message =
+    /404|unsupported runtime|no ota bundles|no update/i.test(raw)
+      ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
+      : raw
+  return { status: 'error', message }
+}
+
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
-  if (updateId && lastPromptedUpdateId === updateId) {
+  const now = Date.now()
+  if (
+    updateId &&
+    lastPromptedUpdateId === updateId &&
+    now - lastPromptedAt < PROMPT_COOLDOWN_MS
+  ) {
     return Promise.resolve({ status: 'downloaded', willReload: false })
   }
-  if (updateId) lastPromptedUpdateId = updateId
+  if (updateId) {
+    lastPromptedUpdateId = updateId
+    lastPromptedAt = now
+  }
 
   return new Promise((resolve) => {
     Alert.alert(
       'Update ready',
-      'A new version was downloaded. Restart now to apply it? Your current screen is saved as a draft where supported.',
+      'A new version is ready. Restart now to apply it? Draft job cards are saved on this device.',
       [
         {
           text: 'Later',
@@ -45,7 +70,6 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   })
 }
 
-/** Mark bundle ready and prompt when foreground — never reload while backgrounded. */
 function markDownloadedOtaUpdate(updateId?: string | null): OtaCheckResult {
   const id = updateId || 'pending'
   pendingOtaUpdateId = id
@@ -57,86 +81,115 @@ function markDownloadedOtaUpdate(updateId?: string | null): OtaCheckResult {
 
 function tryPromptPendingOtaOnForeground() {
   if (!pendingOtaUpdateId) return
-  if (lastPromptedUpdateId === pendingOtaUpdateId) return
   void promptApplyUpdate(pendingOtaUpdateId)
 }
 
-/** Download a newer bundle in the background — user chooses when to restart. */
-export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
-  if (__DEV__) return { status: 'dev' }
-  if (Platform.OS !== 'android') return { status: 'unsupported' }
-  if (!Updates.isEnabled) return { status: 'disabled' }
+/**
+ * Sync OTA state with the server.
+ * After fetchUpdateAsync the client may report "no update" while a downloaded bundle
+ * is still unapplied — compare running updateId vs downloaded manifest id.
+ */
+export async function syncOtaUpdate(
+  options: { coldStart?: boolean; interactive?: boolean } = {}
+): Promise<OtaCheckResult> {
+  const blocked = otaDisabled()
+  if (blocked) return blocked
+
+  const coldStart = options.coldStart === true
+  const interactive = options.interactive === true
 
   try {
-    const check = await Updates.checkForUpdateAsync()
-    if (!check.isAvailable) return { status: 'current' }
+    let fetchResult: Updates.UpdateFetchResult | null = null
 
-    const fetch = await Updates.fetchUpdateAsync()
-    return markDownloadedOtaUpdate(fetch.manifest?.id ?? null)
-  } catch (error) {
-    const raw = error instanceof Error ? error.message : 'OTA prefetch failed'
-    const message =
-      /404|unsupported runtime|no ota bundles|no update/i.test(raw)
-        ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
-        : raw
-    return {
-      status: 'error',
-      message
+    const check = await Updates.checkForUpdateAsync()
+    if (check.isAvailable) {
+      fetchResult = await Updates.fetchUpdateAsync()
+    } else {
+      // Staged download may exist while the running bundle is still old.
+      try {
+        fetchResult = await Updates.fetchUpdateAsync()
+      } catch {
+        fetchResult = null
+      }
     }
+
+    const downloadedId = fetchResult?.manifest?.id ?? null
+    const runningId = Updates.updateId
+
+    if (downloadedId && runningId && downloadedId !== runningId) {
+      if (coldStart) {
+        pendingOtaUpdateId = null
+        await Updates.reloadAsync()
+        return { status: 'downloaded', willReload: true }
+      }
+      if (interactive) {
+        return promptApplyUpdate(downloadedId)
+      }
+      return markDownloadedOtaUpdate(downloadedId)
+    }
+
+    if (check.isAvailable && fetchResult?.manifest?.id) {
+      if (coldStart) {
+        pendingOtaUpdateId = null
+        await Updates.reloadAsync()
+        return { status: 'downloaded', willReload: true }
+      }
+      if (interactive) {
+        return promptApplyUpdate(fetchResult.manifest.id)
+      }
+      return markDownloadedOtaUpdate(fetchResult.manifest.id)
+    }
+
+    return { status: 'current' }
+  } catch (error) {
+    return formatOtaError(error, 'OTA sync')
   }
+}
+
+/** Download a newer bundle in the background — user chooses when to restart (unless cold start). */
+export async function prefetchOtaUpdate(
+  options: { coldStart?: boolean } = {}
+): Promise<OtaCheckResult> {
+  return syncOtaUpdate({ coldStart: options.coldStart, interactive: false })
 }
 
 /** Fetch a newer JS bundle without reloading — for manual download from Settings. */
 export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
-  return prefetchOtaUpdate()
+  return syncOtaUpdate({ interactive: true })
 }
 
 export async function applyOtaUpdate(
   options: { silent?: boolean; reload?: boolean; prompt?: boolean } = {}
 ): Promise<OtaCheckResult> {
-  if (__DEV__) return { status: 'dev' }
-  if (Platform.OS !== 'android') return { status: 'unsupported' }
-  if (!Updates.isEnabled) return { status: 'disabled' }
+  const blocked = otaDisabled()
+  if (blocked) return blocked
 
-  try {
-    const check = await Updates.checkForUpdateAsync()
-    if (!check.isAvailable) return { status: 'current' }
-
-    const fetch = await Updates.fetchUpdateAsync()
-    const updateId = fetch.manifest?.id ?? null
-
-    const shouldReload = options.reload === true
-    if (!shouldReload) {
-      if (options.prompt || options.silent === false) {
-        return promptApplyUpdate(updateId)
-      }
-      return markDownloadedOtaUpdate(updateId)
-    }
-
-    pendingOtaUpdateId = null
-    await Updates.reloadAsync()
-    return { status: 'downloaded', willReload: true }
-  } catch (error) {
-    const raw = error instanceof Error ? error.message : 'OTA check failed'
-    const message =
-      /404|unsupported runtime|no ota bundles|no update/i.test(raw)
-        ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
-        : raw
-    return {
-      status: 'error',
-      message
+  if (options.reload === true) {
+    try {
+      const result = await syncOtaUpdate({ interactive: options.prompt === true })
+      if (result.status === 'downloaded' && result.willReload) return result
+      pendingOtaUpdateId = null
+      await Updates.reloadAsync()
+      return { status: 'downloaded', willReload: true }
+    } catch (error) {
+      return formatOtaError(error, 'OTA apply')
     }
   }
+
+  return syncOtaUpdate({
+    interactive: options.prompt === true || options.silent === false
+  })
 }
 
-/** Background OTA prefetch on launch (deferred), foreground, and periodic poll. */
+/** OTA sync on app launch (before login), foreground, and periodic poll. */
 export function useOTAUpdates(enabled = true) {
   const inFlightRef = useRef(false)
   const lastCheckRef = useRef(0)
+  const coldStartDoneRef = useRef(false)
 
-  const prefetch = useCallback(async (opts: { force?: boolean } = {}) => {
+  const prefetch = useCallback(async (opts: { force?: boolean; coldStart?: boolean } = {}) => {
     const now = Date.now()
-    if (!opts.force && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {
+    if (!opts.force && !opts.coldStart && now - lastCheckRef.current < FOREGROUND_DEBOUNCE_MS) {
       return { status: 'current' as const }
     }
     if (inFlightRef.current) return { status: 'current' as const }
@@ -144,7 +197,7 @@ export function useOTAUpdates(enabled = true) {
     inFlightRef.current = true
     lastCheckRef.current = now
     try {
-      return await prefetchOtaUpdate()
+      return await prefetchOtaUpdate({ coldStart: opts.coldStart })
     } finally {
       inFlightRef.current = false
     }
@@ -178,14 +231,15 @@ export function useOTAUpdates(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
-    const launchTimer = setTimeout(() => {
-      void prefetch({ force: true })
-    }, LAUNCH_PREFETCH_DELAY_MS)
+    if (!coldStartDoneRef.current) {
+      coldStartDoneRef.current = true
+      void prefetch({ force: true, coldStart: true })
+    }
 
     const onAppStateChange = (state: string) => {
       if (state === 'active') {
         tryPromptPendingOtaOnForeground()
-        void prefetch()
+        void prefetch({ force: true })
       }
     }
     const sub = AppState.addEventListener('change', onAppStateChange)
@@ -195,7 +249,6 @@ export function useOTAUpdates(enabled = true) {
     }, BACKGROUND_POLL_MS)
 
     return () => {
-      clearTimeout(launchTimer)
       sub.remove()
       clearInterval(poll)
     }

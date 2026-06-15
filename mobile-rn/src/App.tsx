@@ -7,9 +7,11 @@ import { AppShellProvider } from './components/shell/AppShellContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ThemedStatusBar } from './components/ThemedStatusBar'
 import { initTelemetry, setTelemetryUser } from './services/telemetry'
+import { useOTAUpdates } from './hooks/useOTAUpdates'
 
 function TelemetryBridge({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
+  useOTAUpdates(true)
   useEffect(() => {
     initTelemetry()
   }, [])

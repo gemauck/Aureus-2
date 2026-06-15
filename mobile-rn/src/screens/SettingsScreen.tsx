@@ -70,7 +70,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [lastOtaCheck, setLastOtaCheck] = useState<string | null>(null)
   const [lastApkCheck, setLastApkCheck] = useState<string | null>(null)
   const [otaStatus, setOtaStatus] = useState<string>(
-    'JS updates download in the background after login. You are asked before the app restarts to apply them. APK install is only needed for rare native shell changes.'
+    'JS updates download in the background. On a fresh app open they apply automatically; while you are working you are asked before restart.'
   )
 
   const refreshRemoteVersion = useCallback(async () => {
