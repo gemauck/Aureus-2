@@ -336,6 +336,27 @@ app.all('/api/users/heartbeat', async (req, res, next) => {
   }
 })
 
+// Admin: nudge mobile user to check/apply OTA update via push
+app.all('/api/users/prompt-ota-update', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'prompt-ota-update.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in prompt-ota-update handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for invitation endpoints (no auth required)
 app.all('/api/users/invitation-details', async (req, res, next) => {
   try {

@@ -8,10 +8,12 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ThemedStatusBar } from './components/ThemedStatusBar'
 import { initTelemetry, setTelemetryUser } from './services/telemetry'
 import { useOTAUpdates } from './hooks/useOTAUpdates'
+import { useClientPresence } from './hooks/useClientPresence'
 
 function TelemetryBridge({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   useOTAUpdates(true)
+  useClientPresence()
   useEffect(() => {
     initTelemetry()
   }, [])

@@ -5,6 +5,8 @@ import { ok, serverError, badRequest, unauthorized, notFound } from '../_lib/res
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { isConnectionError } from '../_lib/dbErrorHandler.js'
+import { parseJsonBody } from '../_lib/body.js'
+import { parseClientPresencePayload, upsertUserClientPresence } from '../_lib/userClientPresence.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -66,6 +68,12 @@ async function handler(req, res) {
         timestamp: new Date().toISOString(),
         note: 'User record not found, but heartbeat processed'
       })
+    }
+
+    const body = await parseJsonBody(req).catch(() => ({}))
+    const clientPayload = parseClientPresencePayload(body)
+    if (clientPayload) {
+      void upsertUserClientPresence(prisma, userId, clientPayload).catch(() => null)
     }
 
     return ok(res, { 

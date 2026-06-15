@@ -1,6 +1,6 @@
-import { Platform } from 'react-native'
 import { apiUrl, API_BASE_URL } from '../config'
 import { trackError } from './telemetry'
+import { getMobileClientInfo } from './clientPresence'
 
 export { API_BASE_URL }
 
@@ -122,7 +122,7 @@ export const apiClient = {
       user: { id: string; email: string; role?: string; name?: string; permissions?: string | string[] }
     }>('/api/auth/mobile/login', {
       method: 'POST',
-      body: { email, password, platform: Platform.OS }
+      body: { email, password, ...getMobileClientInfo() }
     })
   },
   async mobileRefresh(refreshToken: string) {

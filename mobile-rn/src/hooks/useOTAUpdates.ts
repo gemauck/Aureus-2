@@ -158,6 +158,11 @@ export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
   return syncOtaUpdate({ interactive: true })
 }
 
+/** Push nudge from admin Users page — force interactive OTA check. */
+export async function handleRemoteOtaNudge(): Promise<OtaCheckResult> {
+  return syncOtaUpdate({ interactive: true })
+}
+
 export async function applyOtaUpdate(
   options: { silent?: boolean; reload?: boolean; prompt?: boolean } = {}
 ): Promise<OtaCheckResult> {

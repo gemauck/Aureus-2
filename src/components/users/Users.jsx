@@ -24,6 +24,7 @@ const Users = () => {
     ); // 'grid' or 'table' — default grid on compact shell
     const [forceUpdate, setForceUpdate] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [otaPromptingUserId, setOtaPromptingUserId] = useState(null);
     
     // Sort state - default alphabetical by name
     const [sortColumn, setSortColumn] = useState('name'); // Default sort by name (alphabetical)
@@ -687,6 +688,90 @@ const Users = () => {
         return lastSeen.toLocaleDateString();
     };
 
+    const getClientActivityEntry = (user, client) => {
+        const entries = user?.clientActivity?.entries || [];
+        return entries.find((e) => e.client === client) || null;
+    };
+
+    const formatClientMedium = (user) => {
+        const activity = user?.clientActivity;
+        if (!activity?.entries?.length) return '—';
+
+        const browser = getClientActivityEntry(user, 'browser');
+        const mobile = getClientActivityEntry(user, 'mobile');
+        const parts = [];
+
+        if (browser) parts.push('Browser');
+        if (mobile) {
+            const platformLabel = mobile.platform === 'ios' ? 'iOS' : mobile.platform === 'android' ? 'Android' : 'App';
+            parts.push(`App (${platformLabel})`);
+        }
+
+        if (!parts.length) return '—';
+        if (parts.length === 2) return parts.join(' + ');
+        return parts[0];
+    };
+
+    const formatAppVersion = (user) => {
+        const mobile = getClientActivityEntry(user, 'mobile');
+        if (!mobile) return '—';
+
+        const chunks = [];
+        if (mobile.nativeVersion) chunks.push(`v${mobile.nativeVersion}`);
+        if (mobile.runtimeVersion) chunks.push(mobile.runtimeVersion);
+        if (mobile.updateId) chunks.push(mobile.updateId.slice(0, 8));
+
+        return chunks.length ? chunks.join(' · ') : '—';
+    };
+
+    const getOtaStatusMeta = (user) => {
+        const mobile = getClientActivityEntry(user, 'mobile');
+        if (!mobile) return { label: '—', tone: 'muted', canPrompt: false };
+
+        if (mobile.otaStatus === 'current') {
+            return { label: 'Up to date', tone: 'good', canPrompt: !!user?.clientActivity?.hasPushToken };
+        }
+        if (mobile.otaStatus === 'update_available') {
+            return { label: 'Update available', tone: 'warn', canPrompt: !!user?.clientActivity?.hasPushToken };
+        }
+        return { label: 'Unknown', tone: 'muted', canPrompt: !!user?.clientActivity?.hasPushToken };
+    };
+
+    const handlePromptOtaUpdate = async (user) => {
+        if (!user?.id || otaPromptingUserId) return;
+        const mobile = getClientActivityEntry(user, 'mobile');
+        if (!mobile) {
+            alert('This user has not signed in on the mobile app yet.');
+            return;
+        }
+        if (!user?.clientActivity?.hasPushToken) {
+            alert('No push token for this user. They need to open the app and allow notifications.');
+            return;
+        }
+
+        setOtaPromptingUserId(user.id);
+        try {
+            const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token') || '';
+            const response = await fetch('/api/users/prompt-ota-update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ userId: user.id })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.error?.message || payload?.message || 'Failed to send update prompt');
+            }
+            alert(`Update prompt sent to ${user.name || user.email}.`);
+        } catch (error) {
+            alert(error.message || 'Failed to send update prompt');
+        } finally {
+            setOtaPromptingUserId(null);
+        }
+    };
+
     // Show access denied message if user is not admin
     if (!isAdmin) {
         return (
@@ -902,6 +987,7 @@ const Users = () => {
                     {filteredUsers.length > 0 ? (
                         filteredUsers.map(user => {
                             const role = roleDefinitions[user.role];
+                            const otaMeta = getOtaStatusMeta(user);
                             return (
                                 <div key={user.id} className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-4 hover:shadow-md transition-all duration-200`}>
                                     <div className="flex items-start justify-between mb-2">
@@ -959,9 +1045,45 @@ const Users = () => {
                                                 <span>{user.phone}</span>
                                             </div>
                                         )}
+                                        <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <i className={`fas fa-display w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                                            <span>{formatClientMedium(user)}</span>
+                                        </div>
+                                        {getClientActivityEntry(user, 'mobile') && (
+                                            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <i className={`fas fa-mobile-screen w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                                                <span className="font-mono">{formatAppVersion(user)}</span>
+                                            </div>
+                                        )}
+                                        {otaMeta.label !== '—' && (
+                                            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                <i className={`fas fa-cloud-arrow-down w-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}></i>
+                                                <span>{otaMeta.label}</span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className={`flex gap-1.5 pt-2 border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+                                        {getClientActivityEntry(user, 'mobile') && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handlePromptOtaUpdate(user);
+                                                }}
+                                                disabled={!otaMeta.canPrompt || otaPromptingUserId === user.id}
+                                                className={`px-2 py-1 text-xs rounded transition font-medium ${
+                                                    otaMeta.canPrompt
+                                                        ? isDark ? 'bg-blue-900/30 text-blue-300 hover:bg-blue-900/40' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                                        : isDark ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                }`}
+                                                title="Send push to prompt app update check"
+                                            >
+                                                <i className={`fas ${otaPromptingUserId === user.id ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-down'} mr-1`}></i>
+                                                Update
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={(e) => {
@@ -1102,6 +1224,9 @@ const Users = () => {
                                             )}
                                         </div>
                                     </th>
+                                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Client</th>
+                                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>App Version</th>
+                                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Update</th>
                                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Actions</th>
                                 </tr>
                             </thead>
@@ -1109,6 +1234,7 @@ const Users = () => {
                                 {filteredUsers.length > 0 ? (
                                     filteredUsers.map(user => {
                                         const role = roleDefinitions[user.role];
+                                        const otaMeta = getOtaStatusMeta(user);
                                         return (
                                             <tr key={user.id} className={isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
                                                 <td className="px-4 py-3">
@@ -1161,8 +1287,52 @@ const Users = () => {
                                                         )}
                                                     </div>
                                                 </td>
+                                                <td className={`px-4 py-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                    {formatClientMedium(user)}
+                                                </td>
+                                                <td className={`px-4 py-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                    <span className="font-mono">{formatAppVersion(user)}</span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {otaMeta.label === '—' ? (
+                                                        <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+                                                    ) : (
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                                            otaMeta.tone === 'good'
+                                                                ? isDark ? 'bg-green-900/40 text-green-300' : 'bg-green-100 text-green-700'
+                                                                : otaMeta.tone === 'warn'
+                                                                    ? isDark ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-800'
+                                                                    : isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
+                                                        }`}>
+                                                            {otaMeta.label}
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex gap-1">
+                                                        {getClientActivityEntry(user, 'mobile') && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    handlePromptOtaUpdate(user);
+                                                                }}
+                                                                disabled={!otaMeta.canPrompt || otaPromptingUserId === user.id}
+                                                                className={`p-1 transition ${
+                                                                    otaMeta.canPrompt
+                                                                        ? isDark ? 'text-gray-500 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'
+                                                                        : isDark ? 'text-gray-700 cursor-not-allowed' : 'text-gray-300 cursor-not-allowed'
+                                                                }`}
+                                                                title={
+                                                                    otaMeta.canPrompt
+                                                                        ? 'Send push to prompt app update check'
+                                                                        : 'Requires mobile app with push notifications enabled'
+                                                                }
+                                                            >
+                                                                <i className={`fas ${otaPromptingUserId === user.id ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-down'} text-xs`}></i>
+                                                            </button>
+                                                        )}
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
@@ -1204,7 +1374,7 @@ const Users = () => {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="7" className={`px-6 py-12 text-center ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        <td colSpan="10" className={`px-6 py-12 text-center ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                             <i className="fas fa-users text-4xl mb-3 opacity-50"></i>
                                             <p className="text-sm">No users found</p>
                                         </td>

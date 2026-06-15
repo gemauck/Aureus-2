@@ -10,6 +10,7 @@ import {
   unregisterPushToken
 } from '../services/pushNotifications'
 import type { PushNotificationData } from '../notifications/notificationNavigation'
+import { handleRemoteOtaNudge } from '../hooks/useOTAUpdates'
 import { useNotificationUnread } from '../notifications/NotificationUnreadContext'
 import { useChatEvents } from '../messages/ChatEventsContext'
 
@@ -57,10 +58,17 @@ export function usePushNotifications(onOpenNotification?: (data: PushNotificatio
     })
 
     const removeOpen = addNotificationResponseListener((data) => {
+      if (data.type === 'ota_nudge') {
+        void handleRemoteOtaNudge()
+      }
       onOpenRef.current?.(data)
     })
 
     const removeReceived = addNotificationReceivedListener((data) => {
+      if (data.type === 'ota_nudge') {
+        void handleRemoteOtaNudge()
+        return
+      }
       if (data.type === 'call_invite') {
         void startCallRing()
         return

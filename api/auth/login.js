@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } from '../_lib/jwt.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging, logger } from '../_lib/logger.js'
+import { upsertUserClientPresence } from '../_lib/userClientPresence.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
@@ -192,6 +193,14 @@ async function handler(req, res) {
     } catch (updateErr) {
       logger.warn({ email, userId: user.id, err: updateErr.message }, '⚠️ lastLoginAt/lastSeenAt update failed, login still succeeding')
     }
+
+    void upsertUserClientPresence(prisma, user.id, {
+      client: 'browser',
+      platform: 'web',
+      runtimeVersion: null,
+      updateId: null,
+      nativeVersion: null
+    }).catch(() => null)
 
     // Set refresh token cookie
     const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'

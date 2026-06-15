@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '../../_lib/prisma.js'
 import { signAccessToken, signRefreshToken } from '../../_lib/jwt.js'
 import { logMobileLogin } from '../../_lib/mobileAuthLog.js'
+import { parseClientPresencePayload, upsertUserClientPresence } from '../../_lib/userClientPresence.js'
 import { badRequest, ok, serverError, unauthorized } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging, logger } from '../../_lib/logger.js'
@@ -58,6 +59,11 @@ async function handler(req, res) {
 
     const { platform } = await logMobileLogin(prisma, req, req.body, user, { success: true })
     logger.info({ email, userId: user.id, platform }, 'mobile login success')
+
+    const clientPayload =
+      parseClientPresencePayload({ ...req.body, client: 'mobile', platform: req.body?.platform || platform }) ||
+      { client: 'mobile', platform, runtimeVersion: null, updateId: null, nativeVersion: null }
+    void upsertUserClientPresence(prisma, user.id, clientPayload).catch(() => null)
 
     return ok(res, {
       accessToken,

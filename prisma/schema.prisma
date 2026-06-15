@@ -111,6 +111,7 @@ model User {
   chatMessageReads              ChatMessageRead[]
   chatMessageReactions          ChatMessageReaction[]
   pushDeviceTokens              PushDeviceToken[]
+  clientPresences               UserClientPresence[]
 
   @@index([createdAt])
   @@index([role])
@@ -3057,4 +3058,22 @@ model PushDeviceToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Last-seen client + mobile OTA version reported on login/heartbeat.
+model UserClientPresence {
+  id             String   @id @default(cuid())
+  userId         String
+  client         String
+  platform       String?
+  runtimeVersion String?
+  updateId       String?
+  nativeVersion  String?
+  lastSeenAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, client], name: "userId_client")
+  @@index([userId])
+  @@index([lastSeenAt])
 }

@@ -8,6 +8,7 @@ import { sendNotificationEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
 import { isConnectionError } from './_lib/dbErrorHandler.js'
 import { addUserToAbcoAllStaff } from './_lib/addToAbcoAllStaff.js'
+import { enrichUsersWithClientActivity } from './_lib/userClientPresence.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
@@ -112,6 +113,14 @@ async function handler(req, res) {
                 
                 // Return error instead of throwing to avoid double error handling
                 return serverError(res, 'Failed to query users', userQueryError.message)
+            }
+
+            if (isAdmin && users.length) {
+                try {
+                    users = await enrichUsersWithClientActivity(prisma, users)
+                } catch (presenceErr) {
+                    console.warn('⚠️ Users endpoint: client activity enrichment failed:', presenceErr.message)
+                }
             }
 
             return ok(res, {
