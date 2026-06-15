@@ -114,8 +114,85 @@ function serializePresenceEntry(entry, latestUpdateId) {
     nativeVersion: entry.nativeVersion,
     lastSeenAt: entry.lastSeenAt ? new Date(entry.lastSeenAt).toISOString() : null,
     otaStatus,
-    latestUpdateId: entry.client === 'mobile' ? latestUpdateId : null
+    latestUpdateId: entry.client === 'mobile' ? latestUpdateId : null,
+    inferred: !!entry.inferred
   }
+}
+
+function parseMobileEventDetails(detailsRaw) {
+  if (!detailsRaw) return { platform: null }
+  try {
+    const parsed = typeof detailsRaw === 'string' ? JSON.parse(detailsRaw) : detailsRaw
+    const platform = String(parsed?.platform || '').trim().toLowerCase()
+    return { platform: platform === 'android' || platform === 'ios' ? platform : null }
+  } catch {
+    return { platform: null }
+  }
+}
+
+/** Latest mobile login per user from SecurityEvent (before app reports version on heartbeat). */
+async function loadMobileLoginFallbacks(prisma, userIds) {
+  if (!userIds.length) return new Map()
+
+  const events = await prisma.securityEvent.findMany({
+    where: { userId: { in: userIds }, eventType: 'mobile_login_success' },
+    orderBy: { createdAt: 'desc' },
+    select: { userId: true, details: true, createdAt: true }
+  })
+
+  const byUser = new Map()
+  for (const event of events) {
+    if (byUser.has(event.userId)) continue
+    const { platform } = parseMobileEventDetails(event.details)
+    byUser.set(event.userId, {
+      client: 'mobile',
+      platform,
+      runtimeVersion: null,
+      updateId: null,
+      nativeVersion: null,
+      lastSeenAt: event.createdAt,
+      inferred: true
+    })
+  }
+  return byUser
+}
+
+function buildBrowserFallback(user, mobileFallback) {
+  if (!user?.lastSeenAt) return null
+  const seenAt = new Date(user.lastSeenAt).getTime()
+  if (Number.isNaN(seenAt)) return null
+
+  if (mobileFallback?.lastSeenAt) {
+    const mobileAt = new Date(mobileFallback.lastSeenAt).getTime()
+    // Skip browser guess for mobile-only users (last activity matches last mobile login).
+    if (!Number.isNaN(mobileAt) && seenAt <= mobileAt + 5 * 60 * 1000) return null
+  }
+
+  return {
+    client: 'browser',
+    platform: 'web',
+    runtimeVersion: null,
+    updateId: null,
+    nativeVersion: null,
+    lastSeenAt: user.lastSeenAt,
+    inferred: true
+  }
+}
+
+function mergePresenceRows(dbRows, user, mobileFallback) {
+  const merged = [...dbRows]
+  const hasClient = (client) => merged.some((row) => row.client === client)
+
+  if (!hasClient('mobile') && mobileFallback) {
+    merged.push(mobileFallback)
+  }
+
+  const browserFallback = buildBrowserFallback(user, mobileFallback)
+  if (!hasClient('browser') && browserFallback) {
+    merged.push(browserFallback)
+  }
+
+  return merged
 }
 
 /** Attach clientActivity for admin Users list (browser/app + OTA status). */
@@ -156,8 +233,11 @@ export async function enrichUsersWithClientActivity(prisma, users) {
     })
   )
 
+  const mobileFallbacks = await loadMobileLoginFallbacks(prisma, userIds)
+
   return users.map((user) => {
-    const rows = byUser.get(user.id) || []
+    const dbRows = byUser.get(user.id) || []
+    const rows = mergePresenceRows(dbRows, user, mobileFallbacks.get(user.id) || null)
     const entries = rows.map((row) => {
       const latest =
         row.client === 'mobile' && row.runtimeVersion

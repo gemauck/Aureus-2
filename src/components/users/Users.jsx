@@ -80,6 +80,26 @@ const Users = () => {
     useEffect(() => {
         loadUsersAndInvitations();
     }, []);
+
+    // Report browser client on heartbeat when viewing Users (populates Client column).
+    useEffect(() => {
+        if (!isAdmin || !window.api?.heartbeat) return;
+        const send = () => {
+            try { window.api.heartbeat(); } catch (_) { /* non-fatal */ }
+        };
+        send();
+        const interval = setInterval(send, 5 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [isAdmin]);
+
+    // Refresh user list periodically so client/version columns update after heartbeats.
+    useEffect(() => {
+        if (!isAdmin) return;
+        const interval = setInterval(() => {
+            loadUsersAndInvitations({ silent: true });
+        }, 2 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [isAdmin]);
     
     // Listen for route changes to handle user navigation and URL-based user opening
     useEffect(() => {
@@ -174,9 +194,10 @@ const Users = () => {
     }, [users, viewMode]);
 
     // Combined function to load both users and invitations in a single API call
-    const loadUsersAndInvitations = async () => {
+    const loadUsersAndInvitations = async (options = {}) => {
+        const silent = options.silent === true;
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const token = window.storage?.getToken?.();
             if (token) {
                 const response = await fetch('/api/users', {
@@ -198,7 +219,7 @@ const Users = () => {
                     // Update local storage to match API data
                     storage.setUsers(apiUsers);
                     storage.setInvitations(apiInvitations);
-                    setLoading(false);
+                    if (!silent) setLoading(false);
                     return;
                 }
             }
@@ -212,7 +233,7 @@ const Users = () => {
             }
             setUsers(savedUsers);
             setInvitations(savedInvitations);
-            setLoading(false);
+            if (!silent) setLoading(false);
         } catch (error) {
             console.error('Error loading users and invitations:', error);
             // Fallback to local storage on error
@@ -224,7 +245,7 @@ const Users = () => {
             }
             setUsers(savedUsers);
             setInvitations(savedInvitations);
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -720,6 +741,7 @@ const Users = () => {
         if (mobile.nativeVersion) chunks.push(`v${mobile.nativeVersion}`);
         if (mobile.runtimeVersion) chunks.push(mobile.runtimeVersion);
         if (mobile.updateId) chunks.push(mobile.updateId.slice(0, 8));
+        if (!chunks.length && mobile.inferred) chunks.push('App login recorded');
 
         return chunks.length ? chunks.join(' · ') : '—';
     };

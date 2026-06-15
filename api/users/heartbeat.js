@@ -73,7 +73,11 @@ async function handler(req, res) {
     const body = await parseJsonBody(req).catch(() => ({}))
     const clientPayload = parseClientPresencePayload(body)
     if (clientPayload) {
-      void upsertUserClientPresence(prisma, userId, clientPayload).catch(() => null)
+      try {
+        await upsertUserClientPresence(prisma, userId, clientPayload)
+      } catch (presenceErr) {
+        console.warn('⚠️ Heartbeat: client presence update failed:', presenceErr.message)
+      }
     }
 
     return ok(res, { 
