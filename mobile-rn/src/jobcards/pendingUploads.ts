@@ -14,6 +14,7 @@ export type PendingUploadItem = {
   subtitle: string
   savedAt: string
   locationId?: string
+  syncConflict?: boolean
 }
 
 function jobCardTitle(card: Record<string, unknown>) {
@@ -44,8 +45,11 @@ export async function listPendingUploadItems(): Promise<PendingUploadItem[]> {
       id: String(card.id),
       kind: 'job_card',
       title: jobCardTitle(card as Record<string, unknown>),
-      subtitle: jobCardSubtitle(card as Record<string, unknown>),
-      savedAt: String(card.updatedAt || card.createdAt || new Date().toISOString())
+      subtitle: (card as Record<string, unknown>).syncConflict
+        ? 'Sync conflict — tap Retry to choose which copy to keep'
+        : jobCardSubtitle(card as Record<string, unknown>),
+      savedAt: String(card.updatedAt || card.createdAt || new Date().toISOString()),
+      syncConflict: Boolean((card as Record<string, unknown>).syncConflict)
     })
   }
 

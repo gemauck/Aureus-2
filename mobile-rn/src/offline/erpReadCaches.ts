@@ -1,6 +1,6 @@
 import type { CrmClient, CrmGroup, CrmLead } from '../crm/types'
 import type { ProjectSummary, ProjectTask } from '../projects/types'
-import type { DashboardNotification, DashboardTask } from '../services/erpApi'
+import type { DashboardNotification, DashboardTask, DashboardJobCard } from '../services/erpApi'
 import { readListCache, writeListCache } from './readListCache'
 
 const MY_TASKS_KEY = 'mobile_rn_my_tasks_cache_v1'
@@ -66,3 +66,19 @@ export function offlineListMessage(hasCache: boolean) {
     ? 'Showing saved copy — connect to refresh.'
     : 'No saved data on this device. Open once while online.'
 }
+
+const DASHBOARD_SNAPSHOT_KEY = 'mobile_rn_dashboard_snapshot_v1'
+
+export type DashboardSnapshot = {
+  projectTasks: DashboardTask[]
+  userTasks: DashboardTask[]
+  notifications: DashboardNotification[]
+  jobCards: DashboardJobCard[]
+  stats: { projects: number; activeProjects: number; clients: number }
+}
+
+export const cacheDashboardSnapshot = (snapshot: DashboardSnapshot) =>
+  writeListCache(DASHBOARD_SNAPSHOT_KEY, snapshot)
+
+export const readCachedDashboardSnapshot = () =>
+  readListCache<DashboardSnapshot>(DASHBOARD_SNAPSHOT_KEY)

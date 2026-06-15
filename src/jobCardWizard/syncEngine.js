@@ -90,6 +90,44 @@ export function createSyncEngine(deps) {
     let errorText = '';
 
     if (serverJobCardId) {
+      const forceOverwrite = Boolean(draftCard.forceOverwrite);
+      const syncBaseUpdatedAt = draftCard.syncBaseUpdatedAt
+        ? String(draftCard.syncBaseUpdatedAt)
+        : '';
+
+      if (syncBaseUpdatedAt && !forceOverwrite) {
+        try {
+          const getRes = await fetchWithRetry(
+            `${apiBase}/api/jobcards/${encodeURIComponent(serverJobCardId)}`,
+            {
+              method: 'GET',
+              headers: { Authorization: `Bearer ${token}` }
+            },
+            fetchRetryConfig
+          );
+          if (getRes.ok) {
+            const getData = await getRes.json().catch(() => ({}));
+            const serverJc = getData?.data?.jobCard || getData?.jobCard;
+            const serverUpdatedAt = serverJc?.updatedAt ? String(serverJc.updatedAt) : '';
+            if (
+              serverUpdatedAt &&
+              new Date(serverUpdatedAt).getTime() > new Date(syncBaseUpdatedAt).getTime()
+            ) {
+              return {
+                ok: false,
+                serverId: String(serverJobCardId),
+                conflict: true,
+                serverJobCard: serverJc,
+                errorText:
+                  'Someone else updated this job card on the server after you opened your copy.'
+              };
+            }
+          }
+        } catch {
+          /* proceed with PATCH if conflict check fails */
+        }
+      }
+
       try {
         const patchRes = await fetchWithRetry(
           `${apiBase}/api/jobcards/${encodeURIComponent(serverJobCardId)}`,

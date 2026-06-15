@@ -11,6 +11,11 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { useAuth } from '../state/AuthContext'
 import { getOfflineStore, migrateLegacyOfflineQueue } from './offlineStore'
+import {
+  isJobCardSyncConflict,
+  promptJobCardConflictChoice,
+  resolveJobCardConflict
+} from './jobCardConflict'
 import { listUnsyncedPendingIncidents } from './incidents/incidentOfflineStore'
 import { syncAllPendingIncidents } from './incidents/incidentSync'
 import { getPendingIncident } from './incidents/incidentOfflineStore'
@@ -119,6 +124,14 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       if (result === null) {
         return { ok: false, serverId: null, errorText: 'Sync already in progress' }
       }
+      if (isJobCardSyncConflict(result)) {
+        const offlineStore = await getOfflineStore()
+        await offlineStore.upsertLocalPendingJobCardAsync({
+          ...card,
+          synced: false,
+          syncConflict: true
+        })
+      }
       await refreshUnsyncedCount()
       if (result.ok) bumpLocalDrafts()
       return result
@@ -137,7 +150,25 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
         const cards = await offlineStore.readLocalPendingJobCardsAsync()
         const card = cards.find((row) => row && String(row.id) === String(item.id))
         if (!card) return { ok: false, errorText: 'Job card not found on device' }
-        const result = await syncOnePendingCard(card as Record<string, unknown>)
+        let payload = card as Record<string, unknown>
+        let result = await syncOnePendingCard(payload)
+        if (isJobCardSyncConflict(result)) {
+          const choice = await promptJobCardConflictChoice()
+          const resolved = await resolveJobCardConflict(payload, result.serverJobCard, choice)
+          if (choice === 'cancel') {
+            return { ok: false, errorText: 'Sync cancelled' }
+          }
+          if (choice === 'use_server') {
+            await refreshPendingUploads()
+            bumpLocalDrafts()
+            return { ok: true }
+          }
+          if (resolved) {
+            payload = resolved
+            result = await syncOnePendingCard(resolved)
+          }
+        }
+        await refreshPendingUploads()
         return result.ok
           ? { ok: true }
           : { ok: false, errorText: result.errorText || 'Sync failed' }

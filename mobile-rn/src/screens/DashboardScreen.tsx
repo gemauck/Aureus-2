@@ -25,6 +25,13 @@ import {
   type DashboardWidgetId
 } from '../dashboard/dashboardConfig'
 import { openJobCard, openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
+import { OfflineBanner } from '../components/OfflineBanner'
+import { useNetwork } from '../hooks/useNetwork'
+import {
+  cacheDashboardSnapshot,
+  offlineListMessage,
+  readCachedDashboardSnapshot
+} from '../offline/erpReadCaches'
 import { buildWidgetSnapshot, unreadFromNotifications } from '../widgets/buildWidgetSnapshot'
 import { refreshHomeScreenWidgets } from '../widgets/refreshHomeScreenWidgets'
 import { erpApi, mergeDashboardTasks, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
@@ -210,6 +217,8 @@ export function DashboardScreen({ navigation }: Props) {
   const widgetDefs = useMemo(() => getWidgetDefs(erp), [erp])
   const quickActionDefs = useMemo(() => getQuickActionDefs(erp), [erp])
   const { user, accessToken } = useAuth()
+  const { isOnline } = useNetwork()
+  const [readOnlyOffline, setReadOnlyOffline] = useState(false)
   const { unreadCount: notificationUnread, refresh: refreshNotificationUnread, decrementUnread } =
     useNotificationUnread()
   const [loading, setLoading] = useState(true)
@@ -238,6 +247,30 @@ export function DashboardScreen({ navigation }: Props) {
       if (!accessToken) return
       if (!silent) setLoading(true)
       setError('')
+      setReadOnlyOffline(false)
+
+      const applyCached = async () => {
+        const cached = await readCachedDashboardSnapshot()
+        if (!cached) {
+          setError(offlineListMessage(false))
+          return false
+        }
+        setProjectTasks(cached.projectTasks?.slice(0, 6) || [])
+        setUserTasks(cached.userTasks?.slice(0, 6) || [])
+        setNotifications(cached.notifications || [])
+        setJobCards(cached.jobCards || [])
+        setStats(cached.stats || { projects: 0, activeProjects: 0, clients: 0 })
+        setReadOnlyOffline(true)
+        return true
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       try {
         const [pt, ut, notes, cards, proj, clients] = await Promise.all([
           erpApi.getProjectTasks(accessToken).catch(() => []),
@@ -247,14 +280,26 @@ export function DashboardScreen({ navigation }: Props) {
           erpApi.getProjectsSummary(accessToken).catch(() => ({ total: 0, active: 0 })),
           erpApi.getClientsSummary(accessToken).catch(() => ({ total: 0 }))
         ])
-        setProjectTasks(Array.isArray(pt) ? pt.slice(0, 6) : [])
-        setUserTasks(Array.isArray(ut) ? ut.slice(0, 6) : [])
-        setNotifications(Array.isArray(notes) ? notes : [])
-        setJobCards(Array.isArray(cards) ? cards : [])
-        setStats({
+        const projectTasksSlice = Array.isArray(pt) ? pt.slice(0, 6) : []
+        const userTasksSlice = Array.isArray(ut) ? ut.slice(0, 6) : []
+        const notificationsList = Array.isArray(notes) ? notes : []
+        const jobCardsList = Array.isArray(cards) ? cards : []
+        const stats = {
           projects: proj.total,
           activeProjects: proj.active,
           clients: clients.total
+        }
+        setProjectTasks(projectTasksSlice)
+        setUserTasks(userTasksSlice)
+        setNotifications(notificationsList)
+        setJobCards(jobCardsList)
+        setStats(stats)
+        await cacheDashboardSnapshot({
+          projectTasks: Array.isArray(pt) ? pt : [],
+          userTasks: Array.isArray(ut) ? ut : [],
+          notifications: notificationsList,
+          jobCards: jobCardsList,
+          stats
         })
         void refreshHomeScreenWidgets(
           buildWidgetSnapshot({
@@ -262,22 +307,25 @@ export function DashboardScreen({ navigation }: Props) {
             projectTasks: Array.isArray(pt) ? pt : [],
             userTasks: Array.isArray(ut) ? ut : [],
             unreadNotifications: unreadFromNotifications(
-              Array.isArray(notes) ? notes : [],
+              notificationsList,
               notificationUnread
             ),
             activeProjects: proj.active,
             totalProjects: proj.total,
-            jobCards: Array.isArray(cards) ? cards : []
+            jobCards: jobCardsList
           })
         )
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load dashboard')
+        const hadCache = await applyCached()
+        if (!hadCache) {
+          setError(e instanceof Error ? e.message : 'Could not load dashboard')
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [accessToken, notificationUnread, user]
+    [accessToken, isOnline, notificationUnread, user]
   )
 
   useEffect(() => {
@@ -398,6 +446,7 @@ export function DashboardScreen({ navigation }: Props) {
         navigation={navigation}
         onSettingsPress={() => navigation.navigate('Settings')}
       />
+      <OfflineBanner visible={readOnlyOffline} variant="read" />
       <ScreenBody padded={false}>
         <ScrollView
           contentContainerStyle={styles.scroll}

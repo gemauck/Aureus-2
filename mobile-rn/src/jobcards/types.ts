@@ -110,6 +110,8 @@ export type EditingMeta = {
   synced: boolean
   jobCardNumber: string
   useNewJobTimeFlow: boolean
+  /** Server `updatedAt` when the card was opened — used for sync conflict detection. */
+  syncBaseUpdatedAt?: string | null
 }
 
 export type PendingJobCard = JobCardFormData & {
@@ -119,6 +121,9 @@ export type PendingJobCard = JobCardFormData & {
   activityQueue?: Array<{ action: string; metadata?: unknown; source?: string }>
   jobCardNumber?: string
   updatedAt?: string
+  syncBaseUpdatedAt?: string | null
+  syncConflict?: boolean
+  forceOverwrite?: boolean
   useNewJobTimeFlow?: boolean
   startedAt?: string
   createdAt?: string

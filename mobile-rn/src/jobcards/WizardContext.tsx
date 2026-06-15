@@ -29,6 +29,11 @@ import { useWizardReferenceData } from './hooks/useWizardReferenceData'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { normalizeMediaItemForSave, voiceClipToPayloadUrl } from './media/mediaUri'
 import { inferVoiceClipsNeedingTranscription } from './media/voiceClipState'
+import {
+  isJobCardSyncConflict,
+  promptJobCardConflictChoice,
+  resolveJobCardConflict
+} from './jobCardConflict'
 import { getOfflineStore } from './offlineStore'
 import { cacheJobCard, getCachedJobCard } from './jobCardCache'
 import { useJobCardSync } from './JobCardSyncContext'
@@ -422,12 +427,40 @@ export function JobCardWizardProvider({
         if (editingMeta.serverJobCardId) {
           jobCardData.serverJobCardId = editingMeta.serverJobCardId
         }
+        if (editingMeta.syncBaseUpdatedAt) {
+          jobCardData.syncBaseUpdatedAt = editingMeta.syncBaseUpdatedAt
+        }
         const tryImmediateSync = Boolean(isOnline && accessToken)
         await persistLocal(jobCardData, { scheduleAutoSync: !tryImmediateSync })
 
         if (tryImmediateSync) {
           const result = await syncOnePendingCard(jobCardData)
-          if (result.ok && result.serverId) {
+          if (isJobCardSyncConflict(result)) {
+            const choice = await promptJobCardConflictChoice()
+            const resolved = await resolveJobCardConflict(
+              jobCardData,
+              result.serverJobCard,
+              choice
+            )
+            if (resolved) {
+              const retry = await syncOnePendingCard(resolved)
+              if (retry.ok && retry.serverId) {
+                setEditingMeta((m) =>
+                  m
+                    ? {
+                        ...m,
+                        serverJobCardId: retry.serverId,
+                        synced: true
+                      }
+                    : m
+                )
+              } else if (!retry.ok) {
+                bumpLocalDrafts()
+              }
+            } else if (choice === 'use_server') {
+              bumpLocalDrafts()
+            }
+          } else if (result.ok && result.serverId) {
             setEditingMeta((m) =>
               m
                 ? {
@@ -519,6 +552,7 @@ export function JobCardWizardProvider({
   const applyServerJobCardToWizard = useCallback(
     (jc: JobCardFormData, opts: { fromCache?: boolean } = {}) => {
       const id = String(jc.id)
+      const syncBaseUpdatedAt = jc.updatedAt ? String(jc.updatedAt) : null
       setEditingMeta({
         localId: id,
         serverJobCardId: id,
@@ -526,7 +560,8 @@ export function JobCardWizardProvider({
         createdAt: jc.createdAt || new Date().toISOString(),
         synced: !opts.fromCache,
         jobCardNumber: jc.jobCardNumber || '',
-        useNewJobTimeFlow: false
+        useNewJobTimeFlow: false,
+        syncBaseUpdatedAt
       })
       const merged = { ...createEmptyFormData(), ...jc } as JobCardFormData
       setFormData(merged)
@@ -555,7 +590,12 @@ export function JobCardWizardProvider({
           createdAt: row.createdAt || new Date().toISOString(),
           synced: false,
           jobCardNumber: row.jobCardNumber || '',
-          useNewJobTimeFlow: row.useNewJobTimeFlow !== false
+          useNewJobTimeFlow: row.useNewJobTimeFlow !== false,
+          syncBaseUpdatedAt: row.syncBaseUpdatedAt
+            ? String(row.syncBaseUpdatedAt)
+            : row.updatedAt
+              ? String(row.updatedAt)
+              : null
         })
         setFormData(merged)
         applyMediaAndStockFromCard(merged)

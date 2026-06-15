@@ -13,6 +13,14 @@ import {
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheEntityDetail,
+  projectDetailCacheKey,
+  readEntityDetail
+} from '../../offline/entityDetailCache'
+import { offlineListMessage } from '../../offline/erpReadCaches'
 import { useAuth } from '../../state/AuthContext'
 
 import { projectsApi } from '../api'
@@ -78,6 +86,8 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   const { erp } = useTheme()
   const { projectId, initialTab } = route.params
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
+  const [readOnlyOffline, setReadOnlyOffline] = useState(false)
   const [project, setProject] = useState<ProjectDetail | null>(null)
   const [notes, setNotes] = useState<ProjectNote[]>([])
   const [activity, setActivity] = useState<ProjectActivityEntry[]>([])
@@ -138,6 +148,34 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
       if (!accessToken) return
       if (!silent) setLoading(true)
       setError('')
+      setReadOnlyOffline(false)
+
+      type ProjectDetailCache = {
+        project: ProjectDetail
+        notes: ProjectNote[]
+        activity: ProjectActivityEntry[]
+      }
+
+      const applyCached = async () => {
+        const cached = await readEntityDetail<ProjectDetailCache>(projectDetailCacheKey(projectId))
+        if (cached?.project) {
+          setProject(cached.project)
+          setNotes(cached.notes || [])
+          setActivity(cached.activity || [])
+          setReadOnlyOffline(true)
+          return true
+        }
+        setError(offlineListMessage(false))
+        return false
+      }
+
+      if (!isOnline) {
+        await applyCached()
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+
       try {
         const [proj, noteList, act] = await Promise.all([
           projectsApi.getProjectSummary(accessToken, projectId),
@@ -147,15 +185,23 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
         setProject(proj)
         setNotes(noteList)
         setActivity(act)
+        await cacheEntityDetail(projectDetailCacheKey(projectId), {
+          project: proj,
+          notes: noteList,
+          activity: act
+        })
         void loadDetails(true)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load project')
+        const hadCache = await applyCached()
+        if (!hadCache) {
+          setError(e instanceof Error ? e.message : 'Could not load project')
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [accessToken, projectId, loadDetails]
+    [accessToken, isOnline, projectId, loadDetails]
   )
 
   useEffect(() => {
@@ -198,7 +244,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
     })
 
   const updateProjectStatus = async (status: string) => {
-    if (!accessToken || !project) return
+    if (!accessToken || !project || readOnlyOffline) return
     try {
       const updated = await projectsApi.patchProject(accessToken, projectId, { status })
       setProject((prev) => (prev ? { ...prev, ...updated } : updated))
@@ -208,7 +254,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   }
 
   const createTask = async () => {
-    if (!accessToken || !newTaskTitle.trim()) return
+    if (!accessToken || !newTaskTitle.trim() || readOnlyOffline) return
     setCreatingTask(true)
     try {
       await projectsApi.createTask(accessToken, {
@@ -229,7 +275,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
   }
 
   const createNote = async () => {
-    if (!accessToken) return
+    if (!accessToken || readOnlyOffline) return
     setCreatingNote(true)
     try {
       const note = await projectsApi.createNote(accessToken, projectId, {
@@ -273,6 +319,7 @@ export function ProjectDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <OfflineBanner visible={readOnlyOffline} variant="read" />
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
           <FontAwesome5 name="arrow-left" size={16} color={erp.primary} />

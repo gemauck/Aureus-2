@@ -12,6 +12,14 @@ import {
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheEntityDetail,
+  projectTaskDetailCacheKey,
+  readEntityDetail
+} from '../../offline/entityDetailCache'
+import { offlineListMessage } from '../../offline/erpReadCaches'
 import { useAuth } from '../../state/AuthContext'
 
 import {
@@ -47,6 +55,8 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const { erp } = useTheme()
   const { taskId, projectId, projectName } = route.params
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
+  const [readOnlyOffline, setReadOnlyOffline] = useState(false)
   const [task, setTask] = useState<ProjectTask | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -67,17 +77,42 @@ export function TaskDetailScreen({ route, navigation }: Props) {
     if (!accessToken) return
     setLoading(true)
     setError('')
+    setReadOnlyOffline(false)
+
+    const applyCached = async () => {
+      const cached = await readEntityDetail<ProjectTask>(projectTaskDetailCacheKey(taskId))
+      if (cached) {
+        setTask(cached)
+        setTitleDraft(cached.title || '')
+        setDescDraft(cached.description || '')
+        setReadOnlyOffline(true)
+        return true
+      }
+      setError(offlineListMessage(false))
+      return false
+    }
+
+    if (!isOnline) {
+      await applyCached()
+      setLoading(false)
+      return
+    }
+
     try {
       const t = await projectsApi.getTask(accessToken, taskId)
       setTask(t)
       setTitleDraft(t.title || '')
       setDescDraft(t.description || '')
+      await cacheEntityDetail(projectTaskDetailCacheKey(taskId), t)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load task')
+      const hadCache = await applyCached()
+      if (!hadCache) {
+        setError(e instanceof Error ? e.message : 'Could not load task')
+      }
     } finally {
       setLoading(false)
     }
-  }, [accessToken, taskId])
+  }, [accessToken, isOnline, taskId])
 
   useEffect(() => {
     void load()
@@ -89,7 +124,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   }, [accessToken])
 
   const patchTask = async (body: Record<string, unknown>) => {
-    if (!accessToken || !task) return
+    if (!accessToken || !task || readOnlyOffline) return
     setSaving(true)
     setError('')
     try {
@@ -103,7 +138,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   }
 
   const postComment = async () => {
-    if (!accessToken || !commentDraft.trim()) return
+    if (!accessToken || !commentDraft.trim() || readOnlyOffline) return
     setPostingComment(true)
     try {
       const comment = await projectsApi.addTaskComment(accessToken, {
@@ -242,6 +277,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <OfflineBanner visible={readOnlyOffline} variant="read" />
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
           <FontAwesome5 name="arrow-left" size={16} color={erp.primary} />

@@ -20,7 +20,14 @@ import { openProject } from '../../dashboard/dashboardNavigation'
 import { navigateIncidentReport } from '../../navigation/navigationHelpers'
 import type { RootStackParamList } from '../../navigation/types'
 
-import { rememberRecentCrmEntity } from '../../offline/erpReadCaches'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheEntityDetail,
+  crmDetailCacheKey,
+  readEntityDetail
+} from '../../offline/entityDetailCache'
+import { offlineListMessage, rememberRecentCrmEntity } from '../../offline/erpReadCaches'
 import { crmApi } from '../api'
 import { CrmDetailPanelContent } from '../components/CrmDetailPanels'
 import { CrmDetailTabBar } from '../components/CrmDetailTabBar'
@@ -57,6 +64,8 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { entityType, entityId, initialTab } = route.params
   const { accessToken, user } = useAuth()
+  const { isOnline } = useNetwork()
+  const [readOnlyOffline, setReadOnlyOffline] = useState(false)
   const [entity, setEntity] = useState<CrmEntityBase | null>(null)
   const [groupMembers, setGroupMembers] = useState<CrmGroupMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,6 +100,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     if (!accessToken) return
     setLoading(true)
     setError('')
+    setReadOnlyOffline(false)
     loadedExtrasRef.current = new Set()
     setTags([])
     setOpportunities([])
@@ -98,42 +108,95 @@ export function CrmDetailScreen({ route, navigation }: Props) {
     setIncidentReports([])
     setClientNotes([])
     setGroupMembers([])
+
+    type CrmDetailCache = {
+      entity: CrmEntityBase
+      notesDraft: string
+      tags: CrmTag[]
+      clientNotes: CrmClientNote[]
+      groupMembers: CrmGroupMember[]
+    }
+
+    const applyCached = async () => {
+      const cached = await readEntityDetail<CrmDetailCache>(
+        crmDetailCacheKey(entityType, entityId)
+      )
+      if (cached?.entity) {
+        setEntity(cached.entity)
+        setNotesDraft(cached.notesDraft || '')
+        setTags(cached.tags || [])
+        setClientNotes(cached.clientNotes || [])
+        setGroupMembers(cached.groupMembers || [])
+        if (cached.tags?.length) loadedExtrasRef.current.add('tags')
+        if (cached.clientNotes?.length) loadedExtrasRef.current.add('notes')
+        if (cached.groupMembers?.length) loadedExtrasRef.current.add('members')
+        setReadOnlyOffline(true)
+        return true
+      }
+      setError(offlineListMessage(false))
+      return false
+    }
+
+    if (!isOnline) {
+      await applyCached()
+      setLoading(false)
+      return
+    }
+
     try {
       const data =
         entityType === 'lead'
           ? await crmApi.getLead(accessToken, entityId)
           : await crmApi.getClient(accessToken, entityId)
-      setEntity(normalizeEntity(data))
+      const entity = normalizeEntity(data)
+      setEntity(entity)
       setNotesDraft(String(data.notes || ''))
+
+      let clientTags: CrmTag[] = []
+      let notes: CrmClientNote[] = []
+      let members: CrmGroupMember[] = []
 
       if (entityType === 'client' || entityType === 'group') {
         const notePromise = crmApi.getClientNotes(accessToken, entityId).catch(() => [] as CrmClientNote[])
         if (entityType === 'client') {
-          const [clientTags, notes] = await Promise.all([
+          const [tagsResult, notesResult] = await Promise.all([
             crmApi.getClientTags(accessToken, entityId).catch(() => [] as CrmTag[]),
             notePromise
           ])
+          clientTags = tagsResult
+          notes = notesResult
           setTags(clientTags)
           setClientNotes(notes)
           loadedExtrasRef.current.add('tags')
         } else {
-          const notes = await notePromise
+          notes = await notePromise
           setClientNotes(notes)
         }
         loadedExtrasRef.current.add('notes')
       }
 
       if (entityType === 'group') {
-        const members = await crmApi.getGroupMembers(accessToken, entityId).catch(() => [] as CrmGroupMember[])
+        members = await crmApi.getGroupMembers(accessToken, entityId).catch(() => [] as CrmGroupMember[])
         setGroupMembers(members)
         loadedExtrasRef.current.add('members')
       }
+
+      await cacheEntityDetail(crmDetailCacheKey(entityType, entityId), {
+        entity,
+        notesDraft: String(data.notes || ''),
+        tags: clientTags,
+        clientNotes: notes,
+        groupMembers: members
+      })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load record')
+      const hadCache = await applyCached()
+      if (!hadCache) {
+        setError(e instanceof Error ? e.message : 'Could not load record')
+      }
     } finally {
       setLoading(false)
     }
-  }, [accessToken, entityId, entityType])
+  }, [accessToken, entityId, entityType, isOnline])
 
   useEffect(() => {
     void load()
@@ -141,7 +204,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
   const loadExtrasForTab = useCallback(
     async (activeTab: CrmDetailTab) => {
-      if (!accessToken || !entity) return
+      if (!accessToken || !entity || readOnlyOffline) return
       const key = `${activeTab}`
       if (loadedExtrasRef.current.has(key)) return
 
@@ -176,7 +239,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
         setLoadingExtras(false)
       }
     },
-    [accessToken, entity, entityId, entityType]
+    [accessToken, entity, entityId, entityType, readOnlyOffline]
   )
 
   useEffect(() => {
@@ -190,7 +253,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }, [notesFeedback])
 
   const patchEntity = async (body: Record<string, unknown>) => {
-    if (!accessToken || !entity) return
+    if (!accessToken || !entity || readOnlyOffline) return
     setPatchBusy(true)
     setError('')
     try {
@@ -209,7 +272,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }
 
   const createOpportunity = async (body: { title: string; value?: number }) => {
-    if (!accessToken || entityType !== 'client') return
+    if (!accessToken || entityType !== 'client' || readOnlyOffline) return
     setPatchBusy(true)
     setError('')
     try {
@@ -230,7 +293,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }
 
   const toggleStar = async () => {
-    if (!accessToken || !entity) return
+    if (!accessToken || !entity || readOnlyOffline) return
     setStarBusy(true)
     try {
       const result = await crmApi.toggleStar(accessToken, entityId)
@@ -243,7 +306,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }
 
   const saveSummaryNotes = async () => {
-    if (!accessToken || !entity) return
+    if (!accessToken || !entity || readOnlyOffline) return
     setSavingNotes(true)
     setError('')
     try {
@@ -261,7 +324,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
   }
 
   const saveNewNote = async () => {
-    if (!accessToken || !newNoteDraft.trim()) return
+    if (!accessToken || !newNoteDraft.trim() || readOnlyOffline) return
     setSavingNewNote(true)
     setError('')
     try {
@@ -339,6 +402,7 @@ export function CrmDetailScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      <OfflineBanner visible={readOnlyOffline} variant="read" />
       <View style={styles.hero}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
           <FontAwesome5 name="arrow-left" size={14} color="#fff" />

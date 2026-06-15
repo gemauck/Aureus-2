@@ -16,6 +16,14 @@ import {
   parseFieldDate,
   toDateLocal
 } from '../../jobcards/components/DateTimeField'
+import { OfflineBanner } from '../../components/OfflineBanner'
+import { useNetwork } from '../../hooks/useNetwork'
+import {
+  cacheEntityDetail,
+  readEntityDetail,
+  userTaskDetailCacheKey
+} from '../../offline/entityDetailCache'
+import { offlineListMessage } from '../../offline/erpReadCaches'
 import { useAuth } from '../../state/AuthContext'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { ErpTheme } from '../../theme/palettes'
@@ -41,6 +49,8 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
   const { erp } = useTheme()
   const { taskId, isNew } = route.params
   const { accessToken } = useAuth()
+  const { isOnline } = useNetwork()
+  const [readOnlyOffline, setReadOnlyOffline] = useState(false)
   const [task, setTask] = useState<UserTask | null>(null)
   const [lists, setLists] = useState<UserTaskList[]>([])
   const [tags, setTags] = useState<UserTaskTag[]>([])
@@ -78,6 +88,29 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
     }
     setLoading(true)
     setError('')
+    setReadOnlyOffline(false)
+
+    const applyCached = async () => {
+      const cached = await readEntityDetail<UserTask>(userTaskDetailCacheKey(taskId))
+      if (cached) {
+        setTask(cached)
+        setTitleDraft(cached.title || '')
+        setDescDraft(cached.description || '')
+        setCategoryDraft(cached.category || '')
+        setSelectedTagIds((cached.tags || []).map((tag) => tag.id))
+        setReadOnlyOffline(true)
+        return true
+      }
+      setError(offlineListMessage(false))
+      return false
+    }
+
+    if (!isOnline) {
+      await applyCached()
+      setLoading(false)
+      return
+    }
+
     try {
       const t = await userTasksApi.getTask(accessToken, taskId)
       setTask(t)
@@ -85,12 +118,16 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
       setDescDraft(t.description || '')
       setCategoryDraft(t.category || '')
       setSelectedTagIds((t.tags || []).map((tag) => tag.id))
+      await cacheEntityDetail(userTaskDetailCacheKey(taskId), t)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load task')
+      const hadCache = await applyCached()
+      if (!hadCache) {
+        setError(e instanceof Error ? e.message : 'Could not load task')
+      }
     } finally {
       setLoading(false)
     }
-  }, [accessToken, isNew, taskId])
+  }, [accessToken, isNew, isOnline, taskId])
 
   useEffect(() => {
     void loadMeta()
@@ -98,7 +135,7 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
   }, [load, loadMeta])
 
   const saveTask = async (body: Record<string, unknown>, opts?: { navigateBack?: boolean }) => {
-    if (!accessToken) return
+    if (!accessToken || readOnlyOffline) return
     setSaving(true)
     setError('')
     try {
@@ -137,6 +174,7 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
   }
 
   const patchTask = async (body: Record<string, unknown>) => {
+    if (readOnlyOffline) return
     if (isNew || taskId === 'new') {
       setTask((prev) => (prev ? ({ ...prev, ...body } as UserTask) : prev))
       return
@@ -263,6 +301,7 @@ export function UserTaskDetailScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.root}>
+      <OfflineBanner visible={readOnlyOffline} variant="read" />
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
           <FontAwesome5 name="arrow-left" size={16} color={erp.primary} />

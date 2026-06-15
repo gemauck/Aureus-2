@@ -99,6 +99,11 @@ Incident reports can be **created and edited offline** (queued on device, synced
 - **Clients** — clients/leads/groups lists cached; **Recent** filter shows last opened records; **Starred** works from cached data.
 - **Notifications** — last fetched list and unread badge count cached for offline viewing.
 
+**Phase 2.5 offline (detail read + sync safety):**
+
+- **Detail screens** — open cached task, project, CRM record, or dashboard snapshot after one online visit (read-only offline).
+- **Job card sync conflicts** — if the server copy changed after you opened a card, sync pauses with a choice: keep your changes or use the server copy.
+
 ## Pilot modules (existing shells)
 
 - Dashboard, Clients, Projects, Tasks, Notifications, Attachments — list/load stubs from Phase 1 pilot.
