@@ -14,6 +14,7 @@ import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { ScreenBody } from '../../components/shell/ScreenBody'
 import { useNetwork } from '../../hooks/useNetwork'
@@ -252,6 +253,7 @@ export function ProjectsHomeScreen({ navigation }: Props) {
         showNotifications
         onNotificationsPress={() => rootNavigation.navigate('Notifications')}
       />
+      <OfflineBanner visible={!isOnline} variant="read" />
       <ScreenBody padded={false}>
         {tab === 'tasks' ? (
           <ProjectInsightsBar

@@ -4,12 +4,22 @@ import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
 
 
-export function OfflineBanner({ visible }: { visible: boolean }) {
+type OfflineBannerProps = {
+  visible: boolean
+  /** sync = field capture queues; read = browse cached lists (Phase 2 navigation). */
+  variant?: 'sync' | 'read'
+}
+
+export function OfflineBanner({ visible, variant = 'sync' }: OfflineBannerProps) {
   const styles = useThemedStyles(createStyles)
   if (!visible) return null
+  const text =
+    variant === 'read'
+      ? 'Offline — showing saved copy. Connect to refresh.'
+      : 'Offline — changes will sync when you reconnect'
   return (
     <View style={styles.banner}>
-      <Text style={styles.text}>Offline — changes will sync when you reconnect</Text>
+      <Text style={styles.text}>{text}</Text>
     </View>
   )
 }

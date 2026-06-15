@@ -31,6 +31,7 @@ type Props<T> = {
   showNotifications?: boolean
   onItemPress?: (item: T) => void
   renderItemExtra?: (item: T) => React.ReactNode
+  topBanner?: React.ReactNode
 }
 
 export function ModuleListScreen<T>({
@@ -45,7 +46,8 @@ export function ModuleListScreen<T>({
   navigation,
   showNotifications = true,
   onItemPress,
-  renderItemExtra
+  renderItemExtra,
+  topBanner
 }: Props<T>) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
@@ -89,6 +91,7 @@ export function ModuleListScreen<T>({
         showNotifications={showNotifications}
       />
       <ScreenBody padded={false}>
+        {topBanner}
         <View style={styles.searchWrap}>
           <TextInput
             style={styles.search}

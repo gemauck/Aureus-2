@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { FontAwesome5 } from '@expo/vector-icons'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { AppHeader } from '../../components/shell/AppHeader'
 import { openTask } from '../../dashboard/dashboardNavigation'
 import { useNetwork } from '../../hooks/useNetwork'
@@ -197,6 +198,7 @@ export function MyTasksHomeScreen({ navigation }: Props) {
         subtitle="Project tasks and personal to-dos"
         onNotificationsPress={() => navigation.getParent()?.navigate('Notifications')}
       />
+      <OfflineBanner visible={!isOnline} variant="read" />
 
       {loading && !refreshing ? (
         <View style={styles.center}>

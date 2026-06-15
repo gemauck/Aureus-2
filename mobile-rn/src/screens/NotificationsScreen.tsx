@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { OfflineBanner } from '../components/OfflineBanner'
 import { ModuleListScreen } from '../components/shell/ModuleListScreen'
 import { useNetwork } from '../hooks/useNetwork'
 import {
@@ -70,6 +71,7 @@ export function NotificationsScreen({ navigation }: Props) {
       subtitle="Updates from across the ERP"
       navigation={navigation}
       showNotifications={false}
+      topBanner={<OfflineBanner visible={!isOnline} variant="read" />}
       loadItems={loadItems}
       keyExtractor={(item) => item.id}
       renderTitle={(item) => item.title || item.message || 'Notification'}
