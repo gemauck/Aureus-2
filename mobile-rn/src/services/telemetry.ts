@@ -11,21 +11,37 @@ let sentry: SentryModule | null = null
 let initAttempted = false
 
 export function initTelemetry(): void {
-  if (initAttempted || !SENTRY_DSN) return
+  if (initAttempted) return
   initAttempted = true
+
+  if (SENTRY_DSN) {
+    try {
+      // Optional native dependency — no-op when not installed or DSN unset.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Sentry = require('@sentry/react-native') as SentryModule
+      Sentry.init({
+        dsn: SENTRY_DSN,
+        enableNative: true,
+        tracesSampleRate: 0.1,
+        enableAutoSessionTracking: true
+      })
+      sentry = Sentry
+    } catch {
+      console.warn('[telemetry] Sentry not available — set EXPO_PUBLIC_SENTRY_DSN and install @sentry/react-native')
+    }
+  }
+
   try {
-    // Optional native dependency — no-op when not installed or DSN unset.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Sentry = require('@sentry/react-native') as SentryModule
-    Sentry.init({
-      dsn: SENTRY_DSN,
-      enableNative: true,
-      tracesSampleRate: 0.1,
-      enableAutoSessionTracking: true
-    })
-    sentry = Sentry
+    const ErrorUtils = (global as { ErrorUtils?: { getGlobalHandler: () => (e: unknown, f?: boolean) => void; setGlobalHandler: (h: (e: unknown, f?: boolean) => void) => void } }).ErrorUtils
+    if (ErrorUtils?.getGlobalHandler && ErrorUtils?.setGlobalHandler) {
+      const defaultHandler = ErrorUtils.getGlobalHandler()
+      ErrorUtils.setGlobalHandler((error, isFatal) => {
+        trackError(error, isFatal ? 'GlobalFatal' : 'Global')
+        defaultHandler(error, isFatal)
+      })
+    }
   } catch {
-    console.warn('[telemetry] Sentry not available — set EXPO_PUBLIC_SENTRY_DSN and install @sentry/react-native')
+    /* non-fatal */
   }
 }
 

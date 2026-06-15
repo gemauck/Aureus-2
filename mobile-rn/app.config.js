@@ -24,7 +24,7 @@ module.exports = {
     updates: {
       enabled: true,
       url: `${OTA_BASE.replace(/\/$/, '')}/api/public/mobile-ota/manifest`,
-      // Safeguards: native never checks/applies on cold start — JS hook prefetches after login (no auto-reload).
+      // Safeguards: native never checks/applies on cold start — JS hook prefetches after login; user confirms restart.
       checkAutomatically: 'NEVER',
       fallbackToCacheTimeout: 0
     },

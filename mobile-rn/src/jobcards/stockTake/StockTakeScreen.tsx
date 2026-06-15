@@ -41,7 +41,8 @@ export function StockTakeScreen() {
   const [locationId, setLocationId] = useState('')
   const { rows, loading: stockLoading, error: stockError } = useLocationInventory(
     locationId,
-    Boolean(locationId)
+    Boolean(locationId),
+    { mode: 'stockTake' }
   )
   const [counts, setCounts] = useState<Record<string, string>>({})
   const [lineSearch, setLineSearch] = useState('')

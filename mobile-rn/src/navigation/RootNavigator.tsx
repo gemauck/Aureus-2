@@ -159,7 +159,7 @@ function AuthenticatedAppInner() {
   const refreshChatUnreadRef = React.useRef(refreshChatUnread)
   refreshChatUnreadRef.current = refreshChatUnread
 
-  // OTA: prefetch after login; downloaded bundles apply when the app is backgrounded.
+  // OTA: prefetch after login; user is prompted before restart (no silent reload on background).
   useOTAUpdates(true)
   useAppUpdateCheck(true)
 

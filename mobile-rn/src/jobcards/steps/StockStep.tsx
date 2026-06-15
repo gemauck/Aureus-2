@@ -2,13 +2,12 @@ import React, { useEffect, useMemo } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { createStockEntryRow } from '../../../../src/jobCardWizard/formDefaults.js'
 import { useJobCardWizard } from '../WizardContext'
-import { prefetchLocationInventory, useLocationInventory } from '../hooks/useLocationInventory'
+import { useLocationInventory } from '../hooks/useLocationInventory'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { SectionCard } from '../components/SectionCard'
 import { InfoBanner } from '../components/InfoBanner'
 import { useFormStyles } from '../components/formStyles'
-import type { JobCardFormData, StockEntryRow as StockRow, StockLocation } from '../types'
-import { useNetwork } from '../../hooks/useNetwork'
+import type { InventoryItem, JobCardFormData, StockEntryRow as StockRow, StockLocation } from '../types'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -29,11 +28,15 @@ function StockEntryRowEditor({
   onUpdate: (id: string, patch: Partial<StockRow>) => void
   onRemove: (id: string) => void
   onAddLine: (rowId: string, pick?: { itemName?: string }) => void
+  catalogFallback: InventoryItem[]
 }) {
   const styles = useThemedStyles(createStyles)
   const formStyles = useFormStyles()
   const { jc } = useTheme()
-  const { rows, loading, error, fromCache } = useLocationInventory(row.locationId, Boolean(row.locationId))
+  const { rows, loading, error, fromCache } = useLocationInventory(row.locationId, Boolean(row.locationId), {
+    mode: 'jobCard',
+    catalogFallback
+  })
 
   const skuOptions = useMemo(
     () =>
@@ -126,19 +129,13 @@ export function StockStep() {
     stockLocations,
     stockEntryRows,
     setStockEntryRows,
-    ensureInventoryLoaded
+    ensureInventoryLoaded,
+    inventory
   } = useJobCardWizard()
-
-  const { isOnline } = useNetwork()
 
   useEffect(() => {
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
-
-  useEffect(() => {
-    if (!isOnline || !stockLocations.length) return
-    void prefetchLocationInventory(stockLocations.map((l) => l.id))
-  }, [isOnline, stockLocations])
 
   const locationOptions = stockLocations.map((l) => ({
     value: l.id,
@@ -209,6 +206,7 @@ export function StockStep() {
             onUpdate={updateRow}
             onRemove={(id) => setStockEntryRows((rows) => rows.filter((r) => r.id !== id))}
             onAddLine={addStockFromRow}
+            catalogFallback={inventory}
           />
         ))}
 

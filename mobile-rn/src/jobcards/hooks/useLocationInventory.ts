@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { jobCardStockPickListFromCachedInventory } from '../../../../src/jobCardWizard/stockPickList.js'
 import { REFERENCE_CACHE_KEYS } from '../../../../src/jobCardWizard/constants.js'
 import { useNetwork } from '../../hooks/useNetwork'
 import { jobcardsApi } from '../api'
@@ -7,6 +8,20 @@ import type { InventoryItem } from '../types'
 
 const memoryCache = new Map<string, InventoryItem[]>()
 let diskCachePromise: Promise<Record<string, InventoryItem[]>> | null = null
+
+/** jobCard: on-hand only (web parity). stockTake: full catalog incl. zero qty. */
+export type LocationInventoryMode = 'jobCard' | 'stockTake'
+
+function cacheKey(locationId: string, mode: LocationInventoryMode) {
+  return `${mode}:${locationId}`
+}
+
+function apiOptsForMode(mode: LocationInventoryMode) {
+  if (mode === 'stockTake') {
+    return { includeZero: true, allSkus: true }
+  }
+  return {}
+}
 
 async function readLocationInventoryDiskCache(): Promise<Record<string, InventoryItem[]>> {
   if (!diskCachePromise) {
@@ -24,11 +39,11 @@ async function readLocationInventoryDiskCache(): Promise<Record<string, Inventor
 }
 
 async function writeLocationInventoryDiskCache(
-  locationId: string,
+  key: string,
   rows: InventoryItem[]
 ): Promise<void> {
   const disk = await readLocationInventoryDiskCache()
-  disk[locationId] = rows
+  disk[key] = rows
   diskCachePromise = Promise.resolve(disk)
   try {
     await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.locationInventory, JSON.stringify(disk))
@@ -37,8 +52,20 @@ async function writeLocationInventoryDiskCache(
   }
 }
 
+type UseLocationInventoryOptions = {
+  mode?: LocationInventoryMode
+  /** Offline fallback for job card stock (global catalog cached on device). */
+  catalogFallback?: InventoryItem[]
+}
+
 /** Fetch location-scoped inventory (van / warehouse stock picker). Cached offline per site. */
-export function useLocationInventory(locationId: string, enabled = true) {
+export function useLocationInventory(
+  locationId: string,
+  enabled = true,
+  options: UseLocationInventoryOptions = {}
+) {
+  const mode = options.mode ?? 'jobCard'
+  const catalogFallback = options.catalogFallback
   const { isOnline } = useNetwork()
   const [rows, setRows] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -52,27 +79,41 @@ export function useLocationInventory(locationId: string, enabled = true) {
       return
     }
 
-    const mem = memoryCache.get(locationId)
+    const key = cacheKey(locationId, mode)
+    const mem = memoryCache.get(key)
     if (mem) {
       setRows(mem)
       setFromCache(!isOnline)
     } else {
       const disk = await readLocationInventoryDiskCache()
-      const cached = disk[locationId]
+      const cached = disk[key]
       if (Array.isArray(cached) && cached.length) {
-        memoryCache.set(locationId, cached)
+        memoryCache.set(key, cached)
         setRows(cached)
         setFromCache(true)
       }
     }
 
     if (!isOnline) {
-      if (!memoryCache.get(locationId)?.length) {
-        setError('Stock list unavailable offline — open this location once while online.')
-        setRows([])
-      } else {
+      const existing = memoryCache.get(key)
+      if (existing?.length) {
         setError('')
+        setLoading(false)
+        return
       }
+      if (mode === 'jobCard' && catalogFallback?.length) {
+        const picked = jobCardStockPickListFromCachedInventory(catalogFallback, locationId)
+        if (picked.length) {
+          memoryCache.set(key, picked)
+          setRows(picked)
+          setFromCache(true)
+          setError('')
+          setLoading(false)
+          return
+        }
+      }
+      setError('Stock list unavailable offline — open this location once while online.')
+      setRows([])
       setLoading(false)
       return
     }
@@ -80,21 +121,27 @@ export function useLocationInventory(locationId: string, enabled = true) {
     setLoading(true)
     setError('')
     try {
-      const inv = await jobcardsApi.getPublicInventory(locationId, {
-        includeZero: true,
-        allSkus: true
-      })
-      memoryCache.set(locationId, inv)
+      const inv = await jobcardsApi.getPublicInventory(locationId, apiOptsForMode(mode))
+      memoryCache.set(key, inv)
       setRows(inv)
       setFromCache(false)
-      await writeLocationInventoryDiskCache(locationId, inv)
+      await writeLocationInventoryDiskCache(key, inv)
       if (!inv.length) {
-        setError('No stock items found for this location.')
+        setError(
+          mode === 'stockTake'
+            ? 'No stock items found for this location.'
+            : 'No on-hand stock at this location.'
+        )
       }
     } catch (e) {
-      const fallback = memoryCache.get(locationId)
+      const fallback = memoryCache.get(key)
       if (fallback?.length) {
         setRows(fallback)
+        setFromCache(true)
+        setError('')
+      } else if (mode === 'jobCard' && catalogFallback?.length) {
+        const picked = jobCardStockPickListFromCachedInventory(catalogFallback, locationId)
+        setRows(picked)
         setFromCache(true)
         setError('')
       } else {
@@ -104,7 +151,7 @@ export function useLocationInventory(locationId: string, enabled = true) {
     } finally {
       setLoading(false)
     }
-  }, [locationId, enabled, isOnline])
+  }, [locationId, enabled, isOnline, mode, catalogFallback])
 
   useEffect(() => {
     void load()
@@ -113,20 +160,21 @@ export function useLocationInventory(locationId: string, enabled = true) {
   return { rows, loading, error, fromCache, reload: load }
 }
 
-/** Warm per-location stock caches while online (e.g. all vans on the stock step). */
-export async function prefetchLocationInventory(locationIds: string[]): Promise<void> {
+/** Warm one location cache while online (optional; job card step loads lazily per row). */
+export async function prefetchLocationInventory(
+  locationIds: string[],
+  mode: LocationInventoryMode = 'jobCard'
+): Promise<void> {
   const ids = [...new Set(locationIds.map((id) => String(id || '').trim()).filter(Boolean))]
   if (!ids.length) return
   await Promise.all(
     ids.map(async (locationId) => {
-      if (memoryCache.has(locationId)) return
+      const key = cacheKey(locationId, mode)
+      if (memoryCache.has(key)) return
       try {
-        const inv = await jobcardsApi.getPublicInventory(locationId, {
-          includeZero: true,
-          allSkus: true
-        })
-        memoryCache.set(locationId, inv)
-        await writeLocationInventoryDiskCache(locationId, inv)
+        const inv = await jobcardsApi.getPublicInventory(locationId, apiOptsForMode(mode))
+        memoryCache.set(key, inv)
+        await writeLocationInventoryDiskCache(key, inv)
       } catch {
         /* best-effort prefetch */
       }

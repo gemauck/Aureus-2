@@ -13,8 +13,8 @@ export type OtaCheckResult =
   | { status: 'error'; message: string }
 
 let lastPromptedUpdateId: string | null = null
-/** Set after a silent background download; applied when the app leaves the foreground. */
-let pendingOtaReload = false
+/** Downloaded bundle waiting for explicit user restart (never auto-reload on background). */
+let pendingOtaUpdateId: string | null = null
 
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   if (updateId && lastPromptedUpdateId === updateId) {
@@ -25,7 +25,7 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   return new Promise((resolve) => {
     Alert.alert(
       'Update ready',
-      'A new version was downloaded. Tap Restart to apply it now.',
+      'A new version was downloaded. Restart now to apply it? Your current screen is saved as a draft where supported.',
       [
         {
           text: 'Later',
@@ -35,6 +35,7 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
         {
           text: 'Restart',
           onPress: () => {
+            pendingOtaUpdateId = null
             void Updates.reloadAsync()
             resolve({ status: 'downloaded', willReload: true })
           }
@@ -44,25 +45,23 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   })
 }
 
-/** Apply a downloaded OTA bundle as soon as it is safe (background), not while the user is active. */
-function scheduleBackgroundOtaApply(): OtaCheckResult {
-  pendingOtaReload = true
-  const state = AppState.currentState
-  if (state === 'background' || state === 'inactive') {
-    pendingOtaReload = false
-    void Updates.reloadAsync()
-    return { status: 'downloaded', willReload: true }
+/** Mark bundle ready and prompt when foreground — never reload while backgrounded. */
+function markDownloadedOtaUpdate(updateId?: string | null): OtaCheckResult {
+  const id = updateId || 'pending'
+  pendingOtaUpdateId = id
+  if (AppState.currentState === 'active') {
+    void promptApplyUpdate(id)
   }
   return { status: 'downloaded', willReload: false }
 }
 
-function tryApplyPendingOtaOnBackground() {
-  if (!pendingOtaReload) return
-  pendingOtaReload = false
-  void Updates.reloadAsync()
+function tryPromptPendingOtaOnForeground() {
+  if (!pendingOtaUpdateId) return
+  if (lastPromptedUpdateId === pendingOtaUpdateId) return
+  void promptApplyUpdate(pendingOtaUpdateId)
 }
 
-/** Download a newer bundle in the background — applies when the app is backgrounded. */
+/** Download a newer bundle in the background — user chooses when to restart. */
 export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
   if (__DEV__) return { status: 'dev' }
   if (Platform.OS !== 'android') return { status: 'unsupported' }
@@ -72,8 +71,8 @@ export async function prefetchOtaUpdate(): Promise<OtaCheckResult> {
     const check = await Updates.checkForUpdateAsync()
     if (!check.isAvailable) return { status: 'current' }
 
-    await Updates.fetchUpdateAsync()
-    return scheduleBackgroundOtaApply()
+    const fetch = await Updates.fetchUpdateAsync()
+    return markDownloadedOtaUpdate(fetch.manifest?.id ?? null)
   } catch (error) {
     const raw = error instanceof Error ? error.message : 'OTA prefetch failed'
     const message =
@@ -106,20 +105,17 @@ export async function applyOtaUpdate(
     const fetch = await Updates.fetchUpdateAsync()
     const updateId = fetch.manifest?.id ?? null
 
-    const shouldReload = options.reload ?? !options.silent
+    const shouldReload = options.reload === true
     if (!shouldReload) {
-      if (options.prompt) {
+      if (options.prompt || options.silent === false) {
         return promptApplyUpdate(updateId)
       }
-      return scheduleBackgroundOtaApply()
+      return markDownloadedOtaUpdate(updateId)
     }
 
-    if (options.silent) {
-      await Updates.reloadAsync()
-      return { status: 'downloaded', willReload: true }
-    }
-
-    return promptApplyUpdate(updateId)
+    pendingOtaUpdateId = null
+    await Updates.reloadAsync()
+    return { status: 'downloaded', willReload: true }
   } catch (error) {
     const raw = error instanceof Error ? error.message : 'OTA check failed'
     const message =
@@ -187,11 +183,10 @@ export function useOTAUpdates(enabled = true) {
     }, LAUNCH_PREFETCH_DELAY_MS)
 
     const onAppStateChange = (state: string) => {
-      if (state === 'background' || state === 'inactive') {
-        tryApplyPendingOtaOnBackground()
-        return
+      if (state === 'active') {
+        tryPromptPendingOtaOnForeground()
+        void prefetch()
       }
-      if (state === 'active') void prefetch()
     }
     const sub = AppState.addEventListener('change', onAppStateChange)
 

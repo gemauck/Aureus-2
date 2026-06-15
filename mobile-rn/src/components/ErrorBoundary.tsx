@@ -2,6 +2,7 @@ import React from 'react'
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import * as Updates from 'expo-updates'
 import { API_BASE_URL } from '../config'
+import { trackError } from '../services/telemetry'
 import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
 
@@ -18,6 +19,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
+    trackError(error, 'ErrorBoundary')
     console.error('App crash:', error)
   }
 
