@@ -25,6 +25,8 @@ import {
   type DashboardWidgetId
 } from '../dashboard/dashboardConfig'
 import { openJobCard, openModule, openNotification, openTask } from '../dashboard/dashboardNavigation'
+import { buildWidgetSnapshot, unreadFromNotifications } from '../widgets/buildWidgetSnapshot'
+import { refreshHomeScreenWidgets } from '../widgets/refreshHomeScreenWidgets'
 import { erpApi, mergeDashboardTasks, type DashboardJobCard, type DashboardNotification, type DashboardTask } from '../services/erpApi'
 import { useAuth } from '../state/AuthContext'
 import { useNotificationUnread } from '../notifications/NotificationUnreadContext'
@@ -254,6 +256,20 @@ export function DashboardScreen({ navigation }: Props) {
           activeProjects: proj.active,
           clients: clients.total
         })
+        void refreshHomeScreenWidgets(
+          buildWidgetSnapshot({
+            user,
+            projectTasks: Array.isArray(pt) ? pt : [],
+            userTasks: Array.isArray(ut) ? ut : [],
+            unreadNotifications: unreadFromNotifications(
+              Array.isArray(notes) ? notes : [],
+              notificationUnread
+            ),
+            activeProjects: proj.active,
+            totalProjects: proj.total,
+            jobCards: Array.isArray(cards) ? cards : []
+          })
+        )
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load dashboard')
       } finally {
@@ -261,7 +277,7 @@ export function DashboardScreen({ navigation }: Props) {
         setRefreshing(false)
       }
     },
-    [accessToken]
+    [accessToken, notificationUnread, user]
   )
 
   useEffect(() => {

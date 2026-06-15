@@ -312,6 +312,13 @@ export function SettingsScreen({ navigation }: Props) {
               <Text style={styles.linkBtnText}>Customize dashboard widgets</Text>
               <FontAwesome5 name="chevron-right" size={12} color={erp.textSubtle} />
             </Pressable>
+            {Platform.OS === 'android' ? (
+              <Text style={styles.widgetHint}>
+                Home screen widgets: long-press your launcher, choose Widgets, then add My Tasks,
+                Notifications, or ERP Overview. Open the dashboard once after signing in to refresh
+                them.
+              </Text>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -587,6 +594,7 @@ function createStyles({ erp }: { erp: ErpTheme }) {
     segmentLabel: { fontSize: 13, fontWeight: '600', color: erp.textMuted },
     segmentLabelSelected: { color: erp.primary, fontWeight: '700' },
     themeHint: { fontSize: 12, color: erp.textMuted, marginTop: 10, lineHeight: 18 },
+    widgetHint: { fontSize: 12, color: erp.textMuted, marginTop: 10, lineHeight: 18 },
     detailRow: {
       paddingVertical: 10,
       borderBottomWidth: StyleSheet.hairlineWidth,

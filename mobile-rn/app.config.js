@@ -2,7 +2,7 @@ const fs = require('fs')
 const path = require('path')
 
 /** Bump when native modules / permissions change — must match native APK expo_runtime_version. */
-const RUNTIME_VERSION = 'erp-mobile-3'
+const RUNTIME_VERSION = 'erp-mobile-4'
 
 const OTA_BASE =
   process.env.MOBILE_OTA_PUBLIC_URL ||
@@ -14,6 +14,54 @@ const base = require('./app.json').expo
 const plugins = [...(base.plugins || [])]
 if (!plugins.some((p) => p === 'expo-updates' || (Array.isArray(p) && p[0] === 'expo-updates'))) {
   plugins.push('expo-updates')
+}
+if (
+  !plugins.some(
+    (p) => Array.isArray(p) && (p[0] === 'react-native-android-widget' || p[0] === 'react-native-android-widget/app.plugin')
+  )
+) {
+  plugins.push([
+    'react-native-android-widget',
+    {
+      widgets: [
+        {
+          name: 'ErpTasks',
+          label: 'My Tasks',
+          description: 'Open tasks from Abcotronics ERP',
+          minWidth: '180dp',
+          minHeight: '110dp',
+          targetCellWidth: 3,
+          targetCellHeight: 2,
+          previewImage: './assets/icon.png',
+          resizeMode: 'horizontal|vertical',
+          updatePeriodMillis: 1800000
+        },
+        {
+          name: 'ErpNotifications',
+          label: 'Notifications',
+          description: 'Unread ERP notifications at a glance',
+          minWidth: '110dp',
+          minHeight: '110dp',
+          targetCellWidth: 2,
+          targetCellHeight: 2,
+          previewImage: './assets/icon.png',
+          updatePeriodMillis: 1800000
+        },
+        {
+          name: 'ErpSummary',
+          label: 'ERP Overview',
+          description: 'Tasks, notifications, projects and job cards',
+          minWidth: '250dp',
+          minHeight: '140dp',
+          targetCellWidth: 4,
+          targetCellHeight: 3,
+          previewImage: './assets/icon.png',
+          resizeMode: 'horizontal|vertical',
+          updatePeriodMillis: 1800000
+        }
+      ]
+    }
+  ])
 }
 
 module.exports = {

@@ -200,7 +200,7 @@ fi
 if [ "${SKIP_MOBILE_OTA:-0}" != "1" ] && [ -f "${APP_DIR}/scripts/publish-mobile-ota-selfhosted.sh" ]; then
   echo
   echo "-> Publishing mobile JS OTA bundle (automatic in-app updates)..."
-  OTA_RUNTIMES="${MOBILE_OTA_RUNTIMES:-erp-mobile-1 erp-mobile-2 erp-mobile-3}"
+  OTA_RUNTIMES="${MOBILE_OTA_RUNTIMES:-erp-mobile-1 erp-mobile-2 erp-mobile-3 erp-mobile-4}"
   ota_ok=1
   for rv in ${OTA_RUNTIMES}; do
     echo "   Runtime: ${rv}"

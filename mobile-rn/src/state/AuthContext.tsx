@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { AppState } from 'react-native'
 import { apiClient, isUnauthorizedError, refreshAccessToken, registerAuthRefresh } from '../services/apiClient'
 import { clearSession, loadSession, saveSession } from '../services/authSession'
+import { clearHomeScreenWidgets } from '../widgets/refreshHomeScreenWidgets'
 import { trackError } from '../services/telemetry'
 import type { AuthSession, User } from '../types'
 
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await apiClient.mobileLogout(session?.refreshToken, session?.accessToken || undefined)
         setSessionExpired(false)
         await clearAuthSession()
+        void clearHomeScreenWidgets()
       },
       async refreshAuth() {
         if (!session?.refreshToken) return
