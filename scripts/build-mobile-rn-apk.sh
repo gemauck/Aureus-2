@@ -38,6 +38,11 @@ GRADLE_PROPS="$RN/android/gradle.properties"
 if ! grep -q '^android.minSdkVersion=24' "$GRADLE_PROPS" 2>/dev/null; then
   echo 'android.minSdkVersion=24' >> "$GRADLE_PROPS"
 fi
+ROOT_GRADLE="$RN/android/build.gradle"
+if [[ -f "$ROOT_GRADLE" ]]; then
+  sed -i '' "s|findProperty('android.minSdkVersion') ?: '23'|findProperty('android.minSdkVersion') ?: '24'|" "$ROOT_GRADLE" 2>/dev/null \
+    || sed -i "s|findProperty('android.minSdkVersion') ?: '23'|findProperty('android.minSdkVersion') ?: '24'|" "$ROOT_GRADLE"
+fi
 
 # Phone ABIs only — skip x86/x86_64 emulator slices in standalone APKs.
 PHONE_ABIS='armeabi-v7a,arm64-v8a'

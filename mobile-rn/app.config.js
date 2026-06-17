@@ -20,6 +20,8 @@ if (!plugins.some((p) => Array.isArray(p) && p[0] === 'expo-build-properties')) 
     'expo-build-properties',
     {
       android: {
+        // react-native-webrtc requires API 24+
+        minSdkVersion: 24,
         // Drop x86/x86_64 emulator ABIs from release APKs (~30–50 MB smaller).
         buildArchs: ['armeabi-v7a', 'arm64-v8a']
       }
