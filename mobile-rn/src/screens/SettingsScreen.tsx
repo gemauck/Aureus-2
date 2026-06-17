@@ -16,7 +16,7 @@ import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
 import { OTA_RUNTIME_VERSION } from '../constants/ota'
 import { AppHeader } from '../components/shell/AppHeader'
 import { ScreenBody } from '../components/shell/ScreenBody'
-import { API_BASE_URL } from '../config'
+import { ANDROID_APK_DOWNLOAD_URL, API_BASE_URL } from '../config'
 import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { useOTAUpdates } from '../hooks/useOTAUpdates'
 import { useAuth } from '../state/AuthContext'
@@ -38,7 +38,7 @@ type RemoteVersion = {
 type CheckState = 'ota-check' | 'ota-download' | 'ota-apply' | 'apk-check' | 'apk-download' | null
 
 const OTA_MANIFEST_URL = `${API_BASE_URL}/api/public/mobile-ota/manifest`
-const DEFAULT_APK_URL = `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
+const DEFAULT_APK_URL = ANDROID_APK_DOWNLOAD_URL
 
 function formatWhen(iso: string | null): string {
   if (!iso) return 'Not checked yet'

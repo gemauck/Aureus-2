@@ -36,6 +36,16 @@ function buildAuthInjectionScript(webToken: string, user: User | null): string {
   `
 }
 
+function isApkDownloadUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const pathname = new URL(url).pathname.toLowerCase()
+    return pathname.endsWith('.apk') || pathname.includes('/mobile-apk/download')
+  } catch {
+    return url.toLowerCase().includes('.apk') || url.includes('/mobile-apk/download')
+  }
+}
+
 export function ErpModuleWebView({ webPath, title, onBack }: Props) {
   const { erp } = useTheme()
   const styles = useThemedStyles(createStyles)
@@ -77,6 +87,10 @@ export function ErpModuleWebView({ webPath, title, onBack }: Props) {
 
   const handleShouldStartLoad = useCallback(
     (request: { url: string }) => {
+      if (isApkDownloadUrl(request.url)) {
+        void Linking.openURL(request.url)
+        return false
+      }
       if (isAllowedUrl(request.url)) return true
       void Linking.openURL(request.url)
       return false

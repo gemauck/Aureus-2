@@ -895,7 +895,7 @@ const Settings = () => {
                     Install the native Abcotronics ERP app for technicians — job cards, GPS trips, and offline sync on Android.
                 </p>
                 <a
-                    href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/public/downloads/Abcotronics-ERP-Mobile.apk'}
+                    href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/api/public/mobile-apk/download'}
                     download
                     className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                         isDark

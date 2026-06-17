@@ -1,6 +1,6 @@
 // Android ERP mobile app (React Native) sideload download helpers.
 
-const DEFAULT_ANDROID_APK_URL = '/public/downloads/Abcotronics-ERP-Mobile.apk';
+const DEFAULT_ANDROID_APK_URL = '/api/public/mobile-apk/download';
 
 export function getDefaultAndroidApkUrl() {
     return DEFAULT_ANDROID_APK_URL;

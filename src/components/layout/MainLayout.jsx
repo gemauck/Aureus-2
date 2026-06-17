@@ -2210,7 +2210,7 @@ const MainLayout = () => {
                                         Mobile app
                                     </div>
                                     <a
-                                        href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/public/downloads/Abcotronics-ERP-Mobile.apk'}
+                                        href={window.mobileAppDownload?.getDefaultAndroidApkUrl?.() || '/api/public/mobile-apk/download'}
                                         onClick={() => setShowThemeMenu(false)}
                                         className={`erp-theme-menu-item w-full text-left px-3 py-2 rounded-lg text-sm ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-start gap-3 transition-colors`}
                                         download
@@ -2266,7 +2266,7 @@ const MainLayout = () => {
 
                         const androidApkUrl =
                             window.mobileAppDownload?.getDefaultAndroidApkUrl?.() ||
-                            '/public/downloads/Abcotronics-ERP-Mobile.apk';
+                            '/api/public/mobile-apk/download';
                         const showAndroidAppIcon = window.mobileAppDownload?.isAndroidBrowser?.() || false;
 
                         const androidAppButton = showAndroidAppIcon ? (

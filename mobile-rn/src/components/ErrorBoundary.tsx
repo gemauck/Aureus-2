@@ -1,7 +1,7 @@
 import React from 'react'
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import * as Updates from 'expo-updates'
-import { API_BASE_URL } from '../config'
+import { ANDROID_APK_DOWNLOAD_URL } from '../config'
 import { trackError } from '../services/telemetry'
 import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
@@ -9,7 +9,7 @@ import type { ErpTheme } from '../theme/palettes'
 type Props = { children: React.ReactNode }
 type State = { error: Error | null }
 
-const DEFAULT_APK_URL = `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
+const DEFAULT_APK_URL = ANDROID_APK_DOWNLOAD_URL
 
 export class ErrorBoundary extends React.Component<Props, State> {
   state: State = { error: null }

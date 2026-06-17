@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Linking, Platform } from 'react-native'
-import { API_BASE_URL } from '../config'
+import { ANDROID_APK_DOWNLOAD_URL, API_BASE_URL } from '../config'
 import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
 
 type MobileAppVersionPayload = {
@@ -40,7 +40,7 @@ export function useAppUpdateCheck(enabled = false) {
     if (!interactive && promptedRef.current) return
     promptedRef.current = true
 
-    const url = remote.apkUrl || `${API_BASE_URL}/public/downloads/Abcotronics-ERP-Mobile.apk`
+    const url = remote.apkUrl || ANDROID_APK_DOWNLOAD_URL
     Alert.alert(
       'App update required',
       remote.releaseNotes ||

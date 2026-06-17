@@ -2776,6 +2776,17 @@ app.all('/api/public/mobile-app-version', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/mobile-apk/download', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-apk-download.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public mobile-apk-download API error:', e)
+    return next(e)
+  }
+})
+
 app.all('/api/public/mobile-ota/manifest', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-ota-manifest.js'))
@@ -3295,6 +3306,10 @@ function setHttp2SafeStaticHeaders(res, path) {
   } else if (path.match(/\.(woff|woff2|ttf|eot)$/i)) {
     // Fonts: cache for 1 year
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+  } else if (path.endsWith('.apk')) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive')
+    res.setHeader('Content-Disposition', 'attachment; filename="Abcotronics-ERP-Mobile.apk"')
+    res.setHeader('Cache-Control', 'public, max-age=3600')
   }
 
   // Do NOT set Content-Length manually here.
@@ -3336,6 +3351,24 @@ app.get(/^\/uploads\//, (req, res) => {
     }
   })
 })
+
+// Android APK sideload — explicit routes so downloads never fall through to the SPA catch-all.
+const MOBILE_APK_FILENAME = 'Abcotronics-ERP-Mobile.apk'
+const mobileApkFilePath = path.join(rootDir, 'public', 'downloads', MOBILE_APK_FILENAME)
+function sendMobileApkDownload(req, res) {
+  if (!existsSync(mobileApkFilePath)) {
+    return res.status(404).type('text/plain').send('Android APK not published yet.')
+  }
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive')
+  res.setHeader('Content-Disposition', `attachment; filename="${MOBILE_APK_FILENAME}"`)
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.sendFile(mobileApkFilePath, (err) => {
+    if (err && !res.headersSent) res.status(404).type('text/plain').send('File not found')
+  })
+}
+app.get('/public/downloads/Abcotronics-ERP-Mobile.apk', sendMobileApkDownload)
+app.get('/downloads/Abcotronics-ERP-Mobile.apk', sendMobileApkDownload)
 
 // Serve Vite Projects bundle and CSS from /vite-projects
 // Requires: npm run build:vite-projects (outputs to dist/vite-projects/)
@@ -3440,6 +3473,12 @@ app.get('*', (req, res) => {
   const pathname = (req.url || '').split('?')[0]
   if (pathname.startsWith('/uploads/')) {
     return res.status(404).type('text/plain').send('File not found')
+  }
+  if (
+    pathname === '/public/downloads/Abcotronics-ERP-Mobile.apk' ||
+    pathname === '/downloads/Abcotronics-ERP-Mobile.apk'
+  ) {
+    return res.status(404).type('text/plain').send('Android APK not published yet.')
   }
   // Never serve index.html for /vite-projects/* - return 404 so browser doesn't get HTML as JS/CSS (MIME type error)
   if (pathname.startsWith('/vite-projects/')) {

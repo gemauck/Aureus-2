@@ -13,6 +13,9 @@ export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   'https://abcoafrica.co.za'
 
+/** Forces attachment headers — use for sideload APK downloads from Settings / update prompts. */
+export const ANDROID_APK_DOWNLOAD_URL = `${API_BASE_URL.replace(/\/$/, '')}/api/public/mobile-apk/download`
+
 export const SENTRY_DSN =
   (typeof extra.sentryDsn === 'string' && extra.sentryDsn) ||
   process.env.EXPO_PUBLIC_SENTRY_DSN ||

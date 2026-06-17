@@ -5,11 +5,11 @@
 import { ok, badRequest, serverError } from '../_lib/response.js'
 
 const ANDROID_VERSION = {
-  versionCode: 16,
-  versionName: '0.4.1',
-  apkUrl: 'https://abcoafrica.co.za/public/downloads/Abcotronics-ERP-Mobile.apk',
+  versionCode: 18,
+  versionName: '0.4.4',
+  apkUrl: 'https://abcoafrica.co.za/api/public/mobile-apk/download',
   releaseNotes:
-    'Notification sounds, chat separated from bell notifications, app icon badge fix, and improved push alerts. Install this APK for the latest native shell.',
+    'Smaller release APK (phone-only ABIs), OTA runtime erp-mobile-4, and latest native shell fixes. Download and install once — JS updates continue via Check for JS update.',
   /** Set true only when native shell must be replaced (permissions, SDK, runtime bump). */
   forceApkInstall: false
 }
