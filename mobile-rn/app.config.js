@@ -15,6 +15,17 @@ const plugins = [...(base.plugins || [])]
 if (!plugins.some((p) => p === 'expo-updates' || (Array.isArray(p) && p[0] === 'expo-updates'))) {
   plugins.push('expo-updates')
 }
+if (!plugins.some((p) => Array.isArray(p) && p[0] === 'expo-build-properties')) {
+  plugins.push([
+    'expo-build-properties',
+    {
+      android: {
+        // Drop x86/x86_64 emulator ABIs from release APKs (~30–50 MB smaller).
+        buildArchs: ['armeabi-v7a', 'arm64-v8a']
+      }
+    }
+  ])
+}
 if (
   !plugins.some(
     (p) => Array.isArray(p) && (p[0] === 'react-native-android-widget' || p[0] === 'react-native-android-widget/app.plugin')

@@ -39,6 +39,25 @@ if ! grep -q '^android.minSdkVersion=24' "$GRADLE_PROPS" 2>/dev/null; then
   echo 'android.minSdkVersion=24' >> "$GRADLE_PROPS"
 fi
 
+# Phone ABIs only — skip x86/x86_64 emulator slices in standalone APKs.
+PHONE_ABIS='armeabi-v7a,arm64-v8a'
+if grep -q '^reactNativeArchitectures=' "$GRADLE_PROPS" 2>/dev/null; then
+  sed -i '' "s|^reactNativeArchitectures=.*|reactNativeArchitectures=$PHONE_ABIS|" "$GRADLE_PROPS" 2>/dev/null \
+    || sed -i "s|^reactNativeArchitectures=.*|reactNativeArchitectures=$PHONE_ABIS|" "$GRADLE_PROPS"
+else
+  echo "reactNativeArchitectures=$PHONE_ABIS" >> "$GRADLE_PROPS"
+fi
+
+APP_GRADLE="$RN/android/app/build.gradle"
+if ! grep -q 'abiFilters' "$APP_GRADLE" 2>/dev/null; then
+  sed -i '' '/versionName /a\
+        ndk {\
+            abiFilters "arm64-v8a", "armeabi-v7a"\
+        }
+' "$APP_GRADLE" 2>/dev/null \
+    || sed -i '/versionName /a\        ndk {\n            abiFilters "arm64-v8a", "armeabi-v7a"\n        }' "$APP_GRADLE"
+fi
+
 COLORS="$RN/android/app/src/main/res/values/colors.xml"
 if ! grep -q splashscreen_background "$COLORS" 2>/dev/null; then
   sed -i '' 's|</resources>|  <color name="splashscreen_background">#1d4ed8</color>\n</resources>|' "$COLORS" 2>/dev/null \
