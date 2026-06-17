@@ -1,0 +1,40 @@
+# Sync the latest GitHub Release APK asset to production downloads (no local SSH).
+# 1) Publish APK:  gh release upload mobile-latest ~/Desktop/Abcotronics-ERP-Mobile.apk --clobber
+# 2) Sync server:  npm run mobile:apk:sync
+
+name: Mobile APK sync from release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync:
+    if: github.repository == 'gemauck/Aureus-2'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          gh release download mobile-latest -R gemauck/Aureus-2 -D "$RUNNER_TEMP/apk" -p '*.apk'
+          ls -lh "$RUNNER_TEMP/apk"
+          cp "$RUNNER_TEMP/apk"/*.apk "$RUNNER_TEMP/apk/Abcotronics-ERP-Mobile.apk"
+
+      - name: Upload to production downloads
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER != '' && secrets.DROPLET_USER || 'root' }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: ${{ runner.temp }}/apk/Abcotronics-ERP-Mobile.apk
+          target: /var/www/abcotronics-erp/public/downloads/
+          overwrite: true
+
+      - name: Verify on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER != '' && secrets.DROPLET_USER || 'root' }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: ls -lh /var/www/abcotronics-erp/public/downloads/Abcotronics-ERP-Mobile.apk

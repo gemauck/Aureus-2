@@ -32,6 +32,11 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - name: Install CMake and NDK (expo-av / native modules)
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "cmake;3.22.1" "ndk;26.1.10909125"
+
       - name: Build release APK (arm64 + armeabi-v7a)
         run: |
           mkdir -p "$RUNNER_TEMP/mobile-dist"
