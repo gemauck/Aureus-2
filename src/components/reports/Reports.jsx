@@ -13,6 +13,7 @@ const Reports = () => {
 
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
     const [myFeedbackViewerReady, setMyFeedbackViewerReady] = useState(!!window.MyFeedbackViewer);
+    const [mobileReportsReady, setMobileReportsReady] = useState(!!window.MobileAppReportsViewer);
     const [activeTab, setActiveTab] = useState(
       canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'my-queries')
     );
@@ -39,10 +40,12 @@ const Reports = () => {
             }
         }
 
-        if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit') {
+        if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit' || tab === 'mobile-app') {
             if (tab === 'audit' && !canViewAuditTrail) {
                 setActiveTab(canViewFeedback ? 'feedback' : 'my-queries');
             } else if (tab === 'feedback' && !canViewFeedback) {
+                setActiveTab('my-queries');
+            } else if (tab === 'mobile-app' && !canViewFeedback) {
                 setActiveTab('my-queries');
             } else {
                 setActiveTab(tab);
@@ -73,13 +76,20 @@ const Reports = () => {
         // Check if FeedbackViewer is already available
         if (window.FeedbackViewer) {
             setFeedbackViewerReady(true);
-            return;
+        }
+        if (window.MobileAppReportsViewer) {
+            setMobileReportsReady(true);
         }
         
         // Check periodically for FeedbackViewer if it's not loaded yet
         const checkInterval = setInterval(() => {
             if (window.FeedbackViewer) {
                 setFeedbackViewerReady(true);
+            }
+            if (window.MobileAppReportsViewer) {
+                setMobileReportsReady(true);
+            }
+            if (window.FeedbackViewer && window.MobileAppReportsViewer) {
                 clearInterval(checkInterval);
             }
         }, 200);
@@ -106,10 +116,14 @@ const Reports = () => {
         if (activeTab === 'my-queries' && window.MyFeedbackViewer && !myFeedbackViewerReady) {
             setMyFeedbackViewerReady(true);
         }
-    }, [activeTab, feedbackViewerReady, myFeedbackViewerReady]);
+        if (activeTab === 'mobile-app' && window.MobileAppReportsViewer && !mobileReportsReady) {
+            setMobileReportsReady(true);
+        }
+    }, [activeTab, feedbackViewerReady, myFeedbackViewerReady, mobileReportsReady]);
 
     const FeedbackViewer = window.FeedbackViewer;
     const MyFeedbackViewer = window.MyFeedbackViewer;
+    const MobileAppReportsViewer = window.MobileAppReportsViewer;
 
     return (
         <div className="erp-module-root space-y-3 min-w-0">
@@ -150,6 +164,25 @@ const Reports = () => {
                     >
                         My queries
                     </button>
+                    {canViewFeedback && (
+                        <button
+                            onClick={() => setActiveTab('mobile-app')}
+                            className={`shrink-0 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                activeTab === 'mobile-app'
+                                    ? 'border-primary-500 text-primary-600'
+                                    : isDark
+                                        ? 'border-transparent text-gray-400 hover:text-gray-300'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Mobile App
+                            <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
+                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                            }`}>
+                                Auto
+                            </span>
+                        </button>
+                    )}
                     {canViewFeedback && (
                         <button
                             onClick={() => setActiveTab('feedback')}
@@ -200,6 +233,18 @@ const Reports = () => {
                         <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                             All users&apos; interactions are tracked; only users with the Superadmin role can view this report.
                         </p>
+                    </div>
+                )}
+                {activeTab === 'mobile-app' && canViewFeedback && (
+                    <div>
+                        {MobileAppReportsViewer && mobileReportsReady ? (
+                            <MobileAppReportsViewer scrollToFeedbackId={highlightFeedbackId} />
+                        ) : (
+                            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Loading mobile app reports...</p>
+                            </div>
+                        )}
                     </div>
                 )}
                 {activeTab === 'feedback' && canViewFeedback && (

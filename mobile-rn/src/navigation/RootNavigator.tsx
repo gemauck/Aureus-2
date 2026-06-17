@@ -12,7 +12,6 @@ import { JobCardSyncProvider } from '../jobcards/JobCardSyncContext'
 import { useAuth } from '../state/AuthContext'
 import { useAppIconBadge } from '../hooks/useAppIconBadge'
 import { usePushNotifications } from '../hooks/usePushNotifications'
-import { useAppUpdateCheck } from '../hooks/useAppUpdateCheck'
 import { NotificationUnreadProvider, useNotificationUnread } from '../notifications/NotificationUnreadContext'
 import { ChatEventsProvider, useChatEvents } from '../messages/ChatEventsContext'
 import { ChatCallProvider } from '../messages/ChatCallContext'
@@ -22,6 +21,7 @@ import { erpApi } from '../services/erpApi'
 import type { RootStackParamList } from './types'
 import { linking } from './linking'
 import { getActiveRootRouteName } from './navigationHelpers'
+import { setErrorReportScreen } from '../services/errorReporting'
 import { useThemedStyles } from '../theme/useThemedStyles'
 import type { ErpTheme } from '../theme/palettes'
 import { useTheme } from '../theme/ThemeContext'
@@ -158,8 +158,6 @@ function AuthenticatedAppInner() {
   const refreshChatUnreadRef = React.useRef(refreshChatUnread)
   refreshChatUnreadRef.current = refreshChatUnread
 
-  useAppUpdateCheck(true)
-
   const handlePushNotification = React.useCallback((data: Parameters<typeof navigateFromPushData>[1]) => {
     const token = accessTokenRef.current
     const isChat = data.type === 'message' || !!data.conversationId
@@ -190,12 +188,16 @@ function AuthenticatedAppInner() {
         linking={linking}
         onReady={() => {
           const root = getActiveRootRouteName(navigationRef.getRootState())
-          if (root) setCurrentRoute(root)
+          if (root) {
+            setCurrentRoute(root)
+            setErrorReportScreen(root)
+          }
         }}
         onStateChange={(state) => {
           const rootScreen = getActiveRootRouteName(state)
           if (!rootScreen) return
           setCurrentRoute(rootScreen)
+          setErrorReportScreen(rootScreen)
         }}
       >
         <Stack.Navigator

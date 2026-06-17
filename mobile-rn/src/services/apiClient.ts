@@ -1,4 +1,5 @@
 import { apiUrl, API_BASE_URL } from '../config'
+import { addBreadcrumb, reportApiError } from './errorReporting'
 import { trackError } from './telemetry'
 import { getMobileClientInfo } from './clientPresence'
 
@@ -53,6 +54,7 @@ export async function fetchWithTokenRefresh(
   const { token, ...fetchOptions } = options
   const headers = new Headers(fetchOptions.headers || {})
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  const method = (fetchOptions.method || 'GET').toUpperCase()
 
   let response = await fetch(url, { ...fetchOptions, headers })
   if (response.status === 401 && token && authRefreshHandler) {
@@ -62,6 +64,19 @@ export async function fetchWithTokenRefresh(
       response = await fetch(url, { ...fetchOptions, headers })
     }
   }
+
+  if (!response.ok && response.status !== 401) {
+    let path = url
+    try {
+      path = new URL(url, API_BASE_URL).pathname
+    } catch {
+      /* use raw url */
+    }
+    if (!path.startsWith('/api/public/')) {
+      reportApiError(path, method, response.status, `HTTP ${response.status}`)
+    }
+  }
+
   return response
 }
 
@@ -85,6 +100,8 @@ export async function request<T>(
   } catch (error) {
     const hint =
       error instanceof Error ? error.message : 'Network error'
+    addBreadcrumb('api', `Network failure ${method} ${path}`, { path, method })
+    reportApiError(path, method, 0, hint)
     throw new Error(
       `Cannot reach ${url}. Check Wi‑Fi or mobile data, open that URL in Chrome on this device, then try again. (${hint})`
     )
@@ -94,7 +111,9 @@ export async function request<T>(
   try {
     payload = await response.json()
   } catch {
-    throw new Error(`Server returned an invalid response (${response.status}) from ${url}`)
+    const invalidMsg = `Server returned an invalid response (${response.status}) from ${url}`
+    reportApiError(path, method, response.status, invalidMsg)
+    throw new Error(invalidMsg)
   }
   if (!response.ok) {
     const message = payload?.error?.message || 'Request failed'
@@ -109,6 +128,7 @@ export async function request<T>(
         return request<T>(path, { ...options, token: newToken }, true)
       }
     }
+    reportApiError(path, method, response.status, message)
     throw new ApiRequestError(message, response.status)
   }
   return payload?.data as T

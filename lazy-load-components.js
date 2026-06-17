@@ -126,6 +126,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/reports/AuditTrail.jsx',
         './src/components/reports/FeedbackViewer.jsx',
         './src/components/reports/MyFeedbackViewer.jsx',
+        './src/components/reports/MobileAppReportsViewer.jsx',
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         

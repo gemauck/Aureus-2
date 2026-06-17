@@ -1,4 +1,5 @@
 import { SENTRY_DSN } from '../config'
+import { reportError } from './errorReporting'
 
 type SentryModule = {
   init: (opts: Record<string, unknown>) => void
@@ -53,18 +54,18 @@ export function setTelemetryUser(user: { id?: string; email?: string } | null): 
   }
 }
 
-export function trackError(error: unknown, context: string): void {
+export function trackError(error: unknown, context: string, extra?: Record<string, unknown>): void {
   const message = error instanceof Error ? error.message : String(error)
   if (sentry) {
     try {
       sentry.captureException(error instanceof Error ? error : new Error(message), {
         tags: { context }
       })
-      return
     } catch {
       /* fall through */
     }
   }
+  void reportError(error, context, extra)
   console.warn(`[telemetry] ${context}: ${message}`)
 }
 

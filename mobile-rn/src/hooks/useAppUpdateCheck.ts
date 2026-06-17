@@ -1,68 +1,69 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Linking, Platform } from 'react-native'
-import { ANDROID_APK_DOWNLOAD_URL, API_BASE_URL } from '../config'
-import { APP_VERSION, APP_VERSION_CODE } from '../jobcards/theme'
+import { ANDROID_APK_DOWNLOAD_URL } from '../config'
+import { APP_VERSION_CODE } from '../jobcards/theme'
+import { fetchLatestApkVersion, recheckApkVersion } from '../services/apkVersionCheck'
 
-type MobileAppVersionPayload = {
-  android?: {
-    versionCode?: number
-    versionName?: string
-    apkUrl?: string
-    releaseNotes?: string
-    /** When true, user must install a new APK (native module / permission change). OTA cannot replace this. */
-    forceApkInstall?: boolean
-  }
+function promptApkUpdateInteractive(remote: {
+  versionCode?: number
+  versionName?: string
+  releaseNotes?: string
+  apkUrl?: string
+}) {
+  const url = remote.apkUrl || ANDROID_APK_DOWNLOAD_URL
+  Alert.alert(
+    'App update required',
+    remote.releaseNotes ||
+      `Version ${remote.versionName || remote.versionCode} is available (you have build ${APP_VERSION_CODE}). Download and install the latest APK.`,
+    [
+      { text: 'Download', onPress: () => void Linking.openURL(url) }
+    ]
+  )
 }
 
-async function fetchLatestVersion(): Promise<MobileAppVersionPayload | null> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/public/mobile-app-version`, {
-      headers: { Accept: 'application/json' }
-    })
-    if (!res.ok) return null
-    const payload = await res.json()
-    return (payload?.data || payload) as MobileAppVersionPayload
-  } catch {
-    return null
-  }
-}
+/** Block the app until the user installs the latest APK when the server publishes a newer build. */
+export function useAppUpdateCheck(enabled = true) {
+  const inFlightRef = useRef(false)
+  const appStateRef = useRef(AppState.currentState)
 
-/** Only prompts for APK when the server explicitly requires a native shell upgrade. JS changes use OTA. */
-export function useAppUpdateCheck(enabled = false) {
-  const promptedRef = useRef(false)
+  const check = useCallback(
+    async (interactive = false) => {
+      if (Platform.OS !== 'android' || !enabled) return
 
-  const check = useCallback(async (interactive = false) => {
-    if (Platform.OS !== 'android') return
-    const latest = await fetchLatestVersion()
-    const remote = latest?.android
-    if (!remote?.versionCode || remote.versionCode <= APP_VERSION_CODE) return
-    if (!remote.forceApkInstall) return
-    if (!interactive && promptedRef.current) return
-    promptedRef.current = true
-
-    const url = remote.apkUrl || ANDROID_APK_DOWNLOAD_URL
-    Alert.alert(
-      'App update required',
-      remote.releaseNotes ||
-        `Version ${remote.versionName || remote.versionCode} includes native changes. Install once to resume automatic updates.`,
-      [
-        { text: 'Later', style: 'cancel' },
-        {
-          text: 'Download',
-          onPress: () => void Linking.openURL(url)
+      if (inFlightRef.current) return
+      inFlightRef.current = true
+      try {
+        const upToDate = await recheckApkVersion()
+        if (!upToDate && interactive) {
+          const latest = await fetchLatestApkVersion()
+          const remote = latest?.android
+          if (remote?.versionCode && remote.versionCode > APP_VERSION_CODE) {
+            promptApkUpdateInteractive(remote)
+          }
         }
-      ]
-    )
-  }, [])
+      } finally {
+        inFlightRef.current = false
+      }
+    },
+    [enabled]
+  )
 
   useEffect(() => {
     if (!enabled) return
+
     void check(false)
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void check(false)
+
+    const sub = AppState.addEventListener('change', (nextState) => {
+      const prev = appStateRef.current
+      appStateRef.current = nextState
+      if (nextState !== 'active' || prev === 'active') return
+      void recheckApkVersion()
     })
+
     return () => sub.remove()
   }, [enabled, check])
 
   return { checkForUpdate: () => check(true) }
 }
+
+export { recheckApkVersion } from '../services/apkVersionCheck'

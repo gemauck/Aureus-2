@@ -18,9 +18,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { error }
   }
 
-  componentDidCatch(error: Error) {
-    trackError(error, 'ErrorBoundary')
-    console.error('App crash:', error)
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    trackError(error, 'ErrorBoundary', {
+      componentStack: errorInfo?.componentStack
+    })
+    console.error('App crash:', error, errorInfo)
   }
 
   render() {

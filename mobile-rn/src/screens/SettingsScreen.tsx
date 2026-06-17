@@ -70,7 +70,7 @@ export function SettingsScreen({ navigation }: Props) {
   const [lastOtaCheck, setLastOtaCheck] = useState<string | null>(null)
   const [lastApkCheck, setLastApkCheck] = useState<string | null>(null)
   const [otaStatus, setOtaStatus] = useState<string>(
-    'JS updates download in the background. On a fresh app open they apply automatically; while you are working you are asked before restart.'
+    'JS updates are checked every time you open the app. When a new bundle is available it downloads and applies automatically with an on-screen message.'
   )
 
   const refreshRemoteVersion = useCallback(async () => {
@@ -212,17 +212,12 @@ export function SettingsScreen({ navigation }: Props) {
         return
       }
       if (remote.versionCode > APP_VERSION_CODE) {
-        if (remote.forceApkInstall) {
-          await checkApkUpdate()
-          return
-        }
         const url = remote.apkUrl || DEFAULT_APK_URL
         Alert.alert(
-          'New APK available',
+          'App update required',
           remote.releaseNotes ||
-            `Version ${remote.versionName || remote.versionCode} is available (you have build ${APP_VERSION_CODE}). Download and install to update the app shell.`,
+            `Version ${remote.versionName || remote.versionCode} is available (you have build ${APP_VERSION_CODE}). Download and install the latest APK.`,
           [
-            { text: 'Not now', style: 'cancel' },
             { text: 'Download', onPress: () => void Linking.openURL(url) }
           ]
         )
@@ -256,7 +251,7 @@ export function SettingsScreen({ navigation }: Props) {
     Platform.OS === 'android' &&
     !!remoteVersion?.versionCode &&
     remoteVersion.versionCode > APP_VERSION_CODE
-  const apkRequiresInstall = apkNeedsUpdate && !!remoteVersion?.forceApkInstall
+  const apkRequiresInstall = apkNeedsUpdate
 
   return (
     <View style={styles.root}>
@@ -379,8 +374,8 @@ export function SettingsScreen({ navigation }: Props) {
                 <View style={styles.banner}>
                   <FontAwesome5 name="exclamation-circle" size={14} color={erp.warning} />
                   <Text style={styles.bannerText}>
-                    A new APK is required before JS updates can continue (
-                    {remoteVersion?.versionName || remoteVersion?.versionCode}).
+                    Install APK {remoteVersion?.versionName || remoteVersion?.versionCode} to continue — you
+                    have build {APP_VERSION_CODE}.
                   </Text>
                 </View>
               ) : null}
@@ -423,7 +418,8 @@ export function SettingsScreen({ navigation }: Props) {
 
             <Text style={styles.actionGroupTitle}>APK (native shell)</Text>
             <Text style={styles.actionGroupHint}>
-              Only needed when native modules or permissions change — usually rare.
+              Checked automatically on every app open. When the server publishes a newer build you must install
+              the APK before using the app.
             </Text>
             <UpdateButton
               icon="search"

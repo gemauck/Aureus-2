@@ -41,7 +41,30 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
 
     const subject = `New ${feedback.type} on ${section} - ${process.env.APP_NAME || 'Abcotronics ERP'}`
     const appBase = getAppUrl().replace(/\/$/, '')
-    const erpFeedbackUrl = `${appBase}/#/reports?tab=feedback&highlightFeedbackId=${encodeURIComponent(feedback.id)}`
+    const reportsTab = section === 'mobile-app' ? 'mobile-app' : 'feedback'
+    const erpFeedbackUrl = `${appBase}/#/reports?tab=${reportsTab}&highlightFeedbackId=${encodeURIComponent(feedback.id)}`
+
+    let mobileDetailsHtml = ''
+    if (section === 'mobile-app' && feedback.meta) {
+      try {
+        const m = typeof feedback.meta === 'string' ? JSON.parse(feedback.meta) : feedback.meta
+        const category = m?.category || 'issue'
+        const screen = m?.screen || feedback.pageUrl || '—'
+        const api = m?.api
+        const device = m?.device || {}
+        mobileDetailsHtml = `
+            <p style="color: #333; margin-bottom: 10px;"><strong>Category:</strong> ${category}</p>
+            <p style="color: #333; margin-bottom: 10px;"><strong>Screen:</strong> ${screen}</p>
+            ${m?.context ? `<p style="color: #333; margin-bottom: 10px;"><strong>Context:</strong> ${m.context}</p>` : ''}
+            ${api?.path ? `<p style="color: #333; margin-bottom: 10px;"><strong>API:</strong> ${api.method || 'GET'} ${api.path}${api.statusCode != null ? ` (${api.statusCode})` : ''}</p>` : ''}
+            ${device.nativeVersion ? `<p style="color: #333; margin-bottom: 10px;"><strong>App version:</strong> ${device.nativeVersion}${device.runtimeVersion ? ` · OTA ${device.runtimeVersion}` : ''}</p>` : ''}
+            ${device.platform ? `<p style="color: #333; margin-bottom: 10px;"><strong>Device:</strong> ${device.platform} ${device.osVersion || ''}${device.deviceName ? ` · ${device.deviceName}` : ''}</p>` : ''}
+            <p style="color: #666; margin-bottom: 10px; font-size: 13px;">Open <strong>Reports → Mobile App</strong> in the ERP for stack trace, breadcrumbs, and full diagnostics.</p>
+        `
+      } catch (_) {
+        mobileDetailsHtml = ''
+      }
+    }
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -58,6 +81,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
             <p style="color: #333; margin-bottom: 10px;"><strong>Page:</strong> ${feedback.pageUrl}</p>
             <p style="color: #333; margin-bottom: 10px;"><strong>Severity:</strong> ${severityLabel}</p>
             <p style="color: #333; margin-bottom: 10px;"><strong>Type:</strong> ${feedback.type}</p>
+            ${mobileDetailsHtml}
             ${hasScreenshot ? '<p style="color: #333; margin-bottom: 10px;"><strong>Screenshot:</strong> Included — open <strong>Reports → User Feedback</strong> in the ERP to view the image.</p>' : ''}
             
             <div style="background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 15px 0; border-radius: 4px;">
@@ -67,7 +91,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
           
           <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="color: #666; margin: 0; font-size: 14px;">
-              <strong>Open in ERP:</strong> <a href="${erpFeedbackUrl}" style="color:#667eea;">Reports → User feedback</a> (this item is highlighted).
+              <strong>Open in ERP:</strong> <a href="${erpFeedbackUrl}" style="color:#667eea;">Reports → ${section === 'mobile-app' ? 'Mobile App' : 'User feedback'}</a> (this item is highlighted).
             </p>
           </div>
           

@@ -1,11 +1,11 @@
-export type ReportsTabId = 'audit' | 'my-queries' | 'feedback'
+export type ReportsTabId = 'audit' | 'my-queries' | 'feedback' | 'mobile-app'
 
 export type ReportsWebQuery = {
   tab?: ReportsTabId | string
   highlightFeedbackId?: string
 }
 
-const REPORTS_TABS: ReportsTabId[] = ['audit', 'my-queries', 'feedback']
+const REPORTS_TABS: ReportsTabId[] = ['audit', 'my-queries', 'feedback', 'mobile-app']
 
 export function normalizeReportsTab(value: string | null | undefined): ReportsTabId | null {
   const normalized = String(value || '').trim().toLowerCase()
