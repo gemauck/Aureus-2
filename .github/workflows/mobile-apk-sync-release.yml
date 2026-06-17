@@ -19,7 +19,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/apk"
           gh release download mobile-latest -R gemauck/Aureus-2 -D "$RUNNER_TEMP/apk" -p '*.apk'
           ls -lh "$RUNNER_TEMP/apk"
-          cp "$RUNNER_TEMP/apk"/*.apk "$RUNNER_TEMP/apk/Abcotronics-ERP-Mobile.apk"
 
       - name: Upload to production downloads
         uses: appleboy/scp-action@v0.1.7
