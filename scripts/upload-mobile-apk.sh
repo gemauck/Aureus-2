@@ -15,6 +15,16 @@ if [[ ! -f "$APK" ]]; then
 fi
 
 echo "Uploading $(basename "$APK") ($(du -h "$APK" | awk '{print $1}')) to ${DEPLOY_HOST}:${REMOTE_DIR}/${REMOTE_NAME}"
-scp "$APK" "${DEPLOY_HOST}:${REMOTE_DIR}/${REMOTE_NAME}.new"
+if ! scp "$APK" "${DEPLOY_HOST}:${REMOTE_DIR}/${REMOTE_NAME}.new"; then
+  cat >&2 <<EOF
+ERROR: SCP to ${DEPLOY_HOST} failed (SSH port 22 may be blocked on your network).
+
+Use GitHub Actions instead:
+  npm run mobile:apk:remote
+  gh run watch
+
+EOF
+  exit 1
+fi
 ssh "$DEPLOY_HOST" "mv -f '${REMOTE_DIR}/${REMOTE_NAME}.new' '${REMOTE_DIR}/${REMOTE_NAME}' && ls -la '${REMOTE_DIR}/${REMOTE_NAME}'"
 echo "✓ Production APK updated"

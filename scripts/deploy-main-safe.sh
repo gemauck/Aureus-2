@@ -45,7 +45,7 @@ else
 fi
 
 echo "-> Triggering server deploy..."
-ssh "$DEPLOY_HOST" "
+if ! ssh "$DEPLOY_HOST" "
   set -euo pipefail
   cd '$DEPLOY_PATH'
   free_mb=\$(df -Pm . | awk 'NR==2 {print \$4}')
@@ -63,5 +63,16 @@ ssh "$DEPLOY_HOST" "
   git fetch origin --prune main
   git reset --hard origin/main
   MIN_FREE_MB='$REMOTE_MIN_FREE_MB' MIN_FREE_INODES='$REMOTE_MIN_FREE_INODES' PRE_DEPLOY_CLEANUP='$REMOTE_PRE_DEPLOY_CLEANUP' BACKUP_RETENTION_COUNT='$REMOTE_BACKUP_RETENTION_COUNT' SKIP_MOBILE_OTA='${SKIP_MOBILE_OTA:-0}' ./deploy.sh
-"
+"; then
+  cat >&2 <<EOF
+
+ERROR: SSH to $DEPLOY_HOST failed (common when port 22 is blocked on your network).
+
+Use GitHub Actions instead:
+  npm run deploy:remote
+  gh run watch
+
+EOF
+  exit 1
+fi
 

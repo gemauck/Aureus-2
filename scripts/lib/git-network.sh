@@ -68,8 +68,10 @@ git_fetch_safe() {
   fi
 
   if [[ ${#fetch_refs[@]} -gt 0 ]]; then
+    git -c credential.helper=store fetch "$https_url" --prune "${fetch_refs[@]}" 2>/dev/null && return 0
     git -c credential.helper=osxkeychain fetch "$https_url" --prune "${fetch_refs[@]}"
   else
+    git -c credential.helper=store fetch "$https_url" --prune 2>/dev/null && return 0
     git -c credential.helper=osxkeychain fetch "$https_url" --prune
   fi
 }
@@ -102,17 +104,19 @@ git_push_safe() {
     return 0
   fi
 
-  if git -c credential.helper=osxkeychain push "$https_url" "$branch" 2>/dev/null; then
-    return 0
-  fi
+  for helper in store osxkeychain; do
+    if git -c credential.helper="$helper" push "$https_url" "$branch" 2>/dev/null; then
+      return 0
+    fi
+  done
 
   cat >&2 <<EOF
-ERROR: git push failed (SSH blocked and no HTTPS credentials).
+ERROR: git push failed (SSH blocked and HTTPS auth failed).
 
-Fix options:
-  1. Push from Terminal.app: git push origin main
-  2. Export a GitHub PAT: export GITHUB_TOKEN=ghp_... && npm run deploy
-  3. After adding GitHub Actions secrets, push once then use Actions → Deploy production
+Your ~/.git-credentials token may be expired. Fix options:
+  1. Terminal: gh auth login && gh auth setup-git && git push origin main
+  2. Terminal: git push origin main
+  3. Export a fresh PAT: export GITHUB_TOKEN=ghp_... && npm run deploy
 
 EOF
   return 1

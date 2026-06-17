@@ -1,0 +1,62 @@
+# Build phone-only release APK on GitHub runners and upload to production downloads.
+# Use when local SSH is blocked: gh workflow run mobile-apk-release.yml --ref main
+# Secrets: DROPLET_HOST, DROPLET_SSH_KEY (optional DROPLET_USER)
+
+name: Mobile APK release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile-rn/**'
+      - 'scripts/build-mobile-rn-apk.sh'
+      - '.github/workflows/mobile-apk-release.yml'
+
+concurrency:
+  group: mobile-apk-release
+  cancel-in-progress: false
+
+jobs:
+  build-upload:
+    if: github.repository == 'gemauck/Aureus-2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build release APK (arm64 + armeabi-v7a)
+        run: |
+          mkdir -p "$RUNNER_TEMP/mobile-dist"
+          bash scripts/build-mobile-rn-apk.sh "$RUNNER_TEMP/mobile-dist/Abcotronics-ERP-Mobile.apk"
+          ls -lh "$RUNNER_TEMP/mobile-dist/Abcotronics-ERP-Mobile.apk"
+        env:
+          EXPO_PUBLIC_API_BASE_URL: https://abcoafrica.co.za
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
+
+      - name: Upload APK to production downloads
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER != '' && secrets.DROPLET_USER || 'root' }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: ${{ runner.temp }}/mobile-dist/Abcotronics-ERP-Mobile.apk
+          target: /var/www/abcotronics-erp/public/downloads/
+          overwrite: true
+
+      - name: Verify download on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER != '' && secrets.DROPLET_USER || 'root' }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            ls -lh /var/www/abcotronics-erp/public/downloads/Abcotronics-ERP-Mobile.apk
+            file /var/www/abcotronics-erp/public/downloads/Abcotronics-ERP-Mobile.apk
