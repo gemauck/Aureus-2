@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="${1:-$HOME/Desktop/Abcotronics-ERP-Mobile.apk}"
-DEPLOY_HOST="${DEPLOY_HOST:-root@165.22.127.196}"
+DEPLOY_HOST="${DEPLOY_HOST:-abco-prod}"
 REMOTE_DIR="/var/www/abcotronics-erp/public/downloads"
 REMOTE_NAME="Abcotronics-ERP-Mobile.apk"
 

@@ -1,0 +1,46 @@
+# Deploy main to production when pushed or manually triggered.
+# Required repo secrets: DROPLET_HOST, DROPLET_SSH_KEY
+# Optional: DROPLET_USER (default root), DEPLOY_PATH (default /var/www/abcotronics-erp)
+
+name: Deploy production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'gemauck/Aureus-2'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER != '' && secrets.DROPLET_USER || 'root' }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH != '' && secrets.DEPLOY_PATH || '/var/www/abcotronics-erp' }}"
+            cd "$DEPLOY_PATH"
+            free_mb=$(df -Pm . | awk 'NR==2 {print $4}')
+            free_inodes=$(df -Pi . | awk 'NR==2 {print $4}')
+            echo "-> Remote capacity: ${free_mb}MB free, ${free_inodes} inodes free"
+            if [ "${free_mb}" -lt 4096 ]; then
+              echo "ERROR: free disk below 4096MB"
+              exit 1
+            fi
+            if [ "${free_inodes}" -lt 10000 ]; then
+              echo "ERROR: free inodes below 10000"
+              exit 1
+            fi
+            git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+            git fetch origin --prune main
+            git reset --hard origin/main
+            SKIP_MOBILE_OTA="${SKIP_MOBILE_OTA:-0}" ./deploy.sh

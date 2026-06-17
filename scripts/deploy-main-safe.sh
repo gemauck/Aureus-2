@@ -3,10 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+# shellcheck source=lib/git-network.sh
+source "$ROOT_DIR/scripts/lib/git-network.sh"
 
 REMOTE_NAME="origin"
 BRANCH_NAME="main"
-DEPLOY_HOST="root@165.22.127.196"
+DEPLOY_HOST="${DEPLOY_HOST:-abco-prod}"
 DEPLOY_PATH="/var/www/abcotronics-erp"
 REMOTE_MIN_FREE_MB="${REMOTE_MIN_FREE_MB:-4096}"
 REMOTE_MIN_FREE_INODES="${REMOTE_MIN_FREE_INODES:-10000}"
@@ -24,7 +26,7 @@ if [[ "$current_branch" != "$BRANCH_NAME" ]]; then
 fi
 
 echo "-> Fetching latest remote refs..."
-git fetch "$REMOTE_NAME" --prune "$BRANCH_NAME"
+git_fetch_safe "$REMOTE_NAME" "$BRANCH_NAME"
 
 ahead_count="$(git rev-list --count "$REMOTE_NAME/$BRANCH_NAME"..HEAD)"
 behind_count="$(git rev-list --count HEAD.."$REMOTE_NAME/$BRANCH_NAME")"
@@ -37,7 +39,7 @@ fi
 
 if [[ "$ahead_count" -gt 0 ]]; then
   echo "-> Local branch is ahead by $ahead_count commit(s). Pushing before deploy..."
-  git push "$REMOTE_NAME" "$BRANCH_NAME"
+  git_push_safe "$REMOTE_NAME" "$BRANCH_NAME"
 else
   echo "-> Local and remote are in sync. No push needed."
 fi
