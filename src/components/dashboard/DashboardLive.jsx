@@ -88,6 +88,17 @@ const warnTaskDebug = (...args) => {
     }
 };
 
+/** Tolerates stale core-bundle where projectProgressMonthMetrics lacks shouldShowClientSubtitle. */
+const safeShouldShowClientSubtitle = (projectName, clientName) => {
+    const client = String(clientName || '').trim();
+    if (!client) return false;
+    const m = typeof window !== 'undefined' ? window.projectProgressMonthMetrics : null;
+    if (m && typeof m.shouldShowClientSubtitle === 'function') {
+        return m.shouldShowClientSubtitle(projectName, client);
+    }
+    return true;
+};
+
 const isArchivedTask = (task) => {
     const normalizedStatus = String(task?.status || '').toLowerCase().replace(/\s+/g, '');
     return normalizedStatus === 'archived';
@@ -572,8 +583,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                                     title={(() => {
                                                         const name = task.project?.name;
                                                         const client = task.project?.clientName;
-                                                        const m = window.projectProgressMonthMetrics;
-                                                        const showClient = client && (!m || m.shouldShowClientSubtitle(name, client));
+                                                        const showClient = client && safeShouldShowClientSubtitle(name, client);
                                                         return [name, showClient ? client : null].filter(Boolean).join(' · ') || 'My Task';
                                                     })()}
                                                 >
@@ -581,8 +591,7 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
                                                         <>{task.project.name}</>
                                                     )}
                                                     {isProjectTask && task.project?.clientName && (() => {
-                                                        const m = window.projectProgressMonthMetrics;
-                                                        if (m && !m.shouldShowClientSubtitle(task.project?.name, task.project.clientName)) {
+                                                        if (!safeShouldShowClientSubtitle(task.project?.name, task.project.clientName)) {
                                                             return null;
                                                         }
                                                         return (
@@ -1343,7 +1352,7 @@ const LastWorkingMonthProgressWidget = ({ cardBase, headerText, subText, isDark,
     const fmtPct = (p) => (p == null || Number.isNaN(p) ? '—' : `${p}%`);
     const fmtRatio = (completed, total) => `${Number(completed) || 0}/${Number(total) || 0}`;
     const showClientForRow = (row) => (
-        row?.client && (!m || m.shouldShowClientSubtitle(row.name, row.client))
+        row?.client && safeShouldShowClientSubtitle(row.name, row.client)
     );
 
     if (!m || !monthPickerCandidates.length || !activeWorkingMonth) {
