@@ -517,6 +517,28 @@
     color: #ffffff !important;
 }
 
+/* Tailwind green-600 action buttons (e.g. Add Opportunity): keep contrast on hover/active */
+[data-theme="light"] button.bg-green-600,
+[data-theme="light"] button[class*="bg-green-600"] {
+    background-color: #16a34a !important;
+}
+
+[data-theme="light"] button.bg-green-600:hover,
+[data-theme="light"] button[class*="bg-green-600"]:hover,
+[data-theme="light"] button.bg-green-600.text-white:hover,
+[data-theme="light"] button[class*="bg-green-600"][class*="text-white"]:hover {
+    background-color: #15803d !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] button.bg-green-600:active,
+[data-theme="light"] button[class*="bg-green-600"]:active,
+[data-theme="light"] button.bg-green-600.text-white:active,
+[data-theme="light"] button[class*="bg-green-600"][class*="text-white"]:active {
+    background-color: #166534 !important;
+    color: #ffffff !important;
+}
+
 [data-theme="light"] button.text-white .fas,
 [data-theme="light"] button.text-white .far,
 [data-theme="light"] button.text-white .fab,
