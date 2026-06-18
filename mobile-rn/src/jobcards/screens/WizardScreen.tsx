@@ -12,7 +12,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import { useNetwork } from '../../hooks/useNetwork'
 import { STEP_IDS, STEP_META, useJobCardWizard } from '../WizardContext'
 import { WizardStepBar } from '../components/WizardStepBar'
-import { DateTimeField } from '../components/DateTimeField'
+import { DateTimeField, toDatetimeLocal } from '../components/DateTimeField'
 import { AssignmentStep } from '../steps/AssignmentStep'
 import { VisitStep } from '../steps/VisitStep'
 import { WorkStep } from '../steps/WorkStep'
@@ -42,6 +42,9 @@ export function WizardScreen() {
     setWizardFlow,
     arrivalConfirmOpen,
     setArrivalConfirmOpen,
+    departureConfirmOpen,
+    setDepartureConfirmOpen,
+    confirmDepartureAndSubmit,
     setFormData,
     formData,
     editingMeta,
@@ -185,6 +188,34 @@ export function WizardScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={departureConfirmOpen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Confirm departure time</Text>
+            <Text style={styles.modalSub}>
+              Set when you left the site, then submit the job card.
+            </Text>
+            <DateTimeField
+              label="Departure from site"
+              value={formData.departureFromSite || toDatetimeLocal(new Date())}
+              onChange={(departureFromSite) => setFormData((f) => ({ ...f, departureFromSite }))}
+            />
+            <Pressable
+              style={styles.modalBtn}
+              onPress={() => {
+                const v = formData.departureFromSite || toDatetimeLocal(new Date())
+                void confirmDepartureAndSubmit(v)
+              }}
+            >
+              <Text style={styles.modalBtnText}>Confirm & submit</Text>
+            </Pressable>
+            <Pressable style={styles.modalCancel} onPress={() => setDepartureConfirmOpen(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -282,6 +313,8 @@ function createStyles({ jc }: { jc: JcTheme }) {
     alignItems: 'center',
     marginTop: jc.space.sm
   },
-  modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 }
+  modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalCancel: { paddingVertical: 10, alignItems: 'center' },
+  modalCancelText: { color: jc.textMuted, fontWeight: '600' }
   })
 }

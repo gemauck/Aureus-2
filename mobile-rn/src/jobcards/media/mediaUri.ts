@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system'
+import { JOB_CARD_VIDEO_MAX_BYTES } from '../../../../src/jobCardWizard/constants.js'
 import type { MediaItem } from '../types'
 
 /** Convert local file URI to data URL for API sync (voice notes, etc.). */
@@ -40,7 +41,29 @@ export async function normalizeMediaItemForSave(item: MediaItem): Promise<MediaI
     item.mediaType === 'video' ||
     /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url) ||
     url.startsWith('data:video')
+
+  if (isVideo) {
+    try {
+      const info = await FileSystem.getInfoAsync(url)
+      const size = info.exists && 'size' in info ? Number(info.size) : 0
+      if (size > JOB_CARD_VIDEO_MAX_BYTES) {
+        const mb = (size / (1024 * 1024)).toFixed(1)
+        const limitMb = (JOB_CARD_VIDEO_MAX_BYTES / (1024 * 1024)).toFixed(0)
+        throw new Error(
+          `Video "${item.name || 'attachment'}" is ${mb} MB (max ${limitMb} MB). Remove it or use a shorter clip before submitting.`
+        )
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('max')) throw error
+    }
+  }
+
   const dataUrl = await uriToDataUrl(url, isVideo ? 'video/mp4' : 'image/jpeg')
+  if (isVideo && dataUrl.startsWith('data:') && dataUrl.length > JOB_CARD_VIDEO_MAX_BYTES * 1.4) {
+    throw new Error(
+      `Video "${item.name || 'attachment'}" is too large to upload. Remove it or use a shorter clip.`
+    )
+  }
   return {
     ...item,
     url: dataUrl,

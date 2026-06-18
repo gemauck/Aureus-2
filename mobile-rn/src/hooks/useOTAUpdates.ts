@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
+import { isJobCardWizardFormActive } from '../jobcards/jobCardWizardLock'
 import { isApkUpdateRequired, waitForApkVersionCheck } from '../services/apkUpdateUi'
 import { setOtaUiPhase } from '../services/otaUpdateUi'
 import { trackError } from '../services/telemetry'
@@ -277,6 +278,9 @@ export function useOTAUpdates(enabled = true) {
       inFlightRef.current = true
       lastCheckRef.current = now
       try {
+        if (isJobCardWizardFormActive()) {
+          return { status: 'current' as const }
+        }
         const apkState = await waitForApkVersionCheck()
         if (apkState === 'required' || isApkUpdateRequired()) {
           return { status: 'current' as const }

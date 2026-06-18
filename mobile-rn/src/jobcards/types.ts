@@ -38,6 +38,25 @@ export type IncidentPrefill = {
 
 export type WizardStepId = 'assignment' | 'visit' | 'work' | 'stock' | 'signoff'
 
+export type JobCardSaveOptions = {
+  forceDraft?: boolean
+  forceSubmitted?: boolean
+  departureFromSiteOverride?: string
+  timeOfArrivalOverride?: string
+  silent?: boolean
+  /** Step navigation — save fields only, skip heavy media encoding */
+  lightweight?: boolean
+}
+
+export type JobCardSaveResult = {
+  ok: boolean
+  persisted: boolean
+  synced: boolean
+  queued: boolean
+  status: string
+  error?: string
+}
+
 export type JobCardFormData = {
   heading: string
   agentName: string

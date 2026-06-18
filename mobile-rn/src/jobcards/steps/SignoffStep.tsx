@@ -18,7 +18,7 @@ import {
 import { formatWizardDatetimeLabel } from '../../../../src/jobCardWizard/util.js'
 import { SECTION_WORK_MEDIA_KEYS } from '../../../../src/jobCardWizard/constants.js'
 import { useJobCardWizard } from '../WizardContext'
-import { DateTimeField, toDatetimeLocal } from '../components/DateTimeField'
+import { toDatetimeLocal } from '../components/DateTimeField'
 import { SectionCard } from '../components/SectionCard'
 import { SummaryRow } from '../components/SummaryRow'
 import { useFormStyles } from '../components/formStyles'
@@ -44,7 +44,9 @@ export function SignoffStep() {
     sectionWorkMedia,
     clients,
     projects,
-    editingMeta
+    editingMeta,
+    setWizardFlow,
+    refreshPriorList
   } = useJobCardWizard()
   const sigRef = useRef<{ clearSignature?: () => void; readSignature?: () => void } | null>(null)
   const endTimeInitialized = useRef(false)
@@ -111,13 +113,39 @@ export function SignoffStep() {
       )
       return
     }
-    let departure = formData.departureFromSite
-    if (!departure?.trim()) {
-      departure = toDatetimeLocal(new Date())
+    const departure =
+      formData.departureFromSite?.trim() || toDatetimeLocal(new Date())
+    if (!formData.departureFromSite?.trim()) {
       setFormData((f) => ({ ...f, departureFromSite: departure }))
     }
-    await handleSave({ forceSubmitted: true })
-    Alert.alert('Submitted', 'Job card saved and queued for sync if needed.')
+
+    const result = await handleSave({
+      forceSubmitted: true,
+      departureFromSiteOverride: departure
+    })
+
+    if (!result.ok && !result.persisted) {
+      Alert.alert('Could not submit', result.error || 'Please try again.')
+      return
+    }
+
+    if (result.synced) {
+      Alert.alert(
+        'Submitted',
+        'Job card saved to the server.',
+        [{ text: 'OK', onPress: () => setWizardFlow('landing') }]
+      )
+      void refreshPriorList()
+      return
+    }
+
+    const detail = result.error ? `\n\n${result.error}` : ''
+    Alert.alert(
+      'Saved on this device',
+      `Your job card is stored safely and queued to sync.${detail}\n\nOpen "View or edit existing" or Pending uploads to retry if needed.`,
+      [{ text: 'OK', onPress: () => setWizardFlow('landing') }]
+    )
+    void refreshPriorList()
   }
 
   function saveSignature() {

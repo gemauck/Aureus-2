@@ -37,6 +37,8 @@ import {
 import { getOfflineStore } from './offlineStore'
 import { cacheJobCard, getCachedJobCard } from './jobCardCache'
 import { useJobCardSync } from './JobCardSyncContext'
+import { setJobCardWizardFormActive } from './jobCardWizardLock'
+import { trackError } from '../services/telemetry'
 import type {
   ProjectOption,
   ClientOption,
@@ -52,7 +54,9 @@ import type {
   VoiceClip,
   WizardFlow,
   MediaItem,
-  IncidentPrefill
+  IncidentPrefill,
+  JobCardSaveOptions,
+  JobCardSaveResult
 } from './types'
 
 type WizardContextValue = {
@@ -107,8 +111,8 @@ type WizardContextValue = {
   goToStep: (index: number) => void
   handleNext: () => void
   handlePrevious: () => void
-  handleSave: (opts?: { forceDraft?: boolean; forceSubmitted?: boolean }) => Promise<void>
-  saveDraftQuiet: (opts?: { forceDraft?: boolean }) => Promise<void>
+  handleSave: (opts?: JobCardSaveOptions) => Promise<JobCardSaveResult>
+  saveDraftQuiet: (opts?: JobCardSaveOptions) => Promise<JobCardSaveResult>
   runSyncNow: () => Promise<{ synced: number; failed: number }>
   openJobCard: (row: PriorListRow) => Promise<void>
   openJobCardById: (jobCardId: string) => Promise<void>
@@ -123,6 +127,7 @@ type WizardContextValue = {
   setArrivalConfirmOpen: (v: boolean) => void
   departureConfirmOpen: boolean
   setDepartureConfirmOpen: (v: boolean) => void
+  confirmDepartureAndSubmit: (departureValue: string) => Promise<JobCardSaveResult>
 }
 
 const WizardContext = createContext<WizardContextValue | undefined>(undefined)
@@ -197,6 +202,8 @@ export function JobCardWizardProvider({
   const [photosLoading, setPhotosLoading] = useState(false)
   const [arrivalConfirmOpen, setArrivalConfirmOpen] = useState(false)
   const [departureConfirmOpen, setDepartureConfirmOpen] = useState(false)
+  const saveInProgressRef = useRef(false)
+  const pendingSubmitOptionsRef = useRef<JobCardSaveOptions | null>(null)
 
   const startNewJobCard = useCallback(() => {
     void ensureReferenceDataLoaded()
@@ -292,6 +299,11 @@ export function JobCardWizardProvider({
     openIncidentForEdit
   ])
 
+  useEffect(() => {
+    setJobCardWizardFormActive(wizardFlow === 'form')
+    return () => setJobCardWizardFormActive(false)
+  }, [wizardFlow])
+
   const validateStep = useCallback(
     (stepIndex: number) =>
       validateWizardStep(stepIndex, formData, {
@@ -368,24 +380,158 @@ export function JobCardWizardProvider({
   )
 
   const persistDraftQuiet = useCallback(
-    async (opts: { forceDraft?: boolean; forceSubmitted?: boolean } = { forceDraft: true }) => {
-      if (!editingMeta) return
-      try {
-        const normalizedStatus = opts.forceSubmitted
-          ? 'submitted'
-          : opts.forceDraft
-            ? 'draft'
-            : formData.status || 'draft'
+    async (opts: JobCardSaveOptions = { forceDraft: true }): Promise<JobCardSaveResult> => {
+      const fail = (error: string, partial?: Partial<JobCardSaveResult>): JobCardSaveResult => ({
+        ok: false,
+        persisted: false,
+        synced: false,
+        queued: false,
+        status: 'draft',
+        error,
+        ...partial
+      })
 
-        const normalizedPhotos = await Promise.all(selectedPhotos.map(normalizeMediaItemForSave))
-        const normalizedSectionMedia = Object.fromEntries(
-          await Promise.all(
-            (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).map(async (sec) => [
-              sec,
-              await Promise.all((sectionWorkMedia[sec] || []).map(normalizeMediaItemForSave))
-            ])
-          )
-        ) as SectionWorkMedia
+      if (!editingMeta) return fail('No job card is open.')
+      if (saveInProgressRef.current) return fail('Save already in progress — please wait.')
+
+      const forceSubmitted = opts.forceSubmitted === true
+      const forceDraft = opts.forceDraft === true
+      const formSnapshot: JobCardFormData = {
+        ...formData,
+        timeOfArrival:
+          opts.timeOfArrivalOverride != null
+            ? String(opts.timeOfArrivalOverride)
+            : formData.timeOfArrival,
+        departureFromSite:
+          opts.departureFromSiteOverride != null
+            ? String(opts.departureFromSiteOverride)
+            : formData.departureFromSite
+      }
+
+      const normalizedStatus = forceSubmitted
+        ? 'submitted'
+        : forceDraft
+          ? 'draft'
+          : formSnapshot.status || 'draft'
+
+      if (normalizedStatus !== 'draft') {
+        if (!formSnapshot.clientId) {
+          setStepError('Select a client or choose "No Client" before submitting.')
+          setCurrentStep(0)
+          return fail('Select a client before submitting.')
+        }
+        if (!formSnapshot.agentName?.trim()) {
+          setStepError('Select the attending technician before submitting.')
+          setCurrentStep(0)
+          return fail('Select the attending technician before submitting.')
+        }
+        if (!formSnapshot.customerSignature?.trim()) {
+          setStepError('Customer signature is required before submitting.')
+          return fail('Customer signature is required before submitting.')
+        }
+        if (editingMeta.useNewJobTimeFlow && !String(formSnapshot.timeOfArrival || '').trim()) {
+          pendingSubmitOptionsRef.current = opts
+          setArrivalConfirmOpen(true)
+          setCurrentStep(STEP_IDS.indexOf('visit'))
+          return fail('Set your arrival on site time before submitting.')
+        }
+        if (!String(formSnapshot.departureFromSite || '').trim()) {
+          pendingSubmitOptionsRef.current = opts
+          setDepartureConfirmOpen(true)
+          setCurrentStep(STEP_IDS.indexOf('signoff'))
+          return fail('Set your departure time before submitting.')
+        }
+      }
+
+      pendingSubmitOptionsRef.current = null
+      saveInProgressRef.current = true
+      setStepError('')
+
+      try {
+        const offlineStore = await getOfflineStore()
+        const prevPending = (await offlineStore.readLocalPendingJobCardsAsync()).find(
+          (c) => c && String(c.id) === String(editingMeta.localId)
+        )
+
+        if (opts.lightweight) {
+          const jobCardData = buildJobCardSavePayload({
+            formData: {
+              ...formSnapshot,
+              photos: formSnapshot.photos,
+              stockUsed: formSnapshot.stockUsed
+            },
+            editingMeta,
+            editingId: editingMeta.localId,
+            signatureDataUrl: formSnapshot.customerSignature,
+            sectionPhotoEntries: [],
+            voicePhotoEntries: [],
+            normalizedStatus: 'draft',
+            omitPhotos: true
+          }) as Record<string, unknown>
+          jobCardData.id = editingMeta.localId
+          jobCardData.activityQueue = Array.isArray(prevPending?.activityQueue)
+            ? [...prevPending.activityQueue]
+            : []
+          if (editingMeta.serverJobCardId) jobCardData.serverJobCardId = editingMeta.serverJobCardId
+          await persistLocal(jobCardData, { scheduleAutoSync: true })
+          return {
+            ok: true,
+            persisted: true,
+            synced: false,
+            queued: true,
+            status: 'draft'
+          }
+        }
+
+        const shellPayload = buildJobCardSavePayload({
+          formData: {
+            ...formSnapshot,
+            photos: formSnapshot.photos,
+            stockUsed: formSnapshot.stockUsed
+          },
+          editingMeta,
+          editingId: editingMeta.localId,
+          signatureDataUrl: formSnapshot.customerSignature,
+          sectionPhotoEntries: [],
+          voicePhotoEntries: [],
+          normalizedStatus,
+          omitPhotos: true
+        }) as Record<string, unknown>
+
+        shellPayload.id = editingMeta.localId
+        shellPayload.activityQueue = Array.isArray(prevPending?.activityQueue)
+          ? [...prevPending.activityQueue]
+          : []
+        if (editingMeta.serverJobCardId) shellPayload.serverJobCardId = editingMeta.serverJobCardId
+        if (editingMeta.syncBaseUpdatedAt) shellPayload.syncBaseUpdatedAt = editingMeta.syncBaseUpdatedAt
+
+        await persistLocal(shellPayload, { scheduleAutoSync: false })
+
+        let normalizedPhotos: MediaItem[]
+        let normalizedSectionMedia: SectionWorkMedia
+        try {
+          normalizedPhotos = await Promise.all(selectedPhotos.map(normalizeMediaItemForSave))
+          normalizedSectionMedia = Object.fromEntries(
+            await Promise.all(
+              (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).map(async (sec) => [
+                sec,
+                await Promise.all((sectionWorkMedia[sec] || []).map(normalizeMediaItemForSave))
+              ])
+            )
+          ) as SectionWorkMedia
+        } catch (mediaError) {
+          const message =
+            mediaError instanceof Error ? mediaError.message : 'Could not prepare photos for upload'
+          trackError(mediaError, 'jobCard:normalizeMedia')
+          return {
+            ok: true,
+            persisted: true,
+            synced: false,
+            queued: true,
+            status: normalizedStatus,
+            error: `${message} Your answers are saved on this device — fix attachments and sync from Pending uploads.`
+          }
+        }
 
         const sectionPhotoEntries = (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).flatMap(
           (sec) =>
@@ -409,74 +555,95 @@ export function JobCardWizardProvider({
 
         const jobCardData = buildJobCardSavePayload({
           formData: {
-            ...formData,
+            ...formSnapshot,
             photos: normalizedPhotos.length
               ? (normalizedPhotos as JobCardFormData['photos'])
-              : formData.photos,
-            stockUsed: formData.stockUsed
+              : formSnapshot.photos,
+            stockUsed: formSnapshot.stockUsed
           },
           editingMeta,
           editingId: editingMeta.localId,
-          signatureDataUrl: formData.customerSignature,
+          signatureDataUrl: formSnapshot.customerSignature,
           sectionPhotoEntries,
           voicePhotoEntries,
           normalizedStatus
         }) as Record<string, unknown>
 
         jobCardData.id = editingMeta.localId
-        if (editingMeta.serverJobCardId) {
-          jobCardData.serverJobCardId = editingMeta.serverJobCardId
-        }
-        if (editingMeta.syncBaseUpdatedAt) {
-          jobCardData.syncBaseUpdatedAt = editingMeta.syncBaseUpdatedAt
-        }
+        jobCardData.activityQueue = shellPayload.activityQueue
+        if (editingMeta.serverJobCardId) jobCardData.serverJobCardId = editingMeta.serverJobCardId
+        if (editingMeta.syncBaseUpdatedAt) jobCardData.syncBaseUpdatedAt = editingMeta.syncBaseUpdatedAt
+
         const tryImmediateSync = Boolean(isOnline && accessToken)
         await persistLocal(jobCardData, { scheduleAutoSync: !tryImmediateSync })
+
+        let synced = false
+        let syncError = ''
 
         if (tryImmediateSync) {
           const result = await syncOnePendingCard(jobCardData)
           if (isJobCardSyncConflict(result)) {
             const choice = await promptJobCardConflictChoice()
-            const resolved = await resolveJobCardConflict(
-              jobCardData,
-              result.serverJobCard,
-              choice
-            )
+            const resolved = await resolveJobCardConflict(jobCardData, result.serverJobCard, choice)
             if (resolved) {
               const retry = await syncOnePendingCard(resolved)
               if (retry.ok && retry.serverId) {
+                synced = true
                 setEditingMeta((m) =>
-                  m
-                    ? {
-                        ...m,
-                        serverJobCardId: retry.serverId,
-                        synced: true
-                      }
-                    : m
+                  m ? { ...m, serverJobCardId: retry.serverId, synced: true } : m
                 )
-              } else if (!retry.ok) {
+              } else {
+                syncError = retry.errorText || 'Sync failed'
                 bumpLocalDrafts()
               }
             } else if (choice === 'use_server') {
               bumpLocalDrafts()
+              syncError = 'Server copy kept — local changes were not uploaded.'
+            } else {
+              syncError = 'Sync cancelled'
             }
           } else if (result.ok && result.serverId) {
+            synced = true
             setEditingMeta((m) =>
-              m
-                ? {
-                    ...m,
-                    serverJobCardId: result.serverId,
-                    synced: true
-                  }
-                : m
+              m ? { ...m, serverJobCardId: result.serverId, synced: true } : m
             )
-          } else if (!result.ok) {
+          } else {
+            syncError = result.errorText || 'Sync failed'
             bumpLocalDrafts()
           }
+        } else {
+          bumpLocalDrafts()
+          syncError = !accessToken
+            ? 'Sign in required to sync to the server.'
+            : 'Offline — saved on this device.'
         }
+
         setFormData((f) => ({ ...f, status: normalizedStatus }))
-      } catch {
-        /* best-effort on step change */
+
+        if (synced) {
+          return {
+            ok: true,
+            persisted: true,
+            synced: true,
+            queued: false,
+            status: normalizedStatus
+          }
+        }
+
+        return {
+          ok: true,
+          persisted: true,
+          synced: false,
+          queued: true,
+          status: normalizedStatus,
+          error: syncError || undefined
+        }
+      } catch (error) {
+        trackError(error, 'jobCard:save')
+        const message = error instanceof Error ? error.message : 'Could not save job card'
+        return fail(message)
+      } finally {
+        saveInProgressRef.current = false
       }
     },
     [
@@ -494,11 +661,20 @@ export function JobCardWizardProvider({
   )
 
   const handleSave = useCallback(
-    async (opts: { forceDraft?: boolean; forceSubmitted?: boolean } = {}) => {
-      if (!editingMeta) return
+    async (opts: JobCardSaveOptions = {}): Promise<JobCardSaveResult> => {
+      if (!editingMeta) {
+        return {
+          ok: false,
+          persisted: false,
+          synced: false,
+          queued: false,
+          status: 'draft',
+          error: 'No job card is open.'
+        }
+      }
       setIsSubmitting(true)
       try {
-        await persistDraftQuiet(opts)
+        return await persistDraftQuiet(opts)
       } finally {
         setIsSubmitting(false)
       }
@@ -506,10 +682,40 @@ export function JobCardWizardProvider({
     [editingMeta, persistDraftQuiet]
   )
 
+  const confirmDepartureAndSubmit = useCallback(
+    async (departureValue: string): Promise<JobCardSaveResult> => {
+      const departure = String(departureValue || '').trim()
+      if (!departure) {
+        return {
+          ok: false,
+          persisted: false,
+          synced: false,
+          queued: false,
+          status: 'draft',
+          error: 'Departure time is required.'
+        }
+      }
+      setFormData((f) => ({ ...f, departureFromSite: departure }))
+      setDepartureConfirmOpen(false)
+      const pending = pendingSubmitOptionsRef.current || { forceSubmitted: true }
+      return handleSave({ ...pending, departureFromSiteOverride: departure })
+    },
+    [handleSave]
+  )
+
   const saveDraftQuiet = useCallback(
-    async (opts: { forceDraft?: boolean } = { forceDraft: true }) => {
-      if (!editingMeta) return
-      await persistDraftQuiet(opts)
+    async (opts: JobCardSaveOptions = { forceDraft: true }): Promise<JobCardSaveResult> => {
+      if (!editingMeta) {
+        return {
+          ok: false,
+          persisted: false,
+          synced: false,
+          queued: false,
+          status: 'draft',
+          error: 'No job card is open.'
+        }
+      }
+      return persistDraftQuiet(opts)
     },
     [editingMeta, persistDraftQuiet]
   )
@@ -525,7 +731,7 @@ export function JobCardWizardProvider({
         }
       }
       setStepError('')
-      void persistDraftQuiet({ forceDraft: true })
+      void persistDraftQuiet({ forceDraft: true, lightweight: true })
       setCurrentStep(stepIndex)
     },
     [currentStep, editingMeta, validateStep, persistDraftQuiet]
@@ -540,7 +746,7 @@ export function JobCardWizardProvider({
       }
     }
     setStepError('')
-    void persistDraftQuiet({ forceDraft: true })
+    void persistDraftQuiet({ forceDraft: true, lightweight: true })
     setCurrentStep((s) => Math.min(s + 1, STEP_IDS.length - 1))
   }, [currentStep, editingMeta, validateStep, persistDraftQuiet])
 
@@ -850,7 +1056,8 @@ export function JobCardWizardProvider({
       arrivalConfirmOpen,
       setArrivalConfirmOpen,
       departureConfirmOpen,
-      setDepartureConfirmOpen
+      setDepartureConfirmOpen,
+      confirmDepartureAndSubmit
     }),
     [
       loading,
@@ -906,7 +1113,8 @@ export function JobCardWizardProvider({
       openingCardId,
       photosLoading,
       arrivalConfirmOpen,
-      departureConfirmOpen
+      departureConfirmOpen,
+      confirmDepartureAndSubmit
     ]
   )
 
