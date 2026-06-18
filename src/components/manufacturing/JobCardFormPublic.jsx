@@ -4367,6 +4367,10 @@ const JobCardFormPublic = () => {
     void loadMyStockTakeSessions();
   };
 
+  const openStockTransfer = () => {
+    setWizardFlow('stock_transfer');
+  };
+
   const submitStockTake = async () => {
     setStockTakeSubmitConfirmOpen(false);
     if (stockTakeSessionId) {
@@ -7400,6 +7404,24 @@ const JobCardFormPublic = () => {
             </button>
             <button
               type="button"
+              onClick={openStockTransfer}
+              className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                  <i className="fa-solid fa-truck-ramp-box text-xl" aria-hidden />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-base sm:text-lg">Transfer stock</span>
+                  <span className="block text-sm text-slate-600 mt-0.5 leading-snug">
+                    Request stock from another location; source owner approves before stock moves.
+                  </span>
+                </span>
+                <i className="fa-solid fa-chevron-right text-emerald-300 flex-shrink-0" aria-hidden />
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={openIncidentReport}
               className="w-full rounded-2xl bg-white text-slate-900 px-5 py-5 text-left shadow-md hover:bg-slate-50 transition touch-manipulation border border-slate-200/90"
             >
@@ -7786,6 +7808,24 @@ const JobCardFormPublic = () => {
             </div>
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  if (wizardFlow === 'stock_transfer') {
+    if (window.StockTransferRequestField) {
+      return (
+        <window.StockTransferRequestField
+          stockLocations={stockLocations}
+          inventory={inventory}
+          getAuthToken={getJobCardAuthToken}
+          onBack={() => setWizardFlow('landing')}
+        />
+      );
+    }
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center text-slate-500">
+        Loading transfer stock…
       </div>
     );
   }

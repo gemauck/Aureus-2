@@ -3,9 +3,10 @@ import {
   listUnsyncedPendingIncidents,
   pendingToListRow
 } from './incidents/incidentOfflineStore'
-import { listPendingSubmits } from './stockTake/stockTakeOfflineStore'
+import { listPendingSubmits as listPendingStockTakeSubmits } from './stockTake/stockTakeOfflineStore'
+import { listPendingSubmits as listPendingTransferSubmits } from './stockTransferRequest/stockTransferRequestOfflineStore'
 
-export type PendingUploadKind = 'job_card' | 'incident' | 'stock_take'
+export type PendingUploadKind = 'job_card' | 'incident' | 'stock_take' | 'stock_transfer_request'
 
 export type PendingUploadItem = {
   id: string
@@ -31,10 +32,11 @@ function jobCardSubtitle(card: Record<string, unknown>) {
 
 export async function listPendingUploadItems(): Promise<PendingUploadItem[]> {
   const offlineStore = await getOfflineStore()
-  const [jobCards, incidents, stockTakes] = await Promise.all([
+  const [jobCards, incidents, stockTakes, transferRequests] = await Promise.all([
     offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
     listUnsyncedPendingIncidents(),
-    listPendingSubmits()
+    listPendingStockTakeSubmits(),
+    listPendingTransferSubmits()
   ])
 
   const items: PendingUploadItem[] = []
@@ -73,6 +75,17 @@ export async function listPendingUploadItems(): Promise<PendingUploadItem[]> {
       subtitle: `${lineCount} line${lineCount === 1 ? '' : 's'} counted`,
       savedAt: stockTake.savedAt,
       locationId: stockTake.locationId
+    })
+  }
+
+  for (const transfer of transferRequests) {
+    items.push({
+      id: transfer.id,
+      kind: 'stock_transfer_request',
+      title: 'Stock transfer request',
+      subtitle: `${transfer.lines?.length || 0} line${transfer.lines?.length === 1 ? '' : 's'}`,
+      savedAt: transfer.savedAt,
+      locationId: transfer.fromLocationId
     })
   }
 

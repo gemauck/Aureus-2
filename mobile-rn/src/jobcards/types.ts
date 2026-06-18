@@ -3,6 +3,8 @@ export type WizardFlow =
   | 'prior_list'
   | 'form'
   | 'stock_take'
+  | 'stock_transfer_request'
+  | 'stock_transfer_approvals'
   | 'incident_form'
   | 'incident_list'
   | 'pending_uploads'

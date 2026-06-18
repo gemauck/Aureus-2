@@ -8,9 +8,11 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
     name: '',
     code: '',
     type: 'warehouse',
-    address: ''
+    address: '',
+    responsibleUserId: ''
   });
   const [editingLocation, setEditingLocation] = useState(null);
+  const [erpUsers, setErpUsers] = useState([]);
 
   const normalizeLocationsOrder = (list) => {
     const fn = window.manufacturingStockLocations?.sortStockLocationsForManufacturing;
@@ -68,6 +70,14 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
 
   useEffect(() => {
     loadLocations();
+    if (window.DatabaseAPI?.getUsers) {
+      window.DatabaseAPI.getUsers()
+        .then((res) => {
+          const list = res?.data?.users || res?.users || res?.data || [];
+          setErpUsers(Array.isArray(list) ? list : []);
+        })
+        .catch(() => setErpUsers([]));
+    }
   }, []);
 
   const locationUsageById = useMemo(() => {
@@ -127,7 +137,8 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       name: '',
       code: '',
       type: 'warehouse',
-      address: ''
+      address: '',
+      responsibleUserId: ''
     });
   };
 
@@ -137,7 +148,8 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       name: loc.name || '',
       code: loc.code || '',
       type: loc.type || 'warehouse',
-      address: loc.address || ''
+      address: loc.address || '',
+      responsibleUserId: loc.responsibleUserId || ''
     });
   };
 
@@ -189,7 +201,8 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       name: formData.name.trim(),
       code: formData.code.trim(),
       type: formData.type,
-      address: formData.address.trim() || undefined
+      address: formData.address.trim() || undefined,
+      responsibleUserId: formData.responsibleUserId || null
     };
     if (!payload.name || !payload.code) {
       alert('Name and Code are required.');
@@ -337,6 +350,21 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows={3}
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Responsible user (transfer approvals)</label>
+              <select
+                value={formData.responsibleUserId || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, responsibleUserId: e.target.value }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="">— Not set —</option>
+                {erpUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email || u.id}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center justify-between pt-1">
               <button

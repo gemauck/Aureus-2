@@ -235,7 +235,7 @@ const useAuth = window.useAuth || (() => {
 // Helper to safely get React for error fallbacks
 const getReactForError = () => window.React || ReactGlobal;
 
-const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations', 'stock-count', 'reports', 'activity'];
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'transfer-requests', 'suppliers', 'locations', 'stock-count', 'reports', 'activity'];
 const INVENTORY_AUTO_REFRESH_INTERVAL_MS = 15000;
 const INVENTORY_STOCK_VIEW_OPTIONS = ['all', 'in_stock', 'out_of_stock'];
 const normalizeInventoryStockView = (value = 'all') => {
@@ -637,6 +637,16 @@ try {
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
+  const [transferRequestIdFromUrl, setTransferRequestIdFromUrl] = useState(() => {
+    try {
+      const hash = window.location.hash || '';
+      const qPart = hash.includes('?') ? hash.split('?').slice(1).join('?') : window.location.search.replace(/^\?/, '');
+      const params = new URLSearchParams(qPart);
+      return params.get('id') || '';
+    } catch {
+      return '';
+    }
+  });
   const [inventory, setInventory] = useState([]);
   const [inventoryLoadedFromAPI, setInventoryLoadedFromAPI] = useState(false);
   /** Lightweight KPIs for dashboard (GET …/inventory?summary=dashboard) — avoids full SKU list on first paint. */
@@ -16022,6 +16032,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                 { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
                 { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
+                { id: 'transfer-requests', label: 'Transfer requests', icon: 'fa-truck-loading' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
                 { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' },
                 { id: 'reports', label: 'Reports', icon: 'fa-file-alt' },
@@ -16102,6 +16113,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   })
                 : (
                     <div className="p-4 text-gray-500">Loading stock count…</div>
+                  ))}
+            {activeTab === 'transfer-requests' &&
+              (window.StockTransferRequestsView
+                ? createElement(window.StockTransferRequestsView, {
+                    isDark,
+                    initialRequestId: transferRequestIdFromUrl
+                  })
+                : (
+                    <div className="p-4 text-gray-500">Loading transfer requests…</div>
                   ))}
             {activeTab === 'reports' &&
               (window.ManufacturingReportsView

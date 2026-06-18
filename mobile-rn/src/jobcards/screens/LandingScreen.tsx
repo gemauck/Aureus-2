@@ -19,6 +19,9 @@ export function LandingScreen() {
     startNewJobCard,
     openPriorList,
     openStockTake,
+    openStockTransferRequest,
+    openStockTransferApprovals,
+    pendingTransferApprovals,
     openIncidentReport,
     openIncidentList,
     openPendingUploads,
@@ -78,6 +81,21 @@ export function LandingScreen() {
           onPress={openStockTake}
         />
         <MenuButton
+          icon="⇄"
+          title="Transfer stock"
+          subtitle="Request stock from another location for approval."
+          tint={jc.primary}
+          onPress={openStockTransferRequest}
+        />
+        <MenuButton
+          icon="✓"
+          title="Transfer approvals"
+          subtitle="Approve or reject stock leaving your location."
+          tint={jc.accentTeal}
+          badge={pendingTransferApprovals > 0 ? pendingTransferApprovals : undefined}
+          onPress={() => openStockTransferApprovals()}
+        />
+        <MenuButton
           icon="!"
           title="Report incident"
           subtitle="Record a site incident with optional job card link."
@@ -100,7 +118,7 @@ export function LandingScreen() {
                 : `${unsyncedCount} item${unsyncedCount === 1 ? '' : 's'} waiting to sync`}
             </Text>
             <Text style={styles.syncSub}>
-              Job cards, incidents, and stock-take submissions upload when you are back online.
+              Job cards, incidents, stock-take, and transfer requests upload when you are back online.
             </Text>
             <Pressable style={styles.viewPendingBtn} onPress={openPendingUploads}>
               <Text style={styles.viewPendingText}>View pending uploads</Text>
@@ -124,12 +142,14 @@ function MenuButton({
   title,
   subtitle,
   tint,
+  badge,
   onPress
 }: {
   icon: string
   title: string
   subtitle: string
   tint: string
+  badge?: number
   onPress: () => void
 }) {
   const styles = useThemedStyles(createStyles)
@@ -142,7 +162,14 @@ function MenuButton({
         <Text style={[styles.icon, { color: tint }]}>{icon}</Text>
       </View>
       <View style={styles.menuText}>
-        <Text style={styles.menuTitle}>{title}</Text>
+        <View style={styles.menuTitleRow}>
+          <Text style={styles.menuTitle}>{title}</Text>
+          {badge != null && badge > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.menuSub}>{subtitle}</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
@@ -222,7 +249,17 @@ function createStyles({ jc }: { jc: JcTheme }) {
   },
   icon: { fontSize: 22, fontWeight: '700' },
   menuText: { flex: 1 },
+  menuTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   menuTitle: { fontSize: 16, fontWeight: '700', color: jc.text },
+  badge: {
+    backgroundColor: jc.danger,
+    borderRadius: 10,
+    minWidth: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignItems: 'center'
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   menuSub: { fontSize: 13, color: jc.textMuted, marginTop: 3, lineHeight: 18 },
   chevron: { fontSize: 24, color: jc.primaryMuted, fontWeight: '300' },
   syncBox: {

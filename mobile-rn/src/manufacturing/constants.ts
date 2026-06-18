@@ -7,6 +7,7 @@ export type ManufacturingTabId =
   | 'production'
   | 'sales'
   | 'movements'
+  | 'transfer-requests'
   | 'suppliers'
   | 'locations'
   | 'reports'
@@ -34,6 +35,7 @@ export const MANUFACTURING_WEB_TABS: ManufacturingTabId[] = [
   'production',
   'sales',
   'movements',
+  'transfer-requests',
   'suppliers',
   'locations',
   'reports',

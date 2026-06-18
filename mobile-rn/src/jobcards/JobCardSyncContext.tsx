@@ -22,6 +22,11 @@ import { getPendingIncident } from './incidents/incidentOfflineStore'
 import { syncOnePendingIncident } from './incidents/incidentSync'
 import { listPendingSubmits } from './stockTake/stockTakeOfflineStore'
 import { syncAllPendingStockTakeSubmits, syncOnePendingStockTakeSubmit } from './stockTake/stockTakeSync'
+import { listPendingSubmits as listPendingTransferSubmits } from './stockTransferRequest/stockTransferRequestOfflineStore'
+import {
+  syncAllPendingStockTransferSubmits,
+  syncOnePendingStockTransferSubmit
+} from './stockTransferRequest/stockTransferRequestSync'
 import { listPendingUploadItems, type PendingUploadItem } from './pendingUploads'
 
 type SyncEngine = Awaited<ReturnType<typeof getSyncEngine>>
@@ -184,6 +189,16 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
           ? { ok: true }
           : { ok: false, errorText: result.errorText || 'Sync failed' }
       }
+      if (item.kind === 'stock_transfer_request') {
+        const transfers = await listPendingTransferSubmits()
+        const transfer = transfers.find((row) => row && String(row.id) === String(item.id))
+        if (!transfer) return { ok: false, errorText: 'Transfer request not found on device' }
+        const result = await withSyncLock(() => syncOnePendingStockTransferSubmit(token, transfer))
+        if (result === null) return { ok: false, errorText: 'Sync already in progress' }
+        await refreshPendingUploads()
+        if (result.ok) bumpLocalDrafts()
+        return result.ok ? { ok: true } : { ok: false, errorText: result.errorText || 'Sync failed' }
+      }
       const stockTakes = await listPendingSubmits()
       const stockTake = stockTakes.find((row) => row && String(row.id) === String(item.id))
       if (!stockTake) return { ok: false, errorText: 'Stock-take not found on device' }
@@ -203,12 +218,18 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
 
     const token = accessTokenRef.current
     const offlineStore = await getOfflineStore()
-    const [pendingCards, pendingIncidents, pendingStockTakes] = await Promise.all([
+    const [pendingCards, pendingIncidents, pendingStockTakes, pendingTransfers] = await Promise.all([
       offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
       listUnsyncedPendingIncidents(),
-      listPendingSubmits()
+      listPendingSubmits(),
+      listPendingTransferSubmits()
     ])
-    if (!pendingCards.length && !pendingIncidents.length && !pendingStockTakes.length) {
+    if (
+      !pendingCards.length &&
+      !pendingIncidents.length &&
+      !pendingStockTakes.length &&
+      !pendingTransfers.length
+    ) {
       return { synced: 0, failed: 0 }
     }
 
@@ -228,6 +249,11 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       }
       if (pendingStockTakes.length) {
         const batch = await syncAllPendingStockTakeSubmits(token)
+        synced += batch.synced
+        failed += batch.failed
+      }
+      if (pendingTransfers.length) {
+        const batch = await syncAllPendingStockTransferSubmits(token)
         synced += batch.synced
         failed += batch.failed
       }
@@ -258,13 +284,17 @@ export function JobCardSyncProvider({ children }: { children: React.ReactNode })
       if (cancelled) return
       void (async () => {
         const offlineStore = await getOfflineStore()
-        const [pendingCards, pendingIncidents, pendingStockTakes] = await Promise.all([
+        const [pendingCards, pendingIncidents, pendingStockTakes, pendingTransfers] = await Promise.all([
           offlineStore.listUnsyncedLocalPendingJobCardsAsync(),
           listUnsyncedPendingIncidents(),
-          listPendingSubmits()
+          listPendingSubmits(),
+          listPendingTransferSubmits()
         ])
         if (
-          (!pendingCards.length && !pendingIncidents.length && !pendingStockTakes.length) ||
+          (!pendingCards.length &&
+            !pendingIncidents.length &&
+            !pendingStockTakes.length &&
+            !pendingTransfers.length) ||
           cancelled
         ) {
           return

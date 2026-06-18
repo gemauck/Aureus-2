@@ -64,6 +64,8 @@
     "migrate:chat-messaging": "psql \"$DATABASE_URL\" -f migrations/add-chat-messaging.sql",
     "migrate:chat-reactions-push": "psql \"$DATABASE_URL\" -f migrations/add-chat-reactions-push.sql",
     "migrate:notification-email-messages": "psql \"$DATABASE_URL\" -f migrations/add-notification-email-messages.sql",
+    "migrate:stock-transfer-requests": "psql \"$DATABASE_URL\" -f migrations/add-stock-transfer-requests.sql",
+    "seed:location-responsible-users": "node scripts/seed-stock-location-responsible-users.js",
     "audit:inventory-catalog-pricing": "node scripts/audit-catalog-vs-location-unit-cost-valuation.js",
     "backfill:orphan-inventory-items": "node scripts/backfill-orphan-inventory-items.js",
     "dedupe:inventory-by-name": "node scripts/dedupe-inventory-items-by-name.js",

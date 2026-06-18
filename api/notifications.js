@@ -80,6 +80,7 @@ export async function createNotificationForUser(targetUserId, type, title, messa
         validLink.includes('#/helpdesk/') || validLink.includes('#/teams') ||
         validLink.includes('#/messages') ||
         validLink.includes('#/reports') || validLink.includes('#/leave-platform') ||
+        validLink.includes('#/manufacturing') ||
         (validLink.includes('#/projects/') && validLink.includes('task='))
     );
     // Otherwise build from metadata when we have tracker params (or no link)

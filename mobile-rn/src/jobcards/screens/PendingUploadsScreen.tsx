@@ -21,12 +21,14 @@ import { useTheme } from '../../theme/ThemeContext'
 function kindLabel(kind: PendingUploadItem['kind']) {
   if (kind === 'job_card') return 'Job card'
   if (kind === 'incident') return 'Incident'
+  if (kind === 'stock_transfer_request') return 'Transfer request'
   return 'Stock-take'
 }
 
 function kindIcon(kind: PendingUploadItem['kind']) {
   if (kind === 'job_card') return '✓'
   if (kind === 'incident') return '!'
+  if (kind === 'stock_transfer_request') return '⇄'
   return '▦'
 }
 

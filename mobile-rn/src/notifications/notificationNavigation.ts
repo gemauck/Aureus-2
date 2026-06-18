@@ -293,6 +293,12 @@ export function navigateFromNotification(
   }
   if (path.includes('/manufacturing') || link.includes('manufacturing')) {
     const { tab, query } = parseManufacturingLink(link || path)
+    if (tab === 'transfer-requests' && query.id) {
+      return safeNavigate(navigation, user, 'JobCards', {
+        initialFlow: 'stock_transfer_approvals',
+        transferRequestId: query.id
+      })
+    }
     const title =
       tab === 'dashboard'
         ? 'Dashboard'

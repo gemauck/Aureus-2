@@ -9,8 +9,11 @@ export type RootStackParamList = {
           | 'prior_list'
           | 'form'
           | 'stock_take'
+          | 'stock_transfer_request'
+          | 'stock_transfer_approvals'
           | 'incident_form'
           | 'incident_list'
+        transferRequestId?: string
         incidentPrefill?: import('../jobcards/types').IncidentPrefill
         incidentId?: string
       }

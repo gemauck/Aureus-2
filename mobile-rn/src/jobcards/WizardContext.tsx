@@ -107,6 +107,10 @@ type WizardContextValue = {
   startNewJobCard: () => void
   openPriorList: () => void
   openStockTake: () => void
+  openStockTransferRequest: () => void
+  openStockTransferApprovals: (requestId?: string) => void
+  transferApprovalRequestId: string | null
+  pendingTransferApprovals: number
   openPendingUploads: () => void
   openIncidentReport: (prefill?: IncidentPrefill) => void
   openIncidentList: () => void
@@ -141,12 +145,14 @@ export function JobCardWizardProvider({
   children,
   initialJobCardId,
   initialFlow,
+  initialTransferRequestId,
   initialIncidentPrefill,
   initialIncidentId
 }: {
   children: React.ReactNode
   initialJobCardId?: string
   initialFlow?: WizardFlow
+  initialTransferRequestId?: string
   initialIncidentPrefill?: IncidentPrefill
   initialIncidentId?: string
 }) {
@@ -244,6 +250,40 @@ export function JobCardWizardProvider({
     void ensureInventoryLoaded()
   }, [ensureInventoryLoaded])
 
+  const [transferApprovalRequestId, setTransferApprovalRequestId] = useState<string | null>(
+    initialTransferRequestId || null
+  )
+  const [pendingTransferApprovals, setPendingTransferApprovals] = useState(0)
+
+  const refreshPendingTransferApprovals = useCallback(async () => {
+    if (!accessToken) {
+      setPendingTransferApprovals(0)
+      return
+    }
+    try {
+      const res = await jobcardsApi.listStockTransferRequests(accessToken, { pendingMyApproval: true })
+      const list = res?.requests || res?.data?.requests || []
+      setPendingTransferApprovals(Array.isArray(list) ? list.length : 0)
+    } catch {
+      setPendingTransferApprovals(0)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void refreshPendingTransferApprovals()
+  }, [refreshPendingTransferApprovals, wizardFlow, unsyncedCount])
+
+  const openStockTransferRequest = useCallback(() => {
+    setWizardFlow('stock_transfer_request')
+    void ensureInventoryLoaded()
+  }, [ensureInventoryLoaded])
+
+  const openStockTransferApprovals = useCallback((requestId?: string) => {
+    setTransferApprovalRequestId(requestId || null)
+    setWizardFlow('stock_transfer_approvals')
+    void refreshPendingTransferApprovals()
+  }, [refreshPendingTransferApprovals])
+
   const openPendingUploads = useCallback(() => {
     setWizardFlow('pending_uploads')
   }, [])
@@ -291,17 +331,26 @@ export function JobCardWizardProvider({
       } else {
         openIncidentReport(initialIncidentPrefill || undefined)
       }
+    } else if (initialFlow === 'stock_transfer_request') {
+      initialFlowBootstrappedRef.current = true
+      openStockTransferRequest()
+    } else if (initialFlow === 'stock_transfer_approvals') {
+      initialFlowBootstrappedRef.current = true
+      openStockTransferApprovals(initialTransferRequestId)
     }
   }, [
     initialFlow,
     initialJobCardId,
     initialIncidentId,
     initialIncidentPrefill,
+    initialTransferRequestId,
     openStockTake,
     openPriorList,
     openIncidentList,
     openIncidentReport,
-    openIncidentForEdit
+    openIncidentForEdit,
+    openStockTransferRequest,
+    openStockTransferApprovals
   ])
 
   useEffect(() => {
@@ -1028,6 +1077,10 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openStockTransferRequest,
+      openStockTransferApprovals,
+      transferApprovalRequestId,
+      pendingTransferApprovals,
       openPendingUploads,
       openIncidentReport,
       openIncidentList,
@@ -1087,6 +1140,10 @@ export function JobCardWizardProvider({
       startNewJobCard,
       openPriorList,
       openStockTake,
+      openStockTransferRequest,
+      openStockTransferApprovals,
+      transferApprovalRequestId,
+      pendingTransferApprovals,
       openPendingUploads,
       openIncidentReport,
       openIncidentList,

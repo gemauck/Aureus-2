@@ -57,6 +57,7 @@ import XLSX from 'xlsx'
 import QRCode from 'qrcode'
 import { suggestInventoryThumbnail } from './_lib/inventoryThumbnailSuggest.js'
 import { allocateClientAllocationJournalNumberTx } from './_lib/clientAllocationJournalNumber.js'
+import { handleStockTransferRequests } from './_lib/stockTransferRequests.js'
 
 const INVENTORY_TEMPLATE_FIELDS = {
   sku: true,
@@ -1289,6 +1290,7 @@ async function handler(req, res) {
             address: body.address || '',
             contactPerson: body.contactPerson || '',
             contactPhone: body.contactPhone || '',
+            responsibleUserId: body.responsibleUserId ? String(body.responsibleUserId) : null,
             meta: JSON.stringify(metaValue)
           }
         })
@@ -1332,6 +1334,9 @@ async function handler(req, res) {
           address: body.address ?? undefined,
           contactPerson: body.contactPerson ?? undefined,
           contactPhone: body.contactPhone ?? undefined,
+          responsibleUserId: body.responsibleUserId !== undefined
+            ? (body.responsibleUserId ? String(body.responsibleUserId) : null)
+            : undefined,
           meta: body.meta !== undefined ? JSON.stringify(body.meta) : undefined
         }})
         auditManufacturing('update', 'locations', id, {
@@ -2485,6 +2490,25 @@ async function handler(req, res) {
     }
 
     return badRequest(res, 'Unsupported stock-take-submissions route')
+  }
+
+  if (resourceType === 'stock-transfer-requests') {
+    const handled = await handleStockTransferRequests({
+      prisma,
+      req,
+      id,
+      action,
+      auditManufacturing,
+      ok: (data) => ok(res, data),
+      created: (data) => created(res, data),
+      badRequest: (msg) => badRequest(res, msg),
+      notFound: (msg) => notFound(res, msg),
+      forbidden: (msg) => forbidden(res, msg),
+      serverError: (msg, detail) => serverError(res, msg, detail),
+      parseJsonBody
+    })
+    if (handled) return handled
+    return badRequest(res, 'Unsupported stock-transfer-requests route')
   }
 
   // STOCK COUNT (admin): Excel export / import

@@ -91,6 +91,8 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/utils/inventoryQrPayload.js',
         './src/utils/inventoryLabelLayout.js',
         './src/components/manufacturing/StockCountView.jsx',
+        './src/components/manufacturing/StockTransferRequestsView.jsx',
+        './src/components/manufacturing/StockTransferRequestField.jsx',
         './src/components/manufacturing/jobCardActivityDisplay.js',
         './src/components/manufacturing/JobCards.jsx',
         './src/components/manufacturing/PurchaseOrderFromDocumentWizard.jsx',

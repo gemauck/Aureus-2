@@ -197,6 +197,49 @@ export const jobcardsApi = {
       `/api/manufacturing/stock-take-submissions/${encodeURIComponent(sessionId)}/submit-for-review`,
       { method: 'POST', token }
     )
+  },
+
+  createStockTransferRequest(token: string, body: Record<string, unknown>) {
+    return request('/api/manufacturing/stock-transfer-requests', {
+      method: 'POST',
+      token,
+      body
+    })
+  },
+
+  listStockTransferRequests(
+    token: string,
+    options: { pendingMyApproval?: boolean; mine?: boolean; status?: string } = {}
+  ) {
+    const params = new URLSearchParams()
+    if (options.pendingMyApproval) params.set('pendingMyApproval', '1')
+    if (options.mine) params.set('mine', '1')
+    if (options.status) params.set('status', options.status)
+    const qs = params.toString()
+    const path = qs
+      ? `/api/manufacturing/stock-transfer-requests?${qs}`
+      : '/api/manufacturing/stock-transfer-requests'
+    return request(path, { token })
+  },
+
+  getStockTransferRequest(token: string, id: string) {
+    return request(`/api/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}`, { token })
+  },
+
+  approveStockTransferRequest(token: string, id: string, reviewNotes = '') {
+    return request(`/api/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+      token,
+      body: { reviewNotes }
+    })
+  },
+
+  rejectStockTransferRequest(token: string, id: string, reviewNotes = '') {
+    return request(`/api/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}/reject`, {
+      method: 'POST',
+      token,
+      body: { reviewNotes }
+    })
   }
 }
 
