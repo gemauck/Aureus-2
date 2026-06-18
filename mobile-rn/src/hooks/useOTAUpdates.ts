@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Updates from 'expo-updates'
 import { isApkUpdateRequired, waitForApkVersionCheck } from '../services/apkUpdateUi'
 import { setOtaUiPhase } from '../services/otaUpdateUi'
@@ -9,6 +10,8 @@ const FOREGROUND_DEBOUNCE_MS = 30_000
 const BACKGROUND_POLL_MS = 5 * 60_000
 const PROMPT_COOLDOWN_MS = 3 * 60_000
 const APPLY_BRIEF_MS = 700
+const RELOAD_GUARD_KEY = '@ota_reload_guard_v1'
+const RELOAD_GUARD_MS = 10 * 60_000
 
 export type OtaCheckResult =
   | { status: 'dev' | 'disabled' | 'unsupported' | 'current' }
@@ -42,6 +45,52 @@ function formatOtaError(error: unknown, context: string): OtaCheckResult {
       ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
       : raw
   return { status: 'error', message }
+}
+
+async function readReloadGuard(): Promise<{ updateId: string; at: number } | null> {
+  try {
+    const raw = await AsyncStorage.getItem(RELOAD_GUARD_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { updateId?: string; at?: number }
+    if (!parsed?.updateId || typeof parsed.at !== 'number') return null
+    return { updateId: parsed.updateId, at: parsed.at }
+  } catch {
+    return null
+  }
+}
+
+async function markReloadAttempt(updateId: string) {
+  try {
+    await AsyncStorage.setItem(
+      RELOAD_GUARD_KEY,
+      JSON.stringify({ updateId, at: Date.now() })
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+async function clearReloadGuard() {
+  try {
+    await AsyncStorage.removeItem(RELOAD_GUARD_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Stop reload loops when a bundle was already fetched but never became active. */
+async function shouldSkipAutoReload(
+  updateId: string,
+  runningId: string | null | undefined
+): Promise<boolean> {
+  if (runningId && runningId === updateId) {
+    await clearReloadGuard()
+    return true
+  }
+  const guard = await readReloadGuard()
+  if (!guard) return false
+  if (guard.updateId !== updateId) return false
+  return Date.now() - guard.at < RELOAD_GUARD_MS
 }
 
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
@@ -90,28 +139,19 @@ function markDownloadedOtaUpdate(updateId?: string | null): OtaCheckResult {
   return { status: 'downloaded', willReload: false }
 }
 
-async function reloadWithApplyingUi(): Promise<OtaCheckResult> {
+async function reloadWithApplyingUi(updateId: string): Promise<OtaCheckResult> {
   setOtaUiPhase('applying')
   pendingOtaUpdateId = null
+  await markReloadAttempt(updateId)
   await new Promise((resolve) => setTimeout(resolve, APPLY_BRIEF_MS))
   await Updates.reloadAsync()
   return { status: 'downloaded', willReload: true }
 }
 
-function updateReady(
-  check: Updates.UpdateCheckResult,
-  fetchResult: Updates.UpdateFetchResult | null,
-  runningId: string | null | undefined
-): boolean {
-  const downloadedId = fetchResult?.manifest?.id ?? null
-  if (downloadedId && runningId && downloadedId !== runningId) return true
-  return Boolean(check.isAvailable && fetchResult?.manifest?.id)
-}
-
 /**
  * Sync OTA state with the server.
- * After fetchUpdateAsync the client may report "no update" while a downloaded bundle
- * is still unapplied — compare running updateId vs downloaded manifest id.
+ * Only treat server-reported updates (check.isAvailable + fetch.isNew) as apply-ready —
+ * never auto-reload on stale staged bundles (that caused restart loops back to Dashboard).
  */
 export async function syncOtaUpdate(
   options: { mode?: OtaSyncMode } = {}
@@ -122,43 +162,44 @@ export async function syncOtaUpdate(
   const mode = options.mode || 'background'
 
   try {
-    let fetchResult: Updates.UpdateFetchResult | null = null
+    if (mode === 'auto') setOtaUiPhase('checking')
 
     const check = await Updates.checkForUpdateAsync()
-    if (check.isAvailable) {
-      if (mode === 'auto') setOtaUiPhase('downloading')
-      fetchResult = await Updates.fetchUpdateAsync()
-    } else {
-      // Staged download may exist while the running bundle is still old.
-      try {
-        fetchResult = await Updates.fetchUpdateAsync()
-        if (mode === 'auto' && fetchResult?.manifest?.id) {
-          setOtaUiPhase('downloading')
-        }
-      } catch {
-        fetchResult = null
-      }
-    }
-
-    const runningId = Updates.updateId
-    const ready = updateReady(check, fetchResult, runningId)
-
-    if (!ready) {
+    if (!check.isAvailable) {
       if (mode === 'auto') setOtaUiPhase('idle')
       return { status: 'current' }
     }
 
-    const updateId = fetchResult?.manifest?.id ?? null
+    if (mode === 'auto') setOtaUiPhase('downloading')
+    const fetchResult = await Updates.fetchUpdateAsync()
+
+    const downloadedId = fetchResult?.manifest?.id ?? null
+    const runningId = Updates.updateId ?? null
+
+    if (!fetchResult?.isNew || !downloadedId) {
+      if (mode === 'auto') setOtaUiPhase('idle')
+      return { status: 'current' }
+    }
+
+    if (runningId === downloadedId) {
+      await clearReloadGuard()
+      if (mode === 'auto') setOtaUiPhase('idle')
+      return { status: 'current' }
+    }
 
     if (mode === 'auto') {
-      return reloadWithApplyingUi()
+      if (await shouldSkipAutoReload(downloadedId, runningId)) {
+        setOtaUiPhase('idle')
+        return promptApplyUpdate(downloadedId)
+      }
+      return reloadWithApplyingUi(downloadedId)
     }
 
     if (mode === 'prompt') {
-      return promptApplyUpdate(updateId)
+      return promptApplyUpdate(downloadedId)
     }
 
-    return markDownloadedOtaUpdate(updateId)
+    return markDownloadedOtaUpdate(downloadedId)
   } catch (error) {
     if (mode === 'auto') setOtaUiPhase('idle')
     return formatOtaError(error, 'OTA sync')
@@ -175,9 +216,9 @@ export async function downloadOtaUpdate(): Promise<OtaCheckResult> {
   return syncOtaUpdate({ mode: 'prompt' })
 }
 
-/** Push nudge from admin Users page — auto-download and apply with on-screen status. */
+/** Push nudge from admin Users page — download and prompt (no forced reload loop). */
 export async function handleRemoteOtaNudge(): Promise<OtaCheckResult> {
-  return syncOtaUpdate({ mode: 'auto' })
+  return syncOtaUpdate({ mode: 'prompt' })
 }
 
 export async function applyOtaUpdate(
@@ -188,10 +229,23 @@ export async function applyOtaUpdate(
 
   if (options.reload === true) {
     try {
-      const result = await syncOtaUpdate({ mode: options.prompt ? 'prompt' : 'auto' })
-      if (result.status === 'downloaded' && result.willReload) return result
-      pendingOtaUpdateId = null
-      return reloadWithApplyingUi()
+      const check = await Updates.checkForUpdateAsync()
+      if (!check.isAvailable) {
+        const runningId = Updates.updateId
+        if (runningId) {
+          setOtaUiPhase('applying')
+          pendingOtaUpdateId = null
+          await new Promise((resolve) => setTimeout(resolve, APPLY_BRIEF_MS))
+          await Updates.reloadAsync()
+          return { status: 'downloaded', willReload: true }
+        }
+        return { status: 'current' }
+      }
+      const fetchResult = await Updates.fetchUpdateAsync()
+      const downloadedId = fetchResult?.manifest?.id
+      if (!downloadedId) return { status: 'current' }
+      if (options.prompt) return promptApplyUpdate(downloadedId)
+      return reloadWithApplyingUi(downloadedId)
     } catch (error) {
       setOtaUiPhase('idle')
       return formatOtaError(error, 'OTA apply')
@@ -203,14 +257,15 @@ export async function applyOtaUpdate(
   })
 }
 
-/** OTA sync on every app open (cold start + return from background), plus periodic poll. */
+/** OTA sync on app open (once per session auto-apply) and periodic background checks. */
 export function useOTAUpdates(enabled = true) {
   const inFlightRef = useRef(false)
   const lastCheckRef = useRef(0)
   const appStateRef = useRef(AppState.currentState)
+  const sessionAutoDoneRef = useRef(false)
 
   const runOpenCheck = useCallback(
-    async (opts: { force?: boolean } = {}) => {
+    async (opts: { force?: boolean; autoApply?: boolean } = {}) => {
       if (!enabled && !opts.force) return { status: 'current' as const }
 
       const now = Date.now()
@@ -226,7 +281,11 @@ export function useOTAUpdates(enabled = true) {
         if (apkState === 'required' || isApkUpdateRequired()) {
           return { status: 'current' as const }
         }
-        return await syncOtaUpdate({ mode: 'auto' })
+
+        const allowAuto = opts.autoApply === true && !sessionAutoDoneRef.current
+        if (allowAuto) sessionAutoDoneRef.current = true
+
+        return await syncOtaUpdate({ mode: allowAuto ? 'auto' : 'background' })
       } finally {
         inFlightRef.current = false
       }
@@ -262,15 +321,14 @@ export function useOTAUpdates(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
-    void runOpenCheck({ force: true })
+    // One auto-apply attempt per cold start; resume from background only downloads quietly.
+    void runOpenCheck({ force: true, autoApply: true })
 
     const sub = AppState.addEventListener('change', (nextState) => {
       const prev = appStateRef.current
       appStateRef.current = nextState
       if (nextState !== 'active' || prev === 'active') return
-
-      resetOtaPromptCooldown()
-      void runOpenCheck({ force: true })
+      void runOpenCheck({ force: true, autoApply: false })
     })
 
     const poll = setInterval(() => {
@@ -287,7 +345,12 @@ export function useOTAUpdates(enabled = true) {
     checkForOTAUpdate: (interactive = true) =>
       check({ silent: !interactive, force: true }),
     downloadOTAUpdate: () => downloadOtaUpdate(),
-    applyDownloadedUpdate: () => reloadWithApplyingUi(),
+    applyDownloadedUpdate: async () => {
+      const id = Updates.updateId
+      if (id) return reloadWithApplyingUi(id)
+      await Updates.reloadAsync()
+      return { status: 'downloaded' as const, willReload: true }
+    },
     otaEnabled: Updates.isEnabled,
     otaChannel: Updates.channel,
     runtimeVersion: Updates.runtimeVersion,
