@@ -90,6 +90,7 @@ const DatabaseAPI = {
     _endpointTimeout: {
         '/notifications': 20000,   // 20s - allow slow server/DB; reduce pause-after-timeout
         '/users/heartbeat': 10000, // 10s - heartbeat should be quick
+        '/users': 90000,           // 90s - user list can be slow on busy tenants
         '/clients': 90000,        // 90s - list can be large/slow
         '/leads': 90000,          // 90s - list can be large/slow
     },
@@ -2293,6 +2294,59 @@ const DatabaseAPI = {
             body: JSON.stringify(movementData)
         });
         return response;
+    },
+
+    async getStockTransferRequests(options = {}) {
+        const params = new URLSearchParams();
+        if (options.status) params.set('status', options.status);
+        if (options.mine) params.set('mine', '1');
+        if (options.pendingMyApproval) params.set('pendingMyApproval', '1');
+        if (options.limit) params.set('limit', String(options.limit));
+        const qs = params.toString();
+        const path = qs
+            ? `/manufacturing/stock-transfer-requests?${qs}`
+            : '/manufacturing/stock-transfer-requests';
+        const raw = await this.makeRequest(path);
+        return {
+            data: {
+                requests: Array.isArray(raw?.data?.requests)
+                    ? raw.data.requests
+                    : Array.isArray(raw?.requests)
+                        ? raw.requests
+                        : []
+            }
+        };
+    },
+
+    async getStockTransferRequest(id) {
+        return this.makeRequest(`/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}`);
+    },
+
+    async createStockTransferRequest(payload) {
+        return this.makeRequest('/manufacturing/stock-transfer-requests', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async approveStockTransferRequest(id, reviewNotes = '') {
+        return this.makeRequest(`/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({ reviewNotes })
+        });
+    },
+
+    async rejectStockTransferRequest(id, reviewNotes = '') {
+        return this.makeRequest(`/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ reviewNotes })
+        });
+    },
+
+    async cancelStockTransferRequest(id) {
+        return this.makeRequest(`/manufacturing/stock-transfer-requests/${encodeURIComponent(id)}/cancel`, {
+            method: 'POST'
+        });
     },
 
     async deleteStockMovement(id) {

@@ -4874,6 +4874,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 contactPhone: newSite.phone || newSite.contactPhone || '',
                 contactEmail: newSite.email || newSite.contactEmail || '',
                 notes: newSite.notes || '',
+                latitude: newSite.latitude || '',
+                longitude: newSite.longitude || '',
+                gpsCoordinates: newSite.gpsCoordinates || '',
                 siteLead: newSite.siteLead ?? '',
                 siteType: newSite.siteType === 'client' ? 'client' : 'lead',
                 engagementStage: newSite.engagementStage ?? newSite.stage ?? 'Potential',
@@ -5087,11 +5090,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         isAutoSavingRef.current = true;
         lastInlineSaveAtRef.current = Date.now();
 
-        // For leads: persist site via direct site API first (same as clients use for add).
-        // This guarantees DB write even if the lead PATCH path doesn't process body.sites.
+        // Persist site via direct site API so normalized ClientSite rows (incl. GPS) are saved.
         const runSave = async () => {
             let dataToSave = finalFormData;
-            if (isLead && formData.id && editingSite.id && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
+            if (formData.id && editingSite.id && (window.api?.updateSite || window.DatabaseAPI?.makeRequest)) {
                 const payload = {
                     name: sitePayload.name ?? '',
                     address: sitePayload.address ?? '',
@@ -5099,6 +5101,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     contactPhone: sitePayload.contactPhone ?? '',
                     contactEmail: sitePayload.contactEmail ?? '',
                     notes: sitePayload.notes ?? '',
+                    latitude: sitePayload.latitude ?? '',
+                    longitude: sitePayload.longitude ?? '',
+                    gpsCoordinates: sitePayload.gpsCoordinates ?? '',
                     siteLead: sitePayload.siteLead ?? '',
                     siteType: sitePayload.siteType === 'client' ? 'client' : 'lead',
                     engagementStage: sitePayload.engagementStage ?? sitePayload.stage ?? '',
@@ -5122,7 +5127,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         dataToSave = { ...finalFormData, sites: updatedSitesList };
                     }
                 } catch (err) {
-                    console.error('❌ Lead site update (direct API) failed:', err);
+                    console.error('❌ Site update (direct API) failed:', err);
                     alert('Site could not be saved to the database. Please try again.');
                     return;
                 }
@@ -5579,11 +5584,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const navigateToPage = (page) => {
         // If navigating to clients page, reset the Clients component view first
         if (page === 'clients') {
-            // Dispatch event to reset Clients component view
             if (window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('resetClientsView', { 
-                    detail: { viewMode: 'clients' } 
-                }));
+                window.dispatchEvent(new CustomEvent('resetClientsView', { detail: {} }));
             }
         }
         

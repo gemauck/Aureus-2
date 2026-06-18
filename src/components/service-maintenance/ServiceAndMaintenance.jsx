@@ -715,6 +715,8 @@ const ServiceAndMaintenance = () => {
             api.getClients().then((response) => {
               const clientsData = response?.data?.clients || response?.data || [];
               setClients(Array.isArray(clientsData) ? clientsData : []);
+            }).catch((err) => {
+              console.warn('ServiceAndMaintenance: getClients failed', err?.message || err);
             })
           );
         }
@@ -723,6 +725,8 @@ const ServiceAndMaintenance = () => {
             api.getUsers().then((response) => {
               const usersData = response?.data?.users || response?.data || [];
               setUsers(Array.isArray(usersData) ? usersData : []);
+            }).catch((err) => {
+              console.warn('ServiceAndMaintenance: getUsers failed', err?.message || err);
             })
           );
         }

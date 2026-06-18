@@ -112,6 +112,7 @@ model User {
   chatMessageReactions          ChatMessageReaction[]
   pushDeviceTokens              PushDeviceToken[]
   clientPresences               UserClientPresence[]
+  responsibleStockLocations     StockLocation[]              @relation("StockLocationResponsible")
 
   @@index([createdAt])
   @@index([role])
@@ -413,6 +414,8 @@ model ClientSite {
   aidaStatus       String?  @default("")
   // Site type: 'client' = do not show in Pipeline; 'lead' = show in Pipeline (clients can have sites that are still leads)
   siteType      String?  @default("lead")
+  latitude      String?  @default("")
+  longitude     String?  @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1815,23 +1818,26 @@ model StockMovement {
 }
 
 model StockLocation {
-  id              String          @id @default(cuid())
-  code            String          @unique
-  name            String
-  type            String          @default("warehouse")
-  status          String          @default("active")
-  address         String          @default("")
-  contactPerson   String          @default("")
-  contactPhone    String          @default("")
-  meta            String          @default("{}")
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  inventoryItems  InventoryItem[]
-  inventory       LocationInventory[]
-  purchaseOrders  PurchaseOrder[]
+  id                String          @id @default(cuid())
+  code              String          @unique
+  name              String
+  type              String          @default("warehouse")
+  status            String          @default("active")
+  address           String          @default("")
+  contactPerson     String          @default("")
+  contactPhone      String          @default("")
+  responsibleUserId String?
+  meta              String          @default("{}")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  inventoryItems    InventoryItem[]
+  inventory         LocationInventory[]
+  purchaseOrders    PurchaseOrder[]
+  responsibleUser   User?           @relation("StockLocationResponsible", fields: [responsibleUserId], references: [id], onDelete: SetNull)
 
   @@index([type])
   @@index([status])
+  @@index([responsibleUserId])
 }
 
 model LocationInventory {
@@ -1916,6 +1922,52 @@ model StockTakeSubmissionLine {
   submission          StockTakeSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@index([submissionId])
+  @@index([sku])
+}
+
+model StockTransferRequest {
+  id               String                     @id @default(cuid())
+  requestRef       String                     @unique
+  fromLocationId   String
+  toLocationId     String
+  fromLocationCode String                     @default("")
+  fromLocationName String                     @default("")
+  toLocationCode   String                     @default("")
+  toLocationName   String                     @default("")
+  status           String                     @default("pending_approval")
+  requestedById    String                     @default("")
+  requestedBy      String                     @default("")
+  requestedAt      DateTime                   @default(now())
+  notes            String                     @default("")
+  reviewedById     String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  reviewNotes      String                     @default("")
+  stockMovementIds String                     @default("[]")
+  meta             String                     @default("{}")
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  lines            StockTransferRequestLine[]
+
+  @@index([status])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@index([requestedById])
+  @@index([requestedAt])
+}
+
+model StockTransferRequestLine {
+  id                  String               @id @default(cuid())
+  requestId           String
+  locationInventoryId String?
+  sku                 String
+  itemName            String
+  quantity            Float
+  unit                String               @default("pcs")
+  createdAt           DateTime             @default(now())
+  request             StockTransferRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
   @@index([sku])
 }
 

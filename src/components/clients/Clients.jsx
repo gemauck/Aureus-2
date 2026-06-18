@@ -999,8 +999,20 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
 
 // No initial data - all data comes from database
 
+const CLIENTS_LAST_VIEW_MODE_KEY = 'clientsLastViewMode';
+
+function readSavedClientsViewMode() {
+    try {
+        const saved = sessionStorage.getItem(CLIENTS_LAST_VIEW_MODE_KEY);
+        if (saved && ['clients', 'leads', 'pipeline', 'client-detail', 'lead-detail', 'opportunity-detail'].includes(saved)) {
+            return saved;
+        }
+    } catch (_) {}
+    return 'clients';
+}
+
 const Clients = React.memo(() => {
-    const [viewMode, setViewMode] = useState('clients');
+    const [viewMode, setViewMode] = useState(readSavedClientsViewMode);
     const [isPipelineLoading, setIsPipelineLoading] = useState(false);
     const isLoadingOpportunitiesRef = useRef(false); // Prevent concurrent opportunity loads
     const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
@@ -1106,6 +1118,9 @@ const Clients = React.memo(() => {
         clientsRef.current = clients;
         leadsRef.current = leads;
         viewModeRef.current = viewMode;
+        try {
+            sessionStorage.setItem(CLIENTS_LAST_VIEW_MODE_KEY, viewMode);
+        } catch (_) {}
     }, [clients, leads, viewMode]);
     
     // Ensure viewMode is always valid on mount and when it changes
@@ -1969,7 +1984,7 @@ const Clients = React.memo(() => {
     // Listen for resetClientsView event to reset view when navigating from detail pages
     useEffect(() => {
         const handleResetView = (event) => {
-            let targetViewMode = event.detail?.viewMode || 'clients';
+            let targetViewMode = event.detail?.viewMode || readSavedClientsViewMode();
             const role = window.storage?.getUser?.()?.role;
             if (typeof window.isAdminRole === 'function' && !window.isAdminRole(role)) {
                 if (

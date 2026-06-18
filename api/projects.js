@@ -12,6 +12,35 @@ import { openTaskWhere } from './_lib/taskStatus.js'
 /** Run Project table migration at most once per process (perf: avoid ALTER on every list GET). */
 let projectListColumnsMigrated = false;
 
+/** Preserve original comment timestamps when document/FMS sections are rebuilt on save. */
+function commentRowFromPayload(comment, year, month) {
+  const atts = Array.isArray(comment?.attachments) ? comment.attachments : []
+  const commentId = comment?.id != null ? String(comment.id) : undefined
+  const rawDate = comment?.createdAt ?? comment?.date
+  let createdAt
+  if (rawDate != null && rawDate !== '') {
+    const d = rawDate instanceof Date ? rawDate : new Date(rawDate)
+    if (!Number.isNaN(d.getTime())) createdAt = d
+  }
+  return {
+    ...(commentId ? { id: commentId } : {}),
+    year,
+    month,
+    text: comment.text || String(comment),
+    author: comment.author || comment.authorName || '',
+    authorId: comment.authorId || null,
+    attachments: JSON.stringify(atts),
+    ...(createdAt ? { createdAt } : {})
+  }
+}
+
+function commentCreatedAtIso(value) {
+  if (!value) return undefined
+  if (value instanceof Date) return value.toISOString()
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+}
+
 /**
  * Convert DocumentSection table data to JSON format (for backward compatibility)
  */
@@ -88,14 +117,15 @@ async function documentSectionsToJson(projectId, options = {}) {
                   attachments = []
                 }
               }
+              const createdIso = commentCreatedAtIso(comment.createdAt)
               comments[key].push({
                 id: comment.id,
                 text: comment.text,
                 author: comment.author,
                 authorId: comment.authorId,
                 authorName: comment.author,
-                createdAt: comment.createdAt,
-                date: comment.createdAt,
+                createdAt: createdIso,
+                date: createdIso,
                 attachments
               })
             }
@@ -551,17 +581,7 @@ function buildDocumentItemCreateData(doc, docIdx, parentId = null) {
           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
           for (const comment of commentList) {
             if (comment && (comment.text || comment)) {
-              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-              const commentId = comment.id != null ? String(comment.id) : undefined
-              comments.push({
-                ...(commentId ? { id: commentId } : {}),
-                year,
-                month,
-                text: comment.text || String(comment),
-                author: comment.author || comment.authorName || '',
-                authorId: comment.authorId || null,
-                attachments: JSON.stringify(atts)
-              })
+              comments.push(commentRowFromPayload(comment, year, month))
             }
           }
         }
@@ -1261,15 +1281,7 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
-                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                              comments.push({
-                                year,
-                                month,
-                                text: comment.text || String(comment),
-                                author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null,
-                                attachments: JSON.stringify(atts)
-                              })
+                              comments.push(commentRowFromPayload(comment, year, month))
                             }
                           }
                         }
@@ -1379,15 +1391,7 @@ async function saveWeeklyFMSReviewSectionsToTable(projectId, jsonData) {
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
-                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                              comments.push({
-                                year,
-                                month,
-                                text: comment.text || String(comment),
-                                author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null,
-                                attachments: JSON.stringify(atts)
-                              })
+                              comments.push(commentRowFromPayload(comment, year, month))
                             }
                           }
                         }
@@ -1632,15 +1636,7 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData, userCont
                             const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                             for (const comment of commentList) {
                               if (comment && (comment.text || comment)) {
-                                const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                                comments.push({
-                                  year,
-                                  month,
-                                  text: comment.text || String(comment),
-                                  author: comment.author || comment.authorName || '',
-                                  authorId: comment.authorId || null,
-                                  attachments: JSON.stringify(atts)
-                                })
+                                comments.push(commentRowFromPayload(comment, year, month))
                               }
                             }
                           }
@@ -1748,15 +1744,7 @@ async function saveMonthlyFMSReviewSectionsToTable(projectId, jsonData, userCont
                           const commentList = Array.isArray(commentArray) ? commentArray : [commentArray]
                           for (const comment of commentList) {
                             if (comment && (comment.text || comment)) {
-                              const atts = Array.isArray(comment.attachments) ? comment.attachments : []
-                              comments.push({
-                                year,
-                                month,
-                                text: comment.text || String(comment),
-                                author: comment.author || comment.authorName || '',
-                                authorId: comment.authorId || null,
-                                attachments: JSON.stringify(atts)
-                              })
+                              comments.push(commentRowFromPayload(comment, year, month))
                             }
                           }
                         }

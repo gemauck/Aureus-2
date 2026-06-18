@@ -2496,7 +2496,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack, dataSource = 'docum
     const getCommentsForYear = (comments, month, year = selectedYear) => {
         if (!comments) return [];
         const monthKey = getMonthKey(month, year);
-        return comments[monthKey] || [];
+        const list = comments[monthKey] || [];
+        return [...list].sort((a, b) => {
+            const ta = new Date(a?.createdAt || a?.date || 0).getTime();
+            const tb = new Date(b?.createdAt || b?.date || 0).getTime();
+            if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+            if (Number.isNaN(ta)) return 1;
+            if (Number.isNaN(tb)) return -1;
+            return tb - ta;
+        });
     };
     
     // Set status for a specific month in the selected year only
@@ -3916,6 +3924,7 @@ const getAssigneeColor = (identifier, users) => {
             id: newCommentId,
             text: commentText,
             date: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
             authorId: currentUser.id,
@@ -9767,8 +9776,8 @@ Abcotronics`;
                                 </div>
                             ) : (
                                 <>
-                            {/* Horizontal scroll only: overflow-x:auto with overflow-y:visible computes to y=auto and breaks sticky thead in Chromium; clip keeps vertical stickiness to the viewport. */}
-                                <div data-scroll-sync className="overflow-x-auto overflow-y-clip rounded-b-xl">
+                            {/* Scroll container: max-height keeps sticky header rows visible while scrolling document rows (Compliance / Data Review / Doc Collection grid). */}
+                                <div data-scroll-sync className={`overflow-x-auto rounded-b-xl ${isJsonOnlyTracker ? 'max-h-[min(72vh,900px)] overflow-y-auto' : 'overflow-y-clip'}`}>
                                     <table className="min-w-full border-separate border-spacing-0 divide-y divide-gray-200 dark:divide-gray-600">
                                         <thead className="bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-700 dark:to-gray-800 relative">
                                         {isJsonOnlyTracker ? (

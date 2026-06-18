@@ -20,6 +20,24 @@ function isUnauthenticatedGetSitesList(req) {
   return !!(clientId && !siteId)
 }
 
+function normalizeSiteCoordinates(body = {}) {
+  const latitude =
+    body.latitude != null && String(body.latitude).trim() !== ''
+      ? String(body.latitude).trim()
+      : ''
+  const longitude =
+    body.longitude != null && String(body.longitude).trim() !== ''
+      ? String(body.longitude).trim()
+      : ''
+  if (!latitude && !longitude && typeof body.gpsCoordinates === 'string') {
+    const parts = body.gpsCoordinates.split(',').map((p) => p.trim())
+    if (parts.length >= 2) {
+      return { latitude: parts[0], longitude: parts[1] }
+    }
+  }
+  return { latitude, longitude }
+}
+
 async function handler(req, res) {
   try {
     
@@ -76,6 +94,7 @@ async function handler(req, res) {
         
         // Phase 6: Create site in normalized ClientSite table (persist engagementStage/aidaStatus/siteType for leads)
         const siteTypeVal = body.siteType === 'client' ? 'client' : 'lead'
+        const { latitude, longitude } = normalizeSiteCoordinates(body)
         const createData = {
           clientId: rawClientId,
           name: siteName,
@@ -87,7 +106,9 @@ async function handler(req, res) {
           siteLead: body.siteLead != null ? String(body.siteLead) : '',
           engagementStage: body.engagementStage != null ? String(body.engagementStage) : 'Potential',
           aidaStatus: body.aidaStatus != null ? String(body.aidaStatus) : 'Awareness',
-          siteType: siteTypeVal
+          siteType: siteTypeVal,
+          latitude,
+          longitude
         }
         const enrich = (row) => ({
           ...row,
@@ -176,6 +197,7 @@ async function handler(req, res) {
           const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } })
           if (!client) return notFound(res, 'Client not found')
           const siteTypeVal = body.siteType === 'client' ? 'client' : 'lead'
+          const { latitude, longitude } = normalizeSiteCoordinates(body)
           const createData = {
             clientId,
             name: (body.name != null && String(body.name).trim() !== '') ? String(body.name).trim() : 'Unnamed Site',
@@ -187,7 +209,9 @@ async function handler(req, res) {
             siteLead: body.siteLead != null ? String(body.siteLead) : '',
             engagementStage: body.engagementStage != null && String(body.engagementStage).trim() !== '' ? String(body.engagementStage).trim() : 'Potential',
             aidaStatus: body.aidaStatus != null && String(body.aidaStatus).trim() !== '' ? String(body.aidaStatus).trim() : 'Awareness',
-            siteType: siteTypeVal
+            siteType: siteTypeVal,
+            latitude,
+            longitude
           }
           const enrich = (row) => ({
             ...row,
@@ -228,6 +252,11 @@ async function handler(req, res) {
         const engagementStageVal = body.engagementStage !== undefined ? (body.engagementStage != null && String(body.engagementStage).trim() !== '' ? String(body.engagementStage).trim() : 'Potential') : undefined
         const aidaVal = body.aidaStatus !== undefined ? (body.aidaStatus != null && String(body.aidaStatus).trim() !== '' ? String(body.aidaStatus).trim() : 'Awareness') : undefined
         const siteTypeVal = body.siteType !== undefined ? (body.siteType === 'client' ? 'client' : 'lead') : undefined
+        const coordsProvided =
+          body.latitude !== undefined ||
+          body.longitude !== undefined ||
+          body.gpsCoordinates !== undefined
+        const coords = coordsProvided ? normalizeSiteCoordinates(body) : null
         const baseUpdate = {
           name: body.name !== undefined ? body.name : undefined,
           address: body.address !== undefined ? body.address : undefined,
@@ -238,7 +267,13 @@ async function handler(req, res) {
           siteLead: body.siteLead !== undefined ? String(body.siteLead) : undefined,
           engagementStage: engagementStageVal,
           aidaStatus: aidaVal,
-          siteType: siteTypeVal
+          siteType: siteTypeVal,
+          ...(coords
+            ? {
+                latitude: coords.latitude,
+                longitude: coords.longitude
+              }
+            : {})
         }
         const removeUndefined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
         const data = removeUndefined(baseUpdate)

@@ -80,6 +80,25 @@ const parseMonthlyFMSCellKey = (cellKey) => {
     return { sectionId: parts[0], documentId: parts[1], month: parts.slice(2).join('-') };
 };
 
+/** Strip cell deep-link query params so saved sections refresh does not reopen the comment popup. */
+const clearMonthlyFMSDeepLinkUrl = (projectId) => {
+    if (!projectId || typeof window === 'undefined') return;
+    const tabQuery = 'tab=monthlyFMSReview';
+    if (window.RouteState?.navigate) {
+        window.RouteState.navigate({
+            page: 'projects',
+            segments: [String(projectId)],
+            hash: tabQuery,
+            search: '',
+            replace: true,
+            preserveSearch: false,
+            preserveHash: false
+        });
+    } else {
+        window.location.hash = `#/projects/${projectId}?${tabQuery}`;
+    }
+};
+
 const formatMFMSActivityDateTime = (dateValue) => {
     try {
         const date = dateValue ? new Date(dateValue) : null;
@@ -558,6 +577,7 @@ const MonthlyFMSReviewTracker = ({ project, onBack }) => {
         setEditingCommentText('');
     }, [hoverCommentCell]);
     const pendingCommentOpenRef = useRef(null);
+    const deepLinkConsumedSigRef = useRef('');
     const [users, setUsers] = useState([]);
     const [assignmentOpen, setAssignmentOpen] = useState(null); // { sectionId, docId }
     const [assignmentAnchorRect, setAssignmentAnchorRect] = useState(null);
@@ -2743,8 +2763,10 @@ const getAssigneeColor = (identifier, users) => {
                                  event.target.closest('td')?.querySelector('select[data-section-id]');
             
             if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
+                deepLinkConsumedSigRef.current = hoverCommentCell;
                 setHoverCommentCell(null);
                 setQuickComment('');
+                if (project?.id) clearMonthlyFMSDeepLinkUrl(project.id);
             }
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
@@ -2850,6 +2872,16 @@ const getAssigneeColor = (identifier, users) => {
             let isValidDocumentId = deepDocumentId && 
                                     deepDocumentId !== 'undefined' && 
                                     deepDocumentId.trim() !== '';
+
+            if (!deepSectionId || !deepDocumentId || !deepMonth) {
+                deepLinkConsumedSigRef.current = '';
+                return;
+            }
+
+            const linkSig = `${deepSectionId}|${deepDocumentId}|${deepMonth}|${deepCommentId || ''}|${normalizedDeepYear || selectedYear}`;
+            if (deepLinkConsumedSigRef.current === linkSig) {
+                return;
+            }
             
             // If year is specified and different from current, switch to that year first
             if (normalizedDeepYear && normalizedDeepYear !== selectedYear && deepSectionId && isValidDocumentId && deepMonth) {
@@ -2915,6 +2947,7 @@ const getAssigneeColor = (identifier, users) => {
                 
                 // Open the popup immediately and clear pending so we don't re-run after year change
                 pendingCommentOpenRef.current = null;
+                deepLinkConsumedSigRef.current = linkSig;
                 setHoverCommentCell(cellKey);
                 
                 // Find the comment button for this cell and reposition popup near it using smart positioning
@@ -3097,6 +3130,13 @@ const getAssigneeColor = (identifier, users) => {
             return () => clearTimeout(timer);
         }
     }, [selectedYear, sections.length, checkAndOpenDeepLink]);
+
+    useEffect(() => {
+        return () => {
+            deepLinkConsumedSigRef.current = '';
+            if (project?.id) clearMonthlyFMSDeepLinkUrl(project.id);
+        };
+    }, [project?.id]);
     
     // ============================================================
     // RENDER STATUS CELL
@@ -3233,19 +3273,9 @@ const getAssigneeColor = (identifier, users) => {
                                 e.stopPropagation();
                                 
                                 if (isPopupOpen) {
+                                    deepLinkConsumedSigRef.current = cellKey;
                                     setHoverCommentCell(null);
-                                    // Clear URL params when closing popup (but preserve project path)
-                                    if (window.RouteState && window.RouteState.navigate && project?.id) {
-                                        window.RouteState.navigate({
-                                            page: 'projects',
-                                            segments: [String(project.id)],
-                                            hash: '',
-                                            search: '',
-                                            replace: false,
-                                            preserveSearch: false,
-                                            preserveHash: false
-                                        });
-                                    }
+                                    if (project?.id) clearMonthlyFMSDeepLinkUrl(project.id);
                                 } else {
                                     // Set initial position - smart positioning will update it
                                     setHoverCommentCell(cellKey);

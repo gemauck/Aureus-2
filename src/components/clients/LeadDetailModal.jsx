@@ -2946,11 +2946,8 @@ const LeadDetailModal = ({
     const navigateToPage = (page) => {
         // If navigating to clients page, reset the Clients component view first
         if (page === 'clients') {
-            // Dispatch event to reset Clients component view
             if (window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('resetClientsView', { 
-                    detail: { viewMode: 'clients' } 
-                }));
+                window.dispatchEvent(new CustomEvent('resetClientsView', { detail: {} }));
             }
         }
         

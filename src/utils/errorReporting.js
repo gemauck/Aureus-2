@@ -65,10 +65,22 @@
         if (context === 'webLogout') return true;
         if (context.startsWith('api:') && statusCode === 401) return true;
         if (context.startsWith('api:') && statusCode === 429) return true;
+        if (context.startsWith('api:') && statusCode === 0) return true;
         const p = String(path || '');
         if (p.includes('/web-error-report') || p.includes('/feedback')) return true;
         if (p.includes('/users/heartbeat')) return true;
         if (p === '/auth/login' || p === '/login' || p.startsWith('/auth/')) return true;
+        return false;
+    }
+
+    function isTransientClientFailure(error, context) {
+        const msg = String(error?.message || error || '').toLowerCase();
+        if (/request timeout|network error|connection reset|failed to fetch|load failed|err_timed_out|err_connection_reset|network request failed/.test(msg)) {
+            return true;
+        }
+        if (context === 'UnhandledRejection' && (error?.isTimeout || error?.name === 'TimeoutError')) {
+            return true;
+        }
         return false;
     }
 
@@ -251,6 +263,7 @@
             const apiPath = extra?.api?.path;
 
             if (shouldSkipReport(context, statusCode, apiPath)) return;
+            if (isTransientClientFailure(err, context)) return;
             if (sessionReportCount >= MAX_SESSION_REPORTS) return;
 
             const err = error instanceof Error ? error : new Error(String(error));
