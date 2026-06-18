@@ -9,6 +9,7 @@ import React, {
 } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
+import { cacheChatUnread, readCachedChatUnread } from '../offline/erpReadCaches'
 import { erpApi } from '../services/erpApi'
 import { getChatPushEnabled } from '../services/chatPushPrefs'
 import { playNotificationSound, startCallRing } from '../services/notificationSounds'
@@ -60,13 +61,20 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
       setChatUnread(0)
       return
     }
+    if (!isOnline) {
+      const cached = await readCachedChatUnread()
+      if (cached != null) setChatUnread(cached)
+      return
+    }
     try {
       const count = await erpApi.getChatUnreadCount(token)
       setChatUnread(count)
+      await cacheChatUnread(count)
     } catch {
-      /* keep last count */
+      const cached = await readCachedChatUnread()
+      if (cached != null) setChatUnread(cached)
     }
-  }, [])
+  }, [isOnline])
 
   const subscribe = useCallback((listener: ChatEventListener) => {
     listenersRef.current.add(listener)
@@ -153,7 +161,11 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
     void refreshChatUnread()
     if (!accessToken) return
 
-    const pollId = setInterval(() => void refreshChatUnread(), CHAT_POLL_FALLBACK_MS)
+    const poll = () => {
+      if (AppState.currentState !== 'active') return
+      void refreshChatUnread()
+    }
+    const pollId = setInterval(poll, CHAT_POLL_FALLBACK_MS)
     return () => clearInterval(pollId)
   }, [accessToken, refreshChatUnread])
 

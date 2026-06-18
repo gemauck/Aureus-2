@@ -105,7 +105,8 @@ function inferCategory(context: string): ErrorCategory {
 function inferSeverity(category: ErrorCategory, context: string, statusCode?: number): PendingReport['severity'] {
   if (category === 'crash' || context === 'GlobalFatal' || context === 'ErrorBoundary') return 'high'
   if (category === 'api') {
-    if (!statusCode || statusCode >= 500 || statusCode === 0) return 'high'
+    if (statusCode === 0) return 'low'
+    if (!statusCode || statusCode >= 500) return 'high'
     if (statusCode === 401 || statusCode === 403) return 'low'
     if (statusCode >= 400) return 'medium'
     return 'medium'

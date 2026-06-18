@@ -12,6 +12,7 @@ const CRM_GROUPS_KEY = 'mobile_rn_crm_groups_cache_v1'
 const CRM_RECENT_KEY = 'mobile_rn_crm_recent_entities_v1'
 const NOTIFICATIONS_KEY = 'mobile_rn_notifications_cache_v1'
 const NOTIFICATIONS_UNREAD_KEY = 'mobile_rn_notifications_unread_v1'
+const CHAT_UNREAD_KEY = 'mobile_rn_chat_unread_v1'
 const MAX_RECENT_CRM = 30
 
 export type CrmRecentEntry = { entityType: string; entityId: string; viewedAt: string }
@@ -58,6 +59,12 @@ export const cacheNotificationUnread = (count: number) =>
   writeListCache(NOTIFICATIONS_UNREAD_KEY, count)
 export const readCachedNotificationUnread = async () => {
   const count = await readListCache<number>(NOTIFICATIONS_UNREAD_KEY)
+  return typeof count === 'number' ? count : null
+}
+
+export const cacheChatUnread = (count: number) => writeListCache(CHAT_UNREAD_KEY, count)
+export const readCachedChatUnread = async () => {
+  const count = await readListCache<number>(CHAT_UNREAD_KEY)
   return typeof count === 'number' ? count : null
 }
 

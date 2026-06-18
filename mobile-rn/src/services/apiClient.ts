@@ -9,6 +9,8 @@ type RequestOptions = {
   method?: string
   body?: unknown
   token?: string
+  /** Background badge/poll refresh — skip operator error reports on failure */
+  silent?: boolean
 }
 
 type AuthRefreshHandler = () => Promise<string | null>
@@ -85,7 +87,7 @@ export async function request<T>(
   options: RequestOptions = {},
   retriedAfterRefresh = false
 ): Promise<T> {
-  const { method = 'GET', body, token } = options
+  const { method = 'GET', body, token, silent = false } = options
   const url = apiUrl(path)
   let response: Response
   try {
@@ -101,7 +103,7 @@ export async function request<T>(
     const hint =
       error instanceof Error ? error.message : 'Network error'
     addBreadcrumb('api', `Network failure ${method} ${path}`, { path, method })
-    reportApiError(path, method, 0, hint)
+    if (!silent) reportApiError(path, method, 0, hint)
     throw new Error(
       `Cannot reach ${url}. Check Wi‑Fi or mobile data, open that URL in Chrome on this device, then try again. (${hint})`
     )
@@ -112,7 +114,7 @@ export async function request<T>(
     payload = await response.json()
   } catch {
     const invalidMsg = `Server returned an invalid response (${response.status}) from ${url}`
-    reportApiError(path, method, response.status, invalidMsg)
+    if (!silent) reportApiError(path, method, response.status, invalidMsg)
     throw new Error(invalidMsg)
   }
   if (!response.ok) {
@@ -128,7 +130,7 @@ export async function request<T>(
         return request<T>(path, { ...options, token: newToken }, true)
       }
     }
-    reportApiError(path, method, response.status, message)
+    if (!silent) reportApiError(path, method, response.status, message)
     throw new ApiRequestError(message, response.status)
   }
   return payload?.data as T

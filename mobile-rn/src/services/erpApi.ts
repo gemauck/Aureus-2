@@ -124,7 +124,7 @@ export const erpApi = {
   },
 
   getNotificationUnreadCount(token: string) {
-    return request<{ unreadCount?: number }>(notificationsQuery(1), { token }).then(
+    return request<{ unreadCount?: number }>(notificationsQuery(1), { token, silent: true }).then(
       (d) => d.unreadCount ?? 0
     )
   },
@@ -172,6 +172,8 @@ export const erpApi = {
   },
 
   getChatUnreadCount(token: string) {
-    return request<{ unreadCount: number }>('/api/chat/unread', { token }).then((d) => d.unreadCount || 0)
+    return request<{ unreadCount: number }>('/api/chat/unread', { token, silent: true }).then(
+      (d) => d.unreadCount || 0
+    )
   }
 }
