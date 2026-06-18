@@ -300,7 +300,7 @@ const SparrowToGilbarco = () => {
                 {outputFormat === 'winshuttle' ? (
                     <ul className="list-disc pl-4 space-y-0.5">
                         <li>Single sheet with WinShuttle / SAP field headers (rows 1–2)</li>
-                        <li>Row 3: report end date in the Material column</li>
+                        <li>Row 3: report end date in the Material column (green highlight)</li>
                         <li>
                             Data from row 4: fleet ID, material, litres, storage location, goods
                             recipient, internal order number, product code, plant name

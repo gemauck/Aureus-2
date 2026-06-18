@@ -405,6 +405,11 @@ def test_winshuttle_workbook_layout(tmp_path):
     assert ws.cell(4, 8).value == "tm01"
     assert ws.cell(5, 1).value == "DBOTK010"
     assert ws.cell(5, 6).value == 4009348222
+    assert ws.cell(1, 1).fill.fgColor.rgb in ("00729FB3", "729FB3")
+    assert ws.cell(2, 7).font.bold is False
+    assert ws.cell(3, 2).fill.fgColor.rgb in ("0000B050", "00B050")
+    assert ws.cell(3, 2).font.bold is True
+    assert ws.cell(4, 1).fill.patternType is None
     wb.close()
 
 

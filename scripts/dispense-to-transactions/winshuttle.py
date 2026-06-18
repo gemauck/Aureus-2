@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
 WINSHUTTLE_HEADERS = (
     "Number of External Material Slip",
@@ -36,6 +37,23 @@ DEFAULT_WINSHUTTLE_CONFIG = {
     "product": 261,
     "name": "tm01",
 }
+
+# Matches Book1.xlsx: accent1 (#156082) at Excel theme tint ~0.4
+HEADER_FILL = PatternFill("solid", fgColor="729FB3")
+HEADER_FONT = Font(bold=True, color="000000")
+HEADER_FONT_PLAIN = Font(bold=False, color="000000")
+DATE_FILL = PatternFill("solid", fgColor="00B050")
+DATE_FONT = Font(bold=True, color="000000")
+
+
+def _apply_header_style(cell, *, bold: bool = True) -> None:
+    cell.fill = HEADER_FILL
+    cell.font = HEADER_FONT if bold else HEADER_FONT_PLAIN
+
+
+def _apply_date_style(cell) -> None:
+    cell.fill = DATE_FILL
+    cell.font = DATE_FONT
 
 
 def winshuttle_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -113,12 +131,15 @@ def write_winshuttle_workbook(
     ws.title = "Sheet1"
 
     for ci, header in enumerate(WINSHUTTLE_HEADERS, start=1):
-        ws.cell(row=1, column=ci, value=header)
+        cell = ws.cell(row=1, column=ci, value=header)
+        _apply_header_style(cell, bold=True)
     for ci, sap_field in enumerate(WINSHUTTLE_SAP_FIELDS, start=1):
-        ws.cell(row=2, column=ci, value=sap_field)
+        cell = ws.cell(row=2, column=ci, value=sap_field)
+        _apply_header_style(cell, bold=sap_field is not None)
 
     if report_date:
-        ws.cell(row=3, column=2, value=report_date)
+        date_cell = ws.cell(row=3, column=2, value=report_date)
+        _apply_date_style(date_cell)
 
     for ri, (dispense, gilbarco) in enumerate(
         zip(dispense_rows, gilbarco_rows), start=4

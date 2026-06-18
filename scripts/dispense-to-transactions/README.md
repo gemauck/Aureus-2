@@ -54,9 +54,9 @@ npm run convert:dispense-to-transactions -- \
 
 | Row | Content |
 |-----|---------|
-| 1 | Human-readable WinShuttle column titles |
+| 1 | Human-readable WinShuttle column titles (blue header row) |
 | 2 | SAP field names (`GOHEAD-MTSNR`, `GOITEM-MAKTX`, …) |
-| 3 | Report end date in the Material column |
+| 3 | Report end date in the Material column (green highlight) |
 | 4+ | Fleet ID, material, litres, storage location, goods recipient, internal order, product, plant |
 
 Fixed WinShuttle values (material, storage location, goods recipient, product, plant name) are in `pump_config.json` under `winshuttle`.
