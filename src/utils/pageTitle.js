@@ -160,6 +160,8 @@
         'activity',
         'location-inventory',
         'stock-transactions',
+        'transfer-requests',
+        'stock-transfer-requests',
         'sync',
         'purge'
     ]);

@@ -374,6 +374,16 @@ if [ -f migrations/add-incident-report-job-card-links.sql ]; then
   fi
 fi
 
+if [ -f migrations/add-stock-transfer-requests.sql ]; then
+  echo
+  echo "-> Applying migration (StockTransferRequest workflow + location responsibleUserId)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f migrations/add-stock-transfer-requests.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  else
+    npx prisma db execute --file migrations/add-stock-transfer-requests.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  fi
+fi
+
 echo
 echo "-> Regenerating Prisma client (ensure API models match schema)..."
 npx prisma generate --schema=./prisma/schema.prisma

@@ -74,7 +74,7 @@
     }, []);
 
     useEffect(() => {
-      loadList();
+      void loadList();
     }, [loadList]);
 
     useEffect(() => {
@@ -162,7 +162,7 @@
             ))}
             <button
               type="button"
-              onClick={loadList}
+              onClick={() => void loadList()}
               className="px-3 py-1.5 rounded-lg text-sm border border-slate-300 hover:bg-slate-50"
             >
               Refresh

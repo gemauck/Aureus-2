@@ -128,6 +128,12 @@ export async function handleStockTransferRequests(ctx) {
     parseJsonBody
   } = ctx
 
+  /** Response helpers return undefined; manufacturing.js needs a truthy handled flag. */
+  const send = (fn) => {
+    fn()
+    return true
+  }
+
   if (req.method === 'GET' && !id) {
     try {
       const status = String(req.query?.status || '').trim()
@@ -162,10 +168,10 @@ export async function handleStockTransferRequests(ctx) {
         requests = visible
       }
 
-      return ok({ requests })
+      return send(() => ok({ requests }))
     } catch (error) {
       console.error('❌ List stock transfer requests failed:', error)
-      return serverError('Failed to list stock transfer requests', error.message)
+      return send(() => serverError('Failed to list stock transfer requests', error.message))
     }
   }
 
@@ -175,13 +181,13 @@ export async function handleStockTransferRequests(ctx) {
         where: { id },
         include: { lines: true }
       })
-      if (!request) return notFound('Stock transfer request not found')
+      if (!request) return send(() => notFound('Stock transfer request not found'))
       if (!(await userCanAccessRequest(req, prisma, request))) {
-        return forbidden('You do not have access to this transfer request')
+        return send(() => forbidden('You do not have access to this transfer request'))
       }
-      return ok({ request })
+      return send(() => ok({ request }))
     } catch (error) {
-      return serverError('Failed to load transfer request', error.message)
+      return send(() => serverError('Failed to load transfer request', error.message))
     }
   }
 
@@ -191,32 +197,34 @@ export async function handleStockTransferRequests(ctx) {
       const fromLocationId = String(body?.fromLocationId || '').trim()
       const toLocationId = String(body?.toLocationId || '').trim()
       if (!fromLocationId || !toLocationId) {
-        return badRequest('fromLocationId and toLocationId are required')
+        return send(() => badRequest('fromLocationId and toLocationId are required'))
       }
       if (fromLocationId === toLocationId) {
-        return badRequest('From and to location must be different')
+        return send(() => badRequest('From and to location must be different'))
       }
 
       const [fromLoc, toLoc] = await Promise.all([
         prisma.stockLocation.findUnique({ where: { id: fromLocationId } }),
         prisma.stockLocation.findUnique({ where: { id: toLocationId } })
       ])
-      if (!fromLoc || !toLoc) return badRequest('Invalid from or to location')
+      if (!fromLoc || !toLoc) return send(() => badRequest('Invalid from or to location'))
 
       const lines = parseLinesInput(body?.lines)
-      if (!lines.length) return badRequest('At least one line with sku, itemName, and quantity is required')
+      if (!lines.length) {
+        return send(() => badRequest('At least one line with sku, itemName, and quantity is required'))
+      }
 
       for (const line of lines) {
         const fromLi = await prisma.locationInventory.findUnique({
           where: { locationId_sku: { locationId: fromLocationId, sku: line.sku } }
         })
         if (!fromLi || (fromLi.quantity || 0) < line.quantity) {
-          return badRequest(`Insufficient stock at source for ${line.sku}`)
+          return send(() => badRequest(`Insufficient stock at source for ${line.sku}`))
         }
       }
 
       const uid = authUserId(req)
-      if (!uid) return badRequest('You must be signed in to submit a transfer request')
+      if (!uid) return send(() => badRequest('You must be signed in to submit a transfer request'))
 
       const request = await prisma.stockTransferRequest.create({
         data: {
@@ -246,10 +254,10 @@ export async function handleStockTransferRequests(ctx) {
         toLocationId: request.toLocationId,
         lineCount: request.lines.length
       })
-      return created({ request })
+      return send(() => created({ request }))
     } catch (error) {
       console.error('❌ Create stock transfer request failed:', error)
-      return serverError('Failed to create transfer request', error.message)
+      return send(() => serverError('Failed to create transfer request', error.message))
     }
   }
 
@@ -260,9 +268,9 @@ export async function handleStockTransferRequests(ctx) {
         where: { id },
         include: { lines: true }
       })
-      if (!request) return notFound('Stock transfer request not found')
+      if (!request) return send(() => notFound('Stock transfer request not found'))
       if (!(await canReviewStockTransferRequest(req, request))) {
-        return forbidden('You are not authorized to approve this transfer request')
+        return send(() => forbidden('You are not authorized to approve this transfer request'))
       }
 
       const result = await prisma.$transaction(async (tx) => {
@@ -284,12 +292,12 @@ export async function handleStockTransferRequests(ctx) {
         requestRef: result.request.requestRef,
         movementIds: result.movementIds
       })
-      return ok({ request: result.request })
+      return send(() => ok({ request: result.request }))
     } catch (error) {
-      if (error?.httpStatus === 400) return badRequest(error.message)
-      if (error?.httpStatus === 404) return notFound(error.message)
+      if (error?.httpStatus === 400) return send(() => badRequest(error.message))
+      if (error?.httpStatus === 404) return send(() => notFound(error.message))
       console.error('❌ Approve stock transfer request failed:', error)
-      return serverError('Failed to approve transfer request', error.message)
+      return send(() => serverError('Failed to approve transfer request', error.message))
     }
   }
 
@@ -297,12 +305,12 @@ export async function handleStockTransferRequests(ctx) {
     try {
       const body = await parseJsonBody(req)
       const request = await prisma.stockTransferRequest.findUnique({ where: { id } })
-      if (!request) return notFound('Stock transfer request not found')
+      if (!request) return send(() => notFound('Stock transfer request not found'))
       if (!(await canReviewStockTransferRequest(req, request))) {
-        return forbidden('You are not authorized to reject this transfer request')
+        return send(() => forbidden('You are not authorized to reject this transfer request'))
       }
       if (request.status !== 'pending_approval') {
-        return badRequest('Only pending requests can be rejected')
+        return send(() => badRequest('Only pending requests can be rejected'))
       }
 
       const updated = await prisma.stockTransferRequest.update({
@@ -322,22 +330,22 @@ export async function handleStockTransferRequests(ctx) {
       auditManufacturing('update', 'stock-transfer-request-reject', id, {
         requestRef: updated.requestRef
       })
-      return ok({ request: updated })
+      return send(() => ok({ request: updated }))
     } catch (error) {
-      return serverError('Failed to reject transfer request', error.message)
+      return send(() => serverError('Failed to reject transfer request', error.message))
     }
   }
 
   if (req.method === 'POST' && id && action === 'cancel') {
     try {
       const request = await prisma.stockTransferRequest.findUnique({ where: { id } })
-      if (!request) return notFound('Stock transfer request not found')
+      if (!request) return send(() => notFound('Stock transfer request not found'))
       const uid = authUserId(req)
       if (request.requestedById !== uid && !isAdminRole(req.user?.role)) {
-        return forbidden('Only the requester can cancel this transfer request')
+        return send(() => forbidden('Only the requester can cancel this transfer request'))
       }
       if (request.status !== 'pending_approval') {
-        return badRequest('Only pending requests can be cancelled')
+        return send(() => badRequest('Only pending requests can be cancelled'))
       }
 
       const updated = await prisma.stockTransferRequest.update({
@@ -349,9 +357,9 @@ export async function handleStockTransferRequests(ctx) {
       auditManufacturing('update', 'stock-transfer-request-cancel', id, {
         requestRef: updated.requestRef
       })
-      return ok({ request: updated })
+      return send(() => ok({ request: updated }))
     } catch (error) {
-      return serverError('Failed to cancel transfer request', error.message)
+      return send(() => serverError('Failed to cancel transfer request', error.message))
     }
   }
 

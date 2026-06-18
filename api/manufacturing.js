@@ -2492,7 +2492,7 @@ async function handler(req, res) {
     return badRequest(res, 'Unsupported stock-take-submissions route')
   }
 
-  if (resourceType === 'stock-transfer-requests') {
+  if (resourceType === 'stock-transfer-requests' || resourceType === 'transfer-requests') {
     const handled = await handleStockTransferRequests({
       prisma,
       req,
