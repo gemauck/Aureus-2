@@ -50,9 +50,11 @@ fs.writeFileSync(cfgPath, JSON.stringify(cfg));
 " "$TMP/export/expoConfig.json" "$RUNTIME"
 
 DEST="$ROOT/public/mobile-ota/updates/$RUNTIME/$STAMP"
-rm -rf "$DEST"
-mkdir -p "$DEST"
-cp -a "$TMP/export/." "$DEST/"
+STAGING="$DEST.staging.$$"
+rm -rf "$STAGING" "$DEST"
+mkdir -p "$STAGING"
+cp -a "$TMP/export/." "$STAGING/"
+mv "$STAGING" "$DEST"
 
 RUNTIME_DIR="$ROOT/public/mobile-ota/updates/$RUNTIME"
 if [[ -d "$RUNTIME_DIR" ]]; then
