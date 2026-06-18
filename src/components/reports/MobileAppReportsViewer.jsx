@@ -103,6 +103,10 @@ const MobileAppReportsViewer = (props = {}) => {
     const filtered = enriched.filter((item) => {
         const category = item.mobileMeta?.category || 'functionality';
         const status = item.status ?? 'open';
+        const ctx = String(item.mobileMeta?.context || '').toLowerCase();
+        if (ctx === 'deploy-probe' || ctx === 'health-probe' || ctx === 'mobile-error-probe') {
+            return false;
+        }
         if (filter.category !== 'all' && category !== filter.category) return false;
         if (filter.severity !== 'all' && item.severity !== filter.severity) return false;
         if (filter.status === 'open' && status !== 'open') return false;

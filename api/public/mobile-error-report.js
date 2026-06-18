@@ -3,11 +3,12 @@
  * POST /api/public/mobile-error-report
  */
 import { prisma } from '../_lib/prisma.js'
-import { badRequest, created, serverError } from '../_lib/response.js'
+import { badRequest, created, ok, serverError } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { verifyToken } from '../_lib/jwt.js'
 import { notifyAdminsOfFeedback } from '../feedback.js'
+import { isInternalMobileErrorProbe } from '../_lib/mobileErrorProbe.js'
 
 const SECTION = 'mobile-app'
 const META_MAX = 5_242_880
@@ -71,6 +72,10 @@ async function handler(req, res) {
   const message = String(body.message || '').trim()
   const pageUrl = String(body.pageUrl || 'mobile://App').trim()
   if (!message) return badRequest(res, 'message required')
+
+  if (isInternalMobileErrorProbe(body, req)) {
+    return ok(res, { probe: true, stored: false })
+  }
 
   let metaValue = body.meta || null
   if (metaValue && typeof metaValue === 'object') {

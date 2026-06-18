@@ -46,4 +46,24 @@ fi
 check_endpoint "/health" "Health endpoint"
 check_endpoint "/version" "Version endpoint"
 
+check_mobile_error_report() {
+  local code
+  code="$(
+    curl -s -o /dev/null -w "%{http_code}" --max-time "${HEALTH_TIMEOUT_SECONDS}" \
+      -X POST "${APP_URL}/api/public/mobile-error-report" \
+      -H "Content-Type: application/json" \
+      -H "X-Mobile-Error-Probe: 1" \
+      -d '{"message":"Deploy probe","pageUrl":"mobile://Test","meta":{"context":"deploy-probe","probe":true}}' \
+      2>/dev/null || echo "000"
+  )"
+  if [ "$code" = "200" ]; then
+    echo "  ✓ Mobile error report endpoint: HTTP ${code} (probe, not stored)"
+  else
+    echo "  ✗ Mobile error report endpoint: HTTP ${code}"
+    return 1
+  fi
+}
+
+check_mobile_error_report
+
 echo "== Health check passed =="
