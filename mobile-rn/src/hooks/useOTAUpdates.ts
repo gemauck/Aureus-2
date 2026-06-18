@@ -321,8 +321,8 @@ export function useOTAUpdates(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
-    // One auto-apply attempt per cold start; resume from background only downloads quietly.
-    void runOpenCheck({ force: true, autoApply: true })
+    // Download updates in the background only — never auto-reload on cold start (caused broken app loops).
+    void runOpenCheck({ force: true, autoApply: false })
 
     const sub = AppState.addEventListener('change', (nextState) => {
       const prev = appStateRef.current

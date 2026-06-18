@@ -9,7 +9,7 @@ import { isAdminRole } from './_lib/authRoles.js'
 // Note: We'll use sendNotificationEmail from email.js
 
 // Notify admins when feedback is submitted
-async function notifyAdminsOfFeedback(feedback, submittingUser) {
+export async function notifyAdminsOfFeedback(feedback, submittingUser) {
   try {
     // Send email only to garethm@abcotronics.co.za
     const recipientEmail = 'garethm@abcotronics.co.za'

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './state/AuthContext'
 import { ThemeProvider } from './theme/ThemeContext'
@@ -20,20 +20,25 @@ import { useClientPresence } from './hooks/useClientPresence'
 
 function TelemetryBridge({ children }: { children: React.ReactNode }) {
   const { user, accessToken } = useAuth()
+  const accessTokenRef = useRef<string | null>(null)
+  accessTokenRef.current = accessToken
+
   useOTAUpdates(true)
   useAppUpdateCheck(true)
   useClientPresence()
+
   useEffect(() => {
-    initTelemetry()
-    initErrorReporting()
-    registerErrorReportAuth(() => accessToken)
-  }, [accessToken])
+    registerErrorReportAuth(() => accessTokenRef.current)
+  }, [])
+
   useEffect(() => {
     setTelemetryUser(user ? { id: user.id, email: user.email } : null)
   }, [user])
+
   useEffect(() => {
-    if (accessToken) void flushPendingReports()
+    void flushPendingReports()
   }, [accessToken])
+
   return <>{children}</>
 }
 
@@ -46,6 +51,11 @@ function AppShell() {
 }
 
 export default function App() {
+  useEffect(() => {
+    initTelemetry()
+    initErrorReporting()
+  }, [])
+
   return (
     <ThemeProvider>
       <ErrorBoundary>

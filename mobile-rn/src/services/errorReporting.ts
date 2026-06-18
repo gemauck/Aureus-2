@@ -239,30 +239,37 @@ async function savePending(items: PendingReport[]): Promise<void> {
   await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(items.slice(-MAX_PENDING)))
 }
 
-async function postReport(report: PendingReport, token: string): Promise<boolean> {
-  const response = await fetch(apiUrl('/api/feedback'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      message: report.message,
-      pageUrl: report.pageUrl,
-      section: SECTION,
-      type: report.type,
-      severity: report.severity,
-      meta: report.meta
+async function postReport(report: PendingReport, token: string | null): Promise<boolean> {
+  try {
+    const response = await fetch(apiUrl('/api/public/mobile-error-report'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        message: report.message,
+        pageUrl: report.pageUrl,
+        type: report.type,
+        severity: report.severity,
+        meta: report.meta
+      })
     })
-  })
-  return response.ok
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      console.warn(`[errorReporting] POST failed (${response.status}): ${text.slice(0, 200)}`)
+    }
+    return response.ok
+  } catch (error) {
+    console.warn('[errorReporting] POST network error:', error instanceof Error ? error.message : error)
+    return false
+  }
 }
 
 export async function flushPendingReports(): Promise<void> {
   if (flushInFlight) return flushInFlight
   flushInFlight = (async () => {
     const token = accessTokenGetter?.() || null
-    if (!token) return
 
     const pending = await loadPending()
     if (!pending.length) return
@@ -285,13 +292,11 @@ export async function flushPendingReports(): Promise<void> {
 
 async function enqueueReport(report: PendingReport): Promise<void> {
   const token = accessTokenGetter?.() || null
-  if (token) {
-    try {
-      const ok = await postReport(report, token)
-      if (ok) return
-    } catch {
-      /* queue below */
-    }
+  try {
+    const ok = await postReport(report, token)
+    if (ok) return
+  } catch {
+    /* queue below */
   }
   const pending = await loadPending()
   pending.push(report)

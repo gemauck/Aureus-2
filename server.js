@@ -2776,6 +2776,17 @@ app.all('/api/public/mobile-app-version', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/mobile-error-report', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-error-report.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public mobile-error-report API error:', e)
+    return next(e)
+  }
+})
+
 app.all('/api/public/mobile-apk/download', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'public', 'mobile-apk-download.js'))
