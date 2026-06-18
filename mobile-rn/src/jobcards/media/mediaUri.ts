@@ -64,9 +64,19 @@ export async function normalizeMediaItemForSave(item: MediaItem): Promise<MediaI
       `Video "${item.name || 'attachment'}" is too large to upload. Remove it or use a shorter clip.`
     )
   }
+  let thumbUrl = String(item.thumbUrl || '').trim()
+  if (thumbUrl.startsWith('file:') || thumbUrl.startsWith('content:')) {
+    try {
+      thumbUrl = await uriToDataUrl(thumbUrl, 'image/jpeg')
+    } catch {
+      thumbUrl = dataUrl
+    }
+  }
+  if (!thumbUrl) thumbUrl = dataUrl
+
   return {
     ...item,
     url: dataUrl,
-    thumbUrl: item.thumbUrl && !item.thumbUrl.startsWith('file:') ? item.thumbUrl : item.thumbUrl || url
+    thumbUrl
   }
 }

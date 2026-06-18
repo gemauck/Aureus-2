@@ -28,6 +28,11 @@ import { useWizardPriorList } from './hooks/useWizardPriorList'
 import { useWizardReferenceData } from './hooks/useWizardReferenceData'
 import { applyPhotosPayloadToWizardState } from './media/photoHydration'
 import { normalizeMediaItemForSave, voiceClipToPayloadUrl } from './media/mediaUri'
+import {
+  buildSectionPhotoEntriesFromState,
+  buildVoicePhotoEntriesFromState,
+  visualPhotosForSave
+} from './media/buildSaveMedia'
 import { inferVoiceClipsNeedingTranscription } from './media/voiceClipState'
 import {
   isJobCardSyncConflict,
@@ -457,28 +462,28 @@ export function JobCardWizardProvider({
           const jobCardData = buildJobCardSavePayload({
             formData: {
               ...formSnapshot,
-              photos: formSnapshot.photos,
+              photos: visualPhotosForSave(selectedPhotos, formSnapshot.photos),
               stockUsed: formSnapshot.stockUsed
             },
             editingMeta,
             editingId: editingMeta.localId,
             signatureDataUrl: formSnapshot.customerSignature,
-            sectionPhotoEntries: [],
-            voicePhotoEntries: [],
-            normalizedStatus: 'draft',
-            omitPhotos: true
+            sectionPhotoEntries: buildSectionPhotoEntriesFromState(sectionWorkMedia),
+            voicePhotoEntries: buildVoicePhotoEntriesFromState(voiceAttachments),
+            normalizedStatus: 'draft'
           }) as Record<string, unknown>
           jobCardData.id = editingMeta.localId
           jobCardData.activityQueue = Array.isArray(prevPending?.activityQueue)
             ? [...prevPending.activityQueue]
             : []
           if (editingMeta.serverJobCardId) jobCardData.serverJobCardId = editingMeta.serverJobCardId
-          await persistLocal(jobCardData, { scheduleAutoSync: true })
+          // Persist photos on device but do not push step drafts to server (avoids photo-less server rows).
+          await persistLocal(jobCardData, { scheduleAutoSync: false })
           return {
             ok: true,
             persisted: true,
             synced: false,
-            queued: true,
+            queued: false,
             status: 'draft'
           }
         }
@@ -533,16 +538,7 @@ export function JobCardWizardProvider({
           }
         }
 
-        const sectionPhotoEntries = (['diagnosis', 'actionsTaken', 'futureWorkRequired'] as const).flatMap(
-          (sec) =>
-            (normalizedSectionMedia[sec] || []).map((item) => ({
-              kind: 'sectionMedia',
-              section: sec,
-              url: item.url,
-              name: item.name || '',
-              thumbUrl: item.thumbUrl || ''
-            }))
-        )
+        const sectionPhotoEntries = buildSectionPhotoEntriesFromState(normalizedSectionMedia)
 
         const voicePhotoEntries = await Promise.all(
           voiceAttachments.map(async (v) => ({
@@ -558,7 +554,7 @@ export function JobCardWizardProvider({
             ...formSnapshot,
             photos: normalizedPhotos.length
               ? (normalizedPhotos as JobCardFormData['photos'])
-              : formSnapshot.photos,
+              : visualPhotosForSave(selectedPhotos, formSnapshot.photos),
             stockUsed: formSnapshot.stockUsed
           },
           editingMeta,

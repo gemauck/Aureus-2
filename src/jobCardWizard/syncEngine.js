@@ -181,7 +181,6 @@ export function createSyncEngine(deps) {
           fetchRetryConfig
         );
         if (createRes.ok) {
-          synced = true;
           const createText = await createRes.text().catch(() => '');
           let createData = {};
           try {
@@ -190,9 +189,44 @@ export function createSyncEngine(deps) {
             createData = {};
           }
           const createdJobCard = createData?.data?.jobCard || createData?.jobCard;
+          const idempotentReplay = Boolean(
+            createData?.data?.idempotentReplay ?? createData?.idempotentReplay
+          );
           if (createdJobCard?.id) {
             resolvedServerId = String(createdJobCard.id);
             deps.rememberPriorId?.(resolvedServerId);
+          }
+          // Replay means the draft already exists — POST body was not applied; PATCH full payload.
+          if (idempotentReplay && resolvedServerId) {
+            try {
+              const patchBody = { ...payloadObj };
+              delete patchBody.id;
+              const patchRes = await fetchWithRetry(
+                `${apiBase}/api/jobcards/${encodeURIComponent(resolvedServerId)}`,
+                {
+                  method: 'PATCH',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(patchBody)
+                },
+                fetchRetryConfig
+              );
+              if (patchRes.ok) {
+                synced = true;
+                const patchData = await patchRes.json().catch(() => ({}));
+                const patchedJobCard = patchData?.data?.jobCard || patchData?.jobCard;
+                if (patchedJobCard?.id) resolvedServerId = String(patchedJobCard.id);
+              } else {
+                const text = await patchRes.text().catch(() => '');
+                errorText = parseJobCardSyncFailureMessage(patchRes.status, text);
+              }
+            } catch (e) {
+              errorText = e?.message || 'Network error';
+            }
+          } else {
+            synced = true;
           }
         } else {
           const text = await createRes.text().catch(() => '');

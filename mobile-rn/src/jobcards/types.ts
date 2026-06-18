@@ -44,7 +44,7 @@ export type JobCardSaveOptions = {
   departureFromSiteOverride?: string
   timeOfArrivalOverride?: string
   silent?: boolean
-  /** Step navigation — save fields only, skip heavy media encoding */
+  /** Step navigation — persist fields + photos locally; server sync waits for submit / full save */
   lightweight?: boolean
 }
 
