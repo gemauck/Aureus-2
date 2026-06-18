@@ -43,6 +43,7 @@ async function handler(req, res) {
         const timestamp = Date.now();
         let dispensePath = null;
         let fileReceived = false;
+        let outputFormat = 'gilbarco';
 
         await new Promise((resolve, reject) => {
             let bbFinished = false;
@@ -51,6 +52,15 @@ async function handler(req, res) {
             const maybeResolve = () => {
                 if (bbFinished && pendingStreams.size === 0) resolve();
             };
+
+            bb.on('field', (name, value) => {
+                if (name === 'format' && typeof value === 'string') {
+                    const normalized = value.trim().toLowerCase();
+                    if (normalized === 'gilbarco' || normalized === 'winshuttle') {
+                        outputFormat = normalized;
+                    }
+                }
+            });
 
             bb.on('file', (name, file, info) => {
                 const { filename } = info;
@@ -128,6 +138,8 @@ async function handler(req, res) {
             dispensePath,
             '--output-dir',
             outputDir,
+            '--format',
+            outputFormat,
             '--json',
             jsonPath,
         ];

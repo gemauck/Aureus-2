@@ -30,6 +30,12 @@ from parse_dispense import (
     resolve_make_model,
     split_asset_description,
 )
+from winshuttle import (
+    build_winshuttle_filename,
+    format_winshuttle_report_date,
+    winshuttle_config,
+    write_winshuttle_workbook,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "pump_config.json"
@@ -640,6 +646,7 @@ def convert_workbook(
     output_dir: str | Path | None = None,
     template_path: str | Path | None = None,
     pump_config_path: str | Path | None = None,
+    output_format: str = "gilbarco",
 ) -> dict[str, Any]:
     dispense_path = Path(dispense_path)
     template_path = Path(template_path) if template_path else DEFAULT_GILBARCO_TEMPLATE
@@ -649,10 +656,18 @@ def convert_workbook(
             "Expected bundled scripts/dispense-to-transactions/gilbarco-template.xlsx"
         )
 
+    fmt = (output_format or "gilbarco").strip().lower()
+    if fmt not in ("gilbarco", "winshuttle"):
+        raise ValueError(f"Unsupported output_format: {output_format!r} (use gilbarco or winshuttle)")
+
     config = load_pump_config(pump_config_path)
     dispense_rows = parse_dispense_workbook(dispense_path)
     period = dispense_period_range(dispense_rows)
-    output_file_name = build_output_filename(period)
+    output_file_name = (
+        build_winshuttle_filename(period)
+        if fmt == "winshuttle"
+        else build_output_filename(period)
+    )
 
     if output_path is None:
         base_dir = Path(output_dir) if output_dir else dispense_path.parent
@@ -672,7 +687,18 @@ def convert_workbook(
         config,
         fuel_pump_routes,
     )
-    write_side_by_side_workbook(dispense_rows, gilbarco_rows, output_path)
+    if fmt == "winshuttle":
+        period_end = period[1] if period else None
+        report_date = format_winshuttle_report_date(period_end)
+        write_winshuttle_workbook(
+            dispense_rows,
+            gilbarco_rows,
+            output_path,
+            report_date=report_date,
+            ws_cfg=winshuttle_config(config),
+        )
+    else:
+        write_side_by_side_workbook(dispense_rows, gilbarco_rows, output_path)
 
     period_start, period_end = period if period else (None, None)
     unallocated = sum(
@@ -685,6 +711,7 @@ def convert_workbook(
         "template": str(template_path.resolve()),
         "output": str(output_path.resolve()),
         "output_file_name": output_path.name,
+        "output_format": fmt,
         "period_start": period_start,
         "period_end": period_end,
         "dispense_rows": len(dispense_rows),

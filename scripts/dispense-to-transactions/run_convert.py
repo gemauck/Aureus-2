@@ -37,6 +37,13 @@ def main(argv: list[str] | None = None) -> int:
         "--pump-config",
         help="JSON pump routing overrides (default: scripts/dispense-to-transactions/pump_config.json)",
     )
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=("gilbarco", "winshuttle"),
+        default="gilbarco",
+        help="Output format: gilbarco (side-by-side) or winshuttle (SAP upload sheet)",
+    )
     parser.add_argument("--json", "-j", help="Write conversion summary JSON to this path")
 
     args = parser.parse_args(argv)
@@ -46,11 +53,17 @@ def main(argv: list[str] | None = None) -> int:
         output_dir=args.output_dir,
         template_path=args.template,
         pump_config_path=args.pump_config,
+        output_format=args.format,
     )
 
+    label = (
+        "WinShuttle report"
+        if summary.get("output_format") == "winshuttle"
+        else "side-by-side workbook"
+    )
     print(
         f"Converted {summary['dispense_rows']} dispense rows "
-        f"({summary.get('unallocated_rows', 0)} without asset) -> side-by-side workbook"
+        f"({summary.get('unallocated_rows', 0)} without asset) -> {label}"
     )
     print(f"Output: {summary['output']}")
     if summary.get("period_start") and summary.get("period_end"):

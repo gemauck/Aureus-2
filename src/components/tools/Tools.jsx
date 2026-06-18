@@ -274,8 +274,8 @@ const Tools = () => {
             },
             {
                 id: 'sparrow-to-gilbarco',
-                name: 'Sparrow to Gilbarco',
-                description: 'Convert Sparrow Fuel Dispense Reports to Gilbarco Transactions & Fuel Breakdown format (single upload)',
+                name: 'Sparrow fuel dispense converter',
+                description: 'Convert Sparrow Fuel Dispense Reports to Gilbarco side-by-side or WinShuttle SAP upload format',
                 icon: 'fa-right-left',
                 color: 'indigo',
                 component: toolComponents.SparrowToGilbarco

@@ -351,6 +351,63 @@ def test_resolve_make_model_keeps_good_template():
     assert model == "DOZER D11T"
 
 
+def test_winshuttle_report_date_format():
+    from winshuttle import format_winshuttle_report_date
+
+    assert format_winshuttle_report_date("20260529") == "29/5/2026"
+    assert format_winshuttle_report_date("20260602") == "2/6/2026"
+
+
+def test_winshuttle_workbook_layout(tmp_path):
+    from winshuttle import WINSHUTTLE_HEADERS, WINSHUTTLE_SAP_FIELDS, write_winshuttle_workbook
+
+    dispense = [
+        {
+            "Date & Time": "2026-05-29 13:51:43",
+            "Internal Order Number": 4003338574,
+            "Asset Number": "UR13",
+            "Litres": 369.0,
+        },
+        {
+            "Date & Time": "2026-05-29 12:13:29",
+            "Asset Number": "DBOTK010",
+            "Litres": 10354.5,
+        },
+    ]
+    gilbarco = [
+        {"Fleet ID": "UR13", "Liters": 369.0, "Group5": 4003338574},
+        {"Fleet ID": "DBOTK010", "Liters": 10354.5, "Group5": 4009348222},
+    ]
+    ws_cfg = {
+        "material": "am0193746",
+        "storage_location": "mf07",
+        "goods_recipient": "mpho",
+        "product": 261,
+        "name": "tm01",
+    }
+    out = tmp_path / "winshuttle.xlsx"
+    write_winshuttle_workbook(
+        dispense, gilbarco, out, report_date="29/5/2026", ws_cfg=ws_cfg
+    )
+
+    wb = openpyxl.load_workbook(out, read_only=True, data_only=True)
+    ws = wb.active
+    assert ws.cell(1, 1).value == WINSHUTTLE_HEADERS[0]
+    assert ws.cell(2, 1).value == WINSHUTTLE_SAP_FIELDS[0]
+    assert ws.cell(3, 2).value == "29/5/2026"
+    assert ws.cell(4, 1).value == "UR13"
+    assert ws.cell(4, 2).value == "am0193746"
+    assert ws.cell(4, 3).value == pytest.approx(369.0)
+    assert ws.cell(4, 4).value == "mf07"
+    assert ws.cell(4, 5).value == "mpho"
+    assert ws.cell(4, 6).value == 4003338574
+    assert ws.cell(4, 7).value == 261
+    assert ws.cell(4, 8).value == "tm01"
+    assert ws.cell(5, 1).value == "DBOTK010"
+    assert ws.cell(5, 6).value == 4009348222
+    wb.close()
+
+
 def test_convert_vehicle_row_fixes_duplicate_template_model():
     config = load_pump_config()
     fleet = {

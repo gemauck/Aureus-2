@@ -68,6 +68,13 @@
       "group1": null
     }
   ],
+  "winshuttle": {
+    "material": "am0193746",
+    "storage_location": "mf07",
+    "goods_recipient": "mpho",
+    "product": 261,
+    "name": "tm01"
+  },
   "bowser_template": {
     "fleet_id_from_pump": true,
     "make": "BULK DIESEL TANK",

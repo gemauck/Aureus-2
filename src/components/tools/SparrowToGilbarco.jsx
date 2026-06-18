@@ -13,6 +13,7 @@ function formatElapsed(ms) {
 const SparrowToGilbarco = () => {
     const { isDark } = window.useTheme?.() || { isDark: false };
     const [dispenseFile, setDispenseFile] = useState(null);
+    const [outputFormat, setOutputFormat] = useState('gilbarco');
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [phase, setPhase] = useState('');
@@ -91,6 +92,7 @@ const SparrowToGilbarco = () => {
 
         const form = new FormData();
         form.append('dispense', dispenseFile);
+        form.append('format', outputFormat);
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/tools/sparrow-to-gilbarco');
@@ -153,12 +155,42 @@ const SparrowToGilbarco = () => {
     return (
         <div className="space-y-3">
             <div className={`rounded-lg border p-4 ${card}`}>
-                <h3 className={`text-sm font-semibold mb-1 ${text}`}>Sparrow to Gilbarco</h3>
+                <h3 className={`text-sm font-semibold mb-1 ${text}`}>Sparrow fuel dispense converter</h3>
                 <p className={`text-xs mb-4 ${muted}`}>
-                    Upload a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong>. Each row is
-                    output on one line: <strong>Gilbarco format on the left</strong>, original
-                    Sparrow columns on the right. Rows without an asset are still included.
+                    Upload a FuelTrack / Sparrow <strong>Fuel Dispense Report</strong>. Choose
+                    Gilbarco (side-by-side audit sheet) or WinShuttle (SAP goods-movement upload).
+                    Rows without an asset are still included.
                 </p>
+
+                <div className="mb-4">
+                    <span className={`block text-xs font-medium mb-2 ${text}`}>Output format</span>
+                    <div className="flex flex-wrap gap-3">
+                        <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${text}`}>
+                            <input
+                                type="radio"
+                                name="sparrow-output-format"
+                                value="gilbarco"
+                                checked={outputFormat === 'gilbarco'}
+                                onChange={() => setOutputFormat('gilbarco')}
+                                disabled={processing}
+                                className="text-primary-600"
+                            />
+                            Gilbarco (side-by-side)
+                        </label>
+                        <label className={`inline-flex items-center gap-2 text-xs cursor-pointer ${text}`}>
+                            <input
+                                type="radio"
+                                name="sparrow-output-format"
+                                value="winshuttle"
+                                checked={outputFormat === 'winshuttle'}
+                                onChange={() => setOutputFormat('winshuttle')}
+                                disabled={processing}
+                                className="text-primary-600"
+                            />
+                            WinShuttle report
+                        </label>
+                    </div>
+                </div>
 
                 <div>
                     <label className={`block text-xs font-medium mb-1 ${text}`}>
@@ -265,15 +297,30 @@ const SparrowToGilbarco = () => {
 
             <div className={`rounded-lg border p-4 text-[10px] ${card} ${muted}`}>
                 <p className={`font-medium mb-1 ${text}`}>Output layout</p>
-                <ul className="list-disc pl-4 space-y-0.5">
-                    <li>Single sheet — no Fuel Breakdown or separate bowser tab</li>
-                    <li>Left: Gilbarco transaction columns (converted)</li>
-                    <li>Right: original Sparrow dispense columns (unchanged)</li>
-                    <li>
-                        File name: <strong className={text}>Fuel Dispense Report</strong> + date
-                        range (e.g. <span className="font-mono">20260529 - 20260602</span>)
-                    </li>
-                </ul>
+                {outputFormat === 'winshuttle' ? (
+                    <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Single sheet with WinShuttle / SAP field headers (rows 1–2)</li>
+                        <li>Row 3: report end date in the Material column</li>
+                        <li>
+                            Data from row 4: fleet ID, material, litres, storage location, goods
+                            recipient, internal order number, product code, plant name
+                        </li>
+                        <li>
+                            File name: <strong className={text}>WinShuttle Report</strong> + date
+                            range (e.g. <span className="font-mono">20260529 - 20260602</span>)
+                        </li>
+                    </ul>
+                ) : (
+                    <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Single sheet — no Fuel Breakdown or separate bowser tab</li>
+                        <li>Left: Gilbarco transaction columns (converted)</li>
+                        <li>Right: original Sparrow dispense columns (unchanged)</li>
+                        <li>
+                            File name: <strong className={text}>Fuel Dispense Report</strong> + date
+                            range (e.g. <span className="font-mono">20260529 - 20260602</span>)
+                        </li>
+                    </ul>
+                )}
             </div>
         </div>
     );

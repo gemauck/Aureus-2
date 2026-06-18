@@ -18,23 +18,31 @@ Fleet/pump metadata is loaded from:
 
 ## ERP UI
 
-**Tools → Sparrow to Gilbarco** — upload the dispense report only.
+**Tools → Sparrow fuel dispense converter** — upload the dispense report; choose **Gilbarco** or **WinShuttle** output.
 
 Deep link: `/tools/sparrow-to-gilbarco`
 
 - Every dispense row is included (including lines without an asset).
-- Download: **`Fuel Dispense Report YYYYMMDD - YYYYMMDD.xlsx`**
-- One sheet: **Fuel Dispense Report** (side-by-side layout).
+- **Gilbarco:** download **`Fuel Dispense Report YYYYMMDD - YYYYMMDD.xlsx`** — one sheet, side-by-side layout.
+- **WinShuttle:** download **`WinShuttle Report YYYYMMDD - YYYYMMDD.xlsx`** — SAP goods-movement upload sheet.
 
 ## CLI
 
 ```bash
 npm run convert:dispense-to-transactions -- \
   --input "/path/to/Fuel Dispense Report.xlsx" \
-  --output-dir "/path/to/output-folder"
+  --output-dir "/path/to/output-folder" \
+  --format gilbarco
+
+npm run convert:dispense-to-transactions -- \
+  --input "/path/to/Fuel Dispense Report.xlsx" \
+  --output-dir "/path/to/output-folder" \
+  --format winshuttle
 ```
 
-## Output sheet
+## Output sheets
+
+### Gilbarco (default)
 
 | Row | Content |
 |-----|---------|
@@ -42,7 +50,18 @@ npm run convert:dispense-to-transactions -- \
 | 2 | Column headers (Gilbarco then Sparrow) |
 | 3+ | One data row per dispense line |
 
-No **Fuel Breakdown** or **Transactions Exl. Bowsers** tabs.
+### WinShuttle
+
+| Row | Content |
+|-----|---------|
+| 1 | Human-readable WinShuttle column titles |
+| 2 | SAP field names (`GOHEAD-MTSNR`, `GOITEM-MAKTX`, …) |
+| 3 | Report end date in the Material column |
+| 4+ | Fleet ID, material, litres, storage location, goods recipient, internal order, product, plant |
+
+Fixed WinShuttle values (material, storage location, goods recipient, product, plant name) are in `pump_config.json` under `winshuttle`.
+
+No **Fuel Breakdown** or **Transactions Exl. Bowsers** tabs in either format.
 
 ## Tests
 
