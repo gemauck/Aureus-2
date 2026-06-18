@@ -747,10 +747,11 @@ const ServiceAndMaintenance = () => {
     const injectScript = (componentPath, { isJsx = false } = {}) => {
       if (document.querySelector(`script[data-component-path="${componentPath}"]`)) return;
       const script = document.createElement('script');
+      const buildV = window.BUILD_VERSION ? `?v=${window.BUILD_VERSION}` : '';
       const finalPath = isProduction && isJsx
         ? `${baseDir}${componentPath}`.replace('.jsx', '.js')
         : `${baseDir}${componentPath}`;
-      script.src = finalPath;
+      script.src = `${finalPath}${buildV}`;
       if (!isProduction && isJsx) script.type = 'text/babel';
       script.defer = true;
       script.dataset.componentPath = componentPath;
