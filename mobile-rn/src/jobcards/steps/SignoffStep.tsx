@@ -18,7 +18,7 @@ import {
 import { formatWizardDatetimeLabel } from '../../../../src/jobCardWizard/util.js'
 import { SECTION_WORK_MEDIA_KEYS } from '../../../../src/jobCardWizard/constants.js'
 import { useJobCardWizard } from '../WizardContext'
-import { toDatetimeLocal } from '../components/DateTimeField'
+import { DateTimeField, toDatetimeLocal } from '../components/DateTimeField'
 import { SectionCard } from '../components/SectionCard'
 import { SummaryRow } from '../components/SummaryRow'
 import { useFormStyles } from '../components/formStyles'
