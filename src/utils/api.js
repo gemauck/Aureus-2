@@ -533,7 +533,13 @@ async function request(path, options = {}) {
       if (path === '/users/heartbeat' && errorMessage?.includes('Invalid method')) {
         return null; // Silently ignore heartbeat method errors
       }
-      
+
+      try {
+        window.errorReporting?.reportApiError?.(path, options.method || 'GET', res.status, errorMessage || `Request failed with status ${res.status}`);
+      } catch {
+        /* non-fatal */
+      }
+
       throw new Error(errorMessage || `Request failed with status ${res.status}`);
     }
 

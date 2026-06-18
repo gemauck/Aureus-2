@@ -1,0 +1,32 @@
+# When a mobile-app or web-erp error creates a GitHub issue, optionally launch a Cursor cloud agent.
+name: Auto error triage
+
+on:
+  issues:
+    types: [opened, labeled]
+
+concurrency:
+  group: auto-error-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  cursor-agent:
+    if: |
+      github.repository == 'gemauck/Aureus-2' &&
+      (contains(github.event.issue.labels.*.name, 'mobile-error') || contains(github.event.issue.labels.*.name, 'web-error')) &&
+      !contains(github.event.issue.labels.*.name, 'cursor-triaged')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Triage with Cursor cloud agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/mobile-error-cursor-triage.mjs

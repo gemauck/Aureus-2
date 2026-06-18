@@ -14,6 +14,7 @@ const Reports = () => {
     const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
     const [myFeedbackViewerReady, setMyFeedbackViewerReady] = useState(!!window.MyFeedbackViewer);
     const [mobileReportsReady, setMobileReportsReady] = useState(!!window.MobileAppReportsViewer);
+    const [webReportsReady, setWebReportsReady] = useState(!!window.WebErpReportsViewer);
     const [activeTab, setActiveTab] = useState(
       canViewAuditTrail ? 'audit' : (canViewFeedback ? 'feedback' : 'my-queries')
     );
@@ -40,12 +41,12 @@ const Reports = () => {
             }
         }
 
-        if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit' || tab === 'mobile-app') {
+        if (tab === 'feedback' || tab === 'my-queries' || tab === 'audit' || tab === 'mobile-app' || tab === 'web-erp') {
             if (tab === 'audit' && !canViewAuditTrail) {
                 setActiveTab(canViewFeedback ? 'feedback' : 'my-queries');
             } else if (tab === 'feedback' && !canViewFeedback) {
                 setActiveTab('my-queries');
-            } else if (tab === 'mobile-app' && !canViewFeedback) {
+            } else if ((tab === 'mobile-app' || tab === 'web-erp') && !canViewFeedback) {
                 setActiveTab('my-queries');
             } else {
                 setActiveTab(tab);
@@ -80,6 +81,9 @@ const Reports = () => {
         if (window.MobileAppReportsViewer) {
             setMobileReportsReady(true);
         }
+        if (window.WebErpReportsViewer) {
+            setWebReportsReady(true);
+        }
         
         // Check periodically for FeedbackViewer if it's not loaded yet
         const checkInterval = setInterval(() => {
@@ -89,7 +93,10 @@ const Reports = () => {
             if (window.MobileAppReportsViewer) {
                 setMobileReportsReady(true);
             }
-            if (window.FeedbackViewer && window.MobileAppReportsViewer) {
+            if (window.WebErpReportsViewer) {
+                setWebReportsReady(true);
+            }
+            if (window.FeedbackViewer && window.MobileAppReportsViewer && window.WebErpReportsViewer) {
                 clearInterval(checkInterval);
             }
         }, 200);
@@ -119,11 +126,15 @@ const Reports = () => {
         if (activeTab === 'mobile-app' && window.MobileAppReportsViewer && !mobileReportsReady) {
             setMobileReportsReady(true);
         }
-    }, [activeTab, feedbackViewerReady, myFeedbackViewerReady, mobileReportsReady]);
+        if (activeTab === 'web-erp' && window.WebErpReportsViewer && !webReportsReady) {
+            setWebReportsReady(true);
+        }
+    }, [activeTab, feedbackViewerReady, myFeedbackViewerReady, mobileReportsReady, webReportsReady]);
 
     const FeedbackViewer = window.FeedbackViewer;
     const MyFeedbackViewer = window.MyFeedbackViewer;
     const MobileAppReportsViewer = window.MobileAppReportsViewer;
+    const WebErpReportsViewer = window.WebErpReportsViewer;
 
     return (
         <div className="erp-module-root space-y-3 min-w-0">
@@ -164,6 +175,25 @@ const Reports = () => {
                     >
                         My queries
                     </button>
+                    {canViewFeedback && (
+                        <button
+                            onClick={() => setActiveTab('web-erp')}
+                            className={`shrink-0 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                                activeTab === 'web-erp'
+                                    ? 'border-primary-500 text-primary-600'
+                                    : isDark
+                                        ? 'border-transparent text-gray-400 hover:text-gray-300'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Web ERP
+                            <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
+                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                            }`}>
+                                Auto
+                            </span>
+                        </button>
+                    )}
                     {canViewFeedback && (
                         <button
                             onClick={() => setActiveTab('mobile-app')}
@@ -233,6 +263,18 @@ const Reports = () => {
                         <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                             All users&apos; interactions are tracked; only users with the Superadmin role can view this report.
                         </p>
+                    </div>
+                )}
+                {activeTab === 'web-erp' && canViewFeedback && (
+                    <div>
+                        {WebErpReportsViewer && webReportsReady ? (
+                            <WebErpReportsViewer scrollToFeedbackId={highlightFeedbackId} />
+                        ) : (
+                            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Loading web ERP reports...</p>
+                            </div>
+                        )}
                     </div>
                 )}
                 {activeTab === 'mobile-app' && canViewFeedback && (

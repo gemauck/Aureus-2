@@ -20,6 +20,7 @@ import './utils/notificationUrlHelper.js';
 
 // Core services and utilities that must exist before providers render
 import './utils/api.js';
+import './utils/errorReporting.js';
 import './utils/localStorage.js';
 import './utils/dataService.js';
 import './utils/authStorage.js';
@@ -87,6 +88,7 @@ if (typeof window !== 'undefined') {
     try {
         window.USE_LOAD_ONCE_ARCHITECTURE = true;
         window.dispatchEvent(new Event('corebundle:ready'));
+        window.errorReporting?.initErrorReporting?.();
     } catch (error) {
         console.error('❌ Failed to dispatch corebundle:ready event:', error);
     }

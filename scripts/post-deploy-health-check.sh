@@ -66,4 +66,24 @@ check_mobile_error_report() {
 
 check_mobile_error_report
 
+check_web_error_report() {
+  local code
+  code="$(
+    curl -s -o /dev/null -w "%{http_code}" --max-time "${HEALTH_TIMEOUT_SECONDS}" \
+      -X POST "${APP_URL}/api/public/web-error-report" \
+      -H "Content-Type: application/json" \
+      -H "X-Web-Error-Probe: 1" \
+      -d '{"message":"Deploy probe","pageUrl":"web://Test","meta":{"context":"deploy-probe","probe":true}}' \
+      2>/dev/null || echo "000"
+  )"
+  if [ "$code" = "200" ]; then
+    echo "  ✓ Web error report endpoint: HTTP ${code} (probe, not stored)"
+  else
+    echo "  ✗ Web error report endpoint: HTTP ${code}"
+    return 1
+  fi
+}
+
+check_web_error_report
+
 echo "== Health check passed =="

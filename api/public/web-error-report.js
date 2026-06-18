@@ -1,6 +1,6 @@
 /**
- * Public mobile app crash/error reports — no login required (field devices may fail before auth).
- * POST /api/public/mobile-error-report
+ * Public web ERP crash/error reports — optional auth (associates user when logged in).
+ * POST /api/public/web-error-report
  */
 import { prisma } from '../_lib/prisma.js'
 import { badRequest, created, ok, serverError } from '../_lib/response.js'
@@ -9,9 +9,9 @@ import { withHttp } from '../_lib/withHttp.js'
 import { verifyToken } from '../_lib/jwt.js'
 import { notifyAdminsOfFeedback } from '../feedback.js'
 import { isInternalErrorProbe, shouldNotifyAdminForAutoErrorReport } from '../_lib/errorReportProbe.js'
-import { triageMobileErrorFeedback } from '../_lib/errorReportTriage.js'
+import { triageWebErrorFeedback } from '../_lib/errorReportTriage.js'
 
-const SECTION = 'mobile-app'
+const SECTION = 'web-erp'
 const META_MAX = 5_242_880
 const RATE_WINDOW_MS = 60 * 60 * 1000
 const RATE_MAX_PER_IP = 120
@@ -62,7 +62,7 @@ async function handler(req, res) {
 
   const ip = clientIp(req)
   if (!checkRate(ip)) {
-    return res.status(429).json({ error: { message: 'Too many mobile error reports. Try again later.' } })
+    return res.status(429).json({ error: { message: 'Too many web error reports. Try again later.' } })
   }
 
   let body = req.body
@@ -71,7 +71,7 @@ async function handler(req, res) {
   }
 
   const message = String(body.message || '').trim()
-  const pageUrl = String(body.pageUrl || 'mobile://App').trim()
+  const pageUrl = String(body.pageUrl || 'web://App').trim()
   if (!message) return badRequest(res, 'message required')
 
   if (isInternalErrorProbe(body, req)) {
@@ -104,16 +104,16 @@ async function handler(req, res) {
 
     if (shouldNotifyAdminForAutoErrorReport(severity, body.meta)) {
       void notifyAdminsOfFeedback(record, user).catch((err) => {
-        console.error('❌ Mobile error report notification failed:', err?.message || err)
+        console.error('❌ Web error report notification failed:', err?.message || err)
       })
     }
 
-    void triageMobileErrorFeedback(record, user)
+    void triageWebErrorFeedback(record, user)
 
     return created(res, { id: record.id })
   } catch (e) {
-    console.error('❌ Mobile error report save failed:', e)
-    return serverError(res, 'Failed to save mobile error report', e.message)
+    console.error('❌ Web error report save failed:', e)
+    return serverError(res, 'Failed to save web error report', e.message)
   }
 }
 

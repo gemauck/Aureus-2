@@ -41,6 +41,14 @@ class ErrorBoundary extends Component {
             error: error,
             errorInfo: errorInfo
         });
+
+        try {
+            window.errorReporting?.reportError?.(error, 'ErrorBoundary', {
+                componentStack: errorInfo?.componentStack
+            });
+        } catch {
+            /* non-fatal */
+        }
     }
 
     render() {

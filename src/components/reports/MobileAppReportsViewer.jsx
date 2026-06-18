@@ -1,7 +1,30 @@
-// Admin viewer for automatic mobile app crash and error reports
+// Admin viewer for automatic crash and error reports (mobile app + web ERP)
 const { useState, useEffect } = React;
 
-function parseMobileMeta(meta) {
+const SECTION_PRESETS = {
+    'mobile-app': {
+        title: 'Mobile app errors & crashes',
+        subtitle: 'Automatic reports from the Android app — crashes, API failures, and functionality issues',
+        emptyIcon: 'fa-mobile-alt',
+        emptyTitle: 'No mobile app reports yet',
+        emptyHint: 'Reports appear here when the app encounters crashes or errors',
+        loadingLabel: 'Loading mobile reports...',
+        accessDenied: 'Admin access required to view mobile app reports',
+        locationLabel: 'Screen'
+    },
+    'web-erp': {
+        title: 'Web ERP errors & crashes',
+        subtitle: 'Automatic reports from the browser ERP — React crashes, API failures, and functionality issues',
+        emptyIcon: 'fa-desktop',
+        emptyTitle: 'No web ERP reports yet',
+        emptyHint: 'Reports appear here when users hit crashes or unhandled errors in the browser',
+        loadingLabel: 'Loading web ERP reports...',
+        accessDenied: 'Admin access required to view web ERP reports',
+        locationLabel: 'Route'
+    }
+};
+
+function parseReportMeta(meta) {
     if (!meta) return null;
     try {
         return typeof meta === 'string' ? JSON.parse(meta) : meta;
@@ -10,14 +33,14 @@ function parseMobileMeta(meta) {
     }
 }
 
-function mobileCategoryLabel(category) {
+function reportCategoryLabel(category) {
     if (category === 'crash') return 'Crash';
     if (category === 'api') return 'API error';
     if (category === 'functionality') return 'Functionality';
     return category || 'Unknown';
 }
 
-function mobileCategoryClass(category, isDark) {
+function reportCategoryClass(category, isDark) {
     if (category === 'crash') {
         return isDark ? 'bg-red-900/40 text-red-300 border-red-700' : 'bg-red-100 text-red-800 border-red-200';
     }
@@ -27,8 +50,9 @@ function mobileCategoryClass(category, isDark) {
     return isDark ? 'bg-blue-900/40 text-blue-300 border-blue-700' : 'bg-blue-100 text-blue-800 border-blue-200';
 }
 
-const MobileAppReportsViewer = (props = {}) => {
-    const { scrollToFeedbackId = null } = props;
+const AutoErrorReportsViewer = (props = {}) => {
+    const { scrollToFeedbackId = null, section = 'mobile-app' } = props;
+    const preset = SECTION_PRESETS[section] || SECTION_PRESETS['mobile-app'];
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
@@ -49,7 +73,7 @@ const MobileAppReportsViewer = (props = {}) => {
         if (!silent) setLoading(true);
         try {
             const response = await window.api.getFeedback({
-                section: 'mobile-app',
+                section,
                 includeUser: true
             });
             const data = response?.data || response || [];
@@ -74,7 +98,7 @@ const MobileAppReportsViewer = (props = {}) => {
                 ? CSS.escape(scrollToFeedbackId)
                 : String(scrollToFeedbackId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const t = window.setTimeout(() => {
-            document.querySelector(`[data-mobile-report-id="${safe}"]`)?.scrollIntoView?.({
+            document.querySelector(`[data-auto-report-id="${safe}"]`)?.scrollIntoView?.({
                 behavior: 'smooth',
                 block: 'center'
             });
@@ -96,15 +120,15 @@ const MobileAppReportsViewer = (props = {}) => {
     };
 
     const enriched = reports.map((item) => {
-        const meta = parseMobileMeta(item.meta);
-        return { ...item, mobileMeta: meta };
+        const meta = parseReportMeta(item.meta);
+        return { ...item, reportMeta: meta };
     });
 
     const filtered = enriched.filter((item) => {
-        const category = item.mobileMeta?.category || 'functionality';
+        const category = item.reportMeta?.category || 'functionality';
         const status = item.status ?? 'open';
-        const ctx = String(item.mobileMeta?.context || '').toLowerCase();
-        if (ctx === 'deploy-probe' || ctx === 'health-probe' || ctx === 'mobile-error-probe') {
+        const ctx = String(item.reportMeta?.context || '').toLowerCase();
+        if (ctx === 'deploy-probe' || ctx === 'health-probe' || ctx === 'mobile-error-probe' || ctx === 'web-error-probe') {
             return false;
         }
         if (filter.category !== 'all' && category !== filter.category) return false;
@@ -115,9 +139,10 @@ const MobileAppReportsViewer = (props = {}) => {
             const q = filter.search.toLowerCase();
             const hay = [
                 item.message,
-                item.mobileMeta?.context,
-                item.mobileMeta?.screen,
-                item.mobileMeta?.error?.message,
+                item.reportMeta?.context,
+                item.reportMeta?.screen,
+                item.reportMeta?.route,
+                item.reportMeta?.error?.message,
                 item.user?.name,
                 item.user?.email
             ]
@@ -140,13 +165,13 @@ const MobileAppReportsViewer = (props = {}) => {
         });
 
     const countByCategory = (cat) =>
-        enriched.filter((r) => (r.mobileMeta?.category || 'functionality') === cat).length;
+        enriched.filter((r) => (r.reportMeta?.category || 'functionality') === cat).length;
 
     if (!isAdmin) {
         return (
             <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 <i className="fas fa-lock text-3xl mb-3"></i>
-                <p>Admin access required to view mobile app reports</p>
+                <p>{preset.accessDenied}</p>
             </div>
         );
     }
@@ -157,10 +182,10 @@ const MobileAppReportsViewer = (props = {}) => {
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <div>
                         <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            Mobile app errors &amp; crashes
+                            {preset.title}
                         </h2>
                         <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Automatic reports from the Android app — crashes, API failures, and functionality issues
+                            {preset.subtitle}
                         </p>
                     </div>
                     <button
@@ -244,38 +269,40 @@ const MobileAppReportsViewer = (props = {}) => {
                 {loading ? (
                     <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
-                        <p>Loading mobile reports...</p>
+                        <p>{preset.loadingLabel}</p>
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <i className="fas fa-mobile-alt text-3xl mb-3 opacity-50"></i>
-                        <p>No mobile app reports yet</p>
-                        <p className="text-xs mt-2 opacity-75">Reports appear here when the app encounters crashes or errors</p>
+                        <i className={`fas ${preset.emptyIcon} text-3xl mb-3 opacity-50`}></i>
+                        <p>{preset.emptyTitle}</p>
+                        <p className="text-xs mt-2 opacity-75">{preset.emptyHint}</p>
                     </div>
                 ) : (
                     filtered.map((item) => {
-                        const meta = item.mobileMeta || {};
+                        const meta = item.reportMeta || {};
                         const category = meta.category || 'functionality';
                         const isExpanded = expandedId === item.id;
                         const api = meta.api || {};
                         const device = meta.device || {};
+                        const browser = meta.browser || {};
                         const breadcrumbs = Array.isArray(meta.breadcrumbs) ? meta.breadcrumbs : [];
+                        const location = meta.screen || meta.route || item.pageUrl || '—';
 
                         return (
                             <div
                                 key={item.id}
-                                data-mobile-report-id={item.id}
+                                data-auto-report-id={item.id}
                                 className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-lg p-4`}
                             >
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                                         <span
-                                            className={`px-2 py-0.5 rounded text-xs font-medium border ${mobileCategoryClass(
+                                            className={`px-2 py-0.5 rounded text-xs font-medium border ${reportCategoryClass(
                                                 category,
                                                 isDark
                                             )}`}
                                         >
-                                            {mobileCategoryLabel(category)}
+                                            {reportCategoryLabel(category)}
                                         </span>
                                         <span
                                             className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -335,7 +362,7 @@ const MobileAppReportsViewer = (props = {}) => {
                                         <strong>User:</strong> {item.user?.name || item.user?.email || 'Unknown'}
                                     </div>
                                     <div>
-                                        <strong>Screen:</strong> {meta.screen || item.pageUrl || '—'}
+                                        <strong>{preset.locationLabel}:</strong> {location}
                                     </div>
                                     <div>
                                         <strong>Context:</strong> {meta.context || '—'}
@@ -356,6 +383,12 @@ const MobileAppReportsViewer = (props = {}) => {
                                         <div>
                                             <strong>Device:</strong> {device.platform} {device.osVersion || ''}
                                             {device.deviceName ? ` · ${device.deviceName}` : ''}
+                                        </div>
+                                    ) : null}
+                                    {browser.userAgent ? (
+                                        <div className="sm:col-span-2">
+                                            <strong>Browser:</strong> {browser.viewport ? `${browser.viewport} · ` : ''}
+                                            {browser.userAgent}
                                         </div>
                                     ) : null}
                                 </div>
@@ -432,4 +465,9 @@ const MobileAppReportsViewer = (props = {}) => {
     );
 };
 
+const MobileAppReportsViewer = (props) => AutoErrorReportsViewer({ ...props, section: 'mobile-app' });
+const WebErpReportsViewer = (props) => AutoErrorReportsViewer({ ...props, section: 'web-erp' });
+
+window.AutoErrorReportsViewer = AutoErrorReportsViewer;
 window.MobileAppReportsViewer = MobileAppReportsViewer;
+window.WebErpReportsViewer = WebErpReportsViewer;
