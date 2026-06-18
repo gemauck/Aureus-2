@@ -47,6 +47,7 @@ function copyJSFile(srcPath) {
     
     // Match export const, export function, export class, export default
     const patterns = [
+      /export\s+async\s+function\s+(\w+)/g,
       /export\s+const\s+(\w+)/g,
       /export\s+function\s+(\w+)/g,
       /export\s+class\s+(\w+)/g,
@@ -63,7 +64,8 @@ function copyJSFile(srcPath) {
       });
     });
     
-    // Replace export statements
+    // Replace export statements (async before plain function — order matters)
+    content = content.replace(/export\s+async\s+function\s+/g, 'async function ');
     content = content.replace(/export\s+const\s+/g, 'const ');
     content = content.replace(/export\s+function\s+/g, 'function ');
     content = content.replace(/export\s+class\s+/g, 'class ');
