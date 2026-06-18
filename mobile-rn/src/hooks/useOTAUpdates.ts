@@ -94,6 +94,33 @@ async function shouldSkipAutoReload(
   return Date.now() - guard.at < RELOAD_GUARD_MS
 }
 
+function manifestId(manifest: Updates.Manifest | null | undefined): string | null {
+  const id = manifest && 'id' in manifest ? manifest.id : undefined
+  return typeof id === 'string' && id.length > 0 ? id : null
+}
+
+/** Resolve a staged update id from check/fetch results (fetch omits manifest when already downloaded). */
+function resolveApplyReadyUpdateId(
+  check: Awaited<ReturnType<typeof Updates.checkForUpdateAsync>>,
+  fetchResult: Awaited<ReturnType<typeof Updates.fetchUpdateAsync>>
+): { updateId: string | null; freshlyDownloaded: boolean } {
+  const runningId = Updates.updateId ?? null
+  const updateId =
+    manifestId(fetchResult.manifest) ??
+    (check.isAvailable ? manifestId(check.manifest) : null) ??
+    pendingOtaUpdateId
+
+  if (!updateId || updateId === runningId) {
+    if (updateId === runningId) {
+      void clearReloadGuard()
+      pendingOtaUpdateId = null
+    }
+    return { updateId: null, freshlyDownloaded: false }
+  }
+
+  return { updateId, freshlyDownloaded: fetchResult.isNew === true }
+}
+
 function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
   const now = Date.now()
   if (
@@ -121,6 +148,11 @@ function promptApplyUpdate(updateId?: string | null): Promise<OtaCheckResult> {
         {
           text: 'Restart',
           onPress: () => {
+            const id = updateId || pendingOtaUpdateId
+            if (id) {
+              void reloadWithApplyingUi(id).then(resolve)
+              return
+            }
             pendingOtaUpdateId = null
             void Updates.reloadAsync()
             resolve({ status: 'downloaded', willReload: true })
@@ -151,8 +183,8 @@ async function reloadWithApplyingUi(updateId: string): Promise<OtaCheckResult> {
 
 /**
  * Sync OTA state with the server.
- * Only treat server-reported updates (check.isAvailable + fetch.isNew) as apply-ready —
- * never auto-reload on stale staged bundles (that caused restart loops back to Dashboard).
+ * Auto-reload only when fetch.isNew in this call — staged bundles from a prior fetch
+ * still prompt (never silent auto-reload; that caused restart loops back to Dashboard).
  */
 export async function syncOtaUpdate(
   options: { mode?: OtaSyncMode } = {}
@@ -174,33 +206,37 @@ export async function syncOtaUpdate(
     if (mode === 'auto') setOtaUiPhase('downloading')
     const fetchResult = await Updates.fetchUpdateAsync()
 
-    const downloadedId = fetchResult?.manifest?.id ?? null
-    const runningId = Updates.updateId ?? null
-
-    if (!fetchResult?.isNew || !downloadedId) {
+    const { updateId: applyId, freshlyDownloaded } = resolveApplyReadyUpdateId(
+      check,
+      fetchResult
+    )
+    if (!applyId) {
       if (mode === 'auto') setOtaUiPhase('idle')
       return { status: 'current' }
     }
 
-    if (runningId === downloadedId) {
-      await clearReloadGuard()
+    // Already on disk from an earlier fetch — prompt only, never auto-reload.
+    if (!freshlyDownloaded) {
       if (mode === 'auto') setOtaUiPhase('idle')
-      return { status: 'current' }
+      if (mode === 'prompt' || mode === 'auto') {
+        return promptApplyUpdate(applyId)
+      }
+      return markDownloadedOtaUpdate(applyId)
     }
 
     if (mode === 'auto') {
-      if (await shouldSkipAutoReload(downloadedId, runningId)) {
+      if (await shouldSkipAutoReload(applyId, Updates.updateId)) {
         setOtaUiPhase('idle')
-        return promptApplyUpdate(downloadedId)
+        return promptApplyUpdate(applyId)
       }
-      return reloadWithApplyingUi(downloadedId)
+      return reloadWithApplyingUi(applyId)
     }
 
     if (mode === 'prompt') {
-      return promptApplyUpdate(downloadedId)
+      return promptApplyUpdate(applyId)
     }
 
-    return markDownloadedOtaUpdate(downloadedId)
+    return markDownloadedOtaUpdate(applyId)
   } catch (error) {
     if (mode === 'auto') setOtaUiPhase('idle')
     return formatOtaError(error, 'OTA sync')
@@ -232,21 +268,18 @@ export async function applyOtaUpdate(
     try {
       const check = await Updates.checkForUpdateAsync()
       if (!check.isAvailable) {
-        const runningId = Updates.updateId
-        if (runningId) {
-          setOtaUiPhase('applying')
-          pendingOtaUpdateId = null
-          await new Promise((resolve) => setTimeout(resolve, APPLY_BRIEF_MS))
-          await Updates.reloadAsync()
-          return { status: 'downloaded', willReload: true }
+        const pending = pendingOtaUpdateId
+        if (pending && pending !== Updates.updateId) {
+          if (options.prompt) return promptApplyUpdate(pending)
+          return reloadWithApplyingUi(pending)
         }
         return { status: 'current' }
       }
       const fetchResult = await Updates.fetchUpdateAsync()
-      const downloadedId = fetchResult?.manifest?.id
-      if (!downloadedId) return { status: 'current' }
-      if (options.prompt) return promptApplyUpdate(downloadedId)
-      return reloadWithApplyingUi(downloadedId)
+      const { updateId: applyId } = resolveApplyReadyUpdateId(check, fetchResult)
+      if (!applyId) return { status: 'current' }
+      if (options.prompt) return promptApplyUpdate(applyId)
+      return reloadWithApplyingUi(applyId)
     } catch (error) {
       setOtaUiPhase('idle')
       return formatOtaError(error, 'OTA apply')
@@ -332,6 +365,7 @@ export function useOTAUpdates(enabled = true) {
       const prev = appStateRef.current
       appStateRef.current = nextState
       if (nextState !== 'active' || prev === 'active') return
+      resetOtaPromptCooldown()
       void runOpenCheck({ force: true, autoApply: false })
     })
 
@@ -350,10 +384,31 @@ export function useOTAUpdates(enabled = true) {
       check({ silent: !interactive, force: true }),
     downloadOTAUpdate: () => downloadOtaUpdate(),
     applyDownloadedUpdate: async () => {
-      const id = Updates.updateId
-      if (id) return reloadWithApplyingUi(id)
-      await Updates.reloadAsync()
-      return { status: 'downloaded' as const, willReload: true }
+      const blocked = otaDisabled()
+      if (blocked) return blocked
+
+      try {
+        const runningId = Updates.updateId
+        if (pendingOtaUpdateId && pendingOtaUpdateId !== runningId) {
+          return reloadWithApplyingUi(pendingOtaUpdateId)
+        }
+
+        const check = await Updates.checkForUpdateAsync()
+        if (check.isAvailable) {
+          const fetchResult = await Updates.fetchUpdateAsync()
+          const { updateId: applyId } = resolveApplyReadyUpdateId(check, fetchResult)
+          if (applyId) return reloadWithApplyingUi(applyId)
+        }
+
+        setOtaUiPhase('applying')
+        pendingOtaUpdateId = null
+        await new Promise((resolve) => setTimeout(resolve, APPLY_BRIEF_MS))
+        await Updates.reloadAsync()
+        return { status: 'downloaded' as const, willReload: true }
+      } catch (error) {
+        setOtaUiPhase('idle')
+        return formatOtaError(error, 'OTA apply downloaded')
+      }
     },
     otaEnabled: Updates.isEnabled,
     otaChannel: Updates.channel,

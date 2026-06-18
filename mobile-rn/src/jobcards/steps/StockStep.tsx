@@ -19,7 +19,8 @@ function StockEntryRowEditor({
   locationOptions,
   onUpdate,
   onRemove,
-  onAddLine
+  onAddLine,
+  catalogFallback
 }: {
   row: StockRow
   idx: number
