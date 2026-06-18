@@ -17,7 +17,6 @@ async function handler(req, res) {
       where: {
         OR: [
           { type: 'client' },
-          { type: { equals: null } },
           { type: '' }
         ]
       },
