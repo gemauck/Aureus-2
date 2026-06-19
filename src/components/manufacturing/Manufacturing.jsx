@@ -58,6 +58,126 @@ function InventoryAiThumbnailBadge({ className = '' }) {
   );
 }
 
+const EMPTY_INVENTORY_THUMB_SUGGEST = {
+  loading: false,
+  previewUrl: '',
+  imageUrl: '',
+  searchQuery: '',
+  provider: '',
+  error: ''
+};
+
+async function fetchInventoryThumbnailSuggestion(formSnapshot, itemId) {
+  if (!String(formSnapshot?.name || '').trim()) {
+    alert('Enter an item name before suggesting an image.');
+    return null;
+  }
+  if (!window.DatabaseAPI?.suggestInventoryThumbnail && !window.DatabaseAPI?.suggestInventoryThumbnailPreview) {
+    alert('Image suggestion is not available. Refresh the page and try again.');
+    return null;
+  }
+  const response = itemId
+    ? await window.DatabaseAPI.suggestInventoryThumbnail(itemId)
+    : await window.DatabaseAPI.suggestInventoryThumbnailPreview({
+        name: formSnapshot.name,
+        sku: formSnapshot.sku,
+        category: formSnapshot.category,
+        supplier: formSnapshot.supplier,
+        manufacturingPartNumber: formSnapshot.manufacturingPartNumber,
+        legacyPartNumber: formSnapshot.legacyPartNumber
+      });
+  const suggestion = response?.data?.suggestion;
+  if (!suggestion?.imageUrl) {
+    return {
+      ...EMPTY_INVENTORY_THUMB_SUGGEST,
+      error:
+        response?.data?.message ||
+        'No suitable image found. Try adding a part number, refining the name, or upload an image below.'
+    };
+  }
+  return {
+    loading: false,
+    previewUrl: suggestion.previewUrl || suggestion.imageUrl,
+    imageUrl: suggestion.imageUrl,
+    searchQuery: suggestion.searchQuery || '',
+    provider: suggestion.provider || '',
+    error: ''
+  };
+}
+
+const inventoryRowTotalValueForQuantity =
+  typeof inventoryRowTotalValueForQuantityRequire === 'function'
+    ? inventoryRowTotalValueForQuantityRequire
+    : typeof window !== 'undefined' && typeof window.inventoryRowTotalValueForQuantity === 'function'
+      ? (item, q) => window.inventoryRowTotalValueForQuantity(item, q)
+      : inventoryRowTotalValueForQuantityInline;
+
+/** Excel .xlsx cell text limit (SheetJS enforces this on write). */
+const EXCEL_MAX_CELL_CHARS = 32767;
+const EXCEL_TRUNC_SUFFIX = '… [truncated for Excel]';
+
+function truncateForExcelCell(value) {
+  const s = value == null ? '' : String(value);
+  if (s.length <= EXCEL_MAX_CELL_CHARS) return s;
+  const maxBody = EXCEL_MAX_CELL_CHARS - EXCEL_TRUNC_SUFFIX.length;
+  return s.slice(0, Math.max(0, maxBody)) + EXCEL_TRUNC_SUFFIX;
+}
+
+// Use React from window
+
+// Safely access React hooks from the global window.React without throwing
+// If React isn't ready yet, we fall back to an empty object so the script
+// doesn't crash before we can register a fallback component.
+const ReactGlobal = window.React || {};
+const { useState, useEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
+const useLayoutEffect = ReactGlobal.useLayoutEffect || useEffect;
+
+/** Local state for AI thumbnail suggest — keep inside each editor so parent re-renders do not reset form state. */
+function useInventoryThumbSuggest() {
+  const [inventoryThumbSuggest, setInventoryThumbSuggest] = useState(EMPTY_INVENTORY_THUMB_SUGGEST);
+
+  const clearInventoryThumbSuggest = useCallback(() => {
+    setInventoryThumbSuggest(EMPTY_INVENTORY_THUMB_SUGGEST);
+  }, []);
+
+  const suggestInventoryThumbnailForForm = useCallback(async (formSnapshot, itemId) => {
+    setInventoryThumbSuggest((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const next = await fetchInventoryThumbnailSuggestion(formSnapshot, itemId);
+      if (!next) {
+        setInventoryThumbSuggest((prev) => ({ ...prev, loading: false }));
+        return;
+      }
+      setInventoryThumbSuggest(next);
+    } catch (err) {
+      console.error('Suggest inventory thumbnail failed:', err);
+      setInventoryThumbSuggest({
+        ...EMPTY_INVENTORY_THUMB_SUGGEST,
+        error: err?.message || 'Failed to suggest an image. Try again or upload an image below.'
+      });
+    }
+  }, []);
+
+  const applySuggestedInventoryThumbnailTo = useCallback(
+    (setForm) => {
+      if (!inventoryThumbSuggest.imageUrl) return;
+      setForm((prev) => ({
+        ...prev,
+        thumbnail: inventoryThumbSuggest.imageUrl,
+        thumbnailSource: 'ai'
+      }));
+    },
+    [inventoryThumbSuggest.imageUrl]
+  );
+
+  return {
+    inventoryThumbSuggest,
+    clearInventoryThumbSuggest,
+    suggestInventoryThumbnailForForm,
+    applySuggestedInventoryThumbnailTo
+  };
+}
+
 /** Shared image upload + AI suggest UI for inventory add/edit modal and detail editor. */
 function InventoryThumbnailField({
   form,
@@ -67,11 +187,37 @@ function InventoryThumbnailField({
   onApply,
   onClearSuggest
 }) {
+  const fileInputRef = useRef(null);
   const patchForm = (updates) => setForm((prev) => ({ ...prev, ...updates }));
+
+  const handleImageFile = (file) => {
+    if (!file || !String(file.type || '').startsWith('image/')) {
+      alert('Please choose an image file (JPEG, PNG, etc.).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      patchForm({ thumbnail: reader.result, thumbnailSource: 'manual' });
+      onClearSuggest();
+    };
+    reader.onerror = () => {
+      alert('Could not read that image. Try a different file.');
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="col-span-2">
       <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
       <div className="flex flex-wrap gap-2 mb-2">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <i className="fas fa-image mr-1"></i>
+          Upload image
+        </button>
         <button
           type="button"
           onClick={onSuggest}
@@ -91,16 +237,16 @@ function InventoryThumbnailField({
             </>
           )}
         </button>
-        {isAiInventoryThumbnail(form) && form?.thumbnail && (
+        {form?.thumbnail && (
           <button
             type="button"
             onClick={() => {
               patchForm({ thumbnail: '', thumbnailSource: '' });
               onClearSuggest();
             }}
-            className="px-3 py-2 text-sm border border-violet-300 text-violet-800 rounded-lg hover:bg-violet-50"
+            className="px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
-            Remove AI image
+            Remove image
           </button>
         )}
       </div>
@@ -144,25 +290,27 @@ function InventoryThumbnailField({
         </div>
       )}
       <input
+        ref={fileInputRef}
         type="file"
         accept="image/*"
         onChange={(e) => {
           const file = e.target.files && e.target.files[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            patchForm({ thumbnail: reader.result, thumbnailSource: 'manual' });
-            onClearSuggest();
-          };
-          reader.readAsDataURL(file);
+          if (file) handleImageFile(file);
+          e.target.value = '';
         }}
-        className="w-full text-sm mb-2"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
       />
       <div className="mt-2 flex gap-2">
         <input
           type="url"
           placeholder="Or paste image URL (https://...)"
-          value={form?.thumbnail || ''}
+          value={
+            form?.thumbnail && !/^data:/i.test(String(form.thumbnail))
+              ? form.thumbnail
+              : ''
+          }
           onChange={(e) =>
             patchForm({
               thumbnail: e.target.value,
@@ -200,32 +348,6 @@ function InventoryThumbnailField({
   );
 }
 
-const inventoryRowTotalValueForQuantity =
-  typeof inventoryRowTotalValueForQuantityRequire === 'function'
-    ? inventoryRowTotalValueForQuantityRequire
-    : typeof window !== 'undefined' && typeof window.inventoryRowTotalValueForQuantity === 'function'
-      ? (item, q) => window.inventoryRowTotalValueForQuantity(item, q)
-      : inventoryRowTotalValueForQuantityInline;
-
-/** Excel .xlsx cell text limit (SheetJS enforces this on write). */
-const EXCEL_MAX_CELL_CHARS = 32767;
-const EXCEL_TRUNC_SUFFIX = '… [truncated for Excel]';
-
-function truncateForExcelCell(value) {
-  const s = value == null ? '' : String(value);
-  if (s.length <= EXCEL_MAX_CELL_CHARS) return s;
-  const maxBody = EXCEL_MAX_CELL_CHARS - EXCEL_TRUNC_SUFFIX.length;
-  return s.slice(0, Math.max(0, maxBody)) + EXCEL_TRUNC_SUFFIX;
-}
-
-// Use React from window
-
-// Safely access React hooks from the global window.React without throwing
-// If React isn't ready yet, we fall back to an empty object so the script
-// doesn't crash before we can register a fallback component.
-const ReactGlobal = window.React || {};
-const { useState, useEffect, useCallback, useMemo, useRef, createElement, Fragment } = ReactGlobal;
-const useLayoutEffect = ReactGlobal.useLayoutEffect || useEffect;
 // Safely access useAuth - don't destructure if undefined
 const useAuth = window.useAuth || (() => {
   console.error('❌ Manufacturing: useAuth is not available');
@@ -668,14 +790,12 @@ try {
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
   const [isSavingItem, setIsSavingItem] = useState(false);
-  const [inventoryThumbSuggest, setInventoryThumbSuggest] = useState({
-    loading: false,
-    previewUrl: '',
-    imageUrl: '',
-    searchQuery: '',
-    provider: '',
-    error: ''
-  });
+  const {
+    inventoryThumbSuggest,
+    clearInventoryThumbSuggest,
+    suggestInventoryThumbnailForForm,
+    applySuggestedInventoryThumbnailTo
+  } = useInventoryThumbSuggest();
   const [viewingInventoryItemDetail, setViewingInventoryItemDetail] = useState(null); // Full-page detail view
   const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
   const [inventoryItemQrBlobUrl, setInventoryItemQrBlobUrl] = useState(null);
@@ -3966,17 +4086,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }, 300);
   }, []);
 
-  const clearInventoryThumbSuggest = useCallback(() => {
-    setInventoryThumbSuggest({
-      loading: false,
-      previewUrl: '',
-      imageUrl: '',
-      searchQuery: '',
-      provider: '',
-      error: ''
-    });
-  }, []);
-
   const openAddItemModal = useCallback(() => {
     if (!isAdmin) {
       alert('Only admin users can add inventory items directly. Please create new items through a purchase order.');
@@ -6421,69 +6530,6 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     setSelectedItem(item);
     setModalType('edit_item');
     setShowModal(true);
-  };
-
-  const suggestInventoryThumbnailForForm = async (formSnapshot, itemId) => {
-    if (!String(formSnapshot?.name || '').trim()) {
-      alert('Enter an item name before suggesting an image.');
-      return;
-    }
-    if (!window.DatabaseAPI?.suggestInventoryThumbnail && !window.DatabaseAPI?.suggestInventoryThumbnailPreview) {
-      alert('Image suggestion is not available. Refresh the page and try again.');
-      return;
-    }
-    setInventoryThumbSuggest((prev) => ({ ...prev, loading: true, error: '' }));
-    try {
-      const response = itemId
-        ? await window.DatabaseAPI.suggestInventoryThumbnail(itemId)
-        : await window.DatabaseAPI.suggestInventoryThumbnailPreview({
-            name: formSnapshot.name,
-            sku: formSnapshot.sku,
-            category: formSnapshot.category,
-            supplier: formSnapshot.supplier,
-            manufacturingPartNumber: formSnapshot.manufacturingPartNumber,
-            legacyPartNumber: formSnapshot.legacyPartNumber
-          });
-      const suggestion = response?.data?.suggestion;
-      if (!suggestion?.imageUrl) {
-        setInventoryThumbSuggest({
-          loading: false,
-          previewUrl: '',
-          imageUrl: '',
-          searchQuery: '',
-          provider: '',
-          error: response?.data?.message || 'No suitable image found. Try adding a part number or refining the name.'
-        });
-        return;
-      }
-      setInventoryThumbSuggest({
-        loading: false,
-        previewUrl: suggestion.previewUrl || suggestion.imageUrl,
-        imageUrl: suggestion.imageUrl,
-        searchQuery: suggestion.searchQuery || '',
-        provider: suggestion.provider || '',
-        error: ''
-      });
-    } catch (err) {
-      console.error('Suggest inventory thumbnail failed:', err);
-      setInventoryThumbSuggest({
-        loading: false,
-        previewUrl: '',
-        imageUrl: '',
-        searchQuery: '',
-        provider: '',
-        error: err?.message || 'Failed to suggest an image. Try again.'
-      });
-    }
-  };
-
-  const applySuggestedInventoryThumbnailTo = (setForm) => {
-    if (!inventoryThumbSuggest.imageUrl) return;
-    setForm((prev) => ({
-      ...prev,
-      thumbnail: inventoryThumbSuggest.imageUrl,
-      thumbnailSource: 'ai'
-    }));
   };
 
   const handleSuggestInventoryThumbnail = () =>
@@ -14050,6 +14096,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
 
     const [editFormData, setEditFormData] = useState({ ...item });
+    const {
+      inventoryThumbSuggest: detailInventoryThumbSuggest,
+      clearInventoryThumbSuggest: clearDetailInventoryThumbSuggest,
+      suggestInventoryThumbnailForForm: suggestDetailInventoryThumbnailForForm,
+      applySuggestedInventoryThumbnailTo: applyDetailSuggestedInventoryThumbnailTo
+    } = useInventoryThumbSuggest();
     const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
     const [localNewCategoryName, setLocalNewCategoryName] = useState('');
     const [selectedMovementTemplateId, setSelectedMovementTemplateId] = useState('');
@@ -14697,7 +14749,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
           safeSetItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           setViewingInventoryItemDetail(normalized);
           setIsEditingInventoryItem(false);
-          clearInventoryThumbSuggest();
+          clearDetailInventoryThumbSuggest();
           alert('Item updated successfully!');
         }
       } catch (error) {
@@ -14705,6 +14757,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         alert('Failed to update inventory item. Please try again.');
       }
     };
+
+    const handleSuggestDetailInventoryThumbnail = () =>
+      suggestDetailInventoryThumbnailForForm(editFormData, getInventoryItemId(item));
+
+    const handleApplyDetailSuggestedInventoryThumbnail = () =>
+      applyDetailSuggestedInventoryThumbnailTo(setEditFormData);
 
     const handleAddLocalCategory = () => {
       const trimmedName = (localNewCategoryName || '').trim().toLowerCase().replace(/\s+/g, '_');
@@ -14753,7 +14811,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                   </button>
                   <button
                     onClick={() => {
-                      clearInventoryThumbSuggest();
+                      clearDetailInventoryThumbSuggest();
                       setIsEditingInventoryItem(true);
                     }}
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -14775,7 +14833,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     onClick={() => {
                       setIsEditingInventoryItem(false);
                       setEditFormData({ ...item });
-                      clearInventoryThumbSuggest();
+                      clearDetailInventoryThumbSuggest();
                     }}
                     className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                   >
@@ -15185,12 +15243,10 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
                     <InventoryThumbnailField
                       form={editFormData}
                       setForm={setEditFormData}
-                      thumbSuggest={inventoryThumbSuggest}
-                      onSuggest={() =>
-                        suggestInventoryThumbnailForForm(editFormData, getInventoryItemId(item))
-                      }
-                      onApply={() => applySuggestedInventoryThumbnailTo(setEditFormData)}
-                      onClearSuggest={clearInventoryThumbSuggest}
+                      thumbSuggest={detailInventoryThumbSuggest}
+                      onSuggest={handleSuggestDetailInventoryThumbnail}
+                      onApply={handleApplyDetailSuggestedInventoryThumbnail}
+                      onClearSuggest={clearDetailInventoryThumbSuggest}
                     />
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Part Numbers</label>
