@@ -535,6 +535,32 @@ function normalizeInventoryRows(items) {
   return items.map(normalizeInventoryItemRow);
 }
 
+function inventoryCacheStorageKey(locationId) {
+  return locationId && locationId !== 'all'
+    ? `manufacturing_inventory_loc_${locationId}`
+    : 'manufacturing_inventory_all';
+}
+
+function readInventoryCacheForLocation(locationId) {
+  try {
+    const scoped = localStorage.getItem(inventoryCacheStorageKey(locationId));
+    if (scoped) {
+      const parsed = JSON.parse(scoped);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    const legacy = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+    return Array.isArray(legacy) ? legacy : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeInventoryCacheForLocation(locationId, rows) {
+  const payload = JSON.stringify(Array.isArray(rows) ? rows : []);
+  safeSetItem(inventoryCacheStorageKey(locationId), payload);
+  safeSetItem('manufacturing_inventory', payload);
+}
+
 function inventoryRowsEquivalentForUi(prevRows, nextRows) {
   if (!Array.isArray(prevRows) || !Array.isArray(nextRows)) return false;
   if (prevRows.length !== nextRows.length) return false;
@@ -910,6 +936,10 @@ try {
     }
   }, []);
 
+  const inventoryLoadSeqRef = useRef(0);
+  const inventoryBootstrapHandledRef = useRef(false);
+  const prevInventoryLocationRef = useRef(undefined);
+
   const reloadInventoryForLocation = useCallback(async (options = {}) => {
     if (options.skipIfTyping && isUserTypingRef.current) {
       return;
@@ -917,7 +947,17 @@ try {
     if (!window.DatabaseAPI?.getInventory) {
       return;
     }
-    setInventoryLoadedFromAPI(false);
+    const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+    const silent = options.silent === true;
+    if (!silent && inventory.length === 0) {
+      const cached = readInventoryCacheForLocation(locationIdToLoad);
+      if (cached.length > 0) {
+        setInventory(normalizeInventoryRows(cached));
+        setInventoryLoadedFromAPI(true);
+      } else {
+        setInventoryLoadedFromAPI(false);
+      }
+    }
     try {
       const requestSeq = ++inventoryLoadSeqRef.current;
       // Save the currently focused element before state update
@@ -927,10 +967,9 @@ try {
       const inputKey = wasInputFocused ? focusedElement.getAttribute('key') : null;
       const inputPlaceholder = wasInputFocused ? focusedElement.placeholder : null;
 
-      const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
       const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad, {
         forceRefresh: options.forceRefresh,
-        includeLedger: activeTab === 'inventory' || showLedgerMismatchOnly
+        includeLedger: showLedgerMismatchOnly
       });
       const invData = invResponse?.data?.inventory || [];
       const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
@@ -939,9 +978,9 @@ try {
         return;
       }
 
-      setInventory(processed);
+      setInventory((prev) => (silent && inventoryRowsEquivalentForUi(prev, processed) ? prev : processed));
       setInventoryLoadedFromAPI(true);
-      safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+      writeInventoryCacheForLocation(locationIdToLoad, processed);
       void loadInventoryValueByLocationSummary();
 
       // Restore focus after state update if user was typing
@@ -975,7 +1014,7 @@ try {
     } catch (error) {
       console.error('Error loading inventory for location:', error);
     }
-  }, [selectedLocationId, loadInventoryValueByLocationSummary, activeTab, showLedgerMismatchOnly]);
+  }, [selectedLocationId, loadInventoryValueByLocationSummary, showLedgerMismatchOnly, inventory.length]);
 
   /** Keep `?location=` / `?locationId=` aligned with the inventory warehouse dropdown (shareable links). */
   const applyInventoryListLocationInUrl = useCallback((nextLocationId) => {
@@ -1058,7 +1097,6 @@ try {
   // Refs to store current filter values while typing (to prevent re-renders)
   const searchTermRef = useRef('');
   const columnFiltersRef = useRef({});
-  const inventoryLoadSeqRef = useRef(0);
   const ledgerFilterMetaRetryRef = useRef(false);
   /** Tracks prior `showLedgerMismatchOnly` so we only force-refresh inventory when the filter is turned on. */
   const prevShowLedgerMismatchOnlyRef = useRef(false);
@@ -1299,8 +1337,15 @@ try {
         const cachedPurchaseOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
-        // Keep inventory sourced from API only to avoid count flicker from stale cache.
-        // We still read/write cache for fallback/diagnostics, but we do not hydrate UI from it.
+        const initialLocationId =
+          selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+        const cachedInventory = readInventoryCacheForLocation(initialLocationId);
+        if (cachedInventory.length > 0) {
+          setInventory(normalizeInventoryRows(cachedInventory));
+          setInventoryLoadedFromAPI(true);
+        }
+
+        // Other manufacturing lists hydrate from cache for instant UI; inventory uses stale-while-revalidate above.
         if (cachedBOMs.length > 0) {
           setBoms(cachedBOMs);
         }
@@ -1390,13 +1435,13 @@ try {
         if (typeof window.DatabaseAPI.getInventory === 'function') {
           const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
           const loadFullInventory = () =>
-            window.DatabaseAPI.getInventory(locationIdToLoad, { includeLedger: initialTab === 'inventory' })
+            window.DatabaseAPI.getInventory(locationIdToLoad, { includeLedger: false })
               .then(invResponse => {
                 const invData = invResponse?.data?.inventory || [];
                 const processed = normalizeInventoryRows(invData.map(item => ({ ...item, id: item.id })));
-                setInventory(processed);
+                setInventory((prev) => (inventoryRowsEquivalentForUi(prev, processed) ? prev : processed));
                 setInventoryLoadedFromAPI(true);
-                safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+                writeInventoryCacheForLocation(locationIdToLoad, processed);
                 return { type: 'inventory', data: processed };
               })
               .catch(error => {
@@ -3923,18 +3968,39 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     };
   }, [isInventoryDetailOpen, detailInventoryCanonicalId, viewingInventoryItemDetail?.sku]);
 
-  // Reload inventory when location changes - BUT NOT if user is actively typing
+  // Reload inventory when warehouse filter changes — show cached rows instantly, refresh silently.
   useEffect(() => {
     if (isInventoryDetailOpen) return;
-    // CRITICAL: Skip reload if user is actively typing in an input field
-    if (isUserTypingRef.current) {
+    if (isUserTypingRef.current) return;
+    if (activeTab !== 'inventory') return;
+
+    const loc = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+    const locKey = loc || 'all';
+
+    if (!inventoryBootstrapHandledRef.current) {
+      inventoryBootstrapHandledRef.current = true;
+      prevInventoryLocationRef.current = locKey;
+      if (inventory.length === 0) {
+        const cached = readInventoryCacheForLocation(loc);
+        if (cached.length > 0) {
+          setInventory(normalizeInventoryRows(cached));
+          setInventoryLoadedFromAPI(true);
+        }
+      }
       return;
     }
-    
-    if (activeTab === 'inventory') {
-      reloadInventoryForLocation({ skipIfTyping: true });
+
+    if (prevInventoryLocationRef.current === locKey) return;
+    prevInventoryLocationRef.current = locKey;
+
+    const cached = readInventoryCacheForLocation(loc);
+    if (cached.length > 0) {
+      setInventory(normalizeInventoryRows(cached));
+      setInventoryLoadedFromAPI(true);
     }
-  }, [selectedLocationId, activeTab, reloadInventoryForLocation, isInventoryDetailOpen]);
+
+    reloadInventoryForLocation({ skipIfTyping: true, silent: true });
+  }, [selectedLocationId, activeTab, reloadInventoryForLocation, isInventoryDetailOpen, inventory.length]);
 
   // Reload stock locations when switching to inventory tab
   useEffect(() => {
@@ -3983,7 +4049,7 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
         setInventory((prev) => (inventoryRowsEquivalentForUi(prev, processed) ? prev : processed));
         setInventoryLoadedFromAPI(true);
-        safeSetItem('manufacturing_inventory', JSON.stringify(processed));
+        writeInventoryCacheForLocation(locationIdToLoad, processed);
       } catch (error) {
         console.error('Error in silent inventory auto-refresh:', error);
       }
@@ -4878,7 +4944,12 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
 
         {/* Mobile Card View - Shows on mobile devices */}
         <div className="table-mobile space-y-3">
-          {filteredInventory.length === 0 ? (
+          {!inventoryLoadedFromAPI && inventory.length === 0 ? (
+            <div className={`text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6`}>
+              <i className={`fas fa-spinner fa-spin text-2xl mb-4 ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading stock…</p>
+            </div>
+          ) : filteredInventory.length === 0 ? (
             <div className={`text-center py-12 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} rounded-xl border p-6`}>
               <i className={`fas fa-box-open text-4xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-300'}`}></i>
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No inventory items found</p>
