@@ -2601,7 +2601,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
                     </div>
                   )}
 
-                  <div className="mt-4 grid gap-4 sm:grid-cols-3 text-xs text-slate-300">
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-slate-300">
                     <div>
                       <div className="text-[11px] font-semibold uppercase text-slate-500">
                         Location
@@ -2634,6 +2634,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
                         {selectedJobCard.timeOfArrival
                           ? formatDate(selectedJobCard.timeOfArrival)
                           : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Total time on site
+                      </div>
+                      <div className="mt-1">
+                        {(() => {
+                          const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+                          const label = h?.jobSiteDurationLabelFromJobCard?.(selectedJobCard);
+                          return label || '—';
+                        })()}
                       </div>
                     </div>
                   </div>

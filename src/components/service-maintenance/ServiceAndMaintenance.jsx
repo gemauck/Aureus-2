@@ -3208,7 +3208,7 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                     ) : null}
                   </div>
 
-                  <div className={`mt-4 grid gap-4 sm:grid-cols-3 text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                  <div className={`mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                     <div>
                       <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                         Location
@@ -3233,6 +3233,18 @@ const JobCardFormsSection = ({ jobCard, voicesBySection = {} }) => {
                         {selectedJobCard.timeOfArrival
                           ? formatDate(selectedJobCard.timeOfArrival)
                           : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[11px] font-semibold uppercase ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                        Total time on site
+                      </div>
+                      <div className="mt-1">
+                        {(() => {
+                          const h = typeof window !== 'undefined' && window.jobCardActivityHelpers;
+                          const label = h?.jobSiteDurationLabelFromJobCard?.(selectedJobCard);
+                          return label || '—';
+                        })()}
                       </div>
                     </div>
                   </div>

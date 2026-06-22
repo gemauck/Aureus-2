@@ -276,6 +276,33 @@ export function formatTravelDurationMinutes(minutes) {
   return `${m} min`;
 }
 
+/**
+ * On-site minutes for a persisted job card (arrival on site → departure from site).
+ * Falls back to header departure/arrival timestamps, then stored totalTimeMinutes.
+ * @returns {number|null}
+ */
+export function jobSiteDurationMinutesFromJobCard(jobCard) {
+  if (!jobCard || typeof jobCard !== 'object') return null;
+  const onSite = jobSiteMinutesFromDatetimeLocals(
+    jobCard.timeOfArrival,
+    jobCard.departureFromSite
+  );
+  if (onSite != null) return onSite;
+  const fromHeader = travelMinutesFromDatetimeLocals(
+    jobCard.timeOfDeparture,
+    jobCard.timeOfArrival
+  );
+  if (fromHeader != null) return fromHeader;
+  const stored = Number(jobCard.totalTimeMinutes);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  return null;
+}
+
+/** Human-readable on-site duration for a job card detail view. */
+export function jobSiteDurationLabelFromJobCard(jobCard) {
+  return formatTravelDurationMinutes(jobSiteDurationMinutesFromJobCard(jobCard));
+}
+
 const jobCardActivityHelpers = {
   formatJobCardActivityAction,
   formatJobCardActivityDetail,
@@ -284,6 +311,8 @@ const jobCardActivityHelpers = {
   travelMinutesFromDatetimeLocals,
   jobSiteMinutesFromDatetimeLocals,
   formatTravelDurationMinutes,
+  jobSiteDurationMinutesFromJobCard,
+  jobSiteDurationLabelFromJobCard,
   JOB_CARD_ACTIVITY_STEP_LABELS,
   JOB_CARD_FIELD_LABELS,
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
