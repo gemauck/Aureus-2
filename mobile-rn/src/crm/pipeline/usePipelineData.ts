@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { crmApi } from '../api'
+import { ApiRequestError } from '../../services/apiClient'
 import type { CrmClient, CrmLead, CrmOpportunity } from '../types'
 import { filterClientsList, normalizeEntity } from '../utils'
 import {
@@ -76,7 +77,11 @@ export function usePipelineData(accessToken: string | null | undefined, active: 
         setClients(nextClients)
         setLeads(nextLeads)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load pipeline data')
+        if (e instanceof ApiRequestError && e.statusCode === 429) {
+          setError('Too many requests. Wait a moment, then pull down to refresh.')
+        } else {
+          setError(e instanceof Error ? e.message : 'Could not load pipeline data')
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)

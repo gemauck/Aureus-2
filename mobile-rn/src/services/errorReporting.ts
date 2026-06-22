@@ -119,6 +119,7 @@ function inferSeverity(category: ErrorCategory, context: string, statusCode?: nu
 function shouldSkipReport(context: string, statusCode?: number): boolean {
   if (context === 'mobileLogout') return true
   if (context.startsWith('api:') && statusCode === 401) return true
+  if (context.startsWith('api:') && statusCode === 429) return true
   if (context.startsWith('api:') && statusCode === 0) return true
   if (context.startsWith('api:') && context.includes('/auth/mobile/refresh') && statusCode === 0) return true
   return false

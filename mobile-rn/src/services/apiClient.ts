@@ -29,6 +29,44 @@ export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof ApiRequestError && error.statusCode === 401
 }
 
+export function isRateLimitError(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.statusCode === 429
+}
+
+type ParsedApiBody = {
+  payload: { data?: unknown; error?: { message?: string } }
+  message: string
+}
+
+/** Read body once; tolerate plain-text 429 from express-rate-limit (not JSON). */
+async function parseApiResponse(response: Response): Promise<ParsedApiBody> {
+  const text = await response.text()
+  const fallbackMessage =
+    response.status === 429
+      ? 'Too many requests. Please wait a moment and try again.'
+      : 'Request failed'
+
+  if (!text.trim()) {
+    return { payload: {}, message: fallbackMessage }
+  }
+
+  try {
+    const payload = JSON.parse(text) as ParsedApiBody['payload']
+    const message =
+      payload?.error?.message ||
+      (typeof (payload as { message?: string })?.message === 'string'
+        ? (payload as { message: string }).message
+        : '') ||
+      fallbackMessage
+    return { payload, message }
+  } catch {
+    return {
+      payload: {},
+      message: text.trim().slice(0, 300) || fallbackMessage
+    }
+  }
+}
+
 let authRefreshHandler: AuthRefreshHandler | null = null
 let refreshInFlight: Promise<string | null> | null = null
 
@@ -67,7 +105,7 @@ export async function fetchWithTokenRefresh(
     }
   }
 
-  if (!response.ok && response.status !== 401) {
+  if (!response.ok && response.status !== 401 && response.status !== 429) {
     let path = url
     try {
       path = new URL(url, API_BASE_URL).pathname
@@ -109,16 +147,8 @@ export async function request<T>(
     )
   }
 
-  let payload: { data?: T; error?: { message?: string } }
-  try {
-    payload = await response.json()
-  } catch {
-    const invalidMsg = `Server returned an invalid response (${response.status}) from ${url}`
-    if (!silent) reportApiError(path, method, response.status, invalidMsg)
-    throw new Error(invalidMsg)
-  }
+  const { payload, message } = await parseApiResponse(response)
   if (!response.ok) {
-    const message = payload?.error?.message || 'Request failed'
     if (
       response.status === 401 &&
       token &&
@@ -130,7 +160,9 @@ export async function request<T>(
         return request<T>(path, { ...options, token: newToken }, true)
       }
     }
-    if (!silent) reportApiError(path, method, response.status, message)
+    if (!silent && response.status !== 429) {
+      reportApiError(path, method, response.status, message)
+    }
     throw new ApiRequestError(message, response.status)
   }
   return payload?.data as T

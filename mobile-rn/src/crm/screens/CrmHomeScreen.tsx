@@ -34,6 +34,7 @@ import { useAuth } from '../../state/AuthContext'
 
 import type { RootStackParamList } from '../../navigation/types'
 import { crmApi } from '../api'
+import { ApiRequestError } from '../../services/apiClient'
 import { CrmEntityRow } from '../components/CrmEntityRow'
 import type { CrmClient, CrmFilterKey, CrmGroup, CrmLead, CrmTab } from '../types'
 import {
@@ -141,7 +142,11 @@ export function CrmHomeScreen({ navigation }: Props) {
       } catch (e) {
         const hadCache = await applyCached()
         if (!hadCache) {
-          setError(e instanceof Error ? e.message : 'Could not load CRM data')
+          if (e instanceof ApiRequestError && e.statusCode === 429) {
+            setError('Too many requests. Wait a moment, then pull down to refresh.')
+          } else {
+            setError(e instanceof Error ? e.message : 'Could not load CRM data')
+          }
         }
       } finally {
         setLoading(false)

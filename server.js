@@ -450,6 +450,11 @@ const apiLimiter = rateLimit({
   skip: (req) => {
     const url = req.url || req.originalUrl || ''
     return url.includes('/calendar-notes')
+  },
+  handler: (req, res, _next, options) => {
+    res.status(options.statusCode).json({
+      error: { message: options.message, code: 'RATE_LIMIT_EXCEEDED' }
+    })
   }
 })
 
