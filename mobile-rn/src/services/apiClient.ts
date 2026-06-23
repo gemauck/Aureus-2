@@ -1,5 +1,10 @@
 import { apiUrl, API_BASE_URL } from '../config'
 import { addBreadcrumb, reportApiError } from './errorReporting'
+import {
+  isRateLimited,
+  noteSuccessfulRequest,
+  registerRateLimitHit
+} from './rateLimitGuard'
 import { trackError } from './telemetry'
 import { getMobileClientInfo } from './clientPresence'
 
@@ -69,6 +74,11 @@ async function parseApiResponse(response: Response): Promise<ParsedApiBody> {
 
 let authRefreshHandler: AuthRefreshHandler | null = null
 let refreshInFlight: Promise<string | null> | null = null
+const inflightGets = new Map<string, Promise<unknown>>()
+
+function inflightGetKey(method: string, path: string, hasToken: boolean) {
+  return `${method}:${path}:${hasToken ? 'auth' : 'anon'}`
+}
 
 /** Register handler to refresh access token on 401 (set from AuthProvider). */
 export function registerAuthRefresh(handler: AuthRefreshHandler | null) {
@@ -77,6 +87,7 @@ export function registerAuthRefresh(handler: AuthRefreshHandler | null) {
 
 /** Single in-flight token refresh shared by 401 retries and session keepalive. */
 export async function refreshAccessToken(): Promise<string | null> {
+  if (isRateLimited()) return null
   if (!authRefreshHandler) return null
   if (!refreshInFlight) {
     refreshInFlight = authRefreshHandler().finally(() => {
@@ -96,7 +107,16 @@ export async function fetchWithTokenRefresh(
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (fetchOptions.method || 'GET').toUpperCase()
 
+  if (isRateLimited()) {
+    return new Response(
+      JSON.stringify({ error: { message: 'Too many requests. Please wait a moment and try again.' } }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
   let response = await fetch(url, { ...fetchOptions, headers })
+  if (response.status === 429) registerRateLimitHit(response)
+  else if (response.ok) noteSuccessfulRequest()
   if (response.status === 401 && token && authRefreshHandler) {
     const newToken = await refreshAccessToken()
     if (newToken) {
@@ -120,13 +140,18 @@ export async function fetchWithTokenRefresh(
   return response
 }
 
-export async function request<T>(
+async function executeRequest<T>(
   path: string,
-  options: RequestOptions = {},
-  retriedAfterRefresh = false
+  options: RequestOptions,
+  retriedAfterRefresh: boolean
 ): Promise<T> {
   const { method = 'GET', body, token, silent = false } = options
   const url = apiUrl(path)
+
+  if (isRateLimited()) {
+    throw new ApiRequestError('Too many requests. Please wait a moment and try again.', 429)
+  }
+
   let response: Response
   try {
     response = await fetch(url, {
@@ -138,8 +163,7 @@ export async function request<T>(
       body: body ? JSON.stringify(body) : undefined
     })
   } catch (error) {
-    const hint =
-      error instanceof Error ? error.message : 'Network error'
+    const hint = error instanceof Error ? error.message : 'Network error'
     addBreadcrumb('api', `Network failure ${method} ${path}`, { path, method })
     if (!silent) reportApiError(path, method, 0, hint)
     throw new Error(
@@ -149,15 +173,17 @@ export async function request<T>(
 
   const { payload, message } = await parseApiResponse(response)
   if (!response.ok) {
+    if (response.status === 429) registerRateLimitHit(response)
     if (
       response.status === 401 &&
       token &&
       !retriedAfterRefresh &&
-      authRefreshHandler
+      authRefreshHandler &&
+      !isRateLimited()
     ) {
       const newToken = await refreshAccessToken()
       if (newToken) {
-        return request<T>(path, { ...options, token: newToken }, true)
+        return executeRequest<T>(path, { ...options, token: newToken }, true)
       }
     }
     if (!silent && response.status !== 429) {
@@ -165,7 +191,29 @@ export async function request<T>(
     }
     throw new ApiRequestError(message, response.status)
   }
+
+  noteSuccessfulRequest()
   return payload?.data as T
+}
+
+export async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+  retriedAfterRefresh = false
+): Promise<T> {
+  const { method = 'GET', body, token } = options
+  const dedupeKey =
+    method === 'GET' && body == null ? inflightGetKey(method, path, Boolean(token)) : ''
+  if (dedupeKey) {
+    const existing = inflightGets.get(dedupeKey)
+    if (existing) return existing as Promise<T>
+    const promise = executeRequest<T>(path, options, retriedAfterRefresh).finally(() => {
+      inflightGets.delete(dedupeKey)
+    })
+    inflightGets.set(dedupeKey, promise)
+    return promise
+  }
+  return executeRequest<T>(path, options, retriedAfterRefresh)
 }
 
 export const apiClient = {
@@ -192,7 +240,8 @@ export const apiClient = {
       }
     }>('/api/auth/mobile/refresh', {
       method: 'POST',
-      body: { refreshToken }
+      body: { refreshToken },
+      silent: true
     })
   },
   async mobileEmbedToken(token: string) {

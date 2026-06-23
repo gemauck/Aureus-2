@@ -97,7 +97,8 @@ export function mergeDashboardTasks(userTasks: unknown[], projectTasks: unknown[
 export const erpApi = {
   getProjectTasks(token: string) {
     return request<{ tasks?: unknown[] } | unknown[]>('/api/tasks?lightweight=true', {
-      token
+      token,
+      silent: true
     }).then((data) => {
       const list = Array.isArray(data) ? data : data.tasks || []
       return list.map((raw) => normalizeProjectTask(raw as Record<string, unknown>))
@@ -106,7 +107,8 @@ export const erpApi = {
 
   getUserTasks(token: string) {
     return request<{ tasks?: unknown[] } | unknown[]>('/api/user-tasks?lightweight=true', {
-      token
+      token,
+      silent: true
     }).then((data) => {
       const list = Array.isArray(data) ? data : data.tasks || []
       return list.map((raw) => normalizeUserTask(raw as Record<string, unknown>))
@@ -116,7 +118,7 @@ export const erpApi = {
   getNotifications(token: string, limit = 8) {
     return request<{ notifications?: DashboardNotification[]; unreadCount?: number } | DashboardNotification[]>(
       notificationsQuery(limit),
-      { token }
+      { token, silent: true }
     ).then((data) => {
       if (Array.isArray(data)) return data
       return data.notifications || []
@@ -145,14 +147,15 @@ export const erpApi = {
       sortField: 'createdAt',
       sortDirection: 'desc'
     })
-    return request<{ jobCards?: DashboardJobCard[] }>(`/api/jobcards?${q}`, { token }).then(
+    return request<{ jobCards?: DashboardJobCard[] }>(`/api/jobcards?${q}`, { token, silent: true }).then(
       (d) => d.jobCards || []
     )
   },
 
   getProjectsSummary(token: string) {
     return request<{ projects?: Array<{ id: string; name: string; status?: string }> } | Array<{ id: string; name: string; status?: string }>>('/api/projects?limit=500', {
-      token
+      token,
+      silent: true
     }).then((data) => {
       const projects = Array.isArray(data) ? data : data.projects || []
       const active = projects.filter(
@@ -164,7 +167,8 @@ export const erpApi = {
 
   getClientsSummary(token: string) {
     return request<{ clients?: Array<{ id: string; type?: string | null }> }>('/api/clients', {
-      token
+      token,
+      silent: true
     }).then((d) => {
       const clients = (d.clients || []).filter((c) => isCrmClient(c) && !isCrmGroup(c))
       return { total: clients.length }

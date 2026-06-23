@@ -27,6 +27,12 @@ import {
   saveLocalDraft
 } from './stockTakeOfflineStore'
 import { syncOnePendingStockTakeSubmit } from './stockTakeSync'
+import {
+  ensureStockTakeSession,
+  lineIdMapFromLines,
+  patchStockTakeCounts,
+  type StockTakeSessionLine
+} from './stockTakeSessionApi'
 import { useThemedStyles } from '../../theme/useThemedStyles'
 import type { JcTheme } from '../../theme/palettes'
 import { useTheme } from '../../theme/ThemeContext'
@@ -47,6 +53,8 @@ export function StockTakeScreen() {
   const [counts, setCounts] = useState<Record<string, string>>({})
   const [lineSearch, setLineSearch] = useState('')
   const [sessionId, setSessionId] = useState('')
+  const [sessionRevision, setSessionRevision] = useState(0)
+  const [lineIdBySku, setLineIdBySku] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [highlightSku, setHighlightSku] = useState('')
@@ -92,48 +100,73 @@ export function StockTakeScreen() {
     return () => clearTimeout(timer)
   }, [locationId, counts, sessionId])
 
-  const applySessionLines = useCallback((lines: Array<{ sku?: string; countedQty?: number }>) => {
-    setCounts((prev) => {
-      const next = { ...prev }
-      let changed = false
-      for (const line of lines || []) {
-        const sku = String(line.sku || '').trim()
-        if (!sku || editingSkusRef.current.has(sku)) continue
-        const val = String(Number(line.countedQty ?? 0))
-        if (next[sku] !== val) {
-          next[sku] = val
-          changed = true
-        }
+  const applySessionSubmission = useCallback(
+    (submission: {
+      lines?: StockTakeSessionLine[]
+      sessionRevision?: number
+    }) => {
+      const lines = submission.lines || []
+      setLineIdBySku(lineIdMapFromLines(lines))
+      if (submission.sessionRevision != null) {
+        setSessionRevision(Number(submission.sessionRevision) || 0)
       }
-      return changed ? next : prev
-    })
-  }, [])
+      setCounts((prev) => {
+        const next = { ...prev }
+        let changed = false
+        for (const line of lines) {
+          const sku = String(line.sku || '').trim()
+          if (!sku || editingSkusRef.current.has(sku)) continue
+          const val = String(Number(line.countedQty ?? 0))
+          if (next[sku] !== val) {
+            next[sku] = val
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    },
+    []
+  )
 
   const loadSession = useCallback(
     async (id: string, { silent = false } = {}) => {
       if (!accessToken || !id) return null
       try {
         const res = (await jobcardsApi.stockTakeGet(accessToken, id)) as {
-          submission?: { status?: string; locationId?: string; lines?: Array<{ sku?: string; countedQty?: number }> }
-          data?: { submission?: { status?: string; locationId?: string; lines?: Array<{ sku?: string; countedQty?: number }> } }
+          submission?: {
+            status?: string
+            locationId?: string
+            sessionRevision?: number
+            lines?: StockTakeSessionLine[]
+          }
+          data?: {
+            submission?: {
+              status?: string
+              locationId?: string
+              sessionRevision?: number
+              lines?: StockTakeSessionLine[]
+            }
+          }
         }
         const submission = res?.data?.submission || res?.submission
         if (!submission) return null
         if (submission.status && submission.status !== 'in_progress' && submission.status !== 'draft') {
           if (!silent) {
             setSessionId('')
+            setSessionRevision(0)
+            setLineIdBySku({})
             Alert.alert('Session ended', 'This stock-take session is no longer active.')
           }
           return submission
         }
         if (submission.locationId) setLocationId(submission.locationId)
-        applySessionLines(submission.lines || [])
+        applySessionSubmission(submission)
         return submission
       } catch {
         return null
       }
     },
-    [accessToken, applySessionLines]
+    [accessToken, applySessionSubmission]
   )
 
   useEffect(() => {
@@ -226,28 +259,21 @@ export function StockTakeScreen() {
         Alert.alert('Saved offline', 'Counts saved on this device. They will sync when you reconnect.')
         return
       }
-      const lines = Object.entries(counts)
-        .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
-        .map(([sku, countedQty]) => ({
-          sku,
-          countedQty: parseFloat(countedQty) || 0
-        }))
-      const body = {
+      const { sessionId: activeSessionId, submission } = await ensureStockTakeSession(
+        accessToken,
         locationId,
-        description: `Stock take ${new Date().toLocaleDateString()}`,
-        lines,
-        status: 'draft'
-      }
-      if (sessionId) {
-        await jobcardsApi.stockTakePatch(accessToken, sessionId, body)
-      } else {
-        const res = (await jobcardsApi.stockTakeCreate(accessToken, body)) as {
-          id?: string
-          submission?: { id?: string }
-          data?: { submission?: { id?: string } }
-        }
-        const newId = res?.id || res?.submission?.id || res?.data?.submission?.id
-        if (newId) setSessionId(String(newId))
+        sessionId || undefined
+      )
+      setSessionId(activeSessionId)
+      const ids = lineIdMapFromLines(submission.lines)
+      setLineIdBySku(ids)
+      const patched = await patchStockTakeCounts(accessToken, activeSessionId, counts, {
+        lineIdBySku: ids,
+        sessionRevision: submission.sessionRevision ?? sessionRevision
+      })
+      if (patched?.sessionRevision != null) {
+        setSessionRevision(Number(patched.sessionRevision) || 0)
+        setLineIdBySku(lineIdMapFromLines(patched.lines))
       }
       Alert.alert('Saved', 'Stock-take draft saved.')
     } catch (e) {
@@ -260,7 +286,7 @@ export function StockTakeScreen() {
     } finally {
       setSaving(false)
     }
-  }, [accessToken, locationId, counts, sessionId, isOnline])
+  }, [accessToken, locationId, counts, sessionId, sessionRevision, isOnline])
 
   const submitForReview = useCallback(async () => {
     if (!locationId) {
@@ -291,31 +317,20 @@ export function StockTakeScreen() {
         setWizardFlow('landing')
         return
       }
-      await saveDraft()
-      let activeSessionId = sessionId
-      if (!activeSessionId) {
-        const lines = Object.entries(counts)
-          .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
-          .map(([sku, countedQty]) => ({
-            sku,
-            countedQty: parseFloat(countedQty) || 0
-          }))
-        const res = (await jobcardsApi.stockTakeCreate(accessToken, {
-          locationId,
-          description: `Stock take ${new Date().toLocaleDateString()}`,
-          lines,
-          status: 'draft'
-        })) as {
-          id?: string
-          submission?: { id?: string }
-          data?: { submission?: { id?: string } }
-        }
-        activeSessionId = String(res?.id || res?.submission?.id || res?.data?.submission?.id || '')
-        if (!activeSessionId) {
-          Alert.alert('Submit failed', 'Could not create stock-take session.')
-          return
-        }
-        setSessionId(activeSessionId)
+      const { sessionId: activeSessionId, submission } = await ensureStockTakeSession(
+        accessToken,
+        locationId,
+        sessionId || undefined
+      )
+      setSessionId(activeSessionId)
+      const ids = lineIdMapFromLines(submission.lines)
+      setLineIdBySku(ids)
+      const patched = await patchStockTakeCounts(accessToken, activeSessionId, counts, {
+        lineIdBySku: ids,
+        sessionRevision: submission.sessionRevision ?? sessionRevision
+      })
+      if (patched?.sessionRevision != null) {
+        setSessionRevision(Number(patched.sessionRevision) || 0)
       }
       await jobcardsApi.stockTakeSubmit(accessToken, activeSessionId)
       await clearLocalDraft()
@@ -365,8 +380,8 @@ export function StockTakeScreen() {
     counts,
     isOnline,
     locationId,
-    saveDraft,
     sessionId,
+    sessionRevision,
     setWizardFlow
   ])
 

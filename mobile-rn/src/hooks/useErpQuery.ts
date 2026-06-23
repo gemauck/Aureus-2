@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import { useAuth } from '../state/AuthContext'
-import { ApiRequestError } from '../services/apiClient'
+import { ApiRequestError, isRateLimitError } from '../services/apiClient'
 import { trackError } from '../services/telemetry'
 
 type UseErpQueryOptions = {
@@ -40,7 +40,7 @@ export function useErpQuery<T>(
         setData(next)
         setError('')
       } catch (err) {
-        if (!(err instanceof ApiRequestError)) {
+        if (!(err instanceof ApiRequestError) || !isRateLimitError(err)) {
           trackError(err, `useErpQuery:${key}`)
         }
         setError(err instanceof Error ? err.message : 'Request failed')

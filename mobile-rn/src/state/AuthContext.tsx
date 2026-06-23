@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, isUnauthorizedError, refreshAccessToken, registerAuthRefresh } from '../services/apiClient'
+import { isRateLimited } from '../services/rateLimitGuard'
 import { clearSession, loadSession, saveSession } from '../services/authSession'
 import { clearHomeScreenWidgets } from '../widgets/refreshHomeScreenWidgets'
 import { trackError } from '../services/telemetry'
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     registerAuthRefresh(async () => {
       const current = sessionRef.current
       if (!current?.refreshToken) return null
+      if (isRateLimited()) return current.accessToken || null
       try {
         const refreshed = await apiClient.mobileRefresh(current.refreshToken)
         const nextSession = buildSession(current, refreshed)
@@ -90,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session?.refreshToken) return
 
     const refreshIfNeeded = () => {
-      if (!sessionRef.current?.refreshToken) return
+      if (!sessionRef.current?.refreshToken || isRateLimited()) return
       void refreshAccessToken().catch((err) => trackError(err, 'authKeepalive'))
     }
 

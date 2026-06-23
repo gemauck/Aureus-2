@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 import { useAuth } from '../state/AuthContext'
 import { request } from '../services/apiClient'
+import { isRateLimited } from '../services/rateLimitGuard'
 import { getMobileClientInfo } from '../services/clientPresence'
 
 const HEARTBEAT_MS = 5 * 60 * 1000
@@ -13,13 +14,14 @@ export function useClientPresence() {
   const inFlightRef = useRef(false)
 
   const sendPresence = useCallback(async () => {
-    if (!accessToken || inFlightRef.current) return
+    if (!accessToken || inFlightRef.current || isRateLimited()) return
     inFlightRef.current = true
     try {
       await request('/api/users/heartbeat', {
         method: 'POST',
         token: accessToken,
-        body: getMobileClientInfo()
+        body: getMobileClientInfo(),
+        silent: true
       })
     } catch {
       /* non-fatal */

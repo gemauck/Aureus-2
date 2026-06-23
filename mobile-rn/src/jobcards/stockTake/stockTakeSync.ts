@@ -4,21 +4,11 @@ import {
   removePendingSubmit,
   type StockTakePendingSubmit
 } from './stockTakeOfflineStore'
-
-function buildBody(draft: StockTakePendingSubmit) {
-  const lines = Object.entries(draft.counts)
-    .filter(([, raw]) => raw !== undefined && raw !== null && String(raw).trim() !== '')
-    .map(([sku, countedQty]) => ({
-      sku,
-      countedQty: parseFloat(countedQty) || 0
-    }))
-  return {
-    locationId: draft.locationId,
-    description: `Stock take ${new Date().toLocaleDateString()}`,
-    lines,
-    status: 'draft' as const
-  }
-}
+import {
+  ensureStockTakeSession,
+  lineIdMapFromLines,
+  patchStockTakeCounts
+} from './stockTakeSessionApi'
 
 export async function syncOnePendingStockTakeSubmit(
   token: string,
@@ -26,21 +16,16 @@ export async function syncOnePendingStockTakeSubmit(
   { submitForReview = false } = {}
 ): Promise<{ ok: boolean; errorText: string | null }> {
   try {
-    const body = buildBody(draft)
-    let sessionId = draft.sessionId || ''
-    if (sessionId) {
-      await jobcardsApi.stockTakePatch(token, sessionId, body)
-    } else {
-      const res = (await jobcardsApi.stockTakeCreate(token, body)) as {
-        id?: string
-        submission?: { id?: string }
-        data?: { submission?: { id?: string } }
-      }
-      sessionId = String(res?.id || res?.submission?.id || res?.data?.submission?.id || '')
-      if (!sessionId) {
-        return { ok: false, errorText: 'Could not create stock-take session' }
-      }
-    }
+    const { sessionId, submission } = await ensureStockTakeSession(
+      token,
+      draft.locationId,
+      draft.sessionId
+    )
+    const lineIdBySku = lineIdMapFromLines(submission.lines)
+    await patchStockTakeCounts(token, sessionId, draft.counts, {
+      lineIdBySku,
+      sessionRevision: submission.sessionRevision
+    })
     if (submitForReview) {
       await jobcardsApi.stockTakeSubmit(token, sessionId)
     }

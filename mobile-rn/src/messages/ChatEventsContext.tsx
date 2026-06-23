@@ -11,6 +11,7 @@ import { AppState, type AppStateStatus } from 'react-native'
 import { useNetwork } from '../hooks/useNetwork'
 import { cacheChatUnread, readCachedChatUnread } from '../offline/erpReadCaches'
 import { erpApi } from '../services/erpApi'
+import { isRateLimited } from '../services/rateLimitGuard'
 import { getChatPushEnabled } from '../services/chatPushPrefs'
 import { playNotificationSound, startCallRing } from '../services/notificationSounds'
 import {
@@ -66,6 +67,7 @@ export function ChatEventsProvider({ children }: { children: React.ReactNode }) 
       if (cached != null) setChatUnread(cached)
       return
     }
+    if (isRateLimited()) return
     try {
       const count = await erpApi.getChatUnreadCount(token)
       setChatUnread(count)

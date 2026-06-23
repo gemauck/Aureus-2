@@ -335,8 +335,7 @@ export function DashboardScreen({ navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       void load(true)
-      void refreshNotificationUnread()
-    }, [load, refreshNotificationUnread])
+    }, [load])
   )
 
   const handleNotificationPress = useCallback(

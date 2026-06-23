@@ -13,10 +13,11 @@ import {
   readCachedNotificationUnread
 } from '../offline/erpReadCaches'
 import { erpApi } from '../services/erpApi'
+import { isRateLimited } from '../services/rateLimitGuard'
 import { playNotificationSound } from '../services/notificationSounds'
 import { useAuth } from '../state/AuthContext'
 
-const POLL_MS = 30_000
+const POLL_MS = 60_000
 
 type NotificationUnreadContextValue = {
   unreadCount: number
@@ -51,6 +52,7 @@ export function NotificationUnreadProvider({ children }: { children: React.React
       }
       return
     }
+    if (isRateLimited()) return
     try {
       const count = await erpApi.getNotificationUnreadCount(accessToken)
       if (primedRef.current && count > prevUnreadRef.current) {
@@ -77,7 +79,10 @@ export function NotificationUnreadProvider({ children }: { children: React.React
     void refresh()
     if (!accessToken) return
 
-    const id = setInterval(() => void refresh(), POLL_MS)
+    const id = setInterval(() => {
+      if (AppState.currentState !== 'active') return
+      void refresh()
+    }, POLL_MS)
     const onAppState = (state: AppStateStatus) => {
       if (state === 'active') void refresh()
     }
