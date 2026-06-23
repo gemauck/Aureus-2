@@ -243,6 +243,13 @@ const Teams = () => {
         return normalizedPermissions.some((perm) => adminPermissionKeys.includes(perm));
     }, [currentUser]);
 
+    /** Must match api/_lib/dispenseExceptionPrepAccess.js */
+    const DISPENSE_EXCEPTION_PREP_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
+    const canAccessDispenseExceptionPrep = useMemo(() => {
+        const email = (currentUser?.email || '').trim().toLowerCase();
+        return email === DISPENSE_EXCEPTION_PREP_ALLOWED_EMAIL.toLowerCase();
+    }, [currentUser]);
+
     const isTeamAccessible = useCallback(
         (teamId) => {
             if (teamId === 'management') {
@@ -296,7 +303,7 @@ const Teams = () => {
         const tab = urlParams.get('tab') || 'overview';
         // Map legacy tabs to discussions
         if (['documents', 'workflows', 'checklists', 'notices'].includes(tab)) return 'discussions';
-        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'dfrr-check', 'sars-monitoring', 'members'].includes(tab)) return tab;
+        if (['overview', 'discussions', 'process-flows', 'meeting-notes', 'poa-review', 'dfrr-check', 'dispense-exception-prep', 'sars-monitoring', 'members'].includes(tab)) return tab;
         return 'overview';
     };
     
@@ -312,6 +319,12 @@ const Teams = () => {
     useEffect(() => {
         activeTabRef.current = activeTab;
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'dispense-exception-prep' && !canAccessDispenseExceptionPrep) {
+            setActiveTabState('overview');
+        }
+    }, [activeTab, canAccessDispenseExceptionPrep]);
     
     // Wrapper for setActiveTab that BLOCKS navigation until saves complete
     const setActiveTab = useCallback(async (newTab) => {
@@ -986,6 +999,20 @@ const Teams = () => {
                                         <span className="hidden sm:inline">DFRR Check</span>
                                         <span className="sm:hidden">DFRR</span>
                                     </button>
+                                    {canAccessDispenseExceptionPrep && (
+                                        <button
+                                            onClick={() => setActiveTab('dispense-exception-prep')}
+                                            className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
+                                                activeTab === 'dispense-exception-prep'
+                                                    ? isDark ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-900'
+                                                    : isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <i className="fas fa-filter mr-1.5"></i>
+                                            <span className="hidden sm:inline">Exception Prep</span>
+                                            <span className="sm:hidden">Prep</span>
+                                        </button>
+                                    )}
                                 </>
                             )}
                             {(selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (
@@ -1225,6 +1252,33 @@ const Teams = () => {
                                         <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
                                         <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
                                             Loading DFRR Check…
+                                        </p>
+                                        <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                            Please wait while the component loads.
+                                        </p>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div>
+                                    <ComponentToRender />
+                                </div>
+                            );
+                        })()}
+
+                        {activeTab === 'dispense-exception-prep' &&
+                            selectedTeam?.id === 'data-analytics' &&
+                            canAccessDispenseExceptionPrep &&
+                            (() => {
+                            const ComponentToRender = window.DispenseExceptionPrep;
+
+                            if (!ComponentToRender) {
+                                return (
+                                    <div className="text-center py-12">
+                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                                            Loading Exception Prep…
                                         </p>
                                         <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                             Please wait while the component loads.

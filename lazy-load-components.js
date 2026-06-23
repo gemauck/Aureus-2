@@ -67,6 +67,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/utils/poaReviewApi.js',
         './src/components/teams/POAReview.jsx',
         './src/components/teams/DFRRCheck.jsx',
+        './src/components/teams/DispenseExceptionPrep.jsx',
         './src/components/manufacturing/JobCardVoiceNoteTextarea.jsx',
         './src/utils/jobCardStockUsed.js',
         './src/components/teams/JobCardModal.jsx',
@@ -326,7 +327,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
-                                     src.includes('ManagementMeetingNotes') || src.includes('POAReview') || src.includes('DFRRCheck') ||
+                                     src.includes('ManagementMeetingNotes') || src.includes('POAReview') || src.includes('DFRRCheck') || src.includes('DispenseExceptionPrep') ||
                                      src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      src.includes('AuditTrail') || src.includes('Reports') ||
                                      src.includes('JobCardModal') || src.includes('JobCards.jsx') || src.includes('JobCards.js') ||
@@ -341,7 +342,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                                      scriptSrc.includes('/projects/Projects') || 
                                      scriptSrc.includes('/projects/ProjectDetail') ||
                                      scriptSrc.includes('RichTextEditor') || // CRITICAL: Cache busting for cursor fix updates
-                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') || scriptSrc.includes('DFRRCheck') ||
+                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('POAReview') || scriptSrc.includes('DFRRCheck') || scriptSrc.includes('DispenseExceptionPrep') ||
                                      scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      scriptSrc.includes('AuditTrail') || scriptSrc.includes('Reports') ||
                                      scriptSrc.includes('JobCardModal') || scriptSrc.includes('JobCards.jsx') || scriptSrc.includes('JobCards.js') ||
@@ -383,6 +384,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                     scriptSrc.includes('ManagementMeetingNotes') ||
                     scriptSrc.includes('POAReview') ||
                     scriptSrc.includes('DFRRCheck') ||
+                    scriptSrc.includes('DispenseExceptionPrep') ||
                     scriptSrc.includes('WeeklyFMSReviewTracker') ||
                     scriptSrc.includes('Teams.jsx') ||
                     scriptSrc.includes('Teams.js') ||

@@ -51,6 +51,8 @@
     "poa:merge-spreadsheet-rules": "node scripts/poa-review/merge-spreadsheet-eligible-activities.js",
     "audit:fuel-refund-report": "venv-poareview/bin/python3 scripts/fuel-refund-report-audit/run_audit.py",
     "audit:fuel-refund-report:contract": "venv-poareview/bin/python3 -m pytest tests/unit/fuel-refund-report-audit/ -q",
+    "prepare:dispense-exception": "venv-poareview/bin/python3 scripts/dispense-exception-audit/run_prepare.py",
+    "prepare:dispense-exception:contract": "venv-poareview/bin/python3 -m pytest tests/unit/dispense-exception-audit/ -q",
     "convert:dispense-to-transactions": "venv-poareview/bin/python3 scripts/dispense-to-transactions/run_convert.py",
     "convert:dispense-to-transactions:contract": "venv-poareview/bin/python3 -m pytest tests/unit/dispense-to-transactions/ -q",
     "predeploy": "npm run test:safety && npm run test:jobcards:number",

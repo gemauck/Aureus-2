@@ -2997,6 +2997,13 @@ app.post('/api/fuel-refund-audit/process', (req, res) =>
     routeLabel: 'Fuel Refund Report Audit',
   })
 )
+const DISPENSE_EXCEPTION_PREP_TIMEOUT_MS = 600000 // 10m
+app.post('/api/dispense-exception-prep/process', (req, res) =>
+  runLoadedHandler(req, res, path.join(apiDir, 'dispense-exception-prep', 'process.js'), {
+    timeoutMs: DISPENSE_EXCEPTION_PREP_TIMEOUT_MS,
+    routeLabel: 'Dispense Exception Prep',
+  })
+)
 const SPARROW_TO_GILBARCO_TIMEOUT_MS = 300000 // 5m
 app.post('/api/tools/sparrow-to-gilbarco', (req, res) =>
   runLoadedHandler(req, res, path.join(apiDir, 'tools', 'sparrow-to-gilbarco.js'), {
@@ -3095,11 +3102,12 @@ app.use('/api', async (req, res) => {
     // POA Review processing can take up to 5 minutes, so give it more time
     const isPOAReview = req.url.includes('/poa-review/process') || req.url.includes('/poa-review/process-batch') || req.url.includes('/poa-review/process-excel');
     const isFuelRefundAudit = req.url.includes('/fuel-refund-audit/process');
+    const isDispenseExceptionPrep = req.url.includes('/dispense-exception-prep/process');
     const isSparrowToGilbarco = req.url.includes('/tools/sparrow-to-gilbarco');
     const isReceiptExtract = req.url.includes('/receipt-extract');
     const isDocumentSorterProcess = req.url.includes('/tools/document-sorter/process');
     const isPoaExcel = req.url.includes('/poa-review/process-excel')
-    const timeoutDuration = isPoaExcel ? POA_REVIEW_TIMEOUT_MS : isPOAReview ? POA_BATCH_TIMEOUT_MS : isFuelRefundAudit ? FUEL_REFUND_AUDIT_TIMEOUT_MS : isSparrowToGilbarco ? SPARROW_TO_GILBARCO_TIMEOUT_MS : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA Excel: 15m; POA batch: 6m; fuel refund audit: 10m; sparrow→gilbarco: 5m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
+    const timeoutDuration = isPoaExcel ? POA_REVIEW_TIMEOUT_MS : isPOAReview ? POA_BATCH_TIMEOUT_MS : isFuelRefundAudit ? FUEL_REFUND_AUDIT_TIMEOUT_MS : isDispenseExceptionPrep ? DISPENSE_EXCEPTION_PREP_TIMEOUT_MS : isSparrowToGilbarco ? SPARROW_TO_GILBARCO_TIMEOUT_MS : isReceiptExtract ? 120000 : isDocumentSorterProcess ? 3600000 : 30000; // POA Excel: 15m; POA batch: 6m; fuel refund audit: 10m; dispense exception prep: 10m; sparrow→gilbarco: 5m; receipt vision: 2m; diesel doc sorter: 60m; else 30s
     
     timeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -3351,7 +3359,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes', 'receipt-capture']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'dispense-exception-prep-inputs', 'dispense-exception-prep-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes', 'receipt-capture']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }

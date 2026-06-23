@@ -215,6 +215,7 @@
         'components/tools/SafetyCultureInspections.jsx',
         'components/tools/DocumentSorter.jsx',
         'components/teams/DFRRCheck.jsx',
+        'components/teams/DispenseExceptionPrep.jsx',
         'components/tools/TravelBookingRequests.jsx',
         'components/tools/Tools.jsx',
         
