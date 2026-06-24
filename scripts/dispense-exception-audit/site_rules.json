@@ -1,0 +1,27 @@
+{
+  "default_profile": "belfast",
+  "profiles": {
+    "belfast": {
+      "label": "Exxaro Belfast (Andrew)",
+      "escalate_fill_outside": true,
+      "escalate_odo_le_zero": true,
+      "escalate_odo_gt_50": true,
+      "escalate_split_fill_chain": true,
+      "escalate_avr_sync": true,
+      "respect_abco_ok": true,
+      "economy_escalation": false,
+      "economy_variance_threshold": 0.6
+    },
+    "strict": {
+      "label": "Strict — all exception-flagged rows",
+      "escalate_fill_outside": true,
+      "escalate_odo_le_zero": true,
+      "escalate_odo_gt_50": true,
+      "escalate_split_fill_chain": false,
+      "escalate_avr_sync": true,
+      "respect_abco_ok": true,
+      "economy_escalation": false,
+      "economy_variance_threshold": 0.6
+    }
+  }
+}

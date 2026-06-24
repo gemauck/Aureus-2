@@ -84,8 +84,10 @@ async function handler(req, res) {
         let workbookPath = null;
         let assetLookupPath = null;
         let avrSyncLookupPath = null;
+        let priorPreparedPath = null;
         let economyThreshold = null;
         let siteName = '';
+        let ruleProfile = '';
         let workbookName = '';
         let safeWorkbookName = '';
         const pendingWrites = [];
@@ -99,7 +101,9 @@ async function handler(req, res) {
                           ? 'assetLookup'
                           : name === 'avrSyncLookup'
                             ? 'avrSyncLookup'
-                            : null;
+                            : name === 'priorPrepared'
+                              ? 'priorPrepared'
+                              : null;
                 if (!field) {
                     file.resume();
                     return;
@@ -109,7 +113,9 @@ async function handler(req, res) {
                         ? 'exception'
                         : field === 'assetLookup'
                           ? 'asset_lookup'
-                          : 'avr_sync';
+                          : field === 'avrSyncLookup'
+                            ? 'avr_sync'
+                            : 'prior_prepared';
                 pendingWrites.push(
                     saveUploadedFile(file, info, inputDir, timestamp, label)
                         .then((savedPath) => {
@@ -123,8 +129,10 @@ async function handler(req, res) {
                                     .slice(0, 60);
                             } else if (field === 'assetLookup') {
                                 assetLookupPath = savedPath;
-                            } else {
+                            } else if (field === 'avrSyncLookup') {
                                 avrSyncLookupPath = savedPath;
+                            } else {
+                                priorPreparedPath = savedPath;
                             }
                         })
                         .catch(reject)
@@ -138,6 +146,9 @@ async function handler(req, res) {
                 }
                 if (name === 'siteName' && value) {
                     siteName = String(value).slice(0, 120);
+                }
+                if (name === 'ruleProfile' && value) {
+                    ruleProfile = String(value).slice(0, 60);
                 }
             });
 
@@ -177,11 +188,17 @@ async function handler(req, res) {
         if (avrSyncLookupPath) {
             args.push('--avr-sync-lookup', avrSyncLookupPath);
         }
+        if (priorPreparedPath) {
+            args.push('--prior-prepared', priorPreparedPath);
+        }
         if (economyThreshold !== null) {
             args.push('--economy-threshold', String(economyThreshold));
         }
         if (siteName) {
             args.push('--site-name', siteName);
+        }
+        if (ruleProfile) {
+            args.push('--rule-profile', ruleProfile);
         }
 
         const quoted = args.map((arg) => `"${String(arg).replace(/"/g, '\\"')}"`).join(' ');
@@ -215,7 +232,12 @@ async function handler(req, res) {
             }
         }
 
-        for (const cleanupPath of [workbookPath, assetLookupPath, avrSyncLookupPath]) {
+        for (const cleanupPath of [
+            workbookPath,
+            assetLookupPath,
+            avrSyncLookupPath,
+            priorPreparedPath,
+        ]) {
             try {
                 if (cleanupPath && fs.existsSync(cleanupPath)) fs.unlinkSync(cleanupPath);
             } catch (cleanupError) {
@@ -233,6 +255,7 @@ async function handler(req, res) {
             summary,
             hasAssetLookup: !!assetLookupPath,
             hasAvrSyncLookup: !!avrSyncLookupPath,
+            hasPriorPrepared: !!priorPreparedPath,
             prepExitCode: exitCode,
             stdout: stdout.slice(-2000),
         });

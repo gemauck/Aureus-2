@@ -1,0 +1,31 @@
+{
+  "description": "Golden expectations for Exxaro Belfast Mine May 2026 (Andrew reference)",
+  "review_queue_count": 18,
+  "review_transaction_ids": [
+    "59-20260526-5-1-721-666493-CONSEC",
+    "59-20260526-5-1-722-666496-CONSEC",
+    "59-20260508-5-1-455-663188",
+    "59-20260509-9-1-165-663056",
+    "59-20260508-9-1-155-662954",
+    "59-20260521-7-1-35-665232",
+    "59-20260512-7-1-544-663658",
+    "59-20260513-7-1-612-663866",
+    "59-20260511-7-1-536-663639-CONSEC",
+    "59-20260511-7-1-537-663640-CONSEC",
+    "59-20260508-7-1-424-663527-CONSEC",
+    "59-20260508-7-1-425-663528-CONSEC",
+    "59-20260514-6-1-14-664159",
+    "59-20260508-4-1-74-662941-CONSEC",
+    "59-20260508-4-1-75-662942-CONSEC",
+    "59-20260508-4-1-76-662943-CONSEC",
+    "59-20260502-7-1-201-662104",
+    "59-20260503-4-1-1-662454"
+  ],
+  "possible_cause_totals": {
+    "Fill outside of one hour from start": { "transactions": 5, "litres": 1487.85 },
+    "Odo difference <= 0, Consecutive dispenses within 60 minutes": { "transactions": 4, "litres": 972.35 },
+    "Odo difference <= 0": { "transactions": 6, "litres": 890.15 },
+    "Odo difference > 50 hrs": { "transactions": 3, "litres": 860.5 }
+  },
+  "total_review_litres": 4210.85
+}

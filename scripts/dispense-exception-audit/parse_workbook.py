@@ -203,7 +203,13 @@ def parse_details_sheet(df: pd.DataFrame) -> list[dict[str, Any]]:
         values = [None if pd.isna(v) else v for v in row.tolist()]
 
         if is_column_header_row(values):
-            col_map = map_header_row(values)
+            new_map = map_header_row(values)
+            if col_map:
+                # Repeated asset sub-headers often omit exception columns (None cells).
+                for idx, field in col_map.items():
+                    if idx not in new_map:
+                        new_map[idx] = field
+            col_map = new_map
             continue
 
         if is_asset_header_row(values):

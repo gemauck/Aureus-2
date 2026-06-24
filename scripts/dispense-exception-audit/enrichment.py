@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 
 from exception_rules import ComputedTransaction, compute_all
+from site_rules import SiteRuleProfile, get_site_profile
 
 DEFAULT_ECONOMY_VARIANCE_THRESHOLD = 0.6
 MINING_NON_ELIGIBLE_MARKERS = ("non mining", "non-eligible")
@@ -34,7 +36,7 @@ def _economy_type(meter_type: str | None) -> str | None:
 def _compute_economy(row: dict[str, Any]) -> float | None:
     litres = row.get("litres")
     usage = row.get("total_usage_num")
-    if litres is None or usage is None or usage == 0:
+    if litres is None or usage is None or usage <= 0:
         return None
     meter = str(row.get("meter_type") or "").lower()
     if "km" in meter:
@@ -141,75 +143,192 @@ def apply_exception_split(
         comp = computed.get(txn_id)
         if not comp:
             continue
-        row["exception_60"] = comp.flags.reason_60()
-        row["exception_120"] = comp.flags.reason_120()
+        if not row.get("exception_60"):
+            row["exception_60"] = comp.flags.reason_60()
+        if not row.get("exception_120"):
+            row["exception_120"] = comp.flags.reason_120()
         row["_computed"] = comp
+
+
+def _normalize_exception_text(text: str | None) -> str:
+    if not text:
+        return ""
+    normalized = str(text).strip().lower()
+    return normalized.replace("fill outside of 1 hour", "fill outside of one hour")
+
+
+def _exception_60_parts(text: str | None) -> set[str]:
+    normalized = _normalize_exception_text(text)
+    if not normalized:
+        return set()
+    return {part.strip() for part in normalized.split(",") if part.strip()}
+
+
+def _is_exact_odo_le_zero(parts: set[str]) -> bool:
+    return parts == {"odo difference <= 0"}
+
+
+def _has_odo_gt_50(parts: set[str]) -> bool:
+    return any("odo difference > 50" in part for part in parts)
+
+
+def _has_fill_outside(parts: set[str]) -> bool:
+    return any("fill outside" in part for part in parts)
+
+
+def _is_routine_split_exception(parts: set[str]) -> bool:
+    return (
+        "odo difference <= 0" in parts
+        and any("consecutive dispenses within 60" in part for part in parts)
+        and not _has_fill_outside(parts)
+    )
+
+
+def _review_chain_stays_active(parts: set[str]) -> bool:
+    return (
+        _is_exact_odo_le_zero(parts)
+        or _is_routine_split_exception(parts)
+    )
+
+
+def _effective_exception_60_parts(
+    row: dict[str, Any], comp: ComputedTransaction | None
+) -> set[str]:
+    parts = _exception_60_parts(row.get("exception_60"))
+    if parts:
+        return parts
+    if comp:
+        return _exception_60_parts(comp.flags.reason_60())
+    return set()
 
 
 def apply_economy_fields(row: dict[str, Any]) -> None:
     row["economy_type"] = _economy_type(row.get("meter_type"))
-    economy = _compute_economy(row)
-    row["economy"] = economy
+
+    has_source_economy = row.get("economy") is not None and row.get("economy") != ""
+    has_source_variance = row.get("pct_variance") is not None and row.get("pct_variance") != ""
+
+    if not has_source_economy:
+        row["economy"] = _compute_economy(row)
+
     avg = _parse_avg_economy(row.get("avg_economy_180d"))
     if avg is not None:
         row["avg_economy_180d"] = avg
-    row["pct_variance"] = _pct_variance(economy, avg)
+
+    if not has_source_variance:
+        row["pct_variance"] = _pct_variance(row.get("economy"), avg)
+
+
+def review_reason(
+    row: dict[str, Any],
+    comp: ComputedTransaction | None,
+    *,
+    prev_row: dict[str, Any] | None = None,
+    review_chain_active: bool = False,
+) -> str | None:
+    if row.get("_avr_sync"):
+        return "AVR sync match"
+    parts = _effective_exception_60_parts(row, comp)
+    if not parts:
+        return None
+    if _has_fill_outside(parts):
+        return "Fill outside one hour"
+    if _is_exact_odo_le_zero(parts):
+        return "Odo difference <= 0"
+    if _has_odo_gt_50(parts):
+        return "Odo difference > 50 hrs"
+    if _is_routine_split_exception(parts):
+        prev_parts = _exception_60_parts(
+            prev_row.get("exception_60") if prev_row else None
+        )
+        if _is_exact_odo_le_zero(prev_parts):
+            return "Split fill after odo <= 0"
+        if review_chain_active:
+            return "Split fill chain"
+    return "Exception flagged for review"
 
 
 def suggested_abco_comment(row: dict[str, Any], comp: ComputedTransaction | None) -> str | None:
     if row.get("abco_comment"):
-        return row["abco_comment"]
+        return None
     if row.get("_avr_sync"):
         return "AVR Sync"
     if comp and comp.flags.initial_dispense:
         return "Initial Dispense"
+    parts = _effective_exception_60_parts(row, comp)
+    if _has_fill_outside(parts):
+        return "Check 120 min"
+    if _has_odo_gt_50(parts):
+        variance = row.get("pct_variance")
+        if variance is not None and float(variance) < -0.6:
+            return "Economy too low"
     return None
 
 
 def should_escalate(
     row: dict[str, Any],
     comp: ComputedTransaction | None,
+    *,
+    prev_row: dict[str, Any] | None = None,
+    review_chain_active: bool = False,
     economy_threshold: float = DEFAULT_ECONOMY_VARIANCE_THRESHOLD,
+    profile: SiteRuleProfile | None = None,
 ) -> bool:
-    if not comp:
-        return False
-    flags = comp.flags
-    if flags.initial_dispense:
-        return True
-    if flags.meter_reset or flags.odo_jump_50:
-        return True
-    if flags.fill_outside_hour:
-        return True
-    if flags.over_tank_cumulative:
-        return True
-    if row.get("_avr_sync"):
-        return True
-    if flags.reason_60() and not flags.is_routine_split_fill():
+    rules = profile or get_site_profile()
+
+    if rules.escalate_avr_sync and row.get("_avr_sync"):
         return True
 
-    variance = row.get("pct_variance")
-    usage = row.get("total_usage_num")
-    if (
-        variance is not None
-        and usage is not None
-        and usage > 0
-        and abs(variance) > economy_threshold
-        and str(row.get("refund_eligibility") or "").lower() == "eligible"
-    ):
+    if rules.respect_abco_ok:
+        comment = str(row.get("abco_comment") or "").strip().lower()
+        if comment in {"just ok", "ok"}:
+            return False
+
+    parts = _effective_exception_60_parts(row, comp)
+    if not parts:
+        if rules.economy_escalation:
+            variance = row.get("pct_variance")
+            usage = row.get("total_usage_num")
+            threshold = rules.economy_variance_threshold or economy_threshold
+            if (
+                variance is not None
+                and usage is not None
+                and usage > 0
+                and abs(float(variance)) > threshold
+                and str(row.get("refund_eligibility") or "").lower() == "eligible"
+            ):
+                return True
+        return False
+
+    if rules.escalate_fill_outside and _has_fill_outside(parts):
         return True
+    if rules.escalate_odo_le_zero and _is_exact_odo_le_zero(parts):
+        return True
+    if rules.escalate_odo_gt_50 and _has_odo_gt_50(parts):
+        return True
+    if rules.escalate_split_fill_chain and _is_routine_split_exception(parts):
+        prev_parts = _exception_60_parts(
+            prev_row.get("exception_60") if prev_row else None
+        )
+        if _is_exact_odo_le_zero(prev_parts):
+            return True
+        if review_chain_active:
+            return True
     return False
 
 
 def suggested_possible_cause(row: dict[str, Any], comp: ComputedTransaction | None) -> str | None:
     if row.get("_avr_sync") or (row.get("abco_comment") or "").lower() == "avr sync":
         return "AVR"
-    if comp and comp.flags.fill_outside_hour:
+    parts = _effective_exception_60_parts(row, comp)
+    if _has_fill_outside(parts):
         return "Dispensing Point Error?"
-    if comp and (
-        comp.flags.odo_non_positive
-        or comp.flags.odo_jump_50
-        or comp.flags.meter_reset
-        or comp.flags.consec_60
+    if parts and (
+        _is_exact_odo_le_zero(parts)
+        or _is_routine_split_exception(parts)
+        or _has_odo_gt_50(parts)
+        or any("consecutive dispenses within 60" in part for part in parts)
+        or (comp and (comp.flags.odo_non_positive or comp.flags.consec_60))
     ):
         return "AVR?"
     return None
@@ -220,12 +339,14 @@ def enrich_transactions(
     asset_lookup: dict[str, dict[str, Any]],
     avr_rows: list[dict[str, Any]],
     economy_threshold: float = DEFAULT_ECONOMY_VARIANCE_THRESHOLD,
+    profile: SiteRuleProfile | None = None,
 ) -> dict[str, Any]:
+    rules = profile or get_site_profile()
     mining_rows = [t for t in transactions if is_mining_eligible(t)]
+    excluded_non_mining = [t for t in transactions if not is_mining_eligible(t)]
     computed = compute_all(mining_rows)
     avr_index = build_avr_match_index(avr_rows)
 
-    review_queue: list[dict[str, Any]] = []
     flagged_count = 0
     avr_sync_count = 0
 
@@ -239,24 +360,59 @@ def enrich_transactions(
             row["_avr_sync"] = True
             avr_sync_count += 1
 
-        comment = suggested_abco_comment(row, comp)
-        if comment:
-            row["abco_comment"] = comment
+        suggestion = suggested_abco_comment(row, comp)
+        if suggestion:
+            row["suggested_abco_comment"] = suggestion
+            if not row.get("abco_comment"):
+                row["abco_comment"] = suggestion
 
-        if comp and (comp.flags.reason_60() or comp.flags.reason_120()):
+        if row.get("exception_60") or row.get("exception_120"):
             flagged_count += 1
 
-        if should_escalate(row, comp, economy_threshold):
-            row["_review"] = True
-            review_queue.append(dict(row))
+    by_asset: dict[str, list[dict[str, Any]]] = {}
+    for row in mining_rows:
+        asset = str(row.get("asset_number") or "UNKNOWN")
+        by_asset.setdefault(asset, []).append(row)
+
+    review_queue: list[dict[str, Any]] = []
+    for asset_rows in by_asset.values():
+        asset_rows.sort(key=lambda r: r.get("date_time") or datetime.min)
+        review_chain_active = False
+        for index, row in enumerate(asset_rows):
+            prev_row = asset_rows[index - 1] if index > 0 else None
+            comp = row.get("_computed")
+            if should_escalate(
+                row,
+                comp,
+                prev_row=prev_row,
+                review_chain_active=review_chain_active,
+                economy_threshold=economy_threshold,
+                profile=rules,
+            ):
+                row["_review"] = True
+                row["review_reason"] = review_reason(
+                    row,
+                    comp,
+                    prev_row=prev_row,
+                    review_chain_active=review_chain_active,
+                )
+                review_queue.append(dict(row))
+                review_chain_active = _review_chain_stays_active(
+                    _effective_exception_60_parts(row, comp)
+                )
+            else:
+                review_chain_active = False
 
     return {
         "transactions": mining_rows,
+        "excluded_non_mining_rows": excluded_non_mining,
         "computed": computed,
         "review_queue": review_queue,
         "flagged_count": flagged_count,
         "avr_sync_count": avr_sync_count,
-        "excluded_non_mining": len(transactions) - len(mining_rows),
+        "excluded_non_mining": len(excluded_non_mining),
+        "rule_profile": rules.key,
+        "rule_profile_label": rules.label,
     }
 
 
@@ -266,10 +422,10 @@ def build_possible_cause_summary(
     buckets: dict[str, dict[str, Any]] = {}
     for row in review_queue:
         comp = row.get("_computed")
-        exc = None
-        if comp:
+        exc = row.get("exception_60") or row.get("exception_120")
+        if not exc and comp:
             exc = comp.flags.reason_60() or comp.flags.reason_120()
-        exc = exc or row.get("exception_60") or row.get("exception_120") or "Unclassified"
+        exc = exc or "Unclassified"
         cause = suggested_possible_cause(row, comp) or "Review"
         key = f"{exc}||{cause}"
         bucket = buckets.setdefault(
@@ -285,8 +441,23 @@ def build_possible_cause_summary(
         bucket["litres"] += float(row.get("litres") or 0)
 
     rows = list(buckets.values())
-    rows.sort(key=lambda r: (-r["transaction_count"], -r["litres"]))
+    rows.sort(key=_possible_cause_sort_key)
     return rows
+
+
+def _possible_cause_sort_key(row: dict[str, Any]) -> tuple[int, str]:
+    exc = str(row.get("exception_reason") or "").lower()
+    if "fill outside" in exc:
+        rank = 0
+    elif "consecutive dispenses within 60" in exc:
+        rank = 1
+    elif exc.strip() == "odo difference <= 0":
+        rank = 2
+    elif "odo difference > 50" in exc:
+        rank = 3
+    else:
+        rank = 9
+    return (rank, exc)
 
 
 def build_summary_per_asset(review_queue: list[dict[str, Any]]) -> list[dict[str, Any]]:

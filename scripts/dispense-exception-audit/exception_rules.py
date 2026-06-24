@@ -8,7 +8,8 @@ from typing import Any
 REASON_CONSEC_60 = "Consecutive dispenses within 60 minutes"
 REASON_CONSEC_120 = "Consecutive dispenses within 120 minutes"
 REASON_ODO_NON_POS = "Odo difference <= 0"
-REASON_FILL_OUTSIDE = "Fill outside of 1 hour from start"
+REASON_FILL_OUTSIDE = "Fill outside of one hour from start"
+REASON_ODO_GT_50 = "Odo difference > 50 hrs"
 REASON_ODO_JUMP = (
     "Odo difference > 50 hrs, Consecutive dispenses within 60 minutes, "
     "Actual time elapsed between dispenses < Odo time elapsed"
@@ -27,12 +28,15 @@ class RuleFlags:
     odo_non_positive: bool = False
     fill_outside_hour: bool = False
     odo_jump_50: bool = False
+    odo_gt_50: bool = False
     over_tank_cumulative: bool = False
     initial_dispense: bool = False
     meter_reset: bool = False
     over_tank_detail: str | None = None
 
     def reason_60_parts(self) -> list[str]:
+        if self.odo_gt_50:
+            return [REASON_ODO_GT_50]
         parts: list[str] = []
         if self.fill_outside_hour:
             parts.append(REASON_FILL_OUTSIDE)
@@ -47,6 +51,8 @@ class RuleFlags:
         return parts
 
     def reason_120_parts(self) -> list[str]:
+        if self.odo_gt_50:
+            return [REASON_ODO_GT_50]
         parts: list[str] = []
         if self.odo_non_positive:
             parts.append(REASON_ODO_NON_POS)
@@ -80,6 +86,8 @@ class RuleFlags:
             ids.add("fill_outside_hour")
         if self.odo_jump_50:
             ids.add("odo_jump_50")
+        if self.odo_gt_50:
+            ids.add("odo_gt_50")
         if self.over_tank_cumulative:
             ids.add("over_tank_cumulative")
         if self.initial_dispense:
@@ -143,6 +151,9 @@ def compute_flags_for_asset(asset_rows: list[dict[str, Any]]) -> list[ComputedTr
             flags.initial_dispense = True
 
         usage = _usage_value(row)
+        meter_type = str(row.get("meter_type") or "").lower()
+        if usage is not None and usage > 50 and ("hr" in meter_type or not meter_type):
+            flags.odo_gt_50 = True
         if usage is not None and usage <= 0:
             flags.odo_non_positive = True
 

@@ -15,6 +15,8 @@ const DispenseExceptionPrep = () => {
     const [workbook, setWorkbook] = useState(null);
     const [assetLookup, setAssetLookup] = useState(null);
     const [avrSyncLookup, setAvrSyncLookup] = useState(null);
+    const [priorPrepared, setPriorPrepared] = useState(null);
+    const [ruleProfile, setRuleProfile] = useState('belfast');
     const [processing, setProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [processingPhase, setProcessingPhase] = useState('');
@@ -24,6 +26,7 @@ const DispenseExceptionPrep = () => {
     const workbookRef = useRef(null);
     const assetLookupRef = useRef(null);
     const avrSyncRef = useRef(null);
+    const priorPreparedRef = useRef(null);
     const processingStartRef = useRef(null);
     const elapsedTimerRef = useRef(null);
 
@@ -100,6 +103,17 @@ const DispenseExceptionPrep = () => {
         setAvrSyncLookup(selected);
     };
 
+    const handlePriorPreparedSelect = (event) => {
+        const selected = event.target.files?.[0];
+        if (!selected) return;
+        if (!validateExcel(selected)) {
+            setError('Prior prepared workbook must be .xlsx or .xls');
+            return;
+        }
+        setError(null);
+        setPriorPrepared(selected);
+    };
+
     const runPrepare = () => {
         if (!workbook) return;
         setProcessing(true);
@@ -113,6 +127,8 @@ const DispenseExceptionPrep = () => {
         form.append('workbook', workbook);
         if (assetLookup) form.append('assetLookup', assetLookup);
         if (avrSyncLookup) form.append('avrSyncLookup', avrSyncLookup);
+        if (priorPrepared) form.append('priorPrepared', priorPrepared);
+        if (ruleProfile) form.append('ruleProfile', ruleProfile);
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/dispense-exception-prep/process');
@@ -169,6 +185,7 @@ const DispenseExceptionPrep = () => {
         setWorkbook(null);
         setAssetLookup(null);
         setAvrSyncLookup(null);
+        setPriorPrepared(null);
         setResult(null);
         setError(null);
         setUploadProgress(0);
@@ -177,9 +194,11 @@ const DispenseExceptionPrep = () => {
         if (workbookRef.current) workbookRef.current.value = '';
         if (assetLookupRef.current) assetLookupRef.current.value = '';
         if (avrSyncRef.current) avrSyncRef.current.value = '';
+        if (priorPreparedRef.current) priorPreparedRef.current.value = '';
     };
 
     const summary = result?.summary || {};
+    const mom = summary.month_over_month || null;
     const isUploading = processing && uploadProgress < 100;
     const isServerProcessing = processing && uploadProgress >= 100;
 
@@ -193,9 +212,8 @@ const DispenseExceptionPrep = () => {
                     </h3>
                     <p className={`text-xs mb-4 ${muted}`}>
                         Upload the raw InsightWare <strong className={text}>Transaction Exceptions – In Context</strong>{' '}
-                        export. The tool filters non-mining rows, splits 60/120 minute exception reasons, enriches
-                        economy and department fields, flags AVR sync hits, and builds review summary tabs for the
-                        analyst.
+                        export. The tool preserves the source layout, applies Andrew-style review rules, enriches
+                        economy fields, flags AVR sync hits, and builds analyst summary tabs.
                     </p>
 
                     <div className="space-y-3 mb-4">
@@ -243,7 +261,7 @@ const DispenseExceptionPrep = () => {
 
                         <div>
                             <label htmlFor="avr-sync-upload" className={`block text-xs font-medium mb-1 ${text}`}>
-                                AVR Sync Lookup <span className={muted}>(optional)</span>
+                                AVR Sync Lookup <span className={muted}>(recommended for AVR pass)</span>
                             </label>
                             <input
                                 ref={avrSyncRef}
@@ -260,6 +278,45 @@ const DispenseExceptionPrep = () => {
                                     {avrSyncLookup.name}
                                 </p>
                             )}
+                        </div>
+
+                        <div>
+                            <label htmlFor="prior-prepared-upload" className={`block text-xs font-medium mb-1 ${text}`}>
+                                Prior month prepared workbook <span className={muted}>(optional)</span>
+                            </label>
+                            <input
+                                ref={priorPreparedRef}
+                                id="prior-prepared-upload"
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={handlePriorPreparedSelect}
+                                disabled={processing}
+                                className="block w-full text-xs"
+                            />
+                            {priorPrepared && (
+                                <p className={`text-xs mt-1 ${muted}`}>
+                                    <i className="fas fa-file-excel mr-1"></i>
+                                    {priorPrepared.name}
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label htmlFor="rule-profile" className={`block text-xs font-medium mb-1 ${text}`}>
+                                Site rule profile
+                            </label>
+                            <select
+                                id="rule-profile"
+                                value={ruleProfile}
+                                onChange={(e) => setRuleProfile(e.target.value)}
+                                disabled={processing}
+                                className={`w-full text-xs rounded border px-2 py-1.5 ${
+                                    isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'
+                                }`}
+                            >
+                                <option value="belfast">Exxaro Belfast (Andrew)</option>
+                                <option value="strict">Strict — all exception types</option>
+                            </select>
                         </div>
                     </div>
 
@@ -331,17 +388,14 @@ const DispenseExceptionPrep = () => {
                 <div className={`rounded-lg border p-4 ${card}`}>
                     <h3 className={`text-sm font-semibold mb-3 ${text}`}>What gets prepared</h3>
                     <ul className={`text-xs space-y-2 list-disc pl-4 ${muted}`}>
-                        <li>Filters out non-mining / non-eligible asset groups</li>
-                        <li>Splits exception reasons into 120 min and 60 min columns</li>
-                        <li>Enriches department and 180-day average economy from Asset Lookup</li>
-                        <li>Flags AVR Sync transactions when AVR lookup is supplied</li>
-                        <li>Highlights rows: green (routine), orange (review), yellow (AVR sync)</li>
-                        <li>Adds <code>Transactions for Review</code>, <code>Possible Cause Summary</code>, and <code>Summary Per Asset</code> tabs</li>
+                        <li>Light-touch update of <code>Details as Assets</code> — preserves InsightWare layout</li>
+                        <li>Single <code>Exception Reason</code> column (60-minute rule)</li>
+                        <li>Orange = deemed ineligible, green = other exceptions, yellow = AVR sync</li>
+                        <li><code>Transactions deemed ineligible</code> with Review Reason + suggested Abco Comment</li>
+                        <li><code>Possible Cause Summary</code> with blank Analyst Notes column</li>
+                        <li><code>Non-Mining Excluded</code> and <code>Exception Reason Glossary</code> tabs</li>
+                        <li>Optional month-over-month diff when prior prepared workbook is supplied</li>
                     </ul>
-                    <p className={`text-xs mt-4 ${muted}`}>
-                        Analysts still add <strong className={text}>Abco Comment</strong> and move rows to an
-                        ineligible tab manually — this tool does the heavy structural prep.
-                    </p>
                 </div>
             </div>
 
@@ -354,12 +408,13 @@ const DispenseExceptionPrep = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                         {[
                             ['Transactions', summary.transaction_count],
-                            ['Review queue', summary.review_queue_count],
+                            ['Deemed ineligible', summary.review_queue_count],
+                            ['Review litres', summary.review_queue_litres],
                             ['Flagged exceptions', summary.flagged_exception_count],
                             ['AVR sync hits', summary.avr_sync_count],
-                            ['Excluded non-mining', summary.excluded_non_mining_count],
+                            ['Non-mining excluded', summary.excluded_non_mining_count],
+                            ['Rule profile', summary.rule_profile_label || summary.rule_profile],
                             ['Possible cause groups', summary.possible_cause_groups],
-                            ['Assets in summary', summary.summary_asset_count],
                         ].map(([label, value]) => (
                             <div
                                 key={label}
@@ -370,6 +425,77 @@ const DispenseExceptionPrep = () => {
                             </div>
                         ))}
                     </div>
+
+                    {Array.isArray(summary.possible_causes) && summary.possible_causes.length > 0 && (
+                        <div className="mb-4">
+                            <h4 className={`text-xs font-semibold mb-2 ${text}`}>Possible cause breakdown</h4>
+                            <div className={`overflow-x-auto rounded border ${isDark ? 'border-slate-600' : 'border-gray-200'}`}>
+                                <table className="min-w-full text-xs">
+                                    <thead className={isDark ? 'bg-slate-900' : 'bg-gray-50'}>
+                                        <tr>
+                                            <th className="text-left p-2">Exception reason</th>
+                                            <th className="text-left p-2">Cause</th>
+                                            <th className="text-right p-2">Txns</th>
+                                            <th className="text-right p-2">Litres</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {summary.possible_causes.map((row) => (
+                                            <tr key={row.exception_reason} className="border-t border-gray-100">
+                                                <td className="p-2">{row.exception_reason}</td>
+                                                <td className="p-2">{row.possible_cause}</td>
+                                                <td className="p-2 text-right">{row.transaction_count}</td>
+                                                <td className="p-2 text-right">{row.litres}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {Array.isArray(summary.review_sample) && summary.review_sample.length > 0 && (
+                        <div className="mb-4">
+                            <h4 className={`text-xs font-semibold mb-2 ${text}`}>Review queue sample</h4>
+                            <div className={`overflow-x-auto rounded border ${isDark ? 'border-slate-600' : 'border-gray-200'}`}>
+                                <table className="min-w-full text-xs">
+                                    <thead className={isDark ? 'bg-slate-900' : 'bg-gray-50'}>
+                                        <tr>
+                                            <th className="text-left p-2">Asset</th>
+                                            <th className="text-left p-2">Review reason</th>
+                                            <th className="text-left p-2">Exception</th>
+                                            <th className="text-right p-2">Litres</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {summary.review_sample.map((row) => (
+                                            <tr key={row.transaction_id} className="border-t border-gray-100">
+                                                <td className="p-2">{row.asset_number}</td>
+                                                <td className="p-2">{row.review_reason}</td>
+                                                <td className="p-2">{row.exception_reason}</td>
+                                                <td className="p-2 text-right">{row.litres}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {mom && (
+                        <div className={`mb-4 rounded-lg border p-3 text-xs ${isDark ? 'border-slate-600' : 'border-gray-200'}`}>
+                            <h4 className={`font-semibold mb-2 ${text}`}>Month-over-month</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div><span className={muted}>Prior review:</span> {mom.prior_review_count}</div>
+                                <div><span className={muted}>New in review:</span> {mom.new_in_review_count}</div>
+                                <div><span className={muted}>Repeat in review:</span> {mom.repeat_in_review_count}</div>
+                                <div><span className={muted}>Dropped:</span> {mom.dropped_from_review_count}</div>
+                                <div><span className={muted}>New review litres:</span> {mom.new_review_litres}</div>
+                                <div><span className={muted}>Repeat litres:</span> {mom.repeat_review_litres}</div>
+                            </div>
+                        </div>
+                    )}
+
                     <a
                         href={result.downloadUrl}
                         download={result.fileName || 'dispense-exception-prepared.xlsx'}

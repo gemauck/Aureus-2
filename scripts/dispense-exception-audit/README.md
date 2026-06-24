@@ -17,18 +17,22 @@ npm run prepare:dispense-exception -- \
 |------|-------------|
 | `--asset-lookup` | Optional Asset Info Lookup export (department, 180-day economy, tags) |
 | `--avr-sync-lookup` | Optional AVR Sync export for auto-flagging sync transactions |
-| `--economy-threshold` | Abs variance for review queue (default `0.6` = 60%) |
+| `--prior-prepared` | Optional prior-month prepared workbook for month-over-month diff |
+| `--rule-profile` | Site rule profile key (`belfast`, `strict`; default from `site_rules.json`) |
+| `--economy-threshold` | Abs variance when economy escalation is enabled on a profile |
 | `--site-name` | Title on summary sheets (default: inferred from filename) |
 
 ## Output workbook
 
 | Sheet | Contents |
 |-------|----------|
-| Details as Assets | Mining-eligible rows with 120/60 exception split, economy, highlights |
-| Transactions for Review | Escalated rows for analyst queue |
-| Possible Cause Summary | Exception reason × suggested cause rollup |
+| Details as Assets | Light-touch update: highlights + single Exception Reason (layout preserved) |
+| Transactions deemed ineligible | Escalated rows with Review Reason and suggested Abco Comment |
+| Possible Cause Summary | Exception reason × suggested cause rollup + Analyst Notes column |
 | Summary Per Asset | Review queue grouped by asset |
-| Asset Info Lookup | Copied from upload when provided |
+| Non-Mining Excluded | Rows filtered out of mining-eligible processing |
+| Exception Reason Glossary | Reference for analysts |
+| Asset Info Lookup | Copied from source or upload when provided |
 | AVR Sync Lookup | Copied from upload when provided |
 
 ## API / UI
