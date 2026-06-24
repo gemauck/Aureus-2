@@ -3,6 +3,7 @@ import { AppState, Platform } from 'react-native'
 import Constants from 'expo-constants'
 import * as Updates from 'expo-updates'
 import { apiUrl } from '../config'
+import { isTransientNetworkError } from '../utils/networkErrors'
 import { getMobileClientInfo } from './clientPresence'
 
 const SECTION = 'mobile-app'
@@ -116,12 +117,20 @@ function inferSeverity(category: ErrorCategory, context: string, statusCode?: nu
   return 'medium'
 }
 
-function shouldSkipReport(context: string, statusCode?: number): boolean {
+function shouldSkipReport(context: string, statusCode?: number, message?: string): boolean {
   if (context === 'mobileLogout') return true
   if (context.startsWith('api:') && statusCode === 401) return true
   if (context.startsWith('api:') && statusCode === 429) return true
   if (context.startsWith('api:') && statusCode === 0) return true
   if (context.startsWith('api:') && context.includes('/auth/mobile/refresh') && statusCode === 0) return true
+  if (context.startsWith('OTA') && message && isTransientNetworkError(message)) return true
+  if (
+    (context === 'authRefresh' || context === 'authKeepalive' || context === 'loadSession') &&
+    message &&
+    isTransientNetworkError(message)
+  ) {
+    return true
+  }
   return false
 }
 
@@ -316,10 +325,10 @@ export async function reportError(error: unknown, context: string, extra?: Recor
           ? (error as { statusCode: number }).statusCode
           : undefined
 
-    if (shouldSkipReport(context, statusCode)) return
-    if (sessionReportCount >= MAX_SESSION_REPORTS) return
-
     const err = error instanceof Error ? error : new Error(String(error))
+
+    if (shouldSkipReport(context, statusCode, err.message)) return
+    if (sessionReportCount >= MAX_SESSION_REPORTS) return
     const category = inferCategory(context)
     const meta = buildErrorMeta(err, context, extra)
     const fingerprint = String(meta.fingerprint || hashFingerprint([category, context, err.message]))

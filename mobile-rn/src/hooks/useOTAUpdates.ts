@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import NetInfo from '@react-native-community/netinfo'
 import * as Updates from 'expo-updates'
 import { isJobCardWizardFormActive } from '../jobcards/jobCardWizardLock'
 import { isApkUpdateRequired, waitForApkVersionCheck } from '../services/apkUpdateUi'
 import { setOtaUiPhase } from '../services/otaUpdateUi'
 import { trackError } from '../services/telemetry'
+import { computeNetworkOnline } from './useNetwork'
+import { isTransientNetworkError, networkErrorUserMessage } from '../utils/networkErrors'
 
 const FOREGROUND_DEBOUNCE_MS = 30_000
 const BACKGROUND_POLL_MS = 5 * 60_000
@@ -38,14 +41,37 @@ function otaDisabled(): OtaCheckResult | null {
   return null
 }
 
-function formatOtaError(error: unknown, context: string): OtaCheckResult {
+function formatOtaError(
+  error: unknown,
+  context: string,
+  options: { report?: boolean; silentWhenOffline?: boolean } = {}
+): OtaCheckResult {
   const raw = error instanceof Error ? error.message : String(error)
-  trackError(error, context)
-  const message =
-    /404|unsupported runtime|no ota bundles|no update/i.test(raw)
+  const transient = isTransientNetworkError(raw)
+  const shouldReport = options.report !== false && !transient
+  if (shouldReport) {
+    trackError(error, context)
+  } else {
+    console.warn(`[ota] ${context}: ${raw}`)
+  }
+  if (transient && options.silentWhenOffline) {
+    return { status: 'current' }
+  }
+  const message = transient
+    ? networkErrorUserMessage()
+    : /404|unsupported runtime|no ota bundles|no update/i.test(raw)
       ? `No JS bundle on the server for runtime ${Updates.runtimeVersion || 'unknown'}. Deploy and run npm run mobile:ota:publish on the server.`
       : raw
   return { status: 'error', message }
+}
+
+async function isDeviceOnline(): Promise<boolean> {
+  try {
+    const state = await NetInfo.fetch()
+    return computeNetworkOnline(state)
+  } catch {
+    return true
+  }
 }
 
 async function readReloadGuard(): Promise<{ updateId: string; at: number } | null> {
@@ -194,6 +220,10 @@ export async function syncOtaUpdate(
 
   const mode = options.mode || 'background'
 
+  if (mode === 'background' && !(await isDeviceOnline())) {
+    return { status: 'current' }
+  }
+
   try {
     if (mode === 'auto') setOtaUiPhase('checking')
 
@@ -239,7 +269,10 @@ export async function syncOtaUpdate(
     return markDownloadedOtaUpdate(applyId)
   } catch (error) {
     if (mode === 'auto') setOtaUiPhase('idle')
-    return formatOtaError(error, 'OTA sync')
+    return formatOtaError(error, 'OTA sync', {
+      report: mode === 'prompt',
+      silentWhenOffline: mode === 'background'
+    })
   }
 }
 
@@ -282,7 +315,7 @@ export async function applyOtaUpdate(
       return reloadWithApplyingUi(applyId)
     } catch (error) {
       setOtaUiPhase('idle')
-      return formatOtaError(error, 'OTA apply')
+      return formatOtaError(error, 'OTA apply', { report: options.prompt === true })
     }
   }
 
@@ -407,7 +440,7 @@ export function useOTAUpdates(enabled = true) {
         return { status: 'downloaded' as const, willReload: true }
       } catch (error) {
         setOtaUiPhase('idle')
-        return formatOtaError(error, 'OTA apply downloaded')
+        return formatOtaError(error, 'OTA apply downloaded', { report: false })
       }
     },
     otaEnabled: Updates.isEnabled,
