@@ -940,7 +940,7 @@
               return inventoryItemId ? { inventoryItemId } : null;
             };
 
-      const tryDecode = (text) => {
+      const tryDecode = async (text) => {
         if (!stScanActiveRef.current) return;
         const now = Date.now();
         const s = String(text || '').trim();
@@ -951,25 +951,50 @@
         last.t = now;
 
         const rows = stRowsRef.current || [];
-        const parsed = parseQr(s);
-        let sku = '';
-        if (parsed?.inventoryItemId) {
-          const row = rows.find(
-            (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
-          );
-          if (!row) {
-            setError('This item is not in the stock list for this session’s location.');
-            return;
-          }
-          sku = String(row.sku || '').trim();
+        const resolveScan =
+          typeof window.resolveInventoryScanToSku === 'function'
+            ? window.resolveInventoryScanToSku
+            : null;
+        const fetchSku =
+          typeof window.fetchInventorySkuByItemId === 'function'
+            ? window.fetchInventorySkuByItemId
+            : null;
+        let resolved = null;
+        if (resolveScan) {
+          resolved = await resolveScan(s, rows, {
+            resolveItemIdToSku: fetchSku
+              ? (id) => fetchSku(apiBase, id)
+              : undefined
+          });
         } else {
-          const row = rows.find((r) => String(r.sku || '').trim() === s);
-          if (!row) {
-            setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
-            return;
+          const parsed = parseQr(s);
+          if (parsed?.inventoryItemId) {
+            const row = rows.find(
+              (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
+            );
+            if (!row) {
+              setError('This item is not in the stock list for this session’s location.');
+              return;
+            }
+            resolved = { sku: String(row.sku || '').trim(), row };
+          } else {
+            const row = rows.find((r) => String(r.sku || '').trim() === s);
+            if (!row) {
+              setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
+              return;
+            }
+            resolved = { sku: String(row.sku || '').trim(), row };
           }
-          sku = String(row.sku || '').trim();
         }
+        if (!resolved || resolved.error) {
+          if (resolved?.error === 'unrecognized') {
+            setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
+          } else {
+            setError('This item is not in the stock list for this session’s location.');
+          }
+          return;
+        }
+        const sku = String(resolved.sku || '').trim();
         if (!sku) return;
         setStScanFilterSku(sku);
         setStLineSearch(sku);
@@ -1007,7 +1032,7 @@
             ctx.drawImage(video, 0, 0, w, h);
             const img = ctx.getImageData(0, 0, w, h);
             const result = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
-            if (result?.data) tryDecode(result.data);
+            if (result?.data) void tryDecode(result.data);
           }
           stScanRafRef.current = requestAnimationFrame(loop);
         };

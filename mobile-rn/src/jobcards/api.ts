@@ -131,6 +131,18 @@ export const jobcardsApi = {
     )
   },
 
+  resolveInventoryItemSku(inventoryItemId: string) {
+    const id = String(inventoryItemId || '').trim()
+    if (!id) return Promise.resolve(null as string | null)
+    const params = new URLSearchParams({ resolveItemId: id })
+    return request<{ item: { sku?: string } | null }>(`/api/public/inventory?${params}`).then(
+      (d) => {
+        const sku = d.item?.sku != null ? String(d.item.sku).trim() : ''
+        return sku || null
+      }
+    )
+  },
+
   getServiceFormTemplates() {
     return request<{ templates: ServiceFormTemplate[] }>('/api/public/service-forms').then((d) =>
       Array.isArray((d as { templates?: ServiceFormTemplate[] }).templates)

@@ -90,6 +90,7 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
         './src/components/manufacturing/ManufacturingMovementsView.jsx',
         './src/components/manufacturing/ManufacturingReportsView.jsx',
         './src/utils/inventoryQrPayload.js',
+        './src/utils/resolveInventoryScanToSku.js',
         './src/utils/inventoryLabelLayout.js',
         './src/components/manufacturing/StockCountView.jsx',
         './src/components/manufacturing/StockTransferRequestsView.jsx',

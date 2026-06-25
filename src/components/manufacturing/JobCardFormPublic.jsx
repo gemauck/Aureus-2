@@ -10,7 +10,10 @@ import {
   JOB_CARD_CALL_OUT_CATEGORY_OPTIONS
 } from './jobCardActivityDisplay.js';
 import jsQR from 'jsqr';
-import { parseInventoryQrPayload } from '../../utils/inventoryQrPayload.js';
+import {
+  fetchInventorySkuByItemId,
+  resolveInventoryScanToSku
+} from '../../utils/resolveInventoryScanToSku.js';
 import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
 import {
   stockTakeAvailabilityEmptyMessage,
@@ -4980,7 +4983,7 @@ const JobCardFormPublic = () => {
     stockTakeScanActiveRef.current = true;
     let stream = null;
 
-    const tryDecode = (text) => {
+    const tryDecode = async (text) => {
       if (!stockTakeScanActiveRef.current) return;
       const now = Date.now();
       const s = String(text || '').trim();
@@ -4991,25 +4994,18 @@ const JobCardFormPublic = () => {
       last.t = now;
 
       const rows = stockTakeRowsRef.current || [];
-      const parsed = parseInventoryQrPayload(s);
-      let sku = '';
-      if (parsed?.inventoryItemId) {
-        const row = rows.find(
-          (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
-        );
-        if (!row) {
+      const resolved = await resolveInventoryScanToSku(s, rows, {
+        resolveItemIdToSku: (id) => fetchInventorySkuByItemId('', id)
+      });
+      if ('error' in resolved) {
+        if (resolved.error === 'not_in_list') {
           setStockTakeError('This item is not in the stock list for the selected location.');
-          return;
-        }
-        sku = String(row.sku || '').trim();
-      } else {
-        const row = rows.find((r) => String(r.sku || '').trim() === s);
-        if (!row) {
+        } else {
           setStockTakeError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
-          return;
         }
-        sku = String(row.sku || '').trim();
+        return;
       }
+      const sku = resolved.sku;
       if (!sku) return;
       const q = String(stockTakeLineSearchRef.current || '').trim().toLowerCase();
       const rowMatchesSearch = (r) => {
@@ -5063,7 +5059,7 @@ const JobCardFormPublic = () => {
           ctx.drawImage(video, 0, 0, w, h);
           const img = ctx.getImageData(0, 0, w, h);
           const result = jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
-          if (result?.data) tryDecode(result.data);
+          if (result?.data) void tryDecode(result.data);
         }
         stockTakeScanRafRef.current = requestAnimationFrame(loop);
       };

@@ -140,7 +140,7 @@ async function inventoryForLocation(locationId, options = {}) {
     const sku = record.sku
     if (!sku) continue
     const template = bySku.get(sku) || {}
-    if (template.status === 'inactive') continue
+    if (template.status === 'inactive' && !allSystemSkus) continue
 
     const currentQty = Number(record.quantity) || 0
     const existing = bySkuAggregate.get(sku)
@@ -257,6 +257,26 @@ async function handler(req, res) {
       String(rawAllSkus || '')
         .trim()
         .toLowerCase() === 'true'
+
+    const rawResolveItemId = req.query?.resolveItemId
+    const resolveItemId =
+      typeof rawResolveItemId === 'string' ? rawResolveItemId.trim() : ''
+    if (resolveItemId) {
+      const item = await prisma.inventoryItem.findUnique({
+        where: { id: resolveItemId },
+        select: { id: true, sku: true, name: true, status: true }
+      })
+      if (!item || item.status === 'inactive') {
+        return ok(res, { item: null })
+      }
+      return ok(res, {
+        item: {
+          inventoryItemId: item.id,
+          sku: String(item.sku || '').trim(),
+          name: String(item.name || '').trim()
+        }
+      })
+    }
 
     if (locationId && locationId !== 'all') {
       const rows = await inventoryForLocation(locationId, {

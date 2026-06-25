@@ -11,7 +11,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { InventoryBarcodeScannerModal } from '../../components/InventoryBarcodeScannerModal'
-import { parseInventoryQrPayload } from '../../../../src/utils/inventoryQrPayload.js'
+import { resolveInventoryScanToSku } from '../../../../src/utils/resolveInventoryScanToSku.js'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
 import { jobcardsApi } from '../api'
@@ -397,50 +397,26 @@ export function StockTakeScreen() {
     if (!s) return
 
     const currentRows = rowsRef.current
-    const parsed = parseInventoryQrPayload(s)
-    let sku = ''
+    const resolved = await resolveInventoryScanToSku(s, currentRows, {
+      resolveItemIdToSku: (id) => jobcardsApi.resolveInventoryItemSku(id)
+    })
 
-    if (parsed?.kind === 'inventory' && parsed.inventoryItemId) {
-      let item = currentRows.find(
-        (i) =>
-          i.inventoryItemId &&
-          String(i.inventoryItemId) === String(parsed.inventoryItemId)
-      )
-      if (!item?.sku) {
-        try {
-          const catalog = await jobcardsApi.getPublicInventory()
-          const hit = catalog.find(
-            (i) => String(i.id || '').trim() === String(parsed.inventoryItemId).trim()
-          )
-          if (hit?.sku) {
-            item = currentRows.find(
-              (r) => String(r.sku || '').trim() === String(hit.sku).trim()
-            )
-          }
-        } catch {
-          /* ignore catalog lookup failure */
-        }
-      }
-      if (!item?.sku) {
+    if ('error' in resolved) {
+      if (resolved.error === 'not_in_list') {
         Alert.alert(
           'Not in list',
           'This item is not in the stock list for the selected location.'
         )
-        return
-      }
-      sku = String(item.sku).trim()
-    } else {
-      const item = currentRows.find((r) => String(r.sku || '').trim() === s)
-      if (!item?.sku) {
+      } else {
         Alert.alert(
           'Unrecognized scan',
           'Use the inventory QR label on the sticker, or enter the SKU manually.'
         )
-        return
       }
-      sku = String(item.sku).trim()
+      return
     }
 
+    const sku = resolved.sku
     setScanFilterSku(sku)
     setLineSearch('')
     setHighlightSku(sku)
