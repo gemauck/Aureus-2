@@ -3,6 +3,7 @@ import {
   encodeInventoryQrPayload
 } from '../../src/utils/inventoryQrPayload.js'
 import {
+  buildInventoryIdToSkuMap,
   findStockTakeRowByInventoryItemId,
   findStockTakeRowBySku,
   resolveInventoryScanToSku
@@ -25,6 +26,11 @@ describe('resolveInventoryScanToSku', () => {
     expect(result).toEqual({ sku: 'SKU0015', row: rows[1] })
   })
 
+  test('matches SKU barcode case-insensitively', async () => {
+    const result = await resolveInventoryScanToSku('sku0010', rows)
+    expect(result).toEqual({ sku: 'SKU0010', row: rows[0] })
+  })
+
   test('resolves duplicate catalog id on QR via resolveItemIdToSku', async () => {
     const qr = encodeInventoryQrPayload('legacy-aaa')
     const result = await resolveInventoryScanToSku(qr, rows, {
@@ -33,6 +39,13 @@ describe('resolveInventoryScanToSku', () => {
     expect(result).toEqual({ sku: 'SKU0010', row: rows[0] })
     expect(findStockTakeRowByInventoryItemId(rows, 'legacy-aaa')).toBeNull()
     expect(findStockTakeRowBySku(rows, 'SKU0010')).toEqual(rows[0])
+  })
+
+  test('resolves legacy QR offline via idToSkuMap without network', async () => {
+    const qr = encodeInventoryQrPayload('legacy-aaa')
+    const idToSkuMap = buildInventoryIdToSkuMap(rows, { 'legacy-aaa': 'SKU0010' })
+    const result = await resolveInventoryScanToSku(qr, rows, { idToSkuMap })
+    expect(result).toEqual({ sku: 'SKU0010', row: rows[0] })
   })
 
   test('returns not_in_list when QR id cannot map to a row SKU', async () => {

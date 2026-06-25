@@ -11,6 +11,7 @@ import {
 } from './jobCardActivityDisplay.js';
 import jsQR from 'jsqr';
 import {
+  buildInventoryIdToSkuMap,
   fetchInventorySkuByItemId,
   resolveInventoryScanToSku
 } from '../../utils/resolveInventoryScanToSku.js';
@@ -4994,7 +4995,9 @@ const JobCardFormPublic = () => {
       last.t = now;
 
       const rows = stockTakeRowsRef.current || [];
+      const idToSkuMap = buildInventoryIdToSkuMap([...rows, ...inventory]);
       const resolved = await resolveInventoryScanToSku(s, rows, {
+        idToSkuMap,
         resolveItemIdToSku: (id) => fetchInventorySkuByItemId('', id)
       });
       if ('error' in resolved) {
