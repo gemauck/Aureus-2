@@ -812,6 +812,13 @@ const MainLayout = () => {
         };
     }, [currentPage]);
 
+    const [chatUnread, setChatUnread] = React.useState(0);
+    React.useEffect(() => {
+        const onChatUnread = (e) => setChatUnread(e.detail?.count ?? 0);
+        window.addEventListener('chat:unread', onChatUnread);
+        return () => window.removeEventListener('chat:unread', onChatUnread);
+    }, []);
+
     const preloadMessenger = React.useCallback(() => {
         if (window.Messenger) return;
         const v = window.BUILD_VERSION || Date.now();
