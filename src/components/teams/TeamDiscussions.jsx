@@ -416,7 +416,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                 {detail.body && (
                                     <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert mt-3 ${isDark ? 'prose-p:text-gray-200' : ''}`}>
                                         {(detail.body || '').includes('<') && (detail.body || '').includes('>')
-                                            ? <div dangerouslySetInnerHTML={{ __html: detail.body }} />
+                                            ? <div dangerouslySetInnerHTML={{ __html: (window.sanitizeHtml ? window.sanitizeHtml(detail.body) : detail.body) }} />
                                             : <div className="whitespace-pre-wrap break-words">{(detail.body || '').replace(/&quot;/g, '"').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                                         }
                                     </div>
@@ -443,7 +443,7 @@ const TeamDiscussions = ({ team, isDark, searchTerm = '', initialDiscussionId })
                                             </p>
                                             <div className={`text-sm ${text} prose prose-sm max-w-none dark:prose-invert ${isDark ? 'prose-p:text-gray-200' : ''}`}>
                                                 {(r.body || '').includes('<') && (r.body || '').includes('>')
-                                                    ? <div dangerouslySetInnerHTML={{ __html: r.body || '' }} />
+                                                    ? <div dangerouslySetInnerHTML={{ __html: (window.sanitizeHtml ? window.sanitizeHtml(r.body || '') : (r.body || '')) }} />
                                                     : <div className="whitespace-pre-wrap break-words">{(r.body || '').replace(/&quot;/g, '"').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                                                 }
                                             </div>

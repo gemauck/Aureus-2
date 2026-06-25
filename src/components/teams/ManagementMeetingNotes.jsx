@@ -7902,6 +7902,9 @@ const ManagementMeetingNotes = () => {
                                                                         }
                                                                         // Convert URLs to clickable links
                                                                         displayContent = linkifyText(displayContent);
+                                                                        if (window.sanitizeHtml && displayContent) {
+                                                                            displayContent = window.sanitizeHtml(displayContent);
+                                                                        }
                                                                         
                                                                         return (
                                                                             <div

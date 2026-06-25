@@ -5,6 +5,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { authRequired } from './_lib/authRequired.js'
 import { created, badRequest, serverError } from './_lib/response.js'
+import { parseJsonBody } from './_lib/body.js'
 import { resolveSafeUploadDir } from './_lib/securityGuards.js'
 
 async function handler(req, res) {

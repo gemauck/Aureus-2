@@ -34,6 +34,7 @@ import './utils/componentDependencyChecker.js';
 import './utils/projectTrackerDeepLink.js';
 import './utils/projectProgressMonthMetrics.js';
 import './utils/mentionHelper.js';
+import './utils/sanitizeHtml.js';
 import './hooks/usePersistence.js';
 
 // Global React providers and shared components

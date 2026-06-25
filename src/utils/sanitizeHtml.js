@@ -42,3 +42,7 @@ export function sanitizeHtml(html, config = DEFAULT_CONFIG) {
 }
 
 export default sanitizeHtml
+
+if (typeof window !== 'undefined') {
+  window.sanitizeHtml = sanitizeHtml
+}
