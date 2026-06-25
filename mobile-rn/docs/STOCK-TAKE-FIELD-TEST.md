@@ -2,6 +2,15 @@
 
 Run on a technician device (Expo RN build). One pass **online**, one pass **offline** (airplane mode after setup).
 
+## Pre-flight (production — verified 2026-06-25)
+
+- [x] Web deploy build `1782414651867` live at https://abcoafrica.co.za
+- [x] Mobile OTA bundles published for `erp-mobile-1` … `erp-mobile-4` (restart app to pick up)
+- [x] Public inventory/locations APIs respond with field client header
+- [ ] Full module UI smoke (Dashboard → Clients → Projects → Manufacturing) — needs `TEST_EMAIL` / `TEST_PASSWORD` in `.env.local`, then `npm run smoke:production:ui`
+
+Automated checks (no device): `APP_URL=https://abcoafrica.co.za npm run smoke:production`
+
 ## Setup
 
 - [ ] App updated (OTA or fresh install)

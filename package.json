@@ -20,6 +20,8 @@
     "postinstall": "npx prisma generate",
     "deploy": "bash scripts/deploy-main-safe.sh",
     "deploy:remote": "gh workflow run deploy-production.yml --ref main",
+    "smoke:production": "node scripts/post-deploy-production-smoke.mjs",
+    "smoke:production:ui": "node scripts/post-deploy-erp-shell-smoke.mjs",
     "mobile:apk:remote": "gh workflow run mobile-apk-release.yml --ref main",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
