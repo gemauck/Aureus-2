@@ -2,14 +2,17 @@
 
 Run on a technician device (Expo RN build). One pass **online**, one pass **offline** (airplane mode after setup).
 
-## Pre-flight (production — verified 2026-06-25)
+## Pre-flight (production — automated)
 
-- [x] Web deploy build `1782414651867` live at https://abcoafrica.co.za
-- [x] Mobile OTA bundles published for `erp-mobile-1` … `erp-mobile-4` (restart app to pick up)
-- [x] Public inventory/locations APIs respond with field client header
-- [ ] Full module UI smoke (Dashboard → Clients → Projects → Manufacturing) — needs `TEST_EMAIL` / `TEST_PASSWORD` in `.env.local`, then `npm run smoke:production:ui`
+Run **`npm run smoke:production:all`** from a machine with SSH access to `abco-prod`. This:
 
-Automated checks (no device): `APP_URL=https://abcoafrica.co.za npm run smoke:production`
+- Provisions `erp-smoke-automation@abcoafrica.co.za` on the server (rotating password)
+- Checks health, OTA, public field APIs
+- Logs in via Playwright and opens Dashboard, Clients, Projects, Manufacturing
+- Runs the stock-take API flow (create session → count lines → submit for review)
+- Runs manufacturing API integration tests
+
+Device field test below is optional for UX/camera/QR; API parity is covered by automation.
 
 ## Setup
 
