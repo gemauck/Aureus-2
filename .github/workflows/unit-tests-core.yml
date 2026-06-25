@@ -1,0 +1,56 @@
+# Core unit tests: auth, stock transfers, layout nav, mobile stock parity.
+# Full suite: npm run test:unit
+
+name: Unit tests (core)
+
+on:
+  pull_request:
+    paths:
+      - 'api/_lib/**'
+      - 'api/auth/**'
+      - 'api/clients.js'
+      - 'api/contacts.js'
+      - 'src/components/layout/**'
+      - 'src/jobCardWizard/**'
+      - 'tests/unit/**'
+      - 'tests/helpers/**'
+      - 'jest.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/unit-tests-core.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - 'api/_lib/**'
+      - 'api/auth/**'
+      - 'api/clients.js'
+      - 'api/contacts.js'
+      - 'src/components/layout/**'
+      - 'src/jobCardWizard/**'
+      - 'tests/unit/**'
+      - 'tests/helpers/**'
+      - 'jest.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/unit-tests-core.yml'
+
+jobs:
+  unit-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Core unit tests
+        run: npm run test:unit:core
+
+      - name: Full unit test suite
+        run: npm run test:unit

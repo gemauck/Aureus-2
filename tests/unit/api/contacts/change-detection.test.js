@@ -5,9 +5,7 @@
 
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { createMockRequest, createMockResponse } from '../../../helpers/mockExpress.js';
-import handler from '../../../../api/contacts.js';
 
-// Mock Prisma
 jest.unstable_mockModule('../../../../api/_lib/prisma.js', () => ({
   prisma: {
     clientContact: {
@@ -27,7 +25,6 @@ jest.unstable_mockModule('../../../../api/_lib/prisma.js', () => ({
   }
 }));
 
-// Mock auth middleware
 jest.unstable_mockModule('../../../../api/_lib/authRequired.js', () => ({
   authRequired: (handler) => handler
 }));
@@ -36,32 +33,53 @@ jest.unstable_mockModule('../../../../api/_lib/withHttp.js', () => ({
   withHttp: (handler) => handler
 }));
 
-jest.unstable_mockModule('../../../../api/_lib/withLogging.js', () => ({
-  withLogging: (handler) => handler
+jest.unstable_mockModule('../../../../api/_lib/logger.js', () => ({
+  withLogging: (handler) => handler,
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 }));
 
+jest.unstable_mockModule('../../../../api/_lib/contactSiteIds.js', () => ({
+  enrichContactsWithSiteIds: (contacts) => contacts,
+  fetchContactSiteIdsByClientId: jest.fn().mockResolvedValue(new Map()),
+  normalizeContactSiteIds: () => [],
+  syncContactSiteLinks: jest.fn().mockResolvedValue(undefined),
+  contactWithSiteIds: (contact) => contact
+}));
+
+const { default: handler } = await import('../../../../api/contacts.js');
+
+function body(res) {
+  const parsed = res.getData();
+  return parsed?.data ?? parsed;
+}
+
 describe('Contacts API - Change Detection Tests', () => {
-  let req, res;
+  let req;
+  let res;
   let mockPrisma;
 
   beforeEach(async () => {
     req = createMockRequest({
       method: 'GET',
-      url: '/api/contacts',
+      url: '/contacts/client/client-1',
       user: { sub: 'test-user-id', email: 'test@example.com' }
     });
     res = createMockResponse();
 
     const prismaModule = await import('../../../../api/_lib/prisma.js');
     mockPrisma = prismaModule.prisma;
+
     jest.clearAllMocks();
+
+    mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-1' });
+    mockPrisma.clientContact.findMany.mockResolvedValue([]);
   });
 
-  describe('POST /api/contacts - Create Contact', () => {
+  describe('POST /api/contacts/client/:clientId - Create Contact', () => {
     beforeEach(() => {
       req.method = 'POST';
+      req.url = '/contacts/client/client-1';
       req.body = {
-        clientId: 'client-1',
         name: 'John Doe',
         email: 'john@example.com',
         phone: '011-123-4567'
@@ -78,7 +96,6 @@ describe('Contacts API - Change Detection Tests', () => {
       };
 
       mockPrisma.clientContact.create.mockResolvedValue(createdContact);
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Test Client' });
 
       await handler(req, res);
 
@@ -87,23 +104,19 @@ describe('Contacts API - Change Detection Tests', () => {
     });
 
     test('should NEVER update client JSON fields when creating contact', async () => {
-      const createdContact = {
+      mockPrisma.clientContact.create.mockResolvedValue({
         id: 'contact-1',
         clientId: 'client-1',
         name: 'John Doe'
-      };
-
-      mockPrisma.clientContact.create.mockResolvedValue(createdContact);
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Test Client' });
+      });
 
       await handler(req, res);
 
-      // CRITICAL: Should NOT update client.contacts or client.contactsJsonb
       expect(mockPrisma.client.update).not.toHaveBeenCalled();
     });
 
     test('should validate required fields', async () => {
-      req.body = { clientId: 'client-1' }; // Missing name
+      req.body = {};
 
       await handler(req, res);
 
@@ -112,11 +125,10 @@ describe('Contacts API - Change Detection Tests', () => {
     });
   });
 
-  describe('PUT /api/contacts/[id] - Update Contact', () => {
+  describe('PATCH /api/contacts/client/:clientId/:contactId - Update Contact', () => {
     beforeEach(() => {
-      req.method = 'PUT';
-      req.params = { id: 'contact-1' };
-      req.url = '/api/contacts/contact-1';
+      req.method = 'PATCH';
+      req.url = '/contacts/client/client-1/contact-1';
       req.body = {
         name: 'Updated Name',
         email: 'updated@example.com'
@@ -131,7 +143,7 @@ describe('Contacts API - Change Detection Tests', () => {
         email: 'original@example.com'
       };
 
-      mockPrisma.clientContact.findUnique.mockResolvedValue(existingContact);
+      mockPrisma.clientContact.findFirst.mockResolvedValue(existingContact);
       mockPrisma.clientContact.update.mockResolvedValue({
         ...existingContact,
         name: 'Updated Name'
@@ -144,38 +156,40 @@ describe('Contacts API - Change Detection Tests', () => {
     });
 
     test('should NEVER update client JSON fields when updating contact', async () => {
-      const existingContact = {
+      mockPrisma.clientContact.findFirst.mockResolvedValue({
         id: 'contact-1',
         clientId: 'client-1',
         name: 'Original Name'
-      };
-
-      mockPrisma.clientContact.findUnique.mockResolvedValue(existingContact);
-      mockPrisma.clientContact.update.mockResolvedValue(existingContact);
+      });
+      mockPrisma.clientContact.update.mockResolvedValue({
+        id: 'contact-1',
+        clientId: 'client-1',
+        name: 'Updated Name'
+      });
 
       await handler(req, res);
 
-      // CRITICAL: Should NOT update client.contacts or client.contactsJsonb
       expect(mockPrisma.client.update).not.toHaveBeenCalled();
     });
   });
 
-  describe('DELETE /api/contacts/[id] - Delete Contact', () => {
+  describe('DELETE /api/contacts/client/:clientId/:contactId - Delete Contact', () => {
     beforeEach(() => {
       req.method = 'DELETE';
-      req.params = { id: 'contact-1' };
-      req.url = '/api/contacts/contact-1';
+      req.url = '/contacts/client/client-1/contact-1';
     });
 
     test('should delete contact from normalized table', async () => {
-      const existingContact = {
+      mockPrisma.clientContact.findFirst.mockResolvedValue({
         id: 'contact-1',
         clientId: 'client-1',
         name: 'John Doe'
-      };
-
-      mockPrisma.clientContact.findUnique.mockResolvedValue(existingContact);
-      mockPrisma.clientContact.delete.mockResolvedValue(existingContact);
+      });
+      mockPrisma.clientContact.delete.mockResolvedValue({
+        id: 'contact-1',
+        clientId: 'client-1',
+        name: 'John Doe'
+      });
 
       await handler(req, res);
 
@@ -184,26 +198,27 @@ describe('Contacts API - Change Detection Tests', () => {
     });
 
     test('should NEVER update client JSON fields when deleting contact', async () => {
-      const existingContact = {
+      mockPrisma.clientContact.findFirst.mockResolvedValue({
         id: 'contact-1',
         clientId: 'client-1',
         name: 'John Doe'
-      };
-
-      mockPrisma.clientContact.findUnique.mockResolvedValue(existingContact);
-      mockPrisma.clientContact.delete.mockResolvedValue(existingContact);
+      });
+      mockPrisma.clientContact.delete.mockResolvedValue({
+        id: 'contact-1',
+        clientId: 'client-1',
+        name: 'John Doe'
+      });
 
       await handler(req, res);
 
-      // CRITICAL: Should NOT update client.contacts or client.contactsJsonb
       expect(mockPrisma.client.update).not.toHaveBeenCalled();
     });
   });
 
-  describe('GET /api/contacts - List Contacts', () => {
+  describe('GET /api/contacts/client/:clientId - List Contacts', () => {
     beforeEach(() => {
       req.method = 'GET';
-      req.query = { clientId: 'client-1' };
+      req.url = '/contacts/client/client-1';
     });
 
     test('should return contacts from normalized table', async () => {
@@ -218,10 +233,9 @@ describe('Contacts API - Change Detection Tests', () => {
 
       expect(mockPrisma.clientContact.findMany).toHaveBeenCalled();
       expect(res.statusCode).toBe(200);
-      const responseData = res.getData();
+      const responseData = body(res);
       expect(responseData.contacts).toBeDefined();
       expect(responseData.contacts.length).toBe(2);
     });
   });
 });
-

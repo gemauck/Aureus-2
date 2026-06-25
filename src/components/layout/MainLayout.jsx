@@ -1,73 +1,28 @@
+import {
+    VALID_PAGES,
+    PUBLIC_ROUTES,
+    APP_SHELL_STANDALONE_PAGES,
+    isMessengerPwaMode,
+    canAccessErpCalendar,
+    DESKTOP_SITE_LAYOUT_MIN_PX,
+    getRouteSnapshot,
+    resolveInitialPage,
+    applyPageNavigation
+} from './erpNavigationConfig.js';
+import {
+    filterMenuItemsForUser,
+    partitionMenuItems,
+    formatUserRoleLabel,
+    readPreferDesktopLayout
+} from './erpMenuConfig.js';
+import ErpPageRenderer from './ErpPageRenderer.jsx';
+import { getMainScrollClasses, getMainInnerClasses } from './erpPageRegistry.js';
+import useErpLayoutComponents from './useErpLayoutComponents.jsx';
+
 // Use React from window
 if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
-
-const VALID_PAGES = ['dashboard', 'erp-calendar', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks', 'my-notes', 'notifications', 'messages'];
-const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
-/** Full-page routes rendered by App.jsx instead of the sidebar shell — must not coerce to dashboard */
-const APP_SHELL_STANDALONE_PAGES = ['po-from-document', 'po-document', 'podocument', 'expense-capture', 'expense'];
-
-function isMessengerPwaMode() {
-    return typeof window !== 'undefined' && !!window.__PWA_MESSENGER__;
-}
-
-/** Greenfield ERP Calendar: sidebar + route only for this account (must match api/_lib/erpCalendarAccess.js). */
-const ERP_CALENDAR_ALLOWED_EMAIL = 'garethm@abcotronics.co.za';
-/** Set true when Calendar & Mail is ready to show again. */
-const ERP_CALENDAR_AND_MAIL_UI_ENABLED = false;
-function canAccessErpCalendar(user) {
-    if (!ERP_CALENDAR_AND_MAIL_UI_ENABLED) return false;
-    const email = (user?.email || '').toLowerCase().trim();
-    return email === ERP_CALENDAR_ALLOWED_EMAIL.toLowerCase();
-}
-
-/** Wide layout viewport for "Desktop site" on phones; ≥1024 so Tailwind lg: applies. Keep in sync with main.css .erp-desktop-site min-width. */
-const DESKTOP_SITE_LAYOUT_MIN_PX = 1330;
-
-/** Default layout: mobile shell on narrow viewports; desktop shell on wide screens. Override via theme → Layout (erpPreferDesktopLayout). */
-function readPreferDesktopLayout() {
-    const narrowViewport =
-        typeof window !== 'undefined' && window.innerWidth < 1024;
-    try {
-        const v = localStorage.getItem('erpPreferDesktopLayout');
-        if (v === 'false') return false;
-        if (v === 'true') return true;
-        return !narrowViewport;
-    } catch {
-        return !narrowViewport;
-    }
-}
-
-/** Display label for the signed-in user role (sidebar, etc.) */
-function formatUserRoleLabel(role) {
-    if (role == null || role === '') return '';
-    const raw = String(role).trim();
-    const compact = raw.toLowerCase().replace(/[\s_-]/g, '');
-    if (compact === 'superadmin') return 'SuperAdmin';
-    return raw
-        .split(/[\s_-]+/)
-        .filter(Boolean)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(' ');
-}
-
-function getRouteSnapshot() {
-    if (window.RouteState?.getRoute) {
-        return window.RouteState.getRoute();
-    }
-    const pathSegments = (window.location.pathname || '/')
-        .replace(/^\//, '')
-        .split('/')
-        .filter(Boolean);
-    const page = pathSegments[0] || 'dashboard';
-    return {
-        page: page === 'crm' ? 'clients' : page,
-        segments: pathSegments.slice(1),
-        search: new URLSearchParams(window.location.search || ''),
-        hash: window.location.hash || ''
-    };
-}
 
 const MainLayout = () => {
     // Load company name from settings
@@ -115,54 +70,7 @@ const MainLayout = () => {
         };
     }, []);
     
-    const getInitialPage = () => {
-        if (isMessengerPwaMode()) {
-            return 'messages';
-        }
-        if (window.RouteState) {
-            const route = window.RouteState.getRoute();
-            let page = route?.page;
-            // Map 'crm' to 'clients' for backward compatibility
-            if (page === 'crm') {
-                page = 'clients';
-            }
-            if (page && VALID_PAGES.includes(page)) {
-                return page;
-            }
-        }
-        
-        // Check hash-based routing if RouteState not available yet
-        const hash = window.location.hash || '';
-        if (hash.startsWith('#/')) {
-            const hashPath = hash.substring(2); // Remove '#/'
-            const hashPathname = hashPath.split('?')[0]; // Remove query params
-            const hashSegments = hashPathname.split('/').filter(Boolean);
-            if (hashSegments.length > 0) {
-                let pageFromHash = hashSegments[0];
-                // Map 'crm' to 'clients' for backward compatibility
-                if (pageFromHash === 'crm') {
-                    pageFromHash = 'clients';
-                }
-                if (VALID_PAGES.includes(pageFromHash)) {
-                    return pageFromHash;
-                }
-            }
-        }
-        
-        // Fallback to pathname-based routing
-        const pathname = (window.location.pathname || '').toLowerCase();
-        if (pathname && pathname !== '/' && !PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
-            let pageFromPath = pathname.replace(/^\//, '').split('/')[0];
-            // Map 'crm' to 'clients' for backward compatibility
-            if (pageFromPath === 'crm') {
-                pageFromPath = 'clients';
-            }
-            if (VALID_PAGES.includes(pageFromPath)) {
-                return pageFromPath;
-            }
-        }
-        return 'dashboard';
-    };
+    const getInitialPage = () => resolveInitialPage();
 
     const [currentPage, setCurrentPage] = useState(getInitialPage());
     const titleRequestRef = React.useRef(0);
@@ -627,22 +535,8 @@ const MainLayout = () => {
         if (!page) {
             return;
         }
-        if (isMessengerPwaMode() && page !== 'messages') {
-            page = 'messages';
-        }
-        const subpath = Array.isArray(options.subpath) ? options.subpath : [];
-        if (window.RouteState) {
-            window.RouteState.setPageSubpath(page, subpath, {
-                replace: options.replace ?? false,
-                preserveSearch: options.preserveSearch ?? false,
-                preserveHash: options.preserveHash ?? false
-            });
-        } else {
-            const pathSegments = [page, ...subpath].filter(Boolean).join('/');
-            const fallbackPath = page === 'dashboard' && subpath.length === 0 ? '/' : `/${pathSegments}`;
-            window.history.pushState({ page }, '', fallbackPath);
-        }
-        setCurrentPage(page);
+        applyPageNavigation(page, options);
+        setCurrentPage(isMessengerPwaMode() && page !== 'messages' ? 'messages' : page);
     }, []);
 
     // Setup password change modal trigger
@@ -757,838 +651,40 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // DashboardLive loads via lazy-load; avoid locking onto DashboardSimple on first paint.
-    const [dashboardLiveReady, setDashboardLiveReady] = React.useState(
-        !!(window.DashboardLive && typeof window.DashboardLive === 'function')
-    );
-    const [dashboardLiveWaitTimedOut, setDashboardLiveWaitTimedOut] = React.useState(false);
-
-    React.useEffect(() => {
-        const checkDashboardLive = () => {
-            if (window.DashboardLive && typeof window.DashboardLive === 'function') {
-                setDashboardLiveReady(true);
-                return true;
-            }
-            return false;
-        };
-
-        if (checkDashboardLive()) return;
-
-        const handleDashboardLiveReady = () => {
-            checkDashboardLive();
-        };
-        window.addEventListener('dashboardLiveReady', handleDashboardLiveReady);
-
-        const interval = setInterval(() => {
-            if (checkDashboardLive()) {
-                clearInterval(interval);
-            }
-        }, 100);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            window.removeEventListener('dashboardLiveReady', handleDashboardLiveReady);
-            if (!window.DashboardLive) {
-                setDashboardLiveWaitTimedOut(true);
-                console.warn('⚠️ DashboardLive not loaded after 30s — using fallback dashboard');
-            }
-        }, 30000);
-
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-            window.removeEventListener('dashboardLiveReady', handleDashboardLiveReady);
-        };
-    }, []);
-
-    const Dashboard = React.useMemo(() => {
-        if (dashboardLiveReady && window.DashboardLive) {
-            return window.DashboardLive;
-        }
-        if (dashboardLiveWaitTimedOut) {
-            return (
-                window.DashboardSimple ||
-                window.DashboardFallback ||
-                window.DashboardDatabaseFirst ||
-                window.Dashboard ||
-                (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>)
-            );
-        }
-        return (
-            window.QuickDashboard ||
-            (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>)
-        );
-    }, [dashboardLiveReady, dashboardLiveWaitTimedOut]);
-    
-    const ErrorBoundary = React.useMemo(() => {
-        return window.ErrorBoundary || (({ children }) => children);
-    }, []);
-    
-    const [clientsComponentReady, setClientsComponentReady] = React.useState(false);
-    const [mainClientsAvailable, setMainClientsAvailable] = React.useState(false);
-    
-    React.useEffect(() => {
-        const checkClients = () => {
-            // Only check for main Clients component
-            const ClientsComponent = window.Clients;
-            const isValidComponent = ClientsComponent && (
-                typeof ClientsComponent === 'function' || 
-                (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
-            );
-            if (isValidComponent) {
-                if (!clientsComponentReady) {
-                    setClientsComponentReady(true);
-                }
-                if (!mainClientsAvailable) {
-                    setMainClientsAvailable(true);
-                }
-                return true;
-            }
-            return false;
-        };
-        
-        if (checkClients()) return;
-        
-        const handleClientsAvailable = () => {
-            if (checkClients()) {
-                window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-            }
-        };
-        window.addEventListener('clientsComponentReady', handleClientsAvailable);
-        
-        if (window._clientsComponentReady) {
-            checkClients();
-        }
-        
-        const interval = setInterval(() => {
-            if (!clientsComponentReady) {
-                checkClients();
-            } else {
-                clearInterval(interval);
-            }
-        }, 200);
-        
-        // Wait for main Clients component (up to 30 seconds)
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-            if (!clientsComponentReady) {
-                console.warn('⚠️ Main Clients component not loaded after 30 seconds');
-            }
-        }, 30000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-            window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-        };
-    }, [clientsComponentReady]);
-    
-    const [notificationCenterReady, setNotificationCenterReady] = React.useState(false);
-    const [messageCenterReady, setMessageCenterReady] = React.useState(false);
-    const [taskManagementReady, setTaskManagementReady] = React.useState(
-        !!(window.TaskManagement && typeof window.TaskManagement === 'function')
-    );
-    
-    React.useEffect(() => {
-        const checkNotificationCenter = () => {
-            const NotificationCenterComponent = window.NotificationCenter;
-            const isValidComponent = NotificationCenterComponent && typeof NotificationCenterComponent === 'function';
-            if (isValidComponent && !notificationCenterReady) {
-                setNotificationCenterReady(true);
-                return true;
-            }
-            return false;
-        };
-        
-        if (checkNotificationCenter()) return;
-        
-        const interval = setInterval(() => {
-            if (!notificationCenterReady) {
-                checkNotificationCenter();
-            } else {
-                clearInterval(interval);
-            }
-        }, 200);
-        
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-        }, 10000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [notificationCenterReady]);
-
-    React.useEffect(() => {
-        const checkMessageCenter = () => {
-            const MessageCenterComponent = window.MessageCenter;
-            const isValidComponent = MessageCenterComponent && typeof MessageCenterComponent === 'function';
-            if (isValidComponent && !messageCenterReady) {
-                setMessageCenterReady(true);
-                return true;
-            }
-            return false;
-        };
-
-        if (checkMessageCenter()) return;
-
-        const interval = setInterval(() => {
-            if (!messageCenterReady) {
-                checkMessageCenter();
-            } else {
-                clearInterval(interval);
-            }
-        }, 200);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-        }, 10000);
-
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [messageCenterReady]);
-
-    React.useEffect(() => {
-        if (taskManagementReady) {
-            return;
-        }
-
-        const handleTaskManagementReady = () => {
-            if (window.TaskManagement && typeof window.TaskManagement === 'function') {
-                setTaskManagementReady(true);
-            }
-        };
-
-        window.addEventListener('taskManagementComponentReady', handleTaskManagementReady);
-
-        const interval = setInterval(() => {
-            if (window.TaskManagement && typeof window.TaskManagement === 'function') {
-                setTaskManagementReady(true);
-                clearInterval(interval);
-                clearTimeout(timeout);
-            }
-        }, 200);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-        }, 10000);
-
-        if (window.TaskManagement && typeof window.TaskManagement === 'function') {
-            setTaskManagementReady(true);
-            clearInterval(interval);
-            clearTimeout(timeout);
-        }
-
-        return () => {
-            window.removeEventListener('taskManagementComponentReady', handleTaskManagementReady);
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [taskManagementReady]);
-    
-    const TaskManagementComponent = React.useMemo(() => {
-        if (window.TaskManagement && typeof window.TaskManagement === 'function') {
-            return window.TaskManagement;
-        }
-
-        return () => (
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'} border rounded-lg p-6 text-center`}>
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p>Loading My Tasks...</p>
-            </div>
-        );
-    }, [taskManagementReady, isDark]);
-
-    // My Notes component loading state
-    const [myNotesReady, setMyNotesReady] = React.useState(
-        !!(window.MyNotes && typeof window.MyNotes === 'function')
-    );
-
-    React.useEffect(() => {
-        if (myNotesReady) {
-            return;
-        }
-
-        const handleMyNotesReady = () => {
-            if (window.MyNotes && typeof window.MyNotes === 'function') {
-                setMyNotesReady(true);
-            }
-        };
-
-        window.addEventListener('myNotesComponentReady', handleMyNotesReady);
-
-        const interval = setInterval(() => {
-            if (window.MyNotes && typeof window.MyNotes === 'function') {
-                setMyNotesReady(true);
-                clearInterval(interval);
-                clearTimeout(timeout);
-            }
-        }, 200);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-        }, 10000);
-
-        if (window.MyNotes && typeof window.MyNotes === 'function') {
-            setMyNotesReady(true);
-            clearInterval(interval);
-            clearTimeout(timeout);
-        }
-
-        return () => {
-            window.removeEventListener('myNotesComponentReady', handleMyNotesReady);
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [myNotesReady]);
-
-    const MyNotesComponent = React.useMemo(() => {
-        if (window.MyNotes && typeof window.MyNotes === 'function') {
-            return window.MyNotes;
-        }
-
-        return () => (
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'} border rounded-lg p-6 text-center`}>
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-                <p>Loading My Notes...</p>
-            </div>
-        );
-    }, [myNotesReady, isDark]);
-
-    // Always check at render time - only use main Clients component
-    const getClientsComponent = React.useCallback(() => {
-        if (effectiveIsMobile && window.ClientsMobileOptimized) {
-            return window.ClientsMobileOptimized;
-        }
-        if (effectiveIsMobile && window.ClientsMobile) {
-            return window.ClientsMobile;
-        }
-        // Use main Clients component (has Groups tab)
-        // React components can be functions or objects (with $$typeof)
-        const ClientsComponent = window.Clients;
-        if (ClientsComponent && (
-            typeof ClientsComponent === 'function' || 
-            (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
-        )) {
-            return ClientsComponent;
-        }
-        // Loading state if main component not available yet
-        return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
-    }, [effectiveIsMobile, mainClientsAvailable]); // Add mainClientsAvailable to force re-evaluation
-    
-    // Continuously check for main Clients component and update state when it becomes available
-    React.useEffect(() => {
-        const checkMainClients = () => {
-            // React components can be functions or objects (with $$typeof)
-            const ClientsComponent = window.Clients;
-            const isValidComponent = ClientsComponent && (
-                typeof ClientsComponent === 'function' || 
-                (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
-            );
-            if (isValidComponent) {
-                if (!mainClientsAvailable) {
-                    console.log('🔄 Main Clients component detected, updating state');
-                    setMainClientsAvailable(true);
-                    setClientsComponentReady(true);
-                }
-                return true; // Found it
-            }
-            return false; // Not found yet
-        };
-        
-        // Check immediately
-        if (checkMainClients()) {
-            return; // Already available, no need to poll
-        }
-        
-        // Check periodically until found
-        const interval = setInterval(() => {
-            if (checkMainClients()) {
-                clearInterval(interval);
-            }
-        }, 200); // Check more frequently
-        
-        // Stop checking after 30 seconds
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            if (!mainClientsAvailable) {
-                console.warn('⚠️ Main Clients component not loaded after 30 seconds');
-            }
-        }, 30000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [mainClientsAvailable]);
-    
-    const Pipeline = React.useMemo(() => {
-        return window.Pipeline;
-    }, []);
-    
-    const isFullProjectsComponent = (fn) =>
-        fn && typeof fn === 'function' && (fn._hasListView || fn._version);
-    const resolveProjectsComponent = () => {
-        if (isFullProjectsComponent(window.Projects)) return window.Projects;
-        return null;
-    };
-    const [projectsComponentReady, setProjectsComponentReady] = React.useState(
-        !!(typeof window !== 'undefined' && isFullProjectsComponent(window.Projects))
-    );
-
-    React.useEffect(() => {
-        const checkProjects = () => {
-            if (resolveProjectsComponent()) {
-                setProjectsComponentReady(true);
-                return true;
-            }
-            return false;
-        };
-
-        if (checkProjects()) return;
-
-        const handleFullReady = () => {
-            if (checkProjects()) {
-                window.removeEventListener('projectsFullComponentReady', handleFullReady);
-            }
-        };
-        window.addEventListener('projectsFullComponentReady', handleFullReady);
-
-        let intervalId = null;
-        const maxAttempts = 30;
-        let attempts = 0;
-        intervalId = setInterval(() => {
-            attempts++;
-            if (checkProjects() || attempts >= maxAttempts) {
-                clearInterval(intervalId);
-                window.removeEventListener('projectsFullComponentReady', handleFullReady);
-            }
-        }, 1000);
-
-        const timeout = setTimeout(() => {
-            if (intervalId) clearInterval(intervalId);
-            window.removeEventListener('projectsFullComponentReady', handleFullReady);
-        }, 31000);
-
-        return () => {
-            if (intervalId) clearInterval(intervalId);
-            clearTimeout(timeout);
-            window.removeEventListener('projectsFullComponentReady', handleFullReady);
-        };
-    }, []);
-    
-    const Projects = React.useMemo(() => {
-        const ProjectsComponent = resolveProjectsComponent();
-        if (ProjectsComponent) {
-            return ProjectsComponent;
-        }
-        return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
-    }, [projectsComponentReady]);
-    
-    // Users component loading state
-    const [usersComponentReady, setUsersComponentReady] = React.useState(
-        !!(window.Users || window.UserManagement)
-    );
-    
-    React.useEffect(() => {
-        const checkUsers = () => {
-            const UsersComponent = window.Users || window.UserManagement;
-            const isValidComponent = UsersComponent && typeof UsersComponent === 'function';
-            if (isValidComponent && !usersComponentReady) {
-                setUsersComponentReady(true);
-                return true;
-            }
-            return false;
-        };
-        
-        if (checkUsers()) return;
-        
-        const handleUsersAvailable = () => {
-            if (checkUsers()) {
-                window.removeEventListener('usersComponentReady', handleUsersAvailable);
-            }
-        };
-        window.addEventListener('usersComponentReady', handleUsersAvailable);
-        
-        const interval = setInterval(() => {
-            if (!usersComponentReady) {
-                checkUsers();
-            } else {
-                clearInterval(interval);
-            }
-        }, 500);
-        
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            window.removeEventListener('usersComponentReady', handleUsersAvailable);
-            if (!usersComponentReady) {
-                console.warn('⚠️ MainLayout: Users component not loaded after 20 seconds');
-            }
-        }, 20000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-            window.removeEventListener('usersComponentReady', handleUsersAvailable);
-        };
-    }, [usersComponentReady]);
-    
-    // Manufacturing component loading state
-    const [manufacturingComponentReady, setManufacturingComponentReady] = React.useState(
-        !!(window.Manufacturing && typeof window.Manufacturing === 'function')
-    );
-    
-    React.useEffect(() => {
-        const checkManufacturing = () => {
-            const ManufacturingComponent = window.Manufacturing;
-            const isValidComponent = ManufacturingComponent && typeof ManufacturingComponent === 'function';
-            if (isValidComponent && !manufacturingComponentReady) {
-                setManufacturingComponentReady(true);
-                return true;
-            }
-            return false;
-        };
-        
-        if (checkManufacturing()) return;
-        
-        const handleManufacturingAvailable = () => {
-            if (checkManufacturing()) {
-                window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
-            }
-        };
-        window.addEventListener('manufacturingComponentReady', handleManufacturingAvailable);
-        
-        const interval = setInterval(() => {
-            if (!manufacturingComponentReady) {
-                checkManufacturing();
-            } else {
-                clearInterval(interval);
-            }
-        }, 500);
-        
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
-            if (!manufacturingComponentReady) {
-                console.warn('⚠️ MainLayout: Manufacturing component not loaded after 30 seconds (lazy load may still succeed)');
-            }
-        }, 30000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-            window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
-        };
-    }, [manufacturingComponentReady]);
-    
-    const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
-    const Messenger = window.Messenger || (() => <div className="text-center py-12 text-gray-500">Messages loading...</div>);
-
-    const [chatUnread, setChatUnread] = React.useState(0);
-    React.useEffect(() => {
-        const onChatUnread = (e) => setChatUnread(e.detail?.count ?? 0);
-        window.addEventListener('chat:unread', onChatUnread);
-        return () => window.removeEventListener('chat:unread', onChatUnread);
-    }, []);
-    
-    const Users = React.useMemo(() => {
-        const UsersComponent = window.Users || window.UserManagement;
-        if (UsersComponent) {
-            return UsersComponent;
-        }
-        return () => <div className="text-center py-12 text-gray-500">Users component loading...</div>;
-    }, [usersComponentReady]);
-    
-    const PasswordChangeModal = window.PasswordChangeModal;
-    const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
-    
-    const Manufacturing = React.useMemo(() => {
-        const ManufacturingComponent = window.Manufacturing;
-        if (ManufacturingComponent) {
-            return ManufacturingComponent;
-        }
-        return () => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
-    }, [manufacturingComponentReady]);
-    
-    const [serviceMaintenanceReady, setServiceMaintenanceReady] = React.useState(
-        !!(window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function')
-    );
-
-    React.useEffect(() => {
-        const checkServiceMaintenance = () => {
-            const component = window.ServiceAndMaintenance;
-            if (component && typeof component === 'function') {
-                if (!serviceMaintenanceReady) {
-                    setServiceMaintenanceReady(true);
-                }
-                return true;
-            }
-            return false;
-        };
-
-        const handleComponentReady = () => {
-            setServiceMaintenanceReady(true);
-        };
-
-        window.addEventListener('serviceMaintenanceComponentReady', handleComponentReady);
-
-        if (checkServiceMaintenance()) {
-            return () => {
-                window.removeEventListener('serviceMaintenanceComponentReady', handleComponentReady);
-            };
-        }
-
-        const interval = setInterval(() => {
-            if (checkServiceMaintenance()) {
-                clearInterval(interval);
-            }
-        }, 200);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            if (!serviceMaintenanceReady) {
-                console.warn('⚠️ MainLayout: ServiceAndMaintenance component not loaded after 15 seconds (lazy load may still succeed)');
-            }
-        }, 15000);
-
-        return () => {
-            window.removeEventListener('serviceMaintenanceComponentReady', handleComponentReady);
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [serviceMaintenanceReady]);
-
-    React.useEffect(() => {
-        if (serviceMaintenanceReady) {
-            return;
-        }
-
-        const loaderId = 'service-maintenance-component-loader';
-        if (window.loadScriptWithOfflineFallback) {
-            const scriptElement = document.querySelector(`[data-offline-cache-key="offline::components/service-maintenance/ServiceAndMaintenance.jsx"]`);
-            if (!scriptElement) {
-                console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting offline-capable load...');
-                window.loadScriptWithOfflineFallback('/dist/src/components/service-maintenance/ServiceAndMaintenance.js', {
-                    cacheKey: 'offline::components/service-maintenance/ServiceAndMaintenance.jsx'
-                }).catch((error) => {
-                    console.error('❌ Offline ServiceAndMaintenance loader failed, falling back to dynamic script tag', error);
-                    createFallbackScript();
-                });
-            }
-        } else if (!document.getElementById(loaderId)) {
-            createFallbackScript();
-        }
-
-        function createFallbackScript() {
-            if (document.getElementById(loaderId)) {
-                return;
-            }
-            console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting dynamic script load...');
-            const script = document.createElement('script');
-            script.id = loaderId;
-            script.defer = true;
-            script.src = `/dist/src/components/service-maintenance/ServiceAndMaintenance.js?v=sm-${Date.now()}`;
-            script.onload = () => {
-            };
-            script.onerror = (error) => {
-                console.error('❌ Failed to dynamically load ServiceAndMaintenance component:', error);
-            };
-            document.body.appendChild(script);
-        }
-    }, [serviceMaintenanceReady]);
-
-    const ServiceAndMaintenanceFallback = React.useMemo(() => () => (
-        <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-                <p className="text-gray-500">Loading Service & Maintenance...</p>
-            </div>
-        </div>
-    ), []);
-
-    const ServiceAndMaintenance = serviceMaintenanceReady && window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function'
-        ? window.ServiceAndMaintenance
-        : ServiceAndMaintenanceFallback;
-    
-    // Helpdesk component loading
-    const [helpdeskReady, setHelpdeskReady] = React.useState(
-        !!(window.Helpdesk && typeof window.Helpdesk === 'function')
-    );
-
-    React.useEffect(() => {
-        const checkHelpdesk = () => {
-            const component = window.Helpdesk;
-            if (component && typeof component === 'function') {
-                if (!helpdeskReady) {
-                    setHelpdeskReady(true);
-                }
-                return true;
-            }
-            return false;
-        };
-
-        const handleComponentReady = () => {
-            setHelpdeskReady(true);
-        };
-
-        window.addEventListener('componentLoaded', (e) => {
-            if (e.detail?.component === 'Helpdesk') {
-                handleComponentReady();
-            }
-        });
-
-        if (checkHelpdesk()) {
-            return () => {
-                window.removeEventListener('componentLoaded', handleComponentReady);
-            };
-        }
-
-        const interval = setInterval(() => {
-            if (checkHelpdesk()) {
-                clearInterval(interval);
-            }
-        }, 200);
-
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            if (!helpdeskReady) {
-                console.warn('⚠️ MainLayout: Helpdesk component not loaded after 15 seconds (lazy load may still succeed)');
-            }
-        }, 15000);
-
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [helpdeskReady]);
-
-    const HelpdeskFallback = React.useMemo(() => () => (
-        <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-                <p className="text-gray-500">Loading Helpdesk...</p>
-            </div>
-        </div>
-    ), []);
-
-    const Helpdesk = helpdeskReady && window.Helpdesk && typeof window.Helpdesk === 'function'
-        ? window.Helpdesk
-        : HelpdeskFallback;
-    
-    const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
-    const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
-    const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
-    const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
-    
-    // Check for LeavePlatform component availability
-    const [leavePlatformReady, setLeavePlatformReady] = React.useState(false);
-    
-    React.useEffect(() => {
-        const checkLeavePlatform = () => {
-            const LeavePlatformComponent = window.LeavePlatform;
-            if (LeavePlatformComponent && typeof LeavePlatformComponent === 'function' && !leavePlatformReady) {
-                setLeavePlatformReady(true);
-                return true;
-            }
-            return false;
-        };
-        
-        // Listen for component ready event
-        const handleLeavePlatformReady = () => {
-            if (!leavePlatformReady) {
-                setLeavePlatformReady(true);
-            }
-        };
-        
-        window.addEventListener('leavePlatformComponentReady', handleLeavePlatformReady);
-        
-        if (checkLeavePlatform()) return;
-        
-        const interval = setInterval(() => {
-            if (!leavePlatformReady) {
-                checkLeavePlatform();
-            } else {
-                clearInterval(interval);
-            }
-        }, 200);
-        
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            if (!leavePlatformReady) {
-                console.warn('⚠️ MainLayout: LeavePlatform component not loaded after 10 seconds');
-            }
-        }, 10000);
-        
-        return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-            window.removeEventListener('leavePlatformComponentReady', handleLeavePlatformReady);
-        };
-    }, [leavePlatformReady]);
-
-    const [erpCalendarReady, setErpCalendarReady] = React.useState(
-        () => !!(window.ErpCalendar && typeof window.ErpCalendar === 'function')
-    );
-    React.useEffect(() => {
-        const onReady = () => setErpCalendarReady(true);
-        window.addEventListener('erpCalendarComponentReady', onReady);
-        if (window.ErpCalendar && typeof window.ErpCalendar === 'function') {
-            setErpCalendarReady(true);
-        }
-        return () => window.removeEventListener('erpCalendarComponentReady', onReady);
-    }, []);
-
-    const LeavePlatform = React.useMemo(() => {
-        const component = window.LeavePlatform;
-        if (component && typeof component === 'function') {
-            return component;
-        }
-        console.warn('⚠️ MainLayout: LeavePlatform component not available, using fallback');
-        return () => (
-            <div className="text-center py-12 text-gray-500">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-                <p>Leave &amp; HR loading…</p>
-                <p className="text-xs text-gray-400 mt-2">Component status: {typeof window.LeavePlatform}</p>
-            </div>
-        );
-    }, [leavePlatformReady]);
-
-    // Filter menu items based on permissions
-    const allMenuItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large', permission: null }, // Always accessible
-        { id: 'erp-calendar', label: 'Calendar & Mail', icon: 'fa-calendar-week', permission: null },
-        { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
-        { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
-        { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
-        { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        // Leave & HR hidden from nav for now — restore: { id: 'leave-platform', label: 'Leave & HR', icon: 'fa-user-clock', permission: 'ACCESS_LEAVE_PLATFORM' },
-        { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
-        { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
-        { id: 'helpdesk', label: 'Helpdesk', icon: 'fa-headset', permission: 'ACCESS_HELPDESK' },
-        { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
-        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
-        { id: 'notifications', label: 'Notifications', icon: 'fa-bell', permission: null },
-        { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
-        { id: 'my-tasks', label: 'My Tasks', icon: 'fa-check-square', permission: null },
-        { id: 'my-notes', label: 'My Notes', icon: 'fa-sticky-note', permission: null },
-        { id: 'messages', label: 'Messages', icon: 'fa-comments', permission: null },
-    ];
+    const {
+        Dashboard,
+        ErrorBoundary,
+        getClientsComponent,
+        mainClientsAvailable,
+        notificationCenterReady,
+        messageCenterReady,
+        TaskManagementComponent,
+        MyNotesComponent,
+        Projects,
+        Teams,
+        Messenger,
+        Users,
+        TimeTracking,
+        Manufacturing,
+        ServiceAndMaintenance,
+        Helpdesk,
+        Tools,
+        Reports,
+        Settings,
+        Account,
+        LeavePlatform,
+        erpCalendarReady,
+        PasswordChangeModal,
+    } = useErpLayoutComponents({ effectiveIsMobile, isDark });
 
     const [refreshingRole, setRefreshingRole] = React.useState(false);
-    
-    // Get permission checker for current user
+
     const permissionChecker = React.useMemo(() => {
         if (!user || !window.PermissionChecker) return null;
         return new window.PermissionChecker(user);
     }, [user]);
-    
+
     const menuItems = React.useMemo(() => {
-        const userRole = user?.role?.toLowerCase();
-        const adminOrSuperAdmin = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'].includes(userRole);
         const hasUser = !!user && user !== null && user !== undefined;
         
         if (hasUser && !user.role && window.useAuth && !refreshingRole) {
@@ -1605,69 +701,15 @@ const MainLayout = () => {
             }
         }
         
-        // Guest users can only see Projects
-        if (userRole === 'guest') {
-            return allMenuItems.filter(item =>
-                ['projects', 'my-tasks', 'my-notes'].includes(item.id)
-            );
-        }
-        
-        // Filter menu items based on permissions
-        const filtered = allMenuItems.filter(item => {
-            if (item.id === 'erp-calendar') {
-                return canAccessErpCalendar(user);
-            }
-            // If no permission specified, always show (dashboard, documents)
-            if (!item.permission) {
-                return true;
-            }
-
-            // Admin and SuperAdmin users always have access to everything
-            if (adminOrSuperAdmin) {
-                return true;
-            }
-            
-            // Check permission using PermissionChecker
-            if (permissionChecker && window.PERMISSIONS) {
-                const permissionKey = window.PERMISSIONS[item.permission];
-                if (permissionKey) {
-                    const hasAccess = permissionChecker.hasPermission(permissionKey);
-                    // Log for debugging
-                    if (!hasAccess && (item.permission === 'ACCESS_CRM' || item.permission === 'ACCESS_PROJECTS' || item.permission === 'ACCESS_SERVICE_MAINTENANCE')) {
-                    }
-                    return hasAccess;
-                }
-            }
-            
-            // Fallback: if PermissionChecker not available, use role-based check
-            // This handles the case where permissions.js hasn't loaded yet
-            if (item.permission === 'ACCESS_USERS') {
-                return adminOrSuperAdmin;
-            }
-            
-            // All other permissions are public (accessible to all non-guest users)
-            // This ensures Projects, CRM, Service & Maintenance, etc. are always visible
-            return true;
-        });
-        
-        return filtered;
+        return filterMenuItemsForUser(user, permissionChecker);
     }, [user?.role, user?.id, user?.email, refreshingRole, permissionChecker]);
 
-    const myTasksMenuItem = React.useMemo(() => {
-        return menuItems.find(item => item.id === 'my-tasks') || null;
-    }, [menuItems]);
-
-    const myNotesMenuItem = React.useMemo(() => {
-        return menuItems.find(item => item.id === 'my-notes') || null;
-    }, [menuItems]);
-
-    const messagesMenuItem = React.useMemo(() => {
-        return menuItems.find(item => item.id === 'messages') || null;
-    }, [menuItems]);
-
-    const primaryMenuItems = React.useMemo(() => {
-        return menuItems.filter(item => item.id !== 'my-tasks' && item.id !== 'my-notes' && item.id !== 'messages');
-    }, [menuItems]);
+    const {
+        myTasksMenuItem,
+        myNotesMenuItem,
+        messagesMenuItem,
+        primaryMenuItems
+    } = React.useMemo(() => partitionMenuItems(menuItems), [menuItems]);
 
     const isAdmin = React.useMemo(() => {
         return typeof window.isAdminRole === 'function' && window.isAdminRole(user?.role);
@@ -1715,129 +757,36 @@ const MainLayout = () => {
 
     const renderPage = React.useMemo(() => {
         try {
-            switch(currentPage) {
-                case 'dashboard': 
-                    return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
-                case 'erp-calendar': {
-                    if (!user) {
-                        return (
-                            <div key="erp-calendar-auth-wait" className="flex flex-col items-center justify-center min-h-[320px] text-gray-500">
-                                <i className="fas fa-spinner fa-spin text-3xl mb-3" />
-                                <p>Loading…</p>
-                            </div>
-                        );
-                    }
-                    if (!canAccessErpCalendar(user)) {
-                        return (
-                            <div key="erp-calendar-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                <div className="text-center max-w-md px-4">
-                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4" />
-                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Not available</h2>
-                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                                        The Calendar page is not enabled for your account.
-                                    </p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    const ErpCal = window.ErpCalendar;
-                    if (!erpCalendarReady || !ErpCal || typeof ErpCal !== 'function') {
-                        return (
-                            <div key="erp-calendar-loading" className="flex flex-col items-center justify-center min-h-[320px] text-gray-500">
-                                <i className="fas fa-spinner fa-spin text-3xl mb-3" />
-                                <p>Loading calendar…</p>
-                            </div>
-                        );
-                    }
-                    return <ErrorBoundary key="erp-calendar"><ErpCal /></ErrorBoundary>;
-                }
-                case 'clients': 
-                    // Always get fresh component at render time
-                    const ClientsComponent = getClientsComponent();
-                    // Use dynamic key that changes when main Clients component loads to force re-render
-                    const MainClientsComponent = window.Clients;
-                    const isValidComponent = MainClientsComponent && (
-                        typeof MainClientsComponent === 'function' || 
-                        (typeof MainClientsComponent === 'object' && MainClientsComponent.$$typeof)
-                    );
-                    const clientsKey = isValidComponent ? 'clients-main' : 'clients-loading';
-                    // Log for debugging
-                    if (!isValidComponent) {
-                        console.log('⚠️ MainLayout: window.Clients not available yet, showing loading state');
-                    }
-                    return <ErrorBoundary key={clientsKey}><ClientsComponent /></ErrorBoundary>;
-                case 'projects': 
-                    return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
-                case 'teams': 
-                    return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
-                case 'messages':
-                    return <ErrorBoundary key="messages"><Messenger /></ErrorBoundary>;
-                case 'users': 
-                    if (permissionChecker && window.PERMISSIONS) {
-                        if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_USERS)) {
-                            return (
-                                <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                    <div className="text-center">
-                                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                        <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                        <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
-                                    </div>
-                                </div>
-                            );
-                        }
-                    } else if (!isAdmin) {
-                        return (
-                            <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                <div className="text-center">
-                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    return <ErrorBoundary key="users"><Users /></ErrorBoundary>;
-                case 'account': 
-                    return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
-                case 'time-tracking': 
-                    return <ErrorBoundary key="time-tracking"><TimeTracking /></ErrorBoundary>;
-                case 'leave-platform': 
-                    if (!window.LeavePlatform) {
-                        console.warn('⚠️ MainLayout: window.LeavePlatform is not available!');
-                        return <div key="leave-platform-error" className="p-8 text-center">
-                            <div className="text-red-600 mb-4">
-                                <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
-                                <p>Leave &amp; HR module did not load. Please refresh the page.</p>
-                                <p className="text-sm text-gray-500 mt-2">Checking component availability...</p>
-                            </div>
-                        </div>;
-                    }
-                    return <ErrorBoundary key="leave-platform"><LeavePlatform /></ErrorBoundary>;
-                case 'manufacturing': 
-                    return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
-                case 'service-maintenance': 
-                    return <ErrorBoundary key="service-maintenance"><ServiceAndMaintenance /></ErrorBoundary>;
-                case 'helpdesk': 
-                    return <ErrorBoundary key="helpdesk"><Helpdesk /></ErrorBoundary>;
-                case 'tools': 
-                    return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
-                case 'reports': 
-                    return <ErrorBoundary key="reports"><Reports /></ErrorBoundary>;
-                case 'notifications': {
-                    const NotificationsPageComponent = window.NotificationsPage;
-                    return <ErrorBoundary key="notifications">{NotificationsPageComponent ? <NotificationsPageComponent /> : <div key="notifications-loading" className="p-8 text-center text-gray-500">Loading notifications...</div>}</ErrorBoundary>;
-                }
-                case 'my-tasks':
-                    return <ErrorBoundary key="my-tasks"><TaskManagementComponent /></ErrorBoundary>;
-                case 'my-notes':
-                    return <ErrorBoundary key="my-notes"><MyNotesComponent /></ErrorBoundary>;
-                case 'settings': 
-                    return <ErrorBoundary key="settings"><Settings /></ErrorBoundary>;
-                case 'documents': 
-                    return <div key="documents" className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
-                default: 
-                    return <ErrorBoundary key="default"><Dashboard /></ErrorBoundary>;
-            }
+            return (
+                <ErpPageRenderer
+                    currentPage={currentPage}
+                    ErrorBoundary={ErrorBoundary}
+                    user={user}
+                    isAdmin={isAdmin}
+                    isDark={isDark}
+                    permissionChecker={permissionChecker}
+                    erpCalendarReady={erpCalendarReady}
+                    getClientsComponent={getClientsComponent}
+                    components={{
+                        Dashboard,
+                        Projects,
+                        Teams,
+                        Messenger,
+                        Users,
+                        Account,
+                        TimeTracking,
+                        LeavePlatform,
+                        Manufacturing,
+                        ServiceAndMaintenance,
+                        Helpdesk,
+                        Tools,
+                        Reports,
+                        TaskManagementComponent,
+                        MyNotesComponent,
+                        Settings,
+                    }}
+                />
+            );
         } catch (error) {
             console.error('❌ MainLayout: Error rendering page:', error);
             return (
@@ -1845,7 +794,7 @@ const MainLayout = () => {
                     <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Page</h2>
                     <p className="text-sm text-red-600 mb-3">There was an error loading the {currentPage} page.</p>
                     <p className="text-xs text-red-500 mb-4">Error: {error.message}</p>
-                    <button 
+                    <button
                         onClick={() => window.location.reload()}
                         className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
                     >
@@ -2392,11 +1341,11 @@ const MainLayout = () => {
                 {/* Page Content — mobile CRM uses inner scroll only so tabs/search are not in the same scrollport as the list (fixes content bleeding through sticky chrome). */}
                 <main
                     id="main-page-scroll"
-                    className={`flex-1 min-w-0 ${currentPage === 'clients' ? 'overflow-x-auto' : 'overflow-x-hidden'} ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-col min-h-0 overflow-y-hidden' : 'overflow-y-auto'} ${isDark ? '' : 'bg-[#f8fafc]'} ${currentPage === 'clients' ? 'p-0' : currentPage === 'dashboard' && effectiveIsMobile ? 'px-2 py-4 sm:px-6 sm:py-6' : 'px-3 py-4 sm:p-6'}`}
+                    className={getMainScrollClasses(currentPage, { effectiveIsMobile, isDark })}
                     style={{ width: 'auto', maxWidth: '100%', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}
                 >
                     <div
-                        className={`erp-module-root w-full min-w-0 ${currentPage === 'clients' && effectiveIsMobile ? 'flex flex-1 flex-col min-h-0 px-2 lg:px-3 py-4' : currentPage === 'clients' ? 'px-2 lg:px-3 py-4' : currentPage === 'dashboard' && effectiveIsMobile ? 'flex flex-col min-h-0 min-w-0' : ''}`}
+                        className={getMainInnerClasses(currentPage, { effectiveIsMobile })}
                         style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}
                     >
                         {renderPage}

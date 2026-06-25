@@ -11,7 +11,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { InventoryBarcodeScannerModal } from '../../components/InventoryBarcodeScannerModal'
-import { resolveInventoryScanToSku } from '../../../../src/utils/resolveInventoryScanToSku.js'
+import { resolveInventoryScanToSku, buildInventoryIdToSkuMap } from '../../../../src/utils/resolveInventoryScanToSku.js'
 import { useAuth } from '../../state/AuthContext'
 import { useNetwork } from '../../hooks/useNetwork'
 import { jobcardsApi } from '../api'
@@ -43,9 +43,9 @@ export function StockTakeScreen() {
   const { accessToken } = useAuth()
   const { isOnline } = useNetwork()
   const { bumpLocalDrafts } = useJobCardSync()
-  const { stockLocations, setWizardFlow, ensureInventoryLoaded } = useJobCardWizard()
+  const { stockLocations, setWizardFlow, ensureInventoryLoaded, inventory } = useJobCardWizard()
   const [locationId, setLocationId] = useState('')
-  const { rows, loading: stockLoading, error: stockError } = useLocationInventory(
+  const { rows, loading: stockLoading, error: stockError, fromCache, reload } = useLocationInventory(
     locationId,
     Boolean(locationId),
     { mode: 'stockTake' }
@@ -64,6 +64,8 @@ export function StockTakeScreen() {
   const rowsRef = useRef(rows)
   const listRef = useRef<FlatList<{ sku: string }> | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const submitInFlightRef = useRef(false)
+  const prevLocationRef = useRef('')
 
   useEffect(() => {
     rowsRef.current = rows
@@ -206,9 +208,28 @@ export function StockTakeScreen() {
 
   useEffect(() => {
     if (!locationId) {
+      prevLocationRef.current = ''
+      setSessionId('')
+      setSessionRevision(0)
+      setLineIdBySku({})
       setCounts({})
       setScanFilterSku('')
       setHighlightSku('')
+      return
+    }
+    if (prevLocationRef.current && prevLocationRef.current !== locationId) {
+      setSessionId('')
+      setSessionRevision(0)
+      setLineIdBySku({})
+      setCounts({})
+      setScanFilterSku('')
+      setHighlightSku('')
+    }
+    prevLocationRef.current = locationId
+  }, [locationId])
+
+  useEffect(() => {
+    if (!locationId) {
       return
     }
     if (!rows.length) return
@@ -289,6 +310,7 @@ export function StockTakeScreen() {
   }, [accessToken, locationId, counts, sessionId, sessionRevision, isOnline])
 
   const submitForReview = useCallback(async () => {
+    if (submitInFlightRef.current) return
     if (!locationId) {
       Alert.alert('Location required', 'Select a stock location first.')
       return
@@ -298,6 +320,7 @@ export function StockTakeScreen() {
       Alert.alert('Counts required', 'Enter at least one counted quantity before submitting.')
       return
     }
+    submitInFlightRef.current = true
     setSaving(true)
     try {
       await saveLocalDraft({
@@ -372,6 +395,7 @@ export function StockTakeScreen() {
       await clearLocalDraft()
       setWizardFlow('landing')
     } finally {
+      submitInFlightRef.current = false
       setSaving(false)
     }
   }, [
@@ -397,7 +421,9 @@ export function StockTakeScreen() {
     if (!s) return
 
     const currentRows = rowsRef.current
+    const idToSkuMap = buildInventoryIdToSkuMap([...currentRows, ...inventory])
     const resolved = await resolveInventoryScanToSku(s, currentRows, {
+      idToSkuMap,
       resolveItemIdToSku: (id) => jobcardsApi.resolveInventoryItemSku(id)
     })
 
@@ -420,7 +446,7 @@ export function StockTakeScreen() {
     setScanFilterSku(sku)
     setLineSearch('')
     setHighlightSku(sku)
-  }, [])
+  }, [inventory])
 
   return (
     <SafeAreaView style={styles.root}>
@@ -431,6 +457,11 @@ export function StockTakeScreen() {
         <Text style={styles.title}>Stock-Take</Text>
       </View>
       <OfflineBanner visible={!isOnline} />
+      {fromCache && locationId && !stockLoading ? (
+        <Text style={styles.cacheHint}>
+          Showing cached stock list — counts will sync when online.
+        </Text>
+      ) : null}
 
       <View style={styles.panel}>
         <SearchableSelect
@@ -466,7 +497,12 @@ export function StockTakeScreen() {
           <Text style={styles.hint}>Loading stock list…</Text>
         </View>
       ) : stockError ? (
-        <Text style={styles.error}>{stockError}</Text>
+        <View style={styles.errorWrap}>
+          <Text style={styles.error}>{stockError}</Text>
+          <Pressable style={styles.retryBtn} onPress={() => void reload()}>
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           ref={listRef}
@@ -577,8 +613,24 @@ function createStyles({ jc }: { jc: JcTheme }) {
   },
   clearScanText: { color: jc.primaryDark, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   hint: { textAlign: 'center', color: jc.textMuted, marginTop: 40, padding: 16 },
+  cacheHint: {
+    textAlign: 'center',
+    color: jc.primaryDark,
+    fontSize: 13,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingBottom: 8
+  },
   loadingWrap: { alignItems: 'center', marginTop: 48, gap: 12 },
-  error: { textAlign: 'center', color: jc.danger, marginTop: 40, padding: 16, fontWeight: '600' },
+  errorWrap: { alignItems: 'center', marginTop: 40, padding: 16, gap: 12 },
+  error: { textAlign: 'center', color: jc.danger, fontWeight: '600' },
+  retryBtn: {
+    backgroundColor: jc.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: jc.radius.md
+  },
+  retryBtnText: { color: '#fff', fontWeight: '700' },
   line: {
     flexDirection: 'row',
     alignItems: 'center',

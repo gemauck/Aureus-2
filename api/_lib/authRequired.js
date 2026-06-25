@@ -7,7 +7,8 @@ export function authRequired(handler) {
       const auth = req.headers['authorization'] || req.headers['Authorization'] || ''
       const queryToken =
         typeof req.query?.access_token === 'string' ? req.query.access_token.trim() : ''
-      const token = auth.startsWith('Bearer ') ? auth.slice(7) : queryToken || null
+      const rawToken = auth.startsWith('Bearer ') ? auth.slice(7) : queryToken || null
+      const token = rawToken ? String(rawToken).trim() : null
       if (!token) {
         // Ensure response hasn't been sent before attempting to send
         if (!res.headersSent && !res.writableEnded) {
@@ -47,6 +48,10 @@ export function authRequired(handler) {
         throw handlerError
       }
     } catch (e) {
+      // Handler errors after auth must propagate — do not mask as 401
+      if (req.user) {
+        throw e
+      }
       console.error('❌ Token verification failed:', e.message)
       console.error('❌ Auth middleware error stack:', e.stack)
       // Only send unauthorized if response hasn't been sent

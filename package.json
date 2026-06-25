@@ -25,6 +25,7 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit",
+    "test:unit:core": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/api/_lib/jwt.test.js tests/unit/api/_lib/authRequired.test.js tests/unit/api/_lib/requireRole.test.js tests/unit/api/auth/login.test.js tests/unit/api/_lib/stockMovementTransfer.test.js tests/unit/api/_lib/stockTransferRequests.test.js tests/unit/mobile-rn/stock-step-analysis.test.js tests/unit/layout/erpNavigation.test.js",
     "test:deploy": "node tests/deployment-test.js",
     "test:safety": "node tests/deployment-safety-test.js",
     "test:sc-import-latest": "node scripts/test-import-latest-sc-job-card.js",

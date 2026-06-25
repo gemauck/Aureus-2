@@ -1,5 +1,7 @@
 import { API_BASE_URL } from '../config'
 import { request } from '../services/apiClient'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { REFERENCE_CACHE_KEYS } from '../../../src/jobCardWizard/constants.js'
 import type {
   ClientOption,
   InventoryItem,
@@ -28,6 +30,38 @@ function filterActiveClients(list: ClientOption[]): ClientOption[] {
     const isInactive = rawStatus === 'inactive'
     return !isInactive && (type === 'client' || !c.type)
   })
+}
+
+async function readInventoryIdToSkuCache(): Promise<Record<string, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(REFERENCE_CACHE_KEYS.inventoryIdToSku)
+    const parsed = JSON.parse(raw || '{}')
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+async function writeInventoryIdToSkuCache(cache: Record<string, string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.inventoryIdToSku, JSON.stringify(cache))
+  } catch {
+    /* quota */
+  }
+}
+
+export async function seedInventoryIdToSkuCache(items: InventoryItem[]): Promise<void> {
+  if (!Array.isArray(items) || !items.length) return
+  const cache = await readInventoryIdToSkuCache()
+  let changed = false
+  for (const item of items) {
+    const id = String(item.id || item.inventoryItemId || '').trim()
+    const sku = String(item.sku || '').trim()
+    if (!id || !sku || cache[id] === sku) continue
+    cache[id] = sku
+    changed = true
+  }
+  if (changed) await writeInventoryIdToSkuCache(cache)
 }
 
 export const jobcardsApi = {
@@ -134,13 +168,25 @@ export const jobcardsApi = {
   resolveInventoryItemSku(inventoryItemId: string) {
     const id = String(inventoryItemId || '').trim()
     if (!id) return Promise.resolve(null as string | null)
-    const params = new URLSearchParams({ resolveItemId: id })
-    return request<{ item: { sku?: string } | null }>(`/api/public/inventory?${params}`).then(
-      (d) => {
+    return readInventoryIdToSkuCache().then(async (cache) => {
+      const cached = String(cache[id] || '').trim()
+      if (cached) return cached
+      try {
+        const params = new URLSearchParams({ resolveItemId: id })
+        const d = await request<{ item: { sku?: string } | null }>(
+          `/api/public/inventory?${params}`
+        )
         const sku = d.item?.sku != null ? String(d.item.sku).trim() : ''
-        return sku || null
+        if (sku) {
+          cache[id] = sku
+          await writeInventoryIdToSkuCache(cache)
+          return sku
+        }
+        return null
+      } catch {
+        return cached || null
       }
-    )
+    })
   },
 
   getServiceFormTemplates() {

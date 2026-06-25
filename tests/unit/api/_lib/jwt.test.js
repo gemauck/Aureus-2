@@ -91,16 +91,15 @@ describe('JWT Utilities', () => {
     });
 
     test('should return null when JWT_SECRET is not set', () => {
-      const originalSecret = process.env.JWT_SECRET;
-      delete process.env.JWT_SECRET;
-      
       const payload = { sub: 'user123' };
       const token = signAccessToken(payload);
+      const originalSecret = process.env.JWT_SECRET;
+      delete process.env.JWT_SECRET;
+
       const verified = verifyToken(token);
-      
+
       expect(verified).toBeNull();
-      
-      // Restore secret
+
       process.env.JWT_SECRET = originalSecret;
     });
 

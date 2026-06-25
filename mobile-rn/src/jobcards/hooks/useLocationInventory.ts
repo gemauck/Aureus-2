@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { jobCardStockPickListFromCachedInventory } from '../../../../src/jobCardWizard/stockPickList.js'
 import { REFERENCE_CACHE_KEYS } from '../../../../src/jobCardWizard/constants.js'
 import { useNetwork } from '../../hooks/useNetwork'
-import { jobcardsApi } from '../api'
+import { jobcardsApi, seedInventoryIdToSkuCache } from '../api'
 import type { InventoryItem } from '../types'
 
 const memoryCache = new Map<string, InventoryItem[]>()
@@ -126,6 +126,7 @@ export function useLocationInventory(
       setRows(inv)
       setFromCache(false)
       await writeLocationInventoryDiskCache(key, inv)
+      await seedInventoryIdToSkuCache(inv)
       if (!inv.length) {
         setError(
           mode === 'stockTake'

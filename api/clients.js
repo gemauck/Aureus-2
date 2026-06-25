@@ -997,15 +997,21 @@ async function handler(req, res) {
         
         // Phase 5: Sync contacts and comments to normalized tables after client creation
         // Accept both *Jsonb and plain names (e.g. lead conversion sends contacts/sites/comments)
-        const contactsToSync = Array.isArray(clientData.contactsJsonb) && clientData.contactsJsonb.length > 0
-          ? clientData.contactsJsonb
-          : (Array.isArray(clientData.contacts) ? clientData.contacts : [])
-        const commentsToSync = Array.isArray(clientData.commentsJsonb) && clientData.commentsJsonb.length > 0
-          ? clientData.commentsJsonb
-          : (Array.isArray(clientData.comments) ? clientData.comments : [])
-        const sitesToSync = Array.isArray(clientData.sitesJsonb) && clientData.sitesJsonb.length > 0
-          ? clientData.sitesJsonb
-          : (Array.isArray(clientData.sites) ? clientData.sites : [])
+        const contactsToSync = Array.isArray(body.contacts) && body.contacts.length > 0
+          ? body.contacts
+          : (Array.isArray(clientData.contactsJsonb) && clientData.contactsJsonb.length > 0
+            ? clientData.contactsJsonb
+            : (Array.isArray(clientData.contacts) ? clientData.contacts : []))
+        const commentsToSync = Array.isArray(body.comments) && body.comments.length > 0
+          ? body.comments
+          : (Array.isArray(clientData.commentsJsonb) && clientData.commentsJsonb.length > 0
+            ? clientData.commentsJsonb
+            : (Array.isArray(clientData.comments) ? clientData.comments : []))
+        const sitesToSync = Array.isArray(body.sites) && body.sites.length > 0
+          ? body.sites
+          : (Array.isArray(clientData.sitesJsonb) && clientData.sitesJsonb.length > 0
+            ? clientData.sitesJsonb
+            : (Array.isArray(clientData.sites) ? clientData.sites : []))
         const contractsToSync = Array.isArray(clientData.contractsJsonb) && clientData.contractsJsonb.length > 0
           ? clientData.contractsJsonb
           : (Array.isArray(clientData.contracts) ? clientData.contracts : [])

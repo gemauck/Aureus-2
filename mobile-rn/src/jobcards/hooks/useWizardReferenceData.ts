@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { REFERENCE_CACHE_KEYS } from '../../../../src/jobCardWizard/index.js'
 import { useNetwork } from '../../hooks/useNetwork'
-import { jobcardsApi } from '../api'
+import { jobcardsApi, seedInventoryIdToSkuCache } from '../api'
 import type { ClientOption, InventoryItem, ProjectOption, ServiceFormTemplate, StockLocation, UserOption } from '../types'
 
 function activeTechnicianUsers(list: UserOption[]) {
@@ -119,6 +119,7 @@ export function useWizardReferenceData(accessToken: string | null) {
           setInventory(inv)
           inventoryLoadedRef.current = true
           await AsyncStorage.setItem(REFERENCE_CACHE_KEYS.inventory, JSON.stringify(inv))
+          await seedInventoryIdToSkuCache(inv)
         }
         if (locs.length) {
           setStockLocations(locs)
