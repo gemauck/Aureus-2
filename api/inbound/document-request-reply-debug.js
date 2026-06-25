@@ -3,6 +3,7 @@
  * Diagnostic: list recent DocumentRequestEmailSent and DocumentItemComment
  * so you can verify webhook is creating comments and messageIds are stored.
  */
+import { requireCronSecret } from '../_lib/securityGuards.js'
 import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest } from '../_lib/response.js'
 
@@ -10,11 +11,7 @@ async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).setHeader('Allow', 'GET').json({ error: 'Method not allowed' })
   }
-  const secret = process.env.CRON_SECRET || process.env.RESEND_WEBHOOK_SECRET
-  const provided = (req.query && req.query.secret) || (req.headers && req.headers['x-cron-secret'])
-  if (secret && provided !== secret) {
-    return badRequest(res, 'Invalid or missing secret')
-  }
+  if (!requireCronSecret(req, res)) return
 
   try {
     const [recentSent, recentComments] = await Promise.all([

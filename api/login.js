@@ -1,32 +1,38 @@
 import { prisma } from './_lib/prisma.js'
 import bcrypt from 'bcryptjs'
 import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
-import { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } from './_lib/jwt.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+/**
+ * @deprecated Use POST /api/auth/login — kept for backward compatibility with older scripts.
+ */
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
+  res.setHeader('Deprecation', 'true')
+  res.setHeader('Link', '</api/auth/login>; rel="successor-version"')
   try {
-    // Use Express's built-in JSON parser instead of manual parsing
     const { email, password } = req.body || {}
     if (!email || !password) return badRequest(res, 'Email and password required')
 
-    const user = await prisma.user.findUnique({ where: { email } })
-    if (!user || !user.passwordHash) return unauthorized(res)
+    const normalizedEmail = String(email).trim().toLowerCase()
+    const passwordString = String(password).replace(/\0/g, '').trim()
 
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    if (!valid) return unauthorized(res)
-    
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
+    if (!user || !user.passwordHash) return unauthorized(res, 'Invalid credentials')
+    if (user.status !== 'active') return unauthorized(res, 'Account is not active')
 
+    const valid = await bcrypt.compare(passwordString, user.passwordHash)
+    if (!valid) return unauthorized(res, 'Invalid credentials')
+
+    const { signAccessToken, signRefreshToken, REFRESH_TOKEN_MAX_AGE_SECONDS } = await import('./_lib/jwt.js')
     const payload = { sub: user.id, email: user.email, role: user.role }
     const accessToken = signAccessToken(payload)
     const refreshToken = signRefreshToken(payload)
 
-    // Update last login and last seen timestamps
     await prisma.user.update({
       where: { id: user.id },
-      data: { 
+      data: {
         lastLoginAt: new Date(),
         lastSeenAt: new Date()
       }

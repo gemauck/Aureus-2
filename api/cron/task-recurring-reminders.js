@@ -5,6 +5,7 @@
  * Run in-process via node-cron (e.g. daily at 9:00 AM) or HTTP with CRON_SECRET.
  */
 
+import { requireCronSecret } from '../_lib/securityGuards.js'
 import { prisma } from '../_lib/prisma.js';
 import { createNotificationForUser } from '../notifications.js';
 import { ok, badRequest, serverError } from '../_lib/response.js';
@@ -100,13 +101,7 @@ export async function runTaskRecurringReminders() {
 }
 
 async function handler(req, res) {
-  const secret = process.env.CRON_SECRET;
-  const provided =
-    (req.query && req.query.secret) ||
-    (req.headers && (req.headers['x-cron-secret'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '')));
-  if (secret && provided !== secret) {
-    return badRequest(res, 'Invalid or missing cron secret');
-  }
+  if (!requireCronSecret(req, res)) return;
 
   try {
     const result = await runTaskRecurringReminders();

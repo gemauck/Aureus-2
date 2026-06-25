@@ -51,7 +51,8 @@ async function handler(req, res) {
       healthData.checks.database_error = dbError.message
     }
     
-    // Run database migration if needed (PostgreSQL compatible)
+    // Optional schema self-heal — disabled in production unless explicitly enabled
+    if (process.env.RUN_HEALTH_MIGRATIONS === 'true') {
     try {
       // Check if column exists first (PostgreSQL syntax)
       const columnCheck = await prisma.$queryRaw`
@@ -69,6 +70,9 @@ async function handler(req, res) {
       healthData.migration = 'completed'
     } catch (migrationError) {
       healthData.migration = 'skipped'
+    }
+    } else {
+      healthData.migration = 'disabled'
     }
     
     // Determine overall status (only fail on critical issues)

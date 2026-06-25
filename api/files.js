@@ -5,7 +5,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { authRequired } from './_lib/authRequired.js'
 import { created, badRequest, serverError } from './_lib/response.js'
-import { parseJsonBody } from './_lib/body.js'
+import { resolveSafeUploadDir } from './_lib/securityGuards.js'
 
 async function handler(req, res) {
   try {
@@ -43,7 +43,11 @@ async function handler(req, res) {
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const rootDir = path.resolve(__dirname, '..')
     const uploadRoot = path.join(rootDir, 'uploads')
-    const targetDir = path.join(uploadRoot, folder)
+    const resolved = resolveSafeUploadDir(uploadRoot, folder)
+    if (!resolved) {
+      return badRequest(res, 'Invalid upload folder')
+    }
+    const { targetDir, safeFolder } = resolved
     fs.mkdirSync(targetDir, { recursive: true })
 
     // Generate unique filename, preserve extension if present
@@ -57,7 +61,7 @@ async function handler(req, res) {
     fs.writeFileSync(filePath, buffer)
 
     // Public URL (server serves static from root)
-    const publicPath = `/uploads/${folder}/${fileName}`
+    const publicPath = `/uploads/${safeFolder}/${fileName}`
     return created(res, { url: publicPath, name, size: buffer.length, mimeType })
   } catch (e) {
     console.error('File upload error:', e)

@@ -3,8 +3,10 @@ import { prisma } from './_lib/prisma.js'
 import bcrypt from 'bcryptjs'
 import { ok, serverError, badRequest } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
+import { blockLegacyMigrationEndpoint } from './_lib/securityGuards.js'
 
 async function handler(req, res) {
+  if (blockLegacyMigrationEndpoint(res, 'create-admin')) return
   try {
     
     // Check if admin user already exists

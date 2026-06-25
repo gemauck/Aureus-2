@@ -2,18 +2,14 @@
  * POST/GET /api/cron/safety-culture-sync?secret=
  * Scheduled incremental sync into local Safety Culture cache.
  */
-import { ok, badRequest, serverError } from '../_lib/response.js'
+import { requireCronSecret } from '../_lib/securityGuards.js'
+import { requireCronSecret } from '../_lib/securityGuards.js'
+import { ok, serverError } from '../_lib/response.js'
 import { runSafetyCultureSync } from '../_lib/safetyCultureSync.js'
 import { resolveSafetyCultureApiKey } from '../_lib/safetyCultureApiKey.js'
 
 async function handler(req, res) {
-  const secret = process.env.CRON_SECRET
-  const provided =
-    (req.query && req.query.secret) ||
-    (req.headers && (req.headers['x-cron-secret'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '')))
-  if (secret && provided !== secret) {
-    return badRequest(res, 'Invalid or missing cron secret')
-  }
+  if (!requireCronSecret(req, res)) return
 
   const key = await resolveSafetyCultureApiKey()
   if (!key || !key.startsWith('scapi_')) {

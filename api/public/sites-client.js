@@ -1,4 +1,5 @@
 // Public read-only sites for job card form (no auth). Same data as GET /api/sites/client/:clientId.
+import { assertPublicFieldAccess } from '../_lib/securityGuards.js'
 import { getSitesForClientRead } from '../_lib/getSitesForClientRead.js'
 import { ok, badRequest } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
@@ -12,6 +13,7 @@ async function handler(req, res) {
   if (!clientId || typeof clientId !== 'string' || !clientId.trim()) {
     return badRequest(res, 'clientId required')
   }
+  if (!assertPublicFieldAccess(req, res)) return
 
   try {
     const sites = await getSitesForClientRead(clientId)

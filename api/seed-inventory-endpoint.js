@@ -5,6 +5,7 @@
  * This endpoint imports all stock items from the seed-inventory.js file
  */
 
+import { requireAdminOrManageUsers } from './_lib/securityGuards.js'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, badRequest, serverError } from './_lib/response.js'
@@ -17,6 +18,8 @@ async function handler(req, res) {
   }
 
   try {
+
+    if (!requireAdminOrManageUsers(req, res)) return
 
     // Get current max SKU number
     const allItems = await prisma.inventoryItem.findMany({

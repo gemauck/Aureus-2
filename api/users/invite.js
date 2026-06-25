@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { authRequired } from '../_lib/authRequired.js'
+import { requireAdminOrManageUsers, isAdminOrManageUsers } from '../_lib/securityGuards.js'
 import { sendInvitationEmail } from '../_lib/email.js'
 import { getAppUrl } from '../_lib/getAppUrl.js'
 import crypto from 'crypto'
@@ -12,6 +13,7 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
+        if (!requireAdminOrManageUsers(req, res)) return
         
         // Ensure Invitation table exists (self-healing for first deploys)
         try {
@@ -64,6 +66,11 @@ async function handler(req, res) {
         const isInvitingAsSuperAdmin = ['superadmin', 'super-admin', 'super_admin'].includes(inviteRoleNormalized);
         if (isInvitingAsSuperAdmin && !inviterIsSuperAdmin) {
             return res.status(403).json({ error: 'Only a Super Administrator can invite users as Super Administrator' });
+        }
+
+        const inviterIsAdmin = isAdminOrManageUsers(req.user)
+        if (!inviterIsAdmin && inviteRoleNormalized !== 'user') {
+            return res.status(403).json({ error: 'Only administrators can invite users with elevated roles' })
         }
         
         // Check if user already exists
@@ -211,15 +218,6 @@ async function handler(req, res) {
                 emailSent,
                 emailError: emailError ? emailError.message : null,
                 emailErrorDetails: emailErrorDetails,
-                emailConfig: {
-                    RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT_SET',
-                    SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
-                    SMTP_HOST: process.env.SMTP_HOST || 'NOT_SET',
-                    SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
-                    SMTP_USER: process.env.SMTP_USER ? 'SET' : 'NOT_SET',
-                    SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
-                    EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET'
-                },
                 timestamp: new Date().toISOString()
             }
         })

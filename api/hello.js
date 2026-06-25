@@ -1,5 +1,6 @@
 import { prisma } from './_lib/prisma.js'
 import { withHttp } from './_lib/withHttp.js'
+import { blockLegacyMigrationEndpoint } from './_lib/securityGuards.js'
 
 // Helper to safely parse JSON
 function parseJson(str, defaultValue) {
@@ -14,6 +15,7 @@ function parseJson(str, defaultValue) {
 }
 
 async function handler(req, res) {
+  if (blockLegacyMigrationEndpoint(res, 'hello')) return
   try {
     console.log('🧪 Finding and migrating Contact 22...')
     

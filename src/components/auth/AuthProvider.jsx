@@ -65,10 +65,12 @@ const AuthProvider = ({ children }) => {
     useEffect(() => {
         const init = async () => {
             try {
-                // Check for Google OAuth redirect with token
+                // Check for Google OAuth redirect with token (hash preferred; query for backward compatibility)
                 const urlParams = new URLSearchParams(window.location.search);
-                const loginSuccess = urlParams.get('login');
-                const token = urlParams.get('token');
+                const hashRaw = (window.location.hash || '').replace(/^#/, '');
+                const hashParams = new URLSearchParams(hashRaw);
+                const loginSuccess = hashParams.get('login') || urlParams.get('login');
+                const token = hashParams.get('token') || urlParams.get('token');
                 
                 if (loginSuccess === 'success' && token) {
                     // Save token

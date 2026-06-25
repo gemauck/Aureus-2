@@ -106,8 +106,8 @@ async function handler(req, res) {
             `oauth_state=; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}; Max-Age=0`
         ])
         
-        // Redirect to frontend with success
-        const frontendUrl = `${getAppUrl()}?login=success&token=${accessToken}`
+        // Redirect to frontend with success (token in hash — not sent to server logs)
+        const frontendUrl = `${getAppUrl()}#login=success&token=${encodeURIComponent(accessToken)}`
         res.redirect(frontendUrl)
         
     } catch (error) {

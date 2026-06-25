@@ -1,3 +1,4 @@
+import { publicFieldClientHeaders } from './publicFieldClientHeaders.js'
 import { parseInventoryQrPayload } from './inventoryQrPayload.js'
 
 function normalizeSku(sku) {
@@ -121,7 +122,10 @@ export async function fetchInventorySkuByItemId(apiBase, inventoryItemId) {
   const base = String(apiBase || '').replace(/\/$/, '')
   const url = `${base}/api/public/inventory?resolveItemId=${encodeURIComponent(id)}`
   try {
-    const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } })
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: publicFieldClientHeaders({ 'Content-Type': 'application/json' })
+    })
     if (!res.ok) return null
     const data = await res.json()
     const item = data?.data?.item ?? data?.item

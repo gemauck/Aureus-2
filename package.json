@@ -166,6 +166,7 @@
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dompurify": "^3.4.11",
     "dotenv": "^17.2.3",
     "esbuild": "^0.25.11",
     "express": "^4.19.2",

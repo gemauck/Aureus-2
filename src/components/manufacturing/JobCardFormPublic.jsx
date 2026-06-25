@@ -15,6 +15,7 @@ import {
   fetchInventorySkuByItemId,
   resolveInventoryScanToSku
 } from '../../utils/resolveInventoryScanToSku.js';
+import { publicFieldClientHeaders } from '../../utils/publicFieldClientHeaders.js';
 import { sanitizeJobCardStockUsedForSave } from '../../utils/jobCardStockUsed.js';
 import {
   stockTakeAvailabilityEmptyMessage,
@@ -71,6 +72,16 @@ import {
 import { getWebOfflineStore, createWebSyncEngine } from '../../jobCardWizard/webAdapter.js';
 
 const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = React;
+
+function fieldPublicFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...publicFieldClientHeaders(),
+      ...(options.headers || {})
+    }
+  });
+}
 
 const webOfflineStore = getWebOfflineStore();
 const readLocalPendingJobCards = () => webOfflineStore.readLocalPendingJobCards();
@@ -1572,7 +1583,7 @@ const JobCardFormPublic = () => {
     needSkus.forEach((sku) => stockTakeThumbFetchRef.current.add(sku));
     const run = async () => {
       try {
-        const res = await fetch(
+        const res = await fieldPublicFetch(
           `/api/public/inventory?thumbnails=${encodeURIComponent(needSkus.join(','))}`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
@@ -2034,7 +2045,7 @@ const JobCardFormPublic = () => {
       }
 
       try {
-        const response = await fetch(
+        const response = await fieldPublicFetch(
           `/api/public/inventory?locationId=${encodeURIComponent(key)}`,
           { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
@@ -2741,7 +2752,7 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            const response = await fetch('/api/public/clients', {
+            const response = await fieldPublicFetch('/api/public/clients', {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -2834,7 +2845,7 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            const response = await fetch('/api/public/users', {
+            const response = await fieldPublicFetch('/api/public/users', {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -2948,7 +2959,7 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            const response = await fetch('/api/public/inventory', {
+            const response = await fieldPublicFetch('/api/public/inventory', {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -3025,7 +3036,7 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            const response = await fetch('/api/public/locations', {
+            const response = await fieldPublicFetch('/api/public/locations', {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -3101,7 +3112,7 @@ const JobCardFormPublic = () => {
         // Also try to load from API if online
         if (isOnline && sites.length === 0) {
           try {
-            const response = await fetch(`/api/public/sites/client/${encodeURIComponent(formData.clientId)}`, {
+            const response = await fieldPublicFetch(`/api/public/sites/client/${encodeURIComponent(formData.clientId)}`, {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json'
@@ -3542,7 +3553,7 @@ const JobCardFormPublic = () => {
 
       try {
         setLoadingTemplates(true);
-        const response = await fetch('/api/public/service-forms', {
+        const response = await fieldPublicFetch('/api/public/service-forms', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -4921,7 +4932,7 @@ const JobCardFormPublic = () => {
         return;
       }
       try {
-        const response = await fetch(
+        const response = await fieldPublicFetch(
           `/api/public/inventory?locationId=${encodeURIComponent(
             stockTakeLocationId
           )}&includeZero=1&allSkus=1`,

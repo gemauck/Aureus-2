@@ -321,7 +321,8 @@ async function handler(req, res) {
       let actorRole = user.role || 'System';
       
       // If admin and body has userId (migration scenario), try to use that user
-      const isAdmin = isAdminRole(user.role);
+      // Only superadmins may attribute audit entries to another user (migration tooling).
+      const isAdmin = isSuperAdminRole(user.role);
       if (isAdmin && body.userId && body.userId !== 'system' && body.userId !== user.id) {
         try {
           const originalUser = await prisma.user.findUnique({

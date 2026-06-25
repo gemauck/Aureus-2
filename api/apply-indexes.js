@@ -1,10 +1,12 @@
 import { prisma } from './_lib/prisma.js'
 import { ok, serverError } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
+import { requireAdminOrManageUsers } from './_lib/securityGuards.js'
 import { authRequired } from './_lib/authRequired.js'
 
 async function handler(req, res) {
   try {
+    if (!requireAdminOrManageUsers(req, res)) return
     
     // Client table indexes
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Client_createdAt_idx" ON "Client"("createdAt")`

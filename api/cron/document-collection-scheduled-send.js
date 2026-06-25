@@ -5,6 +5,7 @@
  * Schedule: weekly = send if last sent > 7 days ago; monthly = send if not sent this month.
  * Stops when cell status equals the configured stopWhenStatus (e.g. "collected").
  */
+import { requireCronSecret } from '../_lib/securityGuards.js';
 import crypto from 'crypto';
 import { prisma } from '../_lib/prisma.js';
 import { sendEmail } from '../_lib/email.js';
@@ -40,13 +41,7 @@ function buildDocumentCollectionErpLink(projectId, sectionId, documentId, monthK
 }
 
 async function handler(req, res) {
-  const secret = process.env.CRON_SECRET || process.env.DOCUMENT_COLLECTION_CRON_SECRET;
-  const provided =
-    (req.query && req.query.secret) ||
-    (req.headers && (req.headers['x-cron-secret'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '')));
-  if (secret && provided !== secret) {
-    return badRequest(res, 'Invalid or missing cron secret');
-  }
+  if (!requireCronSecret(req, res, { extraEnvKeys: ['DOCUMENT_COLLECTION_CRON_SECRET'] })) return;
 
   try {
     const now = new Date();

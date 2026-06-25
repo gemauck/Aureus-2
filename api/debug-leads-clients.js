@@ -1,4 +1,5 @@
 // Debug endpoint to compare what different users see
+import { requireAdminOrManageUsers } from './_lib/securityGuards.js'
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, serverError } from './_lib/response.js'
@@ -7,6 +8,8 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    if (!requireAdminOrManageUsers(req, res)) return
+
     const userEmail = req.user?.email || 'unknown'
     const userId = req.user?.sub || 'unknown'
     

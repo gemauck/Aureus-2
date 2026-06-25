@@ -1,4 +1,5 @@
 // Public API endpoint for job card form - returns inventory items without authentication
+import { assertPublicFieldAccess } from '../_lib/securityGuards.js'
 import { prisma } from '../_lib/prisma.js'
 import { catalogUnitCostForSku } from '../_lib/inventoryCatalogUnitCost.js'
 import { ok, serverError } from '../_lib/response.js'
@@ -231,6 +232,7 @@ async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
+  if (!assertPublicFieldAccess(req, res)) return
 
   try {
     const rawThumbSkus = req.query?.thumbnails

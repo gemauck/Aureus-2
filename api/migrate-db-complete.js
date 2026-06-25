@@ -2,8 +2,10 @@
 import { prisma } from './_lib/prisma.js'
 import { ok, serverError } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
+import { blockLegacyMigrationEndpoint } from './_lib/securityGuards.js'
 
 async function handler(req, res) {
+  if (blockLegacyMigrationEndpoint(res, 'migrate-db-complete')) return
   try {
     
     const migrationSteps = []

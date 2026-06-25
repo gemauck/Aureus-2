@@ -1,5 +1,6 @@
 // Public endpoint: transcribe short voice clips for the field job card (Whisper).
 // Requires OPENAI_API_KEY. Unauthenticated — abuse risk; consider rate limits at the edge.
+import { assertPublicFieldAccess } from '../_lib/securityGuards.js'
 import OpenAI, { APIConnectionError, APIError } from 'openai'
 import { toFile } from 'openai/uploads'
 import { badRequest, serverError, serviceUnavailable } from '../_lib/response.js'
@@ -68,6 +69,7 @@ async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
+  if (!assertPublicFieldAccess(req, res)) return
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
       error: 'Transcription is not configured on this server',

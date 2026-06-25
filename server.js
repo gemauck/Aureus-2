@@ -436,8 +436,51 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding
 }))
 
-// Rate limiting removed - no 15 minute login restriction
-// Note: Consider implementing other security measures if needed
+// Rate limiting — login endpoints get a dedicated stricter limiter
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many login attempts. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: (req, res, _next, options) => {
+    res.status(options.statusCode).json({
+      error: { message: options.message, code: 'LOGIN_RATE_LIMIT' }
+    })
+  }
+})
+
+const transcribeAudioLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  message: 'Too many transcription requests. Please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const publicFieldRefLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: 'Too many reference data requests. Please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+app.use('/api/auth/login', loginLimiter)
+app.use('/api/login', loginLimiter)
+app.use('/api/auth/mobile/login', loginLimiter)
+app.use('/api/public/transcribe-audio', transcribeAudioLimiter)
+for (const publicRefPath of [
+  '/api/public/clients',
+  '/api/public/users',
+  '/api/public/inventory',
+  '/api/public/locations',
+  '/api/public/service-forms',
+  '/api/public/sites'
+]) {
+  app.use(publicRefPath, publicFieldRefLimiter)
+}
 
 // General API rate limiting
 const apiLimiter = rateLimit({

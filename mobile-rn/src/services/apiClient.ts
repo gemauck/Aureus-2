@@ -7,6 +7,7 @@ import {
 } from './rateLimitGuard'
 import { trackError } from './telemetry'
 import { getMobileClientInfo } from './clientPresence'
+import { publicFieldClientHeaders } from '../../../src/utils/publicFieldClientHeaders.js'
 
 export { API_BASE_URL }
 
@@ -104,6 +105,9 @@ export async function fetchWithTokenRefresh(
 ): Promise<Response> {
   const { token, ...fetchOptions } = options
   const headers = new Headers(fetchOptions.headers || {})
+  for (const [key, value] of Object.entries(publicFieldClientHeaders())) {
+    headers.set(key, value)
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const method = (fetchOptions.method || 'GET').toUpperCase()
 
@@ -158,6 +162,7 @@ async function executeRequest<T>(
       method,
       headers: {
         'Content-Type': 'application/json',
+        ...publicFieldClientHeaders(),
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: body ? JSON.stringify(body) : undefined
