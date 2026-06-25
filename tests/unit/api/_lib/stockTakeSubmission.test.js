@@ -1,6 +1,8 @@
 import { describe, expect, test } from '@jest/globals'
 import {
+  buildStockTakeSkuMetaMap,
   computeStockTakeApplyDeltaQty,
+  normalizeStockTakeLinesInput,
   parseStockTakeLineMeta,
   resolveStockTakeMovementDate
 } from '../../../../api/_lib/stockTakeSubmission.js'
@@ -51,5 +53,56 @@ describe('stockTakeSubmission', () => {
         isNewItem: true
       })
     ).toBe(4)
+  })
+
+  test('normalizeStockTakeLinesInput accepts mobile legacy sku + countedQty only', () => {
+    const skuMeta = buildStockTakeSkuMetaMap(
+      [
+        {
+          id: 'li-1',
+          sku: 'ABC-001',
+          itemName: 'Widget',
+          quantity: 12,
+          unit: 'pcs'
+        }
+      ],
+      [{ id: 'inv-1', sku: 'ABC-001', name: 'Widget', unit: 'pcs' }]
+    )
+
+    const lines = normalizeStockTakeLinesInput(
+      [{ sku: 'ABC-001', countedQty: 10 }],
+      skuMeta
+    )
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({
+      sku: 'ABC-001',
+      itemName: 'Widget',
+      systemQty: 12,
+      countedQty: 10,
+      deltaQty: -2,
+      locationInventoryId: 'li-1',
+      inventoryItemId: 'inv-1'
+    })
+  })
+
+  test('normalizeStockTakeLinesInput keeps explicit systemQty from web clients', () => {
+    const lines = normalizeStockTakeLinesInput(
+      [
+        {
+          sku: 'ABC-001',
+          itemName: 'Widget',
+          systemQty: 5,
+          countedQty: 7
+        }
+      ],
+      new Map()
+    )
+
+    expect(lines[0]).toMatchObject({
+      systemQty: 5,
+      countedQty: 7,
+      deltaQty: 2
+    })
   })
 })

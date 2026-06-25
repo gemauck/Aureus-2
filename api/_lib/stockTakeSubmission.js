@@ -120,3 +120,124 @@ export function computeStockTakeApplyDeltaQty(p) {
   const net = Number(p.netMovementSinceSubmit) || 0
   return counted - (current - net)
 }
+
+/**
+ * Build SKU lookup for stock-take line normalization (location inventory + catalog names).
+ * @param {Array<{ id: string, sku: string, itemName?: string, quantity?: number, unit?: string }>} locationInventoryRows
+ * @param {Array<{ id: string, sku: string, name?: string, unit?: string }>} inventoryItems
+ */
+export function buildStockTakeSkuMetaMap(locationInventoryRows, inventoryItems = []) {
+  const itemBySku = new Map()
+  for (const item of inventoryItems) {
+    const sku = String(item?.sku || '').trim()
+    if (sku && !itemBySku.has(sku)) itemBySku.set(sku, item)
+  }
+
+  const skuMeta = new Map()
+  for (const row of locationInventoryRows || []) {
+    const sku = String(row?.sku || '').trim()
+    if (!sku) continue
+    const inv = itemBySku.get(sku)
+    skuMeta.set(sku, {
+      locationInventoryId: row.id ? String(row.id) : null,
+      inventoryItemId: inv?.id ? String(inv.id) : null,
+      itemName: String(row.itemName || inv?.name || sku).trim() || sku,
+      unit: String(row.unit || inv?.unit || 'pcs').trim() || 'pcs',
+      systemQty: Number(row.quantity) || 0
+    })
+  }
+  return skuMeta
+}
+
+/**
+ * Normalize direct stock-take submission lines (non-session POST).
+ * Fills systemQty/itemName from location inventory when mobile sends only sku + countedQty.
+ */
+export function normalizeStockTakeLinesInput(linesInput, skuMetaBySku = new Map()) {
+  if (!Array.isArray(linesInput) || !linesInput.length) return []
+
+  const cleanLines = []
+  for (let idx = 0; idx < linesInput.length; idx++) {
+    const line = linesInput[idx]
+    const isNewItem = line?.isNewItem === true
+    const sku = String(line?.sku || '').trim()
+    const countedQty = Number(line?.countedQty)
+    if (!Number.isFinite(countedQty)) continue
+
+    let itemName = String(line?.itemName || line?.name || '').trim()
+    let systemQty = Number(line?.systemQty)
+    let unit = String(line?.unit || '').trim()
+    let locationInventoryId = line?.locationInventoryId ? String(line.locationInventoryId) : null
+    let inventoryItemId = line?.inventoryItemId ? String(line.inventoryItemId) : null
+
+    if (!isNewItem) {
+      if (!sku) continue
+      const meta = skuMetaBySku.get(sku)
+      if (!itemName) itemName = meta?.itemName || sku
+      if (!Number.isFinite(systemQty)) systemQty = meta?.systemQty ?? 0
+      if (!unit) unit = meta?.unit || 'pcs'
+      if (!locationInventoryId && meta?.locationInventoryId) {
+        locationInventoryId = meta.locationInventoryId
+      }
+      if (!inventoryItemId && meta?.inventoryItemId) {
+        inventoryItemId = meta.inventoryItemId
+      }
+    } else {
+      if (!itemName) continue
+      if (!Number.isFinite(systemQty)) systemQty = 0
+      if (!unit) unit = 'pcs'
+    }
+
+    if (!itemName) continue
+
+    cleanLines.push({
+      row: idx + 1,
+      locationInventoryId,
+      inventoryItemId,
+      sku,
+      itemName,
+      unit: unit || 'pcs',
+      systemQty,
+      countedQty,
+      deltaQty: countedQty - systemQty,
+      isNewItem,
+      proposedItemDetails:
+        line?.proposedItemDetails && typeof line.proposedItemDetails === 'object'
+          ? line.proposedItemDetails
+          : {}
+    })
+  }
+
+  return cleanLines
+}
+
+/** Load location inventory metadata and normalize stock-take create lines. */
+export async function normalizeStockTakeLinesForCreate(prisma, locationId, linesInput) {
+  const locId = String(locationId || '').trim()
+  if (!locId || !Array.isArray(linesInput) || !linesInput.length) return []
+
+  const locationInventoryRows = await prisma.locationInventory.findMany({
+    where: { locationId: locId },
+    select: {
+      id: true,
+      sku: true,
+      itemName: true,
+      quantity: true,
+      unit: true
+    }
+  })
+
+  const skus = locationInventoryRows
+    .map((row) => String(row.sku || '').trim())
+    .filter(Boolean)
+  const inventoryItems = skus.length
+    ? await prisma.inventoryItem.findMany({
+        where: { sku: { in: skus } },
+        select: { id: true, sku: true, name: true, unit: true },
+        orderBy: { updatedAt: 'desc' }
+      })
+    : []
+
+  const skuMetaBySku = buildStockTakeSkuMetaMap(locationInventoryRows, inventoryItems)
+  return normalizeStockTakeLinesInput(linesInput, skuMetaBySku)
+}

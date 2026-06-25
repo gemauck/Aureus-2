@@ -35,6 +35,7 @@ import {
 import {
   computeMovementNetAtLocationSinceTx,
   computeStockTakeApplyDeltaQty,
+  normalizeStockTakeLinesForCreate,
   refreshStockTakeLinesSystemQtyAtSubmitTx,
   resolveStockTakeMovementDate
 } from './_lib/stockTakeSubmission.js'
@@ -1728,33 +1729,7 @@ async function handler(req, res) {
         const linesInput = Array.isArray(body?.lines) ? body.lines : []
         if (!linesInput.length) return badRequest(res, 'At least one line is required')
 
-        const cleanLines = linesInput
-          .map((line, idx) => {
-            const isNewItem = line?.isNewItem === true
-            const sku = String(line?.sku || '').trim()
-            const itemName = String(line?.itemName || sku).trim()
-            const systemQty = Number(line?.systemQty)
-            const countedQty = Number(line?.countedQty)
-            if (!itemName || !Number.isFinite(systemQty) || !Number.isFinite(countedQty)) return null
-            if (!isNewItem && !sku) return null
-            return {
-              row: idx + 1,
-              locationInventoryId: line?.locationInventoryId ? String(line.locationInventoryId) : null,
-              inventoryItemId: line?.inventoryItemId ? String(line.inventoryItemId) : null,
-              sku,
-              itemName,
-              unit: String(line?.unit || 'pcs').trim() || 'pcs',
-              systemQty,
-              countedQty,
-              deltaQty: countedQty - systemQty,
-              isNewItem,
-              proposedItemDetails:
-                line?.proposedItemDetails && typeof line.proposedItemDetails === 'object'
-                  ? line.proposedItemDetails
-                  : {}
-            }
-          })
-          .filter(Boolean)
+        const cleanLines = await normalizeStockTakeLinesForCreate(prisma, location.id, linesInput)
 
         if (!cleanLines.length) {
           return badRequest(res, 'No valid stock-take lines found')
