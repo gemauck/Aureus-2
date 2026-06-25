@@ -215,7 +215,7 @@ export async function checkForDuplicates(data, excludeId = null) {
  * Validates and returns user-friendly duplicate error message
  */
 export function formatDuplicateError(duplicateResult) {
-  if (!duplicateResult || !duplicateResult.matches) {
+  if (!duplicateResult || !duplicateResult.matches || duplicateResult.matches.length === 0) {
     return null
   }
 

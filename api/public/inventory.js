@@ -266,14 +266,19 @@ async function handler(req, res) {
         where: { id: resolveItemId },
         select: { id: true, sku: true, name: true, status: true }
       })
-      if (!item || item.status === 'inactive') {
+      if (!item) {
+        return ok(res, { item: null })
+      }
+      const sku = String(item.sku || '').trim()
+      if (!sku) {
         return ok(res, { item: null })
       }
       return ok(res, {
         item: {
           inventoryItemId: item.id,
-          sku: String(item.sku || '').trim(),
-          name: String(item.name || '').trim()
+          sku,
+          name: String(item.name || '').trim(),
+          status: item.status || ''
         }
       })
     }

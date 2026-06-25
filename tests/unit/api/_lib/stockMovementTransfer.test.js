@@ -1,15 +1,12 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, test, expect } from '@jest/globals';
+import { assertValidTransferLocations } from '../../../../api/_lib/stockMovementTransfer.js';
 
-import { assertValidTransferLocations } from '../../../../api/_lib/stockMovementTransfer.js'
+describe('assertValidTransferLocations', () => {
+  test('rejects same from and to', () => {
+    expect(() => assertValidTransferLocations('loc-a', 'loc-a')).toThrow(/must be different/);
+  });
 
-test('assertValidTransferLocations rejects same from and to', () => {
-  assert.throws(
-    () => assertValidTransferLocations('loc-a', 'loc-a'),
-    /must be different/
-  )
-})
-
-test('assertValidTransferLocations accepts distinct ids', () => {
-  assert.doesNotThrow(() => assertValidTransferLocations('loc-a', 'loc-b'))
-})
+  test('accepts distinct ids', () => {
+    expect(() => assertValidTransferLocations('loc-a', 'loc-b')).not.toThrow();
+  });
+});

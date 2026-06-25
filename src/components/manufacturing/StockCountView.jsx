@@ -930,16 +930,6 @@
       stScanActiveRef.current = true;
       let stream = null;
 
-      const parseQr =
-        typeof window.parseInventoryQrPayload === 'function'
-          ? window.parseInventoryQrPayload
-          : (raw) => {
-              const s = String(raw || '').trim();
-              if (!s.startsWith('ABCO:INV:')) return null;
-              const inventoryItemId = s.slice('ABCO:INV:'.length).trim();
-              return inventoryItemId ? { inventoryItemId } : null;
-            };
-
       const tryDecode = async (text) => {
         if (!stScanActiveRef.current) return;
         const now = Date.now();
@@ -951,6 +941,10 @@
         last.t = now;
 
         const rows = stRowsRef.current || [];
+        const buildMap =
+          typeof window.buildInventoryIdToSkuMap === 'function'
+            ? window.buildInventoryIdToSkuMap
+            : null;
         const resolveScan =
           typeof window.resolveInventoryScanToSku === 'function'
             ? window.resolveInventoryScanToSku
@@ -959,33 +953,35 @@
           typeof window.fetchInventorySkuByItemId === 'function'
             ? window.fetchInventorySkuByItemId
             : null;
-        let resolved = null;
-        if (resolveScan) {
-          resolved = await resolveScan(s, rows, {
-            resolveItemIdToSku: fetchSku
-              ? (id) => fetchSku(apiBase, id)
-              : undefined
-          });
-        } else {
-          const parsed = parseQr(s);
-          if (parsed?.inventoryItemId) {
-            const row = rows.find(
-              (r) => r.inventoryItemId && String(r.inventoryItemId) === String(parsed.inventoryItemId)
-            );
-            if (!row) {
-              setError('This item is not in the stock list for this session’s location.');
-              return;
-            }
-            resolved = { sku: String(row.sku || '').trim(), row };
-          } else {
-            const row = rows.find((r) => String(r.sku || '').trim() === s);
-            if (!row) {
-              setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');
-              return;
-            }
-            resolved = { sku: String(row.sku || '').trim(), row };
+        const resolveItemIdToSku = async (id) => {
+          if (fetchSku) return fetchSku(apiBase, id);
+          const url =
+            apiBase +
+            '/api/public/inventory?resolveItemId=' +
+            encodeURIComponent(id);
+          try {
+            const res = await fetch(url, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const item = data?.data?.item ?? data?.item;
+            const sku = item?.sku != null ? String(item.sku).trim() : '';
+            return sku || null;
+          } catch {
+            return null;
           }
+        };
+        if (!resolveScan) {
+          setError('QR scanning is not ready — refresh the page and try again.');
+          return;
         }
+        const idToSkuMap = buildMap ? buildMap(rows) : null;
+        const resolved = await resolveScan(s, rows, {
+          idToSkuMap: idToSkuMap || undefined,
+          resolveItemIdToSku
+        });
         if (!resolved || resolved.error) {
           if (resolved?.error === 'unrecognized') {
             setError('Unrecognized scan. Use the inventory QR label or enter the SKU manually.');

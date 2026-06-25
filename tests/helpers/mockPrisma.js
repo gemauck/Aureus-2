@@ -2,6 +2,8 @@
  * Mock Prisma client for testing
  */
 
+import { jest } from '@jest/globals';
+
 export function createMockPrisma() {
   const mockData = {
     users: [],

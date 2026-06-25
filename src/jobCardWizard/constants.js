@@ -69,6 +69,8 @@ export const REFERENCE_CACHE_KEYS = {
   locations: 'manufacturing_stock_locations',
   /** Per-location on-hand rows keyed by location UUID (van / warehouse stock picker). */
   locationInventory: 'manufacturing_location_inventory_v1',
+  /** Catalog inventoryItem.id → sku for offline QR scan resolution. */
+  inventoryIdToSku: 'manufacturing_inventory_id_to_sku_v1',
   projects: 'manufacturing_projects',
   projectsAlt: 'projects'
 };

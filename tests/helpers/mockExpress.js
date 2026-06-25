@@ -10,10 +10,13 @@ export function createMockRequest(options = {}) {
     query = {},
     params = {},
     user = null,
+    url = '/api/clients',
   } = options;
 
   return {
     method,
+    url,
+    originalUrl: options.originalUrl ?? url,
     headers: {
       'content-type': 'application/json',
       ...headers,

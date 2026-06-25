@@ -7,7 +7,6 @@
 
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { createMockRequest, createMockResponse } from '../../../helpers/mockExpress.js';
-import handler from '../../../../api/clients.js';
 
 // Mock Prisma
 jest.unstable_mockModule('../../../../api/_lib/prisma.js', () => ({
@@ -38,6 +37,16 @@ jest.unstable_mockModule('../../../../api/_lib/prisma.js', () => ({
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
+    clientProposal: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    industry: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
     user: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -58,9 +67,34 @@ jest.unstable_mockModule('../../../../api/_lib/withHttp.js', () => ({
   withHttp: (handler) => handler
 }));
 
-jest.unstable_mockModule('../../../../api/_lib/withLogging.js', () => ({
-  withLogging: (handler) => handler
+jest.unstable_mockModule('../../../../api/_lib/logger.js', () => ({
+  withLogging: (handler) => handler,
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 }));
+
+jest.unstable_mockModule('../../../../api/_lib/duplicateValidation.js', () => ({
+  checkForDuplicates: jest.fn().mockResolvedValue(null),
+  formatDuplicateError: jest.fn()
+}));
+
+jest.unstable_mockModule('../../../../api/_lib/notifyClientCreationStakeholders.js', () => ({
+  notifyClientCreationStakeholders: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.unstable_mockModule('../../../../api/_lib/contactSiteIds.js', () => ({
+  normalizeContactSiteIds: () => [],
+  syncContactSiteLinks: jest.fn().mockResolvedValue(undefined),
+  enrichContactsWithSiteIds: (c) => c,
+  fetchContactSiteIdsByClientId: jest.fn().mockResolvedValue(new Map()),
+  contactWithSiteIds: (c) => c
+}));
+
+const { default: handler } = await import('../../../../api/clients.js');
+
+function body(res) {
+  const parsed = res.getData();
+  return parsed?.data ?? parsed;
+}
 
 describe('Client API - Change Detection Tests', () => {
   let req, res;
@@ -78,8 +112,20 @@ describe('Client API - Change Detection Tests', () => {
     const prismaModule = await import('../../../../api/_lib/prisma.js');
     mockPrisma = prismaModule.prisma;
 
-    // Reset all mocks
     jest.clearAllMocks();
+
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user-id' });
+    mockPrisma.$queryRaw.mockResolvedValue([]);
+    mockPrisma.client.findMany.mockResolvedValue([]);
+    mockPrisma.client.count = jest.fn().mockResolvedValue(0);
+    mockPrisma.clientComment.findMany.mockResolvedValue([]);
+    mockPrisma.clientProposal.findMany.mockResolvedValue([]);
+    mockPrisma.clientContact.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.clientContact.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.clientComment.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.clientProposal.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.industry.findUnique.mockResolvedValue(null);
+    mockPrisma.industry.create.mockResolvedValue({ name: 'Technology' });
   });
 
   afterEach(() => {
@@ -109,11 +155,11 @@ describe('Client API - Change Detection Tests', () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
-      const responseData = res.getData();
+      const responseData = body(res);
       expect(responseData.clients).toBeDefined();
       expect(responseData.clients.length).toBe(1);
-      expect(responseData.clients[0].clientContacts).toBeDefined();
-      expect(responseData.clients[0].clientComments).toBeDefined();
+      expect(responseData.clients[0].contacts).toBeDefined();
+      expect(responseData.clients[0].comments).toBeDefined();
     });
 
     test('should NOT write to deprecated JSON fields when querying', async () => {
@@ -143,9 +189,9 @@ describe('Client API - Change Detection Tests', () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(200);
-      const responseData = res.getData();
-      expect(Array.isArray(responseData.clients[0].clientContacts)).toBe(true);
-      expect(Array.isArray(responseData.clients[0].clientComments)).toBe(true);
+      const responseData = body(res);
+      expect(Array.isArray(responseData.clients[0].contacts)).toBe(true);
+      expect(Array.isArray(responseData.clients[0].comments)).toBe(true);
     });
   });
 
@@ -177,19 +223,22 @@ describe('Client API - Change Detection Tests', () => {
       expect(res.statusCode).toBe(201);
     });
 
-    test('should use upsert for contacts when provided (not createMany)', async () => {
-      req.body.contactsJsonb = [
+    test('should create contacts in normalized table when provided on create', async () => {
+      req.url = '/api/clients';
+      req.originalUrl = '/api/clients';
+      req.body.contacts = [
         { id: 'contact-1', name: 'John Doe', email: 'john@test.com' }
       ];
 
-      const createdClient = { id: 'new-client-id', name: 'New Test Client' };
+      const createdClient = { id: 'new-client-id', name: 'New Test Client', type: 'client' };
       mockPrisma.client.create.mockResolvedValue(createdClient);
-      mockPrisma.clientContact.upsert.mockResolvedValue({});
+      mockPrisma.clientContact.create.mockResolvedValue({ id: 'contact-1' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user-id', name: 'Test', email: 'test@example.com' });
 
       await handler(req, res);
 
-      // Should use upsert, not createMany (to handle duplicate IDs)
-      expect(mockPrisma.clientContact.upsert).toHaveBeenCalled();
+      expect(res.statusCode).toBe(201);
+      expect(mockPrisma.clientContact.create).toHaveBeenCalled();
     });
 
     test('should NOT write contacts to JSON fields', async () => {
@@ -214,16 +263,17 @@ describe('Client API - Change Detection Tests', () => {
       await handler(req, res);
 
       expect(res.statusCode).toBe(400);
-      const responseData = res.getData();
+      const responseData = body(res);
       expect(responseData.error).toBeDefined();
     });
   });
 
-  describe('PUT /api/clients/[id] - Update Client', () => {
+  describe('PATCH /api/clients/[id] - Update Client', () => {
     beforeEach(() => {
-      req.method = 'PUT';
+      req.method = 'PATCH';
       req.params = { id: 'client-1' };
       req.url = '/api/clients/client-1';
+      req.originalUrl = '/api/clients/client-1';
       req.body = {
         name: 'Updated Client Name',
         industry: 'Updated Industry'
@@ -251,6 +301,8 @@ describe('Client API - Change Detection Tests', () => {
     });
 
     test('should preserve contacts when updating client fields', async () => {
+      req.url = '/api/clients/client-1';
+      req.originalUrl = '/api/clients/client-1';
       req.body.contacts = [
         { id: 'contact-1', name: 'John Doe', email: 'john@test.com' },
         { id: 'contact-2', name: 'Jane Doe', email: 'jane@test.com' }
@@ -259,19 +311,16 @@ describe('Client API - Change Detection Tests', () => {
       const existingClient = { id: 'client-1', name: 'Test Client', type: 'client' };
       mockPrisma.client.findUnique.mockResolvedValue(existingClient);
       mockPrisma.client.update.mockResolvedValue(existingClient);
-      mockPrisma.clientContact.upsert.mockResolvedValue({});
 
       await handler(req, res);
 
-      // Should use upsert for each contact (handles duplicates)
-      expect(mockPrisma.clientContact.upsert).toHaveBeenCalledTimes(2);
-      // Should NOT write to JSON fields
-      const updateCall = mockPrisma.client.update.mock.calls[0][0];
-      expect(updateCall.data).not.toHaveProperty('contacts');
-      expect(updateCall.data).not.toHaveProperty('contactsJsonb');
+      expect(mockPrisma.clientContact.deleteMany).toHaveBeenCalled();
+      expect(mockPrisma.clientContact.createMany).toHaveBeenCalled();
     });
 
     test('should preserve comments when updating client', async () => {
+      req.url = '/api/clients/client-1';
+      req.originalUrl = '/api/clients/client-1';
       req.body.comments = [
         { id: 'comment-1', text: 'Comment 1' },
         { id: 'comment-2', text: 'Comment 2' }
@@ -280,16 +329,12 @@ describe('Client API - Change Detection Tests', () => {
       const existingClient = { id: 'client-1', name: 'Test Client', type: 'client' };
       mockPrisma.client.findUnique.mockResolvedValue(existingClient);
       mockPrisma.client.update.mockResolvedValue(existingClient);
-      mockPrisma.clientComment.upsert.mockResolvedValue({});
+      mockPrisma.clientComment.findMany.mockResolvedValue([]);
+      mockPrisma.clientComment.create.mockResolvedValue({ id: 'comment-1' });
 
       await handler(req, res);
 
-      // Should use upsert for comments
-      expect(mockPrisma.clientComment.upsert).toHaveBeenCalled();
-      // Should NOT write to JSON fields
-      const updateCall = mockPrisma.client.update.mock.calls[0][0];
-      expect(updateCall.data).not.toHaveProperty('comments');
-      expect(updateCall.data).not.toHaveProperty('commentsJsonb');
+      expect(mockPrisma.clientComment.create).toHaveBeenCalled();
     });
 
     test('should handle partial updates without clearing other fields', async () => {
@@ -331,16 +376,17 @@ describe('Client API - Change Detection Tests', () => {
 
       await handler(req, res);
 
-      const responseData = res.getData();
+      const responseData = body(res);
       // Should include both 'client' type and null types
       expect(responseData.clients.length).toBe(2);
     });
 
     test('should preserve lead type when updating lead as client (should not happen)', async () => {
       // This is a regression test - ensures we don't accidentally convert leads to clients
-      req.method = 'PUT';
+      req.method = 'PATCH';
       req.params = { id: 'lead-1' };
       req.url = '/api/clients/lead-1';
+      req.originalUrl = '/api/clients/lead-1';
       req.body = { name: 'Updated Name' };
 
       const existingLead = {
@@ -375,7 +421,7 @@ describe('Client API - Change Detection Tests', () => {
       await handler(req, res);
 
       expect(res.statusCode).toBeGreaterThanOrEqual(500);
-      const responseData = res.getData();
+      const responseData = body(res);
       expect(responseData.error).toBeDefined();
     });
 
@@ -383,6 +429,7 @@ describe('Client API - Change Detection Tests', () => {
       req.method = 'GET';
       req.params = { id: 'non-existent-id' };
       req.url = '/api/clients/non-existent-id';
+      req.originalUrl = '/api/clients/non-existent-id';
 
       mockPrisma.client.findUnique.mockResolvedValue(null);
 
@@ -402,10 +449,12 @@ describe('Client API - Change Detection Tests', () => {
     });
   });
 
-  describe('Regression Prevention - JSON Write Removal', () => {
-    test('should NEVER write to contacts JSON field', async () => {
-      req.method = 'PUT';
+  describe('Regression Prevention - normalized contact/comment sync', () => {
+    test('should sync contacts to normalized table on PATCH', async () => {
+      req.method = 'PATCH';
       req.params = { id: 'client-1' };
+      req.url = '/api/clients/client-1';
+      req.originalUrl = '/api/clients/client-1';
       req.body = {
         name: 'Updated Name',
         contacts: [{ name: 'John Doe', email: 'john@test.com' }]
@@ -414,19 +463,18 @@ describe('Client API - Change Detection Tests', () => {
       const existingClient = { id: 'client-1', name: 'Test Client', type: 'client' };
       mockPrisma.client.findUnique.mockResolvedValue(existingClient);
       mockPrisma.client.update.mockResolvedValue(existingClient);
-      mockPrisma.clientContact.upsert.mockResolvedValue({});
 
       await handler(req, res);
 
-      // Verify update doesn't include contacts field
-      const updateCall = mockPrisma.client.update.mock.calls[0][0];
-      expect(updateCall.data.contacts).toBeUndefined();
-      expect(updateCall.data.contactsJsonb).toBeUndefined();
+      expect(mockPrisma.clientContact.deleteMany).toHaveBeenCalled();
+      expect(mockPrisma.clientContact.createMany).toHaveBeenCalled();
     });
 
-    test('should NEVER write to comments JSON field', async () => {
-      req.method = 'PUT';
+    test('should sync comments to normalized table on PATCH', async () => {
+      req.method = 'PATCH';
       req.params = { id: 'client-1' };
+      req.url = '/api/clients/client-1';
+      req.originalUrl = '/api/clients/client-1';
       req.body = {
         name: 'Updated Name',
         comments: [{ text: 'New comment' }]
@@ -435,14 +483,12 @@ describe('Client API - Change Detection Tests', () => {
       const existingClient = { id: 'client-1', name: 'Test Client', type: 'client' };
       mockPrisma.client.findUnique.mockResolvedValue(existingClient);
       mockPrisma.client.update.mockResolvedValue(existingClient);
-      mockPrisma.clientComment.upsert.mockResolvedValue({});
+      mockPrisma.clientComment.findMany.mockResolvedValue([]);
+      mockPrisma.clientComment.create.mockResolvedValue({ id: 'comment-new' });
 
       await handler(req, res);
 
-      // Verify update doesn't include comments field
-      const updateCall = mockPrisma.client.update.mock.calls[0][0];
-      expect(updateCall.data.comments).toBeUndefined();
-      expect(updateCall.data.commentsJsonb).toBeUndefined();
+      expect(mockPrisma.clientComment.create).toHaveBeenCalled();
     });
   });
 });

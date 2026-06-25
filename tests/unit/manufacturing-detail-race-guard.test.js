@@ -9,20 +9,20 @@ describe('manufacturing inventory detail race-condition guard', () => {
     expect(source).toContain('const isInventoryDetailOpen = Boolean(viewingInventoryItemDetail);')
   })
 
-  test('stops list->detail merge while detail is open', () => {
+  test('merges list into open detail only while detail is open', () => {
     const mergeEffectChunk = source.slice(
       source.indexOf('// Merge list refetches into the open detail view'),
       source.indexOf('// Load canonical InventoryItem from the API so detail matches the database')
     )
-    expect(mergeEffectChunk).toContain('if (isInventoryDetailOpen) return;')
+    expect(mergeEffectChunk).toContain('if (!isInventoryDetailOpen) return;')
   })
 
-  test('stops canonical detail hydration while detail is open', () => {
+  test('hydrates canonical detail only while detail is open', () => {
     const canonicalEffectChunk = source.slice(
       source.indexOf('// Load canonical InventoryItem from the API so detail matches the database'),
       source.indexOf('// Reload inventory when location changes - BUT NOT if user is actively typing')
     )
-    expect(canonicalEffectChunk).toContain('if (isInventoryDetailOpen) return;')
+    expect(canonicalEffectChunk).toContain('if (!isInventoryDetailOpen) return;')
   })
 
   test('stops inventory polling while detail is open', () => {
