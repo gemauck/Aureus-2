@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs'
 import dotenv from 'dotenv'
 import { PrismaClient } from '@prisma/client'
 
-dotenv.config()
+dotenv.config({ quiet: true })
 
 const EMAIL = (process.env.AUTOMATION_SMOKE_EMAIL || 'erp-smoke-automation@abcoafrica.co.za').trim().toLowerCase()
 const prisma = new PrismaClient()

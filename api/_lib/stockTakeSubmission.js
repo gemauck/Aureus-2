@@ -38,6 +38,16 @@ export async function refreshStockTakeLinesSystemQtyAtSubmitTx(tx, submissionId,
   const lines = await tx.stockTakeSubmissionLine.findMany({
     where: { submissionId }
   })
+  if (!lines.length) return { refreshed: 0 }
+
+  const liRows = await tx.locationInventory.findMany({
+    where: { locationId: locId },
+    select: { sku: true, quantity: true }
+  })
+  const qtyBySku = new Map(
+    liRows.map((row) => [String(row.sku || '').trim(), Number(row.quantity) || 0])
+  )
+
   let refreshed = 0
   const refreshedAt = new Date().toISOString()
 
@@ -48,11 +58,7 @@ export async function refreshStockTakeLinesSystemQtyAtSubmitTx(tx, submissionId,
     const sku = String(line.sku || '').trim()
     if (!sku) continue
 
-    const li = await tx.locationInventory.findUnique({
-      where: { locationId_sku: { locationId: locId, sku } },
-      select: { quantity: true }
-    })
-    const systemQty = li ? Number(li.quantity) || 0 : 0
+    const systemQty = qtyBySku.get(sku) ?? 0
     const countedQty = Number(line.countedQty) || 0
 
     await tx.stockTakeSubmissionLine.update({

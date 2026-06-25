@@ -15,10 +15,11 @@ echo "Target: ${APP_URL}"
 echo ""
 
 echo "-> Syncing latest scripts on server..."
-ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && git fetch origin main && git reset --hard origin/main" >/dev/null
+ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && git fetch origin main && git reset --hard origin/main && (pm2 restart abcotronics-erp 2>/dev/null || pm2 restart all 2>/dev/null || true)" >/dev/null
+sleep 3
 
 echo "-> Ensuring automation smoke user on production DB..."
-CREDS_JSON="$(ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && node scripts/ensure-automation-smoke-user.mjs")"
+CREDS_JSON="$(ssh "$DEPLOY_HOST" "cd '$DEPLOY_PATH' && node scripts/ensure-automation-smoke-user.mjs 2>/dev/null | tail -1")"
 TEST_EMAIL="$(node -e "const j=JSON.parse(process.argv[1]); process.stdout.write(j.email||'')" "$CREDS_JSON")"
 TEST_PASSWORD="$(node -e "const j=JSON.parse(process.argv[1]); process.stdout.write(j.password||'')" "$CREDS_JSON")"
 

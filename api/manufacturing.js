@@ -2266,7 +2266,7 @@ async function handler(req, res) {
             },
             include: { lines: true }
           })
-        })
+        }, { timeout: 60000 })
 
         auditManufacturing('update', 'stock-take-session-submit', id, {
           submissionRef: result.submissionRef
