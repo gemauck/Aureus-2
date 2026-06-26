@@ -1,6 +1,7 @@
 /**
- * Restore missing Invoices / Remittance / Proof Of Payment sub-documents under File 6
- * contractor parents (e.g. Siluno, Ritluka) after mistaken duplicate cleanup.
+ * Restore / repair File 6 contractor payment sub-documents (Siluno, Ritluka) after mistaken cleanup:
+ * - correct parentId + doc name per stable document id
+ * - replay collectionStatus from ProjectActivityLog, gap-fill from Dust-A-Side reference
  * Dry-run by default; pass --write to persist JSON + DocumentSection table.
  */
 import { PrismaClient } from '@prisma/client';
@@ -8,19 +9,25 @@ import { saveDocumentSectionsToTable } from '../api/projects.js';
 
 const PAYMENT_DOC_NAMES = ['Invoices', 'Remittance', 'Proof Of Payment'];
 
-/** Original ids removed by scripts/fix-exxaro-file6-duplicate-docs.js (18 Jun 2026). */
-const KNOWN_DOC_IDS_BY_PARENT = {
+/** Stable ids removed 18 Jun 2026 — parent + name mapping verified via activity log metadata. */
+const PAYMENT_DOCS_BY_PARENT = {
   cmnsl4aux00hkp6qd0dtufqsq: {
+    // Siluno - Proof Of Mining
     Invoices: 'cmnsl4axt00itp6qddt0ge1jh',
-    Remittance: 'cmnsl4ay600j1p6qd9a4di762',
-    'Proof Of Payment': 'cmnsl4ax700igp6qducefadse'
+    Remittance: 'cmnsl4ay000ixp6qdc6i21ttk',
+    'Proof Of Payment': 'cmnsl4ay600j1p6qd9a4di762'
   },
   cmnsl4aux00hmp6qda9j671ho: {
-    Invoices: 'cmnsl4axe00ikp6qd5b47wb9y',
-    Remittance: 'cmnsl4ay000ixp6qdc6i21ttk',
-    'Proof Of Payment': 'cmnsl4ax000icp6qdfru1g3s4'
+    // Ritluka - Proof Of Mining
+    Invoices: 'cmnsl4ax000icp6qdfru1g3s4',
+    Remittance: 'cmnsl4ax700igp6qducefadse',
+    'Proof Of Payment': 'cmnsl4axe00ikp6qd5b47wb9y'
   }
 };
+
+const ALL_PAYMENT_DOC_IDS = new Set(
+  Object.values(PAYMENT_DOCS_BY_PARENT).flatMap((m) => Object.values(m))
+);
 
 const write = process.argv.includes('--write');
 const projectIdArg = process.argv.find((a) => a.startsWith('--project='))?.split('=')[1];
@@ -85,14 +92,14 @@ function lastParentBlockIndex(docs, parentId) {
   return lastIdx;
 }
 
-function makeRestoredDoc(parentId, name) {
-  const knownId = KNOWN_DOC_IDS_BY_PARENT[parentId]?.[name];
+function makeRestoredDoc(parentId, name, collectionStatus = {}) {
+  const knownId = PAYMENT_DOCS_BY_PARENT[parentId]?.[name];
   return {
     id: knownId || `restored_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     name,
     description: '',
     parentId,
-    collectionStatus: {},
+    collectionStatus: { ...collectionStatus },
     comments: {},
     notesByMonth: {},
     assignedTo: []
@@ -120,27 +127,199 @@ function restoreSection(section) {
   return { section: { ...section, documents: docs }, restored };
 }
 
-function restoreSectionsPayload(parsed) {
+function parseMetadata(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function monthKey(year, month) {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function replayStatusesFromActivity(events) {
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  const out = {};
+  for (const row of sorted) {
+    const meta = parseMetadata(row.metadata);
+    const year = meta.year;
+    const month = meta.month;
+    if (!year || !month) continue;
+    const key = monthKey(year, month);
+    if (meta.newValue != null && String(meta.newValue).trim() !== '') {
+      out[key] = String(meta.newValue);
+    }
+  }
+  return out;
+}
+
+function mergeStatusMaps(...maps) {
+  const out = {};
+  for (const map of maps) {
+    if (!map || typeof map !== 'object') continue;
+    for (const [key, value] of Object.entries(map)) {
+      if (value != null && String(value).trim() !== '' && out[key] == null) {
+        out[key] = String(value);
+      }
+    }
+  }
+  return out;
+}
+
+function findDustPaymentReference(section) {
+  const docs = section?.documents || [];
+  const dustRoot = docs.find(
+    (d) => !d?.parentId && /dust-a-side/i.test(String(d.name || ''))
+  );
+  if (!dustRoot) return {};
+  const ref = {};
+  for (const name of PAYMENT_DOC_NAMES) {
+    const doc = docs.find(
+      (d) =>
+        d.parentId === dustRoot.id &&
+        normName(d.name) === normName(name) &&
+        d.collectionStatus &&
+        typeof d.collectionStatus === 'object'
+    );
+    if (doc) ref[name] = { ...doc.collectionStatus };
+  }
+  return ref;
+}
+
+function siblingPrimaryStatus(section, parentId) {
+  const docs = section?.documents || [];
+  const primary = docs.find(
+    (d) =>
+      d.parentId === parentId &&
+      d.collectionStatus &&
+      typeof d.collectionStatus === 'object' &&
+      !PAYMENT_DOC_NAMES.some((n) => normName(n) === normName(d.name))
+  );
+  return primary?.collectionStatus ? { ...primary.collectionStatus } : {};
+}
+
+function repairPaymentDocsInSection(section, activityByDocId) {
+  const dustRef = findDustPaymentReference(section);
+  const docs = [...(section.documents || [])];
+  const repairs = [];
+
+  for (const [parentId, nameToId] of Object.entries(PAYMENT_DOCS_BY_PARENT)) {
+    const parent = docs.find((d) => d.id === parentId);
+    if (!parent) continue;
+    const siblingStatus = siblingPrimaryStatus(section, parentId);
+
+    for (const [name, docId] of Object.entries(nameToId)) {
+      let doc = docs.find((d) => d.id === docId);
+      const activityStatus = activityByDocId.get(docId) || {};
+      const dustStatus = dustRef[name] || {};
+      const targetStatus = mergeStatusMaps(activityStatus, dustStatus, siblingStatus);
+
+      if (!doc) {
+        doc = makeRestoredDoc(parentId, name, targetStatus);
+        const insertAt = lastParentBlockIndex(docs, parentId);
+        if (insertAt === -1) continue;
+        docs.splice(insertAt + 1, 0, doc);
+        repairs.push({
+          action: 'created',
+          parentName: parent.name,
+          name,
+          id: docId,
+          statuses: Object.keys(targetStatus).length
+        });
+        continue;
+      }
+
+      const needsName = normName(doc.name) !== normName(name);
+      const needsParent = String(doc.parentId) !== String(parentId);
+      const needsStatus =
+        JSON.stringify(doc.collectionStatus || {}) !== JSON.stringify(targetStatus);
+
+      if (needsName || needsParent || needsStatus) {
+        const idx = docs.findIndex((d) => d.id === docId);
+        if (idx === -1) continue;
+        docs[idx] = {
+          ...doc,
+          name,
+          parentId,
+          collectionStatus: targetStatus
+        };
+        repairs.push({
+          action: 'repaired',
+          parentName: parent.name,
+          name,
+          id: docId,
+          fixName: needsName,
+          fixParent: needsParent,
+          fixStatus: needsStatus,
+          statuses: Object.keys(targetStatus).length,
+          collectionStatus: targetStatus
+        });
+      }
+    }
+  }
+
+  return { section: { ...section, documents: docs }, repairs };
+}
+
+function processPayload(parsed, activityByDocId) {
   const allRestored = [];
+  const allRepairs = [];
+
   if (Array.isArray(parsed)) {
     const next = parsed.map((section) => {
-      const { section: updated, restored } = restoreSection(section);
+      const { section: withRows, restored } = restoreSection(section);
+      const { section: repaired, repairs } = repairPaymentDocsInSection(withRows, activityByDocId);
       allRestored.push(...restored);
-      return updated;
+      allRepairs.push(...repairs);
+      return repaired;
     });
-    return { sections: next, restored: allRestored };
+    return { sections: next, restored: allRestored, repairs: allRepairs };
   }
 
   const next = { ...parsed };
   for (const year of Object.keys(next)) {
     if (!Array.isArray(next[year])) continue;
     next[year] = next[year].map((section) => {
-      const { section: updated, restored } = restoreSection(section);
+      const { section: withRows, restored } = restoreSection(section);
+      const { section: repaired, repairs } = repairPaymentDocsInSection(withRows, activityByDocId);
       allRestored.push(...restored.map((r) => ({ ...r, year })));
-      return updated;
+      allRepairs.push(...repairs.map((r) => ({ ...r, year })));
+      return repaired;
     });
   }
-  return { sections: next, restored: allRestored };
+  return { sections: next, restored: allRestored, repairs: allRepairs };
+}
+
+async function loadActivityStatuses(projectId) {
+  const rows = await prisma.projectActivityLog.findMany({
+    where: {
+      projectId,
+      type: 'document_section_status_change'
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { metadata: true, createdAt: true }
+  });
+
+  const byDocId = new Map();
+  for (const row of rows) {
+    const meta = parseMetadata(row.metadata);
+    const docId = meta.entityId != null ? String(meta.entityId) : '';
+    if (!ALL_PAYMENT_DOC_IDS.has(docId)) continue;
+    if (!byDocId.has(docId)) byDocId.set(docId, []);
+    byDocId.get(docId).push(row);
+  }
+
+  const statuses = new Map();
+  for (const [docId, events] of byDocId.entries()) {
+    statuses.set(docId, replayStatusesFromActivity(events));
+  }
+  return statuses;
 }
 
 async function main() {
@@ -154,6 +333,7 @@ async function main() {
       });
 
   let totalRestored = 0;
+  let totalRepaired = 0;
 
   for (const project of projects) {
     if (!project.documentSections) continue;
@@ -169,15 +349,34 @@ async function main() {
       continue;
     }
 
-    const { sections, restored } = restoreSectionsPayload(parsed);
-    if (!restored.length) continue;
+    const activityByDocId = await loadActivityStatuses(project.id);
+    const { sections, restored, repairs } = processPayload(parsed, activityByDocId);
+    if (!restored.length && !repairs.length) continue;
 
     console.log(`\nProject: ${project.name} (${project.id})`);
     restored.forEach((r) => {
       const yearPrefix = r.year ? `${r.year} ` : '';
       console.log(`  + ${yearPrefix}${r.parentName} → ${r.name} (${r.id})`);
     });
+    repairs.forEach((r) => {
+      const yearPrefix = r.year ? `${r.year} ` : '';
+      const fixes = [
+        r.fixName ? 'name' : null,
+        r.fixParent ? 'parent' : null,
+        r.fixStatus ? `status×${r.statuses}` : null
+      ]
+        .filter(Boolean)
+        .join(', ');
+      console.log(
+        `  ~ ${yearPrefix}${r.parentName} → ${r.name} (${r.id})${fixes ? ` [${fixes}]` : ''}`
+      );
+      if (r.collectionStatus) {
+        console.log(`      statuses: ${JSON.stringify(r.collectionStatus)}`);
+      }
+    });
+
     totalRestored += restored.length;
+    totalRepaired += repairs.length;
 
     if (!write) continue;
 
@@ -194,12 +393,12 @@ async function main() {
     console.log('  Applied: JSON + DocumentSection table synced.');
   }
 
-  if (!totalRestored) {
-    console.log('No missing contractor payment sub-documents found.');
+  if (!totalRestored && !totalRepaired) {
+    console.log('No contractor payment rows to restore or repair.');
     return;
   }
 
-  console.log(`\nTotal rows to restore: ${totalRestored}`);
+  console.log(`\nRows created: ${totalRestored}, rows repaired: ${totalRepaired}`);
   if (!write) {
     console.log('Dry-run only. Re-run with --write to apply.');
   }
