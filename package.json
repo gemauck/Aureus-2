@@ -101,6 +101,7 @@
     "align:inventory-to-movements": "node scripts/align-location-inventory-to-movements.mjs",
     "undo:li-align-to-movements": "node scripts/undo-li-align-to-movements.mjs",
     "convert:receipt-to-adjustment": "node scripts/convert-receipt-stock-movement-to-adjustment.js",
+    "restore:contractor-payment-subdocs": "node scripts/restore-contractor-payment-subdocs.js",
     "news:search:daily": "node scripts/daily-news-search.js",
     "audit:stock-movements:sku-diff": "node scripts/audit-stock-movements-for-sku-diff-window.mjs",
     "audit:forensic:movements": "node scripts/forensic-stock-movement-audit.mjs",
