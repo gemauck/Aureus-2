@@ -19,13 +19,39 @@ if (isWatchMode) {
 
 // Find all JSX files in src directory
 const jsxFiles = await glob('src/**/*.jsx', { cwd: __dirname });
-// Also find .js files that need to be copied
-const jsFiles = await glob('src/**/*.js', { cwd: __dirname, ignore: ['src/**/*.test.js', 'src/**/*.spec.js'] });
+// Plain .js files: copy when export-only; compile via esbuild when they use `import`
+// (raw imports break lazy-load blob scripts — "Cannot use import statement outside a module").
+const JS_GLOB_IGNORE = [
+  'src/**/*.test.js',
+  'src/**/*.spec.js',
+  'src/core-entry.js', // consumed only by dist/core-bundle.js
+];
+const jsFiles = await glob('src/**/*.js', { cwd: __dirname, ignore: JS_GLOB_IGNORE });
+
+function fileHasEsImports(content) {
+  return /\bimport\s+/.test(content) || /\bimport\s*\(/.test(content);
+}
+
+const jsFilesToCompile = [];
+const jsFilesToCopy = [];
+for (const file of jsFiles) {
+  const fullPath = path.join(__dirname, file);
+  const content = fs.readFileSync(fullPath, 'utf8');
+  if (fileHasEsImports(content)) {
+    jsFilesToCompile.push(fullPath);
+  } else {
+    jsFilesToCopy.push(file);
+  }
+}
 
 console.log(`📦 Found ${jsxFiles.length} JSX files to compile`);
-console.log(`📦 Found ${jsFiles.length} JS files to copy`);
+console.log(`📦 Found ${jsFilesToCompile.length} JS files to compile (ES imports)`);
+console.log(`📦 Found ${jsFilesToCopy.length} JS files to copy`);
 
-const entryPoints = jsxFiles.map(file => path.join(__dirname, file));
+const entryPoints = [
+  ...jsxFiles.map((file) => path.join(__dirname, file)),
+  ...jsFilesToCompile,
+];
 
 // Copy .js files to dist and wrap ES6 exports for browser
 function copyJSFile(srcPath) {
@@ -39,6 +65,11 @@ function copyJSFile(srcPath) {
   
   // Read the file content
   let content = fs.readFileSync(srcPath, 'utf8');
+
+  if (fileHasEsImports(content)) {
+    console.warn(`⚠️ Skipping copyJSFile for ${relativePath} — file uses import; esbuild compiles it`);
+    return;
+  }
   
   // Check if file uses ES6 exports
   if (content.includes('export ')) {
@@ -151,13 +182,16 @@ async function buildJSX() {
       console.log('✅ JSX files compiled successfully!');
     }
   
-    // Copy .js files to dist
+    // Copy export-only .js files (import-bearing files were compiled above)
     console.log('📋 Copying .js files...');
-    jsFiles.forEach(file => {
+    jsFilesToCopy.forEach((file) => {
       const fullPath = path.join(__dirname, file);
       copyJSFile(fullPath);
     });
-    console.log(`✅ Copied ${jsFiles.length} .js files to dist/`);
+    console.log(`✅ Copied ${jsFilesToCopy.length} .js files to dist/`);
+    if (jsFilesToCompile.length > 0) {
+      console.log(`✅ Compiled ${jsFilesToCompile.length} import-bearing .js files via esbuild`);
+    }
     
     // Also copy hooks directory if it exists
     const hooksDir = path.join(__dirname, 'src', 'hooks');
@@ -321,12 +355,22 @@ if (isWatchMode) {
       .on('change', async (filePath) => {
         console.log(`\n📝 File changed: ${filePath}`);
         const fullPath = path.join(__dirname, filePath);
+        const content = fs.readFileSync(fullPath, 'utf8');
+        if (fileHasEsImports(content)) {
+          console.log(`✅ ${filePath} uses imports — esbuild watch context will rebuild it`);
+          return;
+        }
         copyJSFile(fullPath);
         console.log(`✅ Rebuilt ${filePath}`);
       })
       .on('add', async (filePath) => {
         console.log(`\n➕ File added: ${filePath}`);
         const fullPath = path.join(__dirname, filePath);
+        const content = fs.readFileSync(fullPath, 'utf8');
+        if (fileHasEsImports(content)) {
+          console.log(`✅ ${filePath} uses imports — run full build or restart watch to add to esbuild entries`);
+          return;
+        }
         copyJSFile(fullPath);
         console.log(`✅ Copied ${filePath}`);
       });
@@ -350,8 +394,13 @@ if (isWatchMode) {
           if (filename.endsWith('.js')) {
             const fullPath = path.join(watchDir, filename);
             if (fs.existsSync(fullPath)) {
-              copyJSFile(fullPath);
-              console.log(`✅ Rebuilt ${filename}`);
+              const content = fs.readFileSync(fullPath, 'utf8');
+              if (fileHasEsImports(content)) {
+                console.log(`✅ ${filename} uses imports — esbuild watch context will rebuild it`);
+              } else {
+                copyJSFile(fullPath);
+                console.log(`✅ Rebuilt ${filename}`);
+              }
             }
           }
         }
