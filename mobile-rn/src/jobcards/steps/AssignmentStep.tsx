@@ -214,6 +214,14 @@ export function AssignmentStep() {
     setFormData((f) => ({ ...f, siteId, siteName: site?.name || '' }))
   }
 
+  function onSiteNameChange(siteName: string) {
+    setFormData((f) => ({
+      ...f,
+      siteName,
+      siteId: siteName.trim() ? '' : f.siteId
+    }))
+  }
+
   function onProjectChange(projectId: string) {
     const project = projects.find((p) => String(p.id) === String(projectId))
     setFormData((f) => ({
@@ -330,22 +338,34 @@ export function AssignmentStep() {
             />
           </>
         ) : (
-          <SearchableSelect
-            label="Site"
-            value={formData.siteId}
-            options={siteOptions}
-            onChange={onSiteChange}
-            placeholder={
-              sitesLoading
-                ? 'Loading sites…'
-                : siteOptions.length
-                  ? 'Search sites…'
-                  : 'No sites for client'
-            }
-            disabled={!formData.clientId || sitesLoading || siteOptions.length === 0}
-            loading={sitesLoading}
-            emptyLabel="No sites for this client"
-          />
+          <>
+            {siteOptions.length > 0 ? (
+              <SearchableSelect
+                label="Site"
+                value={formData.siteId}
+                options={siteOptions}
+                onChange={onSiteChange}
+                placeholder={sitesLoading ? 'Loading sites…' : 'Search sites…'}
+                disabled={!formData.clientId || sitesLoading}
+                loading={sitesLoading}
+                emptyLabel="No sites for this client"
+              />
+            ) : null}
+            <TextInput
+              style={formStyles.input}
+              placeholder={
+                siteOptions.length
+                  ? 'Site name (if not listed)'
+                  : sitesLoading
+                    ? 'Loading sites…'
+                    : 'Site name (manual)'
+              }
+              placeholderTextColor={jc.textSubtle}
+              value={formData.siteName}
+              onChangeText={onSiteNameChange}
+              editable={!sitesLoading}
+            />
+          </>
         )}
       </SectionCard>
 

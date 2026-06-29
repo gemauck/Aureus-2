@@ -3302,6 +3302,15 @@ const JobCardFormPublic = () => {
       return;
     }
 
+    if (name === 'siteName') {
+      setFormData((prev) => ({
+        ...prev,
+        siteName: value,
+        siteId: value.trim() ? '' : prev.siteId
+      }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -3874,6 +3883,8 @@ const JobCardFormPublic = () => {
   };
 
   const openPriorList = () => {
+    flushActiveFormField();
+    void persistWizardDraftRef.current?.({ syncServer: false });
     setPriorListRefreshTick(t => t + 1);
     setWizardFlow('prior_list');
   };
@@ -5646,6 +5657,27 @@ const JobCardFormPublic = () => {
 
   const persistWizardDraft = useCallback(
     async ({ syncServer = false } = {}) => {
+      flushActiveFormField();
+      const etherFlush = flushJobCardWizardEphemeralFields({
+        stockEntryRows,
+        stockUsed: formData.stockUsed,
+        stockLocations,
+        inventory,
+        inventoryByLocation,
+        materialDraft: newMaterialItem,
+        materialsBought: formData.materialsBought
+      });
+      if (etherFlush.flushedStock.length || etherFlush.flushedMaterial) {
+        setFormData((prev) => ({
+          ...prev,
+          stockUsed: etherFlush.stockUsed,
+          materialsBought: etherFlush.materialsBought
+        }));
+        setStockEntryRows(etherFlush.stockEntryRows);
+        if (etherFlush.flushedMaterial) {
+          setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+        }
+      }
       const nowIso = new Date().toISOString();
       const draftLocalId =
         editingMeta?.localId ?? activeEditCardIdRef.current ?? generateClientDraftId();
@@ -5659,8 +5691,15 @@ const JobCardFormPublic = () => {
       const serverJobCardId =
         editingMeta?.serverJobCardId ||
         (isLikelyServerJobCardId(draftLocalId) ? String(draftLocalId) : null);
+      const materialsBoughtForDraft = etherFlush.materialsBought;
+      const totalMaterialsCostForDraft = (materialsBoughtForDraft || []).reduce(
+        (sum, item) => sum + (item.cost || 0),
+        0
+      );
       const snapshot = {
         ...formData,
+        stockUsed: sanitizeJobCardStockUsedForSave(etherFlush.stockUsed),
+        materialsBought: materialsBoughtForDraft,
         customerSignature: draftSignature,
         id: draftLocalId,
         startedAt: editingMeta?.startedAt ?? editingMeta?.createdAt ?? nowIso,
@@ -5673,13 +5712,12 @@ const JobCardFormPublic = () => {
         jobCardNumber: editingMeta?.jobCardNumber || '',
         serverJobCardId: editingMeta?.serverJobCardId || null,
         useNewJobTimeFlow: Boolean(editingMeta?.useNewJobTimeFlow),
-        totalMaterialsCost: totalMaterialCost,
+        totalMaterialsCost: totalMaterialsCostForDraft,
         travelKilometers: Math.max(
           0,
           (parseFloat(formData.kmReadingAfter) || 0) - (parseFloat(formData.kmReadingBefore) || 0)
         ),
         totalTimeMinutes: jobSiteDurationMinutes ?? 0,
-        stockUsed: sanitizeJobCardStockUsedForSave(formData.stockUsed),
         photos: buildWizardPhotosPayload(),
         activityQueue: Array.isArray(prevPending?.activityQueue) ? [...prevPending.activityQueue] : []
       };
@@ -5734,17 +5772,41 @@ const JobCardFormPublic = () => {
       editingMeta,
       formData,
       signatureLocked,
-      totalMaterialCost,
       jobSiteDurationMinutes,
       buildWizardPhotosPayload,
       exportSignature,
-      isOnline
+      isOnline,
+      stockEntryRows,
+      stockLocations,
+      inventory,
+      inventoryByLocation,
+      newMaterialItem
     ]
   );
 
   useEffect(() => {
     persistWizardDraftRef.current = persistWizardDraft;
   }, [persistWizardDraft]);
+
+  useEffect(() => {
+    if (wizardFlow !== 'form' || !editingMeta) return undefined;
+    const timer = setTimeout(() => {
+      void persistWizardDraftRef.current?.({
+        syncServer: Boolean(editingMeta?.serverJobCardId)
+      });
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [
+    wizardFlow,
+    editingMeta,
+    formData,
+    stockEntryRows,
+    newMaterialItem,
+    sectionWorkMedia,
+    voiceAttachments,
+    selectedPhotos,
+    signatureLocked
+  ]);
 
   const validateStep = (stepIndex) =>
     validateWizardStep(stepIndex, formData, {
@@ -5950,25 +6012,43 @@ const JobCardFormPublic = () => {
               </div>
             </>
           ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Site
-              </label>
-              <SearchableSelect
-                id="jobcard-site"
-                name="siteId"
-                aria-label="Site"
-                value={formData.siteId}
-                onChange={v => handleChange({ target: { name: 'siteId', value: v } })}
-                options={siteSelectOptions}
-                placeholder={
-                  availableSites.length === 0 && formData.clientId && formData.clientId !== NO_CLIENT_ID
-                    ? 'No sites for this client'
-                    : 'Search sites…'
-                }
-                disabled={!formData.clientId || formData.clientId === NO_CLIENT_ID || availableSites.length === 0}
-              />
-            </div>
+            <>
+              {availableSites.length > 0 ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Site
+                  </label>
+                  <SearchableSelect
+                    id="jobcard-site"
+                    name="siteId"
+                    aria-label="Site"
+                    value={formData.siteId}
+                    onChange={v => handleChange({ target: { name: 'siteId', value: v } })}
+                    options={siteSelectOptions}
+                    placeholder="Search sites…"
+                    disabled={!formData.clientId || formData.clientId === NO_CLIENT_ID}
+                  />
+                </div>
+              ) : null}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Site name {availableSites.length === 0 ? '(manual)' : '(if not listed)'}
+                </label>
+                <input
+                  type="text"
+                  name="siteName"
+                  value={formData.siteName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder={
+                    availableSites.length === 0
+                      ? 'Enter site / location for this client'
+                      : 'Enter site name if not in the list above'
+                  }
+                  style={{ fontSize: '16px' }}
+                />
+              </div>
+            </>
           )}
         </div>
       </section>

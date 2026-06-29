@@ -1354,6 +1354,44 @@ const ServiceAndMaintenance = () => {
     return () => window.removeEventListener('jobcards:saved', onSaved);
   }, [selectedJobCard?.id, refetchJobCardDetailAfterSave]);
 
+  // Silent refresh while viewing an in-progress draft (field tech may still be editing on device).
+  useEffect(() => {
+    if (!showJobCardDetail || !selectedJobCard?.id) return undefined;
+    if (normalizeJobCardStatus(selectedJobCard.status) !== 'draft') return undefined;
+    const jobCardId = selectedJobCard.id;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      const token = window.storage?.getToken?.();
+      if (!token) return;
+      try {
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const response = await fetchWithTimeout(
+          `/api/jobcards/${encodeURIComponent(jobCardId)}?omitPhotos=1`,
+          { headers }
+        );
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        const full = data?.jobCard || data?.data?.jobCard || data?.data || data;
+        if (!full?.id || cancelled) return;
+        setSelectedJobCard((prev) => {
+          if (!prev || prev.id !== full.id) return prev;
+          const prevMs = new Date(prev.updatedAt || prev.createdAt || 0).getTime();
+          const nextMs = new Date(full.updatedAt || full.createdAt || 0).getTime();
+          if (nextMs <= prevMs) return prev;
+          return { ...prev, ...full };
+        });
+      } catch {
+        /* non-fatal background poll */
+      }
+    };
+    const interval = setInterval(() => void poll(), 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showJobCardDetail, selectedJobCard?.id, selectedJobCard?.status]);
+
   const handleChangeJobCardStatus = useCallback(async (nextStatusRaw) => {
     const jobCardId = selectedJobCard?.id;
     if (!jobCardId || !window.DatabaseAPI?.updateJobCard) return;

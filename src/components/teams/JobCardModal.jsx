@@ -759,6 +759,23 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        if (name === 'siteId') {
+            const site = availableSites.find(s => s.id === value);
+            setFormData(prev => ({
+                ...prev,
+                siteId: value,
+                siteName: site?.name || ''
+            }));
+            return;
+        }
+        if (name === 'siteName') {
+            setFormData(prev => ({
+                ...prev,
+                siteName: value,
+                siteId: value.trim() ? '' : prev.siteId
+            }));
+            return;
+        }
         setFormData(prev => ({
             ...prev,
             [name]: value
@@ -1285,22 +1302,29 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                Site *
+                                Site
                             </label>
-                            <select
-                                name="siteId"
-                                value={formData.siteId}
+                            {availableSites.length > 0 ? (
+                                <select
+                                    name="siteId"
+                                    value={formData.siteId}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 mb-2"
+                                >
+                                    <option value="">Select site (optional)</option>
+                                    {availableSites.map(site => (
+                                        <option key={site.id} value={site.id}>{site.name}</option>
+                                    ))}
+                                </select>
+                            ) : null}
+                            <input
+                                type="text"
+                                name="siteName"
+                                value={formData.siteName}
                                 onChange={handleChange}
-                                disabled={!formData.clientId || availableSites.length === 0}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            >
-                                <option value="">
-                                    {availableSites.length === 0 ? 'No sites available' : 'Select site (optional)'}
-                                </option>
-                                {availableSites.map(site => (
-                                    <option key={site.id} value={site.id}>{site.name}</option>
-                                ))}
-                            </select>
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                placeholder={availableSites.length ? 'Site name if not listed' : 'Enter site name'}
+                            />
                         </div>
                     </div>
 

@@ -113,6 +113,7 @@ type WizardContextValue = {
   setPriorClientId: (s: string) => void
   startNewJobCard: () => void
   openPriorList: () => void
+  exitWizardToLanding: () => void
   openStockTake: () => void
   openStockTransferRequest: () => void
   openStockTransferApprovals: (requestId?: string) => void
@@ -247,12 +248,6 @@ export function JobCardWizardProvider({
     setArrivalConfirmOpen(true)
     setWizardFlow('form')
   }, [user, ensureReferenceDataLoaded])
-
-  const openPriorList = useCallback(() => {
-    void ensureReferenceDataLoaded()
-    setWizardFlow('prior_list')
-    void refreshPriorList()
-  }, [refreshPriorList, ensureReferenceDataLoaded])
 
   const openStockTake = useCallback(() => {
     setWizardFlow('stock_take')
@@ -858,6 +853,22 @@ export function JobCardWizardProvider({
     setCurrentStep((s) => Math.max(s - 1, 0))
   }, [persistDraftQuiet])
 
+  const openPriorList = useCallback(() => {
+    if (wizardFlow === 'form' && editingMeta) {
+      void persistDraftQuiet({ forceDraft: true, lightweight: true })
+    }
+    void ensureReferenceDataLoaded()
+    setWizardFlow('prior_list')
+    void refreshPriorList()
+  }, [wizardFlow, editingMeta, persistDraftQuiet, refreshPriorList, ensureReferenceDataLoaded])
+
+  const exitWizardToLanding = useCallback(() => {
+    if (wizardFlow === 'form' && editingMeta) {
+      void persistDraftQuiet({ forceDraft: true, lightweight: true })
+    }
+    setWizardFlow('landing')
+  }, [wizardFlow, editingMeta, persistDraftQuiet])
+
   useEffect(() => {
     if (!editingMeta || wizardFlow !== 'form') return
     const onAppState = (next: AppStateStatus) => {
@@ -868,6 +879,24 @@ export function JobCardWizardProvider({
     const sub = AppState.addEventListener('change', onAppState)
     return () => sub.remove()
   }, [editingMeta, wizardFlow, persistDraftQuiet])
+
+  useEffect(() => {
+    if (!editingMeta || wizardFlow !== 'form') return undefined
+    const timer = setTimeout(() => {
+      void persistDraftQuiet({ forceDraft: true, lightweight: true })
+    }, 2500)
+    return () => clearTimeout(timer)
+  }, [
+    editingMeta,
+    wizardFlow,
+    formData,
+    stockEntryRows,
+    materialDraft,
+    sectionWorkMedia,
+    voiceAttachments,
+    selectedPhotos,
+    persistDraftQuiet
+  ])
 
   const applyServerJobCardToWizard = useCallback(
     (jc: JobCardFormData, opts: { fromCache?: boolean } = {}) => {
@@ -1147,6 +1176,7 @@ export function JobCardWizardProvider({
       setPriorClientId,
       startNewJobCard,
       openPriorList,
+      exitWizardToLanding,
       openStockTake,
       openStockTransferRequest,
       openStockTransferApprovals,
@@ -1211,6 +1241,7 @@ export function JobCardWizardProvider({
       priorClientId,
       startNewJobCard,
       openPriorList,
+      exitWizardToLanding,
       openStockTake,
       openStockTransferRequest,
       openStockTransferApprovals,

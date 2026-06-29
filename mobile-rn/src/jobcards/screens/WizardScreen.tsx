@@ -39,7 +39,7 @@ export function WizardScreen() {
     handlePrevious,
     handleSave,
     stepError,
-    setWizardFlow,
+    exitWizardToLanding,
     arrivalConfirmOpen,
     setArrivalConfirmOpen,
     departureConfirmOpen,
@@ -80,7 +80,7 @@ export function WizardScreen() {
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <OfflineBanner visible={!isOnline} />
       <View style={styles.header}>
-        <Pressable onPress={() => setWizardFlow('landing')} hitSlop={8} style={styles.exitBtn}>
+        <Pressable onPress={exitWizardToLanding} hitSlop={8} style={styles.exitBtn}>
           <Text style={styles.back}>← Exit</Text>
         </Pressable>
         <View style={styles.headerCenter}>
