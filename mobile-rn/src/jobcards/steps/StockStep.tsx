@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { createStockEntryRow } from '../../../../src/jobCardWizard/formDefaults.js'
+import { findPendingStockEntryRows } from '../../../../src/jobCardWizard/stockEntryFlush.js'
+import { findPendingMaterialDraft } from '../../../../src/jobCardWizard/wizardDraftFlush.js'
 import { useJobCardWizard } from '../WizardContext'
 import { useLocationInventory } from '../hooks/useLocationInventory'
 import { SearchableSelect } from '../components/SearchableSelect'
@@ -130,6 +132,8 @@ export function StockStep() {
     stockLocations,
     stockEntryRows,
     setStockEntryRows,
+    materialDraft,
+    setMaterialDraft,
     ensureInventoryLoaded,
     inventory
   } = useJobCardWizard()
@@ -146,6 +150,16 @@ export function StockStep() {
   const totalMaterialCost = useMemo(
     () => (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0),
     [formData.materialsBought]
+  )
+
+  const pendingEntryRows = useMemo(
+    () => findPendingStockEntryRows(stockEntryRows, formData.stockUsed),
+    [stockEntryRows, formData.stockUsed]
+  )
+
+  const pendingMaterialDraft = useMemo(
+    () => findPendingMaterialDraft(materialDraft),
+    [materialDraft]
   )
 
   function addStockFromRow(rowId: string, pick?: { itemName?: string }) {
@@ -194,8 +208,17 @@ export function StockStep() {
         <InfoBanner tone="info">
           Select the stock location first (e.g. each bakkie or warehouse). The component list only
           includes items with quantity on hand at that site. Use “Add another stock location” when
-          stock comes from more than one place.
+          stock comes from more than one place. Tap “+ Add to job card” or continue — unfinished
+          lines are saved automatically when you move on or submit.
         </InfoBanner>
+
+        {pendingEntryRows.length > 0 ? (
+          <InfoBanner tone="warning">
+            {pendingEntryRows.length} line{pendingEntryRows.length === 1 ? '' : 's'} selected but not
+            yet in the list below — tap “+ Add to job card” or go to the next step to include{' '}
+            {pendingEntryRows.length === 1 ? 'it' : 'them'}.
+          </InfoBanner>
+        ) : null}
 
         {stockEntryRows.map((row, idx) => (
           <StockEntryRowEditor
@@ -248,6 +271,9 @@ export function StockStep() {
           formData={formData}
           setFormData={setFormData}
           totalMaterialCost={totalMaterialCost}
+          materialDraft={materialDraft}
+          setMaterialDraft={setMaterialDraft}
+          pendingMaterialDraft={pendingMaterialDraft}
         />
       </SectionCard>
     </View>
@@ -257,74 +283,82 @@ export function StockStep() {
 function MaterialSection({
   formData,
   setFormData,
-  totalMaterialCost
+  totalMaterialCost,
+  materialDraft,
+  setMaterialDraft,
+  pendingMaterialDraft
 }: {
   formData: JobCardFormData
   setFormData: React.Dispatch<React.SetStateAction<JobCardFormData>>
   totalMaterialCost: number
+  materialDraft: { itemName: string; description: string; reason: string; cost: string }
+  setMaterialDraft: React.Dispatch<
+    React.SetStateAction<{ itemName: string; description: string; reason: string; cost: string }>
+  >
+  pendingMaterialDraft: { itemName: string; description: string; reason: string; cost: string } | null
 }) {
   const styles = useThemedStyles(createStyles)
   const formStyles = useFormStyles()
   const { jc } = useTheme()
-  const [matDraft, setMatDraft] = React.useState({
-    itemName: '',
-    description: '',
-    reason: '',
-    cost: ''
-  })
 
   return (
     <>
+      {pendingMaterialDraft ? (
+        <InfoBanner tone="warning">
+          Material “{pendingMaterialDraft.itemName}” is filled in but not added yet — tap “+ Add
+          material” or continue to save it automatically.
+        </InfoBanner>
+      ) : null}
       <View style={formStyles.row}>
         <TextInput
           style={[formStyles.input, { flex: 1 }]}
           placeholder="Item name *"
           placeholderTextColor={jc.textSubtle}
-          value={matDraft.itemName}
-          onChangeText={(itemName) => setMatDraft((d) => ({ ...d, itemName }))}
+          value={materialDraft.itemName}
+          onChangeText={(itemName) => setMaterialDraft((d) => ({ ...d, itemName }))}
         />
         <TextInput
           style={[formStyles.input, { flex: 0.45 }]}
           keyboardType="decimal-pad"
           placeholder="Cost (R) *"
           placeholderTextColor={jc.textSubtle}
-          value={matDraft.cost}
-          onChangeText={(cost) => setMatDraft((d) => ({ ...d, cost }))}
+          value={materialDraft.cost}
+          onChangeText={(cost) => setMaterialDraft((d) => ({ ...d, cost }))}
         />
       </View>
       <TextInput
         style={formStyles.input}
         placeholder="Description"
         placeholderTextColor={jc.textSubtle}
-        value={matDraft.description}
-        onChangeText={(description) => setMatDraft((d) => ({ ...d, description }))}
+        value={materialDraft.description}
+        onChangeText={(description) => setMaterialDraft((d) => ({ ...d, description }))}
       />
       <TextInput
         style={formStyles.input}
         placeholder="Reason for purchase"
         placeholderTextColor={jc.textSubtle}
-        value={matDraft.reason}
-        onChangeText={(reason) => setMatDraft((d) => ({ ...d, reason }))}
+        value={materialDraft.reason}
+        onChangeText={(reason) => setMaterialDraft((d) => ({ ...d, reason }))}
       />
       <Pressable
-        style={[formStyles.primaryBtn, !matDraft.itemName.trim() && styles.btnDisabled]}
-        disabled={!matDraft.itemName.trim()}
+        style={[formStyles.primaryBtn, !materialDraft.itemName.trim() && styles.btnDisabled]}
+        disabled={!materialDraft.itemName.trim()}
         onPress={() => {
-          if (!matDraft.itemName.trim()) return
+          if (!materialDraft.itemName.trim()) return
           setFormData((f) => ({
             ...f,
             materialsBought: [
               ...f.materialsBought,
               {
                 id: `mat_${Date.now()}`,
-                itemName: matDraft.itemName,
-                description: matDraft.description,
-                reason: matDraft.reason,
-                cost: parseFloat(matDraft.cost) || 0
+                itemName: materialDraft.itemName,
+                description: materialDraft.description,
+                reason: materialDraft.reason,
+                cost: parseFloat(materialDraft.cost) || 0
               }
             ]
           }))
-          setMatDraft({ itemName: '', description: '', reason: '', cost: '' })
+          setMaterialDraft({ itemName: '', description: '', reason: '', cost: '' })
         }}
       >
         <Text style={formStyles.primaryBtnText}>+ Add material</Text>

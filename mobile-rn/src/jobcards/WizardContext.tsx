@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState
 } from 'react'
-import { Alert } from 'react-native'
+import { Alert, AppState, type AppStateStatus } from 'react-native'
 import {
   STEP_IDS,
   NO_CLIENT_ID,
@@ -17,7 +17,10 @@ import {
   emptySectionWorkMedia,
   buildJobCardSavePayload,
   validateWizardStep,
-  toDatetimeLocalInput
+  toDatetimeLocalInput,
+  flushJobCardWizardEphemeralFields,
+  emptyMaterialDraft,
+  lightweightSaveStatus
 } from '../../../src/jobCardWizard/index.js'
 import { useNetwork } from '../hooks/useNetwork'
 import { useAuth } from '../state/AuthContext'
@@ -88,6 +91,10 @@ type WizardContextValue = {
   formTemplates: ServiceFormTemplate[]
   stockEntryRows: StockEntryRow[]
   setStockEntryRows: React.Dispatch<React.SetStateAction<StockEntryRow[]>>
+  materialDraft: { itemName: string; description: string; reason: string; cost: string }
+  setMaterialDraft: React.Dispatch<
+    React.SetStateAction<{ itemName: string; description: string; reason: string; cost: string }>
+  >
   sectionWorkMedia: SectionWorkMedia
   setSectionWorkMedia: React.Dispatch<React.SetStateAction<SectionWorkMedia>>
   voiceAttachments: VoiceClip[]
@@ -191,6 +198,7 @@ export function JobCardWizardProvider({
   const [stepError, setStepError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [stockEntryRows, setStockEntryRows] = useState<StockEntryRow[]>([createStockEntryRow()])
+  const [materialDraft, setMaterialDraft] = useState(emptyMaterialDraft)
   const [sectionWorkMedia, setSectionWorkMedia] = useState<SectionWorkMedia>({
     diagnosis: [],
     actionsTaken: [],
@@ -230,6 +238,7 @@ export function JobCardWizardProvider({
     })
     setCurrentStep(0)
     setStockEntryRows([createStockEntryRow()])
+    setMaterialDraft(emptyMaterialDraft())
     setSectionWorkMedia(emptySectionWorkMedia() as SectionWorkMedia)
     setVoiceAttachments([])
     setSelectedPhotos([])
@@ -388,37 +397,59 @@ export function JobCardWizardProvider({
     } else {
       setSignatureLocked(Boolean(card.customerSignature))
     }
-    if (card.stockUsed?.length) {
-      setStockEntryRows(
-        card.stockUsed.map((line, i) =>
-          createStockEntryRow({
-            id: line.id || `stock-restore-${i}`,
-            locationId: line.locationId || '',
-            sku: line.sku || '',
-            quantity: line.quantity || 0
-          })
+    if ('stockUsed' in card && Array.isArray(card.stockUsed)) {
+      if (card.stockUsed.length) {
+        setStockEntryRows(
+          card.stockUsed.map((line, i) =>
+            createStockEntryRow({
+              id: line.id || `stock-restore-${i}`,
+              locationId: line.locationId || '',
+              sku: line.sku || '',
+              quantity: line.quantity || 0
+            })
+          )
         )
-      )
-    } else {
-      setStockEntryRows([createStockEntryRow()])
+      } else {
+        setStockEntryRows([createStockEntryRow()])
+      }
+    }
+  }, [])
+
+  const applyPhotosFromPayload = useCallback((photos: unknown, textContext?: Partial<JobCardFormData>) => {
+    const media = applyPhotosPayloadToWizardState(photos, API_BASE_URL)
+    setSelectedPhotos(media.selectedPhotos)
+    setSectionWorkMedia(media.sectionWorkMedia)
+    setVoiceAttachments(
+      inferVoiceClipsNeedingTranscription(media.voiceAttachments, {
+        diagnosis: textContext?.diagnosis || '',
+        actionsTaken: textContext?.actionsTaken || '',
+        otherComments: textContext?.otherComments || '',
+        reasonForVisit: textContext?.reasonForVisit || ''
+      })
+    )
+    if (media.customerSignature) {
+      setFormData((f) => ({ ...f, customerSignature: media.customerSignature }))
+      setSignatureLocked(true)
     }
   }, [])
 
   const hydratePhotosForCard = useCallback(
-    async (serverId: string, localId: string) => {
+    async (serverId: string, _localId: string) => {
       if (!accessToken) return
       setPhotosLoading(true)
       try {
         const res = await jobcardsApi.getPhotos(accessToken, serverId)
-        const photos = res.photos
-        applyMediaAndStockFromCard({ ...createEmptyFormData(), photos } as JobCardFormData)
+        setFormData((f) => {
+          applyPhotosFromPayload(res.photos, f)
+          return f
+        })
       } catch {
         /* keep whatever local/slim payload had */
       } finally {
         setPhotosLoading(false)
       }
     },
-    [accessToken, applyMediaAndStockFromCard]
+    [accessToken, applyPhotosFromPayload]
   )
 
   const persistLocal = useCallback(
@@ -448,10 +479,32 @@ export function JobCardWizardProvider({
       if (!editingMeta) return fail('No job card is open.')
       if (saveInProgressRef.current) return fail('Save already in progress — please wait.')
 
+      const ephemeral = flushJobCardWizardEphemeralFields({
+        stockEntryRows,
+        stockUsed: formData.stockUsed,
+        stockLocations,
+        inventory,
+        materialDraft,
+        materialsBought: formData.materialsBought
+      })
+      const stockUsedForSave = ephemeral.stockUsed
+      const materialsBoughtForSave = ephemeral.materialsBought
+      if (ephemeral.flushedStock.length || ephemeral.flushedMaterial) {
+        setFormData((f) => ({
+          ...f,
+          stockUsed: ephemeral.stockUsed,
+          materialsBought: ephemeral.materialsBought
+        }))
+        setStockEntryRows(ephemeral.stockEntryRows)
+        setMaterialDraft(ephemeral.materialDraft)
+      }
+
       const forceSubmitted = opts.forceSubmitted === true
       const forceDraft = opts.forceDraft === true
       const formSnapshot: JobCardFormData = {
         ...formData,
+        stockUsed: stockUsedForSave,
+        materialsBought: materialsBoughtForSave,
         timeOfArrival:
           opts.timeOfArrivalOverride != null
             ? String(opts.timeOfArrivalOverride)
@@ -519,7 +572,7 @@ export function JobCardWizardProvider({
             signatureDataUrl: formSnapshot.customerSignature,
             sectionPhotoEntries: buildSectionPhotoEntriesFromState(sectionWorkMedia),
             voicePhotoEntries: buildVoicePhotoEntriesFromState(voiceAttachments),
-            normalizedStatus: 'draft'
+            normalizedStatus: lightweightSaveStatus(formSnapshot.status)
           }) as Record<string, unknown>
           jobCardData.id = editingMeta.localId
           jobCardData.activityQueue = Array.isArray(prevPending?.activityQueue)
@@ -694,6 +747,10 @@ export function JobCardWizardProvider({
     [
       editingMeta,
       formData,
+      stockEntryRows,
+      stockLocations,
+      inventory,
+      materialDraft,
       sectionWorkMedia,
       voiceAttachments,
       persistLocal,
@@ -797,8 +854,20 @@ export function JobCardWizardProvider({
 
   const handlePrevious = useCallback(() => {
     setStepError('')
+    void persistDraftQuiet({ forceDraft: true, lightweight: true })
     setCurrentStep((s) => Math.max(s - 1, 0))
-  }, [])
+  }, [persistDraftQuiet])
+
+  useEffect(() => {
+    if (!editingMeta || wizardFlow !== 'form') return
+    const onAppState = (next: AppStateStatus) => {
+      if (next === 'background' || next === 'inactive') {
+        void persistDraftQuiet({ forceDraft: true, lightweight: true })
+      }
+    }
+    const sub = AppState.addEventListener('change', onAppState)
+    return () => sub.remove()
+  }, [editingMeta, wizardFlow, persistDraftQuiet])
 
   const applyServerJobCardToWizard = useCallback(
     (jc: JobCardFormData, opts: { fromCache?: boolean } = {}) => {
@@ -1058,6 +1127,8 @@ export function JobCardWizardProvider({
       formTemplates,
       stockEntryRows,
       setStockEntryRows,
+      materialDraft,
+      setMaterialDraft,
       sectionWorkMedia,
       setSectionWorkMedia,
       voiceAttachments,
@@ -1127,6 +1198,7 @@ export function JobCardWizardProvider({
       stockLocations,
       formTemplates,
       stockEntryRows,
+      materialDraft,
       sectionWorkMedia,
       voiceAttachments,
       selectedPhotos,

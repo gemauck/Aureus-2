@@ -67,7 +67,10 @@ import {
   validateWizardStep,
   priorListLocalSearchHay,
   getPriorCardOpenId,
-  buildMergedWizardJobCardRows as mergeWizardJobCardRows
+  buildMergedWizardJobCardRows as mergeWizardJobCardRows,
+  flushJobCardWizardEphemeralFields,
+  findPendingStockEntryRows,
+  findPendingMaterialDraft
 } from '../../jobCardWizard/index.js';
 import { getWebOfflineStore, createWebSyncEngine } from '../../jobCardWizard/webAdapter.js';
 
@@ -2112,6 +2115,16 @@ const JobCardFormPublic = () => {
       void ensureInventoryForLocation(id);
     });
   }, [formData.stockUsed, stockEntryRows, ensureInventoryForLocation]);
+
+  const pendingStockEntryRows = useMemo(
+    () => findPendingStockEntryRows(stockEntryRows, formData.stockUsed),
+    [stockEntryRows, formData.stockUsed]
+  );
+
+  const pendingMaterialDraft = useMemo(
+    () => findPendingMaterialDraft(newMaterialItem),
+    [newMaterialItem]
+  );
 
   const jobStatusOptions = useMemo(
     () => [
@@ -5211,8 +5224,32 @@ const JobCardFormPublic = () => {
         jobSiteMinutesFromDatetimeLocals(timeOfArrivalForSave, departureFromSiteForSave) ??
         jobSiteDurationMinutes ??
         0;
+      const etherFlush = flushJobCardWizardEphemeralFields({
+        stockEntryRows,
+        stockUsed: formData.stockUsed,
+        stockLocations,
+        inventory,
+        inventoryByLocation,
+        materialDraft: newMaterialItem,
+        materialsBought: formData.materialsBought
+      });
+      const stockUsedForSave = etherFlush.stockUsed;
+      const materialsBoughtForSave = etherFlush.materialsBought;
+      if (etherFlush.flushedStock.length || etherFlush.flushedMaterial) {
+        setFormData((prev) => ({
+          ...prev,
+          stockUsed: etherFlush.stockUsed,
+          materialsBought: etherFlush.materialsBought
+        }));
+        setStockEntryRows(etherFlush.stockEntryRows);
+        if (etherFlush.flushedMaterial) {
+          setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+        }
+      }
       const jobCardData = {
         ...formData,
+        stockUsed: stockUsedForSave,
+        materialsBought: materialsBoughtForSave,
         timeOfArrival: timeOfArrivalForSave,
         departureFromSite: departureFromSiteForSave,
         customerSignature: signatureForSave,
@@ -6576,8 +6613,14 @@ const JobCardFormPublic = () => {
           )}
         </header>
             <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              Select the <strong>stock location</strong> first (e.g. each bakkie or warehouse). The component list only includes items with <strong>quantity on hand</strong> at that site. Use <strong>Add another stock location</strong> when stock comes from more than one place on the same job.
+              Select the <strong>stock location</strong> first (e.g. each bakkie or warehouse). The component list only includes items with <strong>quantity on hand</strong> at that site. Use <strong>Add another stock location</strong> when stock comes from more than one place on the same job. Unfinished lines are saved automatically when you continue or submit.
             </p>
+            {pendingStockEntryRows.length > 0 && (
+              <p className="text-xs text-amber-950 bg-amber-100 border border-amber-300 rounded-lg px-3 py-2 mb-3 font-medium">
+                {pendingStockEntryRows.length} line{pendingStockEntryRows.length === 1 ? '' : 's'} selected but not in the list below — click Add or go to the next step to include{' '}
+                {pendingStockEntryRows.length === 1 ? 'it' : 'them'}.
+              </p>
+            )}
             <div className="space-y-4 mb-3">
               {stockEntryRows.map((entry, entryIndex) => {
                 const entrySkuOptions = getStockSkuOptionsForLocation(entry.locationId);
@@ -6715,6 +6758,11 @@ const JobCardFormPublic = () => {
             </span>
           )}
         </header>
+            {pendingMaterialDraft && (
+              <p className="text-xs text-amber-950 bg-amber-100 border border-amber-300 rounded-lg px-3 py-2 mb-3 font-medium">
+                Material “{pendingMaterialDraft.itemName}” is filled in but not added yet — click Add or continue to save it automatically.
+              </p>
+            )}
             <div className="space-y-3 mb-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input

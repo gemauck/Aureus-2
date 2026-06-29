@@ -7,4 +7,6 @@ export * from './offlineStore.js';
 export * from './validateStep.js';
 export * from './priorList.js';
 export * from './buildSavePayload.js';
+export * from './stockEntryFlush.js';
+export * from './wizardDraftFlush.js';
 export * from './syncEngine.js';
