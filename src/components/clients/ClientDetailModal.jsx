@@ -7048,6 +7048,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 key={contact.id} 
                                                 className={`${isDark ? 'bg-gray-700 border-gray-600 hover:border-primary-400' : 'bg-white border-gray-200 hover:border-primary-300'} rounded-lg p-3 transition cursor-pointer hover:shadow-md`}
                                                 onClick={() => handleEditContact(contact)}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        handleEditContact(contact);
+                                                    }
+                                                }}
                                             >
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex-1">
@@ -7067,7 +7075,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 <div><i className="fas fa-building mr-1.5 w-4"></i>{contact.department}</div>
                                                             )}
                                                             <div><i className="fas fa-envelope mr-1.5 w-4"></i>
-                                                                <a href={`mailto:${contact.email}`} className="text-primary-600 hover:underline">
+                                                                <a
+                                                                    href={`mailto:${contact.email}`}
+                                                                    className="text-primary-600 hover:underline"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
                                                                     {contact.email}
                                                                 </a>
                                                             </div>
@@ -7091,19 +7103,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             })()}
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex gap-2 shrink-0 relative z-10">
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleEditContact(contact)}
-                                                            className="text-primary-600 hover:text-primary-700 p-1"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleEditContact(contact);
+                                                            }}
+                                                            className="text-primary-600 hover:text-primary-700 p-2 min-w-[2.25rem] min-h-[2.25rem]"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit"></i>
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleDeleteContact(contact.id)}
-                                                            className="text-red-600 hover:text-red-700 p-1"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteContact(contact.id);
+                                                            }}
+                                                            className="text-red-600 hover:text-red-700 p-2 min-w-[2.25rem] min-h-[2.25rem]"
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash"></i>

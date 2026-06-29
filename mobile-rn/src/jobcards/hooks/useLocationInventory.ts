@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { jobCardStockPickListFromCachedInventory } from '../../../../src/jobCardWizard/stockPickList.js'
 import { REFERENCE_CACHE_KEYS } from '../../../../src/jobCardWizard/constants.js'
 import { useNetwork } from '../../hooks/useNetwork'
+import { useAuth } from '../../state/AuthContext'
 import { jobcardsApi, seedInventoryIdToSkuCache } from '../api'
 import type { InventoryItem } from '../types'
 
@@ -16,11 +17,11 @@ function cacheKey(locationId: string, mode: LocationInventoryMode) {
   return `${mode}:${locationId}`
 }
 
-function apiOptsForMode(mode: LocationInventoryMode) {
+function apiOptsForMode(mode: LocationInventoryMode, token?: string | null) {
   if (mode === 'stockTake') {
-    return { includeZero: true, allSkus: true }
+    return { includeZero: true, allSkus: true, token: token || undefined }
   }
-  return {}
+  return { token: token || undefined }
 }
 
 async function readLocationInventoryDiskCache(): Promise<Record<string, InventoryItem[]>> {
@@ -67,6 +68,7 @@ export function useLocationInventory(
   const mode = options.mode ?? 'jobCard'
   const catalogFallback = options.catalogFallback
   const { isOnline } = useNetwork()
+  const { accessToken } = useAuth()
   const [rows, setRows] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -121,7 +123,10 @@ export function useLocationInventory(
     setLoading(true)
     setError('')
     try {
-      const inv = await jobcardsApi.getPublicInventory(locationId, apiOptsForMode(mode))
+      const inv = await jobcardsApi.getPublicInventory(
+        locationId,
+        apiOptsForMode(mode, accessToken)
+      )
       memoryCache.set(key, inv)
       setRows(inv)
       setFromCache(false)
@@ -152,7 +157,7 @@ export function useLocationInventory(
     } finally {
       setLoading(false)
     }
-  }, [locationId, enabled, isOnline, mode, catalogFallback])
+  }, [locationId, enabled, isOnline, mode, catalogFallback, accessToken])
 
   useEffect(() => {
     void load()
@@ -164,7 +169,8 @@ export function useLocationInventory(
 /** Warm one location cache while online (optional; job card step loads lazily per row). */
 export async function prefetchLocationInventory(
   locationIds: string[],
-  mode: LocationInventoryMode = 'jobCard'
+  mode: LocationInventoryMode = 'jobCard',
+  token?: string | null
 ): Promise<void> {
   const ids = [...new Set(locationIds.map((id) => String(id || '').trim()).filter(Boolean))]
   if (!ids.length) return
@@ -173,7 +179,10 @@ export async function prefetchLocationInventory(
       const key = cacheKey(locationId, mode)
       if (memoryCache.has(key)) return
       try {
-        const inv = await jobcardsApi.getPublicInventory(locationId, apiOptsForMode(mode))
+        const inv = await jobcardsApi.getPublicInventory(
+          locationId,
+          apiOptsForMode(mode, token)
+        )
         memoryCache.set(key, inv)
         await writeLocationInventoryDiskCache(key, inv)
       } catch {

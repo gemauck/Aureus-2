@@ -112,9 +112,11 @@ export function useWizardReferenceData(accessToken: string | null) {
     setInventoryLoading(true)
     try {
       if (isOnline) {
-        const inv = await jobcardsApi.getPublicInventory().catch(() => [])
-        const locs = await jobcardsApi.getPublicLocations().catch(() => [])
-        const tpl = await jobcardsApi.getServiceFormTemplates().catch(() => [])
+        const inv = await jobcardsApi.getPublicInventory(undefined, {
+          token: accessToken || undefined
+        }).catch(() => [])
+        const locs = await jobcardsApi.getPublicLocations(accessToken || undefined).catch(() => [])
+        const tpl = await jobcardsApi.getServiceFormTemplates(accessToken || undefined).catch(() => [])
         if (inv.length) {
           setInventory(inv)
           inventoryLoadedRef.current = true

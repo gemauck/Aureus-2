@@ -962,7 +962,10 @@
           try {
             const res = await fetch(url, {
               method: 'GET',
-              headers: { 'Content-Type': 'application/json' }
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Abcotronics-Client': 'field-app-v1'
+              }
             });
             if (!res.ok) return null;
             const data = await res.json();

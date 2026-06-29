@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNetwork } from '../../hooks/useNetwork'
+import { useAuth } from '../../state/AuthContext'
 import { jobcardsApi } from '../api'
 import { cacheClientSites, getCachedClientSites } from '../clientSitesCache'
 import { NO_CLIENT_ID, useJobCardWizard } from '../WizardContext'
@@ -68,6 +69,7 @@ export function AssignmentStep() {
     ensureReferenceDataLoaded
   } = useJobCardWizard()
   const { isOnline } = useNetwork()
+  const { accessToken } = useAuth()
   const [techInput, setTechInput] = useState('')
   const [availableSites, setAvailableSites] = useState<SiteOption[]>([])
   const [sitesLoading, setSitesLoading] = useState(false)
@@ -132,7 +134,7 @@ export function AssignmentStep() {
       if (isOnline && sites.length === 0) {
         setSitesLoading(true)
         try {
-          const apiSites = await jobcardsApi.getClientSites(formData.clientId)
+          const apiSites = await jobcardsApi.getClientSites(formData.clientId, accessToken || undefined)
           if (!cancelled && apiSites.length) {
             sites = apiSites.map((s, i) => ({
               id: s.id || `site_${i}`,
@@ -159,7 +161,7 @@ export function AssignmentStep() {
     return () => {
       cancelled = true
     }
-  }, [formData.clientId, clients, isOnline, setFormData])
+  }, [formData.clientId, clients, isOnline, setFormData, accessToken])
 
   useEffect(() => {
     if (!formData.siteId || !availableSites.length) return

@@ -424,7 +424,7 @@ export function StockTakeScreen() {
     const idToSkuMap = buildInventoryIdToSkuMap([...currentRows, ...inventory])
     const resolved = await resolveInventoryScanToSku(s, currentRows, {
       idToSkuMap,
-      resolveItemIdToSku: (id) => jobcardsApi.resolveInventoryItemSku(id)
+      resolveItemIdToSku: (id) => jobcardsApi.resolveInventoryItemSku(id, accessToken || undefined)
     })
 
     if ('error' in resolved) {

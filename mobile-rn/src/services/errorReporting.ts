@@ -122,6 +122,9 @@ function shouldSkipReport(context: string, statusCode?: number, message?: string
   if (context.startsWith('api:') && statusCode === 401) return true
   if (context.startsWith('api:') && statusCode === 429) return true
   if (context.startsWith('api:') && statusCode === 0) return true
+  if (context.startsWith('api:') && statusCode === 403) {
+    if (context.includes('/api/jobcards/') && context.includes('PATCH')) return true
+  }
   if (context.startsWith('api:') && context.includes('/auth/mobile/refresh') && statusCode === 0) return true
   if (context.startsWith('OTA') && message && isTransientNetworkError(message)) return true
   if (

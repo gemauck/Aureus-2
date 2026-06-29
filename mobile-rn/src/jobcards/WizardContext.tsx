@@ -216,7 +216,7 @@ export function JobCardWizardProvider({
     priorClientId,
     setPriorClientId,
     refreshPriorList
-  } = useWizardPriorList({ accessToken, isOnline, wizardFlow, pendingAutoSync })
+  } = useWizardPriorList({ accessToken, isOnline, wizardFlow, pendingAutoSync, userRole: user?.role })
   const [openingCardId, setOpeningCardId] = useState<string | null>(null)
   const [deletingJobCardId, setDeletingJobCardId] = useState<string | null>(null)
   const [photosLoading, setPhotosLoading] = useState(false)

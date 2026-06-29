@@ -10,8 +10,9 @@ export function useWizardPriorList(opts: {
   isOnline: boolean
   wizardFlow: WizardFlow
   pendingAutoSync: boolean
+  userRole?: string | null
 }) {
-  const { accessToken, isOnline, wizardFlow, pendingAutoSync } = opts
+  const { accessToken, isOnline, wizardFlow, pendingAutoSync, userRole } = opts
   const [priorRows, setPriorRows] = useState<PriorListRow[]>([])
   const [priorLoading, setPriorLoading] = useState(false)
   const [priorSearch, setPriorSearch] = useState('')
@@ -25,7 +26,8 @@ export function useWizardPriorList(opts: {
       if (accessToken && isOnline) {
         const res = await jobcardsApi.list(accessToken, {
           search: priorSearch || undefined,
-          clientId: priorClientId || undefined
+          clientId: priorClientId || undefined,
+          userRole
         })
         serverList = res.jobCards || []
         await cachePriorList(serverList)
@@ -43,7 +45,7 @@ export function useWizardPriorList(opts: {
     } finally {
       setPriorLoading(false)
     }
-  }, [accessToken, isOnline, priorSearch, priorClientId])
+  }, [accessToken, isOnline, priorSearch, priorClientId, userRole])
 
   useEffect(() => {
     if (pendingAutoSync) {

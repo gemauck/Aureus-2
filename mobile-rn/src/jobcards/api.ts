@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config'
 import { request } from '../services/apiClient'
+import { canViewAllJobCards } from './jobCardAccess'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { REFERENCE_CACHE_KEYS } from '../../../src/jobCardWizard/constants.js'
 import type {
@@ -65,7 +66,16 @@ export async function seedInventoryIdToSkuCache(items: InventoryItem[]): Promise
 }
 
 export const jobcardsApi = {
-  list(token: string, params: { page?: number; search?: string; clientId?: string } = {}) {
+  list(
+    token: string,
+    params: {
+      page?: number
+      search?: string
+      clientId?: string
+      userRole?: string | null
+      mineOnly?: boolean
+    } = {}
+  ) {
     const q = new URLSearchParams({
       page: String(params.page ?? 1),
       pageSize: '30',
@@ -74,6 +84,10 @@ export const jobcardsApi = {
     })
     if (params.search) q.set('search', params.search)
     if (params.clientId) q.set('clientId', params.clientId)
+    const mineOnly =
+      params.mineOnly === true ||
+      (params.mineOnly !== false && !canViewAllJobCards(params.userRole))
+    if (mineOnly) q.set('mine', '1')
     return request<{ jobCards: PendingJobCard[] }>(`/api/jobcards?${q}`, { token })
   },
 
@@ -114,22 +128,22 @@ export const jobcardsApi = {
       .catch(() => [])
   },
 
-  getPublicClients() {
-    return request<unknown>('/api/public/clients')
+  getPublicClients(token?: string) {
+    return request<unknown>('/api/public/clients', { token })
       .then((d) => filterActiveClients(unwrapList<ClientOption>(d, 'clients')))
       .catch(() => [])
   },
 
   /** Public first (ERP job card form), authenticated fallback. */
   async loadClients(token?: string) {
-    const fromPublic = await jobcardsApi.getPublicClients()
+    const fromPublic = await jobcardsApi.getPublicClients(token)
     if (fromPublic.length) return fromPublic
     if (!token) return []
     return jobcardsApi.getClients(token)
   },
 
   getUsers(token?: string) {
-    return request<unknown>('/api/public/users')
+    return request<unknown>('/api/public/users', { token })
       .then((d) => unwrapList<UserOption>(d, 'users'))
       .catch(() => {
         if (!token) return Promise.resolve([] as UserOption[])
@@ -139,33 +153,33 @@ export const jobcardsApi = {
       })
   },
 
-  getClientSites(clientId: string) {
-    return request<unknown>(`/api/public/sites/client/${encodeURIComponent(clientId)}`)
+  getClientSites(clientId: string, token?: string) {
+    return request<unknown>(`/api/public/sites/client/${encodeURIComponent(clientId)}`, { token })
       .then((d) => unwrapList<{ id: string; name?: string }>(d, 'sites'))
       .catch(() => [])
   },
 
-  getPublicLocations() {
-    return request<{ locations: StockLocation[] }>('/api/public/locations').then(
+  getPublicLocations(token?: string) {
+    return request<{ locations: StockLocation[] }>('/api/public/locations', { token }).then(
       (d) => d.locations || []
     )
   },
 
   getPublicInventory(
     locationId?: string,
-    opts?: { includeZero?: boolean; allSkus?: boolean }
+    opts?: { includeZero?: boolean; allSkus?: boolean; token?: string }
   ) {
     const params = new URLSearchParams()
     if (locationId) params.set('locationId', locationId)
     if (opts?.includeZero) params.set('includeZero', '1')
     if (opts?.allSkus) params.set('allSkus', '1')
     const q = params.toString() ? `?${params.toString()}` : ''
-    return request<{ inventory: InventoryItem[] }>(`/api/public/inventory${q}`).then(
-      (d) => d.inventory || []
-    )
+    return request<{ inventory: InventoryItem[] }>(`/api/public/inventory${q}`, {
+      token: opts?.token
+    }).then((d) => d.inventory || [])
   },
 
-  resolveInventoryItemSku(inventoryItemId: string) {
+  resolveInventoryItemSku(inventoryItemId: string, token?: string) {
     const id = String(inventoryItemId || '').trim()
     if (!id) return Promise.resolve(null as string | null)
     return readInventoryIdToSkuCache().then(async (cache) => {
@@ -174,7 +188,8 @@ export const jobcardsApi = {
       try {
         const params = new URLSearchParams({ resolveItemId: id })
         const d = await request<{ item: { sku?: string } | null }>(
-          `/api/public/inventory?${params}`
+          `/api/public/inventory?${params}`,
+          { token }
         )
         const sku = d.item?.sku != null ? String(d.item.sku).trim() : ''
         if (sku) {
@@ -189,8 +204,10 @@ export const jobcardsApi = {
     })
   },
 
-  getServiceFormTemplates() {
-    return request<{ templates: ServiceFormTemplate[] }>('/api/public/service-forms').then((d) =>
+  getServiceFormTemplates(token?: string) {
+    return request<{ templates: ServiceFormTemplate[] }>('/api/public/service-forms', {
+      token
+    }).then((d) =>
       Array.isArray((d as { templates?: ServiceFormTemplate[] }).templates)
         ? (d as { templates: ServiceFormTemplate[] }).templates
         : []
