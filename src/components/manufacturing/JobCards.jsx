@@ -49,6 +49,41 @@ function canAdjustJobCardsListTextSize(user) {
   return JOB_CARDS_LIST_TEXT_SCALE_NAMES.has(name);
 }
 
+function userFilterLabel(user) {
+  return String(user?.name || user?.email || user?.id || '').trim();
+}
+
+/** Match a user from filter text: exact, then unique prefix, then unique contains. */
+function resolveUserFromFilterText(users, raw) {
+  const normalized = String(raw || '').trim().toLowerCase();
+  if (!normalized || !Array.isArray(users) || users.length === 0) return null;
+
+  const label = (user) => userFilterLabel(user).toLowerCase();
+  const exact = users.find((user) => label(user) === normalized);
+  if (exact) return exact;
+
+  const prefixMatches = users.filter((user) => label(user).startsWith(normalized));
+  if (prefixMatches.length === 1) return prefixMatches[0];
+
+  const containsMatches = users.filter((user) => label(user).includes(normalized));
+  if (containsMatches.length === 1) return containsMatches[0];
+
+  return null;
+}
+
+function applyCreatorFilterText(raw, users, { setCreatorOptionSearch, setTechnicianOwnerId, setMineOnly }) {
+  const text = String(raw || '');
+  setCreatorOptionSearch(text);
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    setTechnicianOwnerId('');
+    return;
+  }
+  const match = resolveUserFromFilterText(users, text);
+  setTechnicianOwnerId(match ? match.id : '');
+  if (match?.id) setMineOnly(false);
+}
+
 function readJobCardsListTextScale() {
   try {
     const raw =
@@ -865,6 +900,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
     categoryFilter,
     mineOnly,
     technicianOwnerId,
+    creatorOptionSearch,
     technicianFilter,
     siteFilter,
     locationFilter,
@@ -964,6 +1000,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
         params.set('mine', '1');
       } else if (technicianOwnerId) {
         params.set('ownerId', technicianOwnerId);
+      } else if (creatorOptionSearch.trim()) {
+        params.set('createdByName', creatorOptionSearch.trim());
       }
       if (createdFrom) {
         params.set('createdFrom', createdFrom);
@@ -1002,6 +1040,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
       debouncedSearch,
       mineOnly,
       technicianOwnerId,
+      creatorOptionSearch,
       technicianFilter,
       siteFilter,
       locationFilter,
@@ -1943,21 +1982,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail, embedded = false }) 
             disabled={mineOnly}
             value={creatorOptionSearch}
             onChange={(e) => {
-              const raw = e.target.value;
-              setCreatorOptionSearch(raw);
-              const normalized = raw.trim().toLowerCase();
-              if (!normalized) {
-                setTechnicianOwnerId('');
-                return;
-              }
-              const match = technicianOptions.find(
-                (u) =>
-                  String(u.name || u.email || u.id || '')
-                    .trim()
-                    .toLowerCase() === normalized
-              );
-              setTechnicianOwnerId(match ? match.id : '');
-              if (match?.id) setMineOnly(false);
+              applyCreatorFilterText(e.target.value, technicianOptions, {
+                setCreatorOptionSearch,
+                setTechnicianOwnerId,
+                setMineOnly,
+              });
+            }}
+            onBlur={() => {
+              const match = resolveUserFromFilterText(technicianOptions, creatorOptionSearch);
+              if (!match) return;
+              setTechnicianOwnerId(match.id);
+              setCreatorOptionSearch(userFilterLabel(match));
+              setMineOnly(false);
             }}
             placeholder="All created by"
             className={`rounded-lg border px-2 py-2 text-xs shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60 ${isDark ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500' : 'border-slate-200 bg-white text-slate-700 placeholder:text-slate-400'}`}

@@ -19,6 +19,7 @@ import {
   buildJobCardListWhereClause,
   jobCardJsonFieldHasEntries
 } from './_lib/jobCardListSearch.js'
+import { resolveJobCardOwnerFilterByCreatorName } from './_lib/jobCardCreatorFilter.js'
 import {
   fetchJobCardListHeadingsByIds,
   JOB_CARD_LIST_TABLE_SELECT
@@ -961,6 +962,7 @@ async function handler(req, res) {
           url.searchParams.get('mine') === '1' ||
           String(url.searchParams.get('mine') || '').toLowerCase() === 'true'
         const ownerIdParamRaw = (url.searchParams.get('ownerId') || '').trim()
+        const createdByNameRaw = (url.searchParams.get('createdByName') || '').trim()
         const createdFromRaw = (url.searchParams.get('createdFrom') || '').trim()
         const createdToRaw = (url.searchParams.get('createdTo') || '').trim()
         const siteFilterRaw = (url.searchParams.get('site') || url.searchParams.get('siteName') || '').trim()
@@ -1013,6 +1015,7 @@ async function handler(req, res) {
           agentNameFilterRaw ||
           mineParam ||
           ownerIdParamRaw ||
+          createdByNameRaw ||
           createdFromRaw ||
           createdToRaw ||
           includeStockUsed ||
@@ -1054,6 +1057,9 @@ async function handler(req, res) {
           baseFilters.ownerId = String(owner)
         } else if (ownerIdParamRaw && looksLikeJobCardOwnerId(ownerIdParamRaw)) {
           baseFilters.ownerId = ownerIdParamRaw
+        } else if (createdByNameRaw) {
+          const ownerFilter = await resolveJobCardOwnerFilterByCreatorName(prisma, createdByNameRaw)
+          if (ownerFilter) Object.assign(baseFilters, ownerFilter)
         }
 
         const createdRange = {}
