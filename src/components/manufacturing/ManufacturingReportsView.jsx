@@ -129,6 +129,13 @@
   }
 
   async function waitForXlsx() {
+    if (typeof window.ensureXLSX === 'function') {
+      try {
+        return await window.ensureXLSX();
+      } catch (_) {
+        return null;
+      }
+    }
     let XLSXLib = window.XLSX;
     if (!XLSXLib || !XLSXLib.utils) {
       for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {

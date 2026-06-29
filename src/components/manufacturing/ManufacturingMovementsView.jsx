@@ -122,6 +122,13 @@
   }
 
   async function waitForXLSX(maxAttempts) {
+    if (typeof window.ensureXLSX === 'function') {
+      try {
+        return await window.ensureXLSX();
+      } catch (_) {
+        return null;
+      }
+    }
     let XLSXLib = window.XLSX;
     for (let i = 0; i < maxAttempts && (!XLSXLib || !XLSXLib.utils); i++) {
       await new Promise(function (resolve) {

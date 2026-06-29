@@ -3062,14 +3062,22 @@ const getAssigneeColor = (identifier, users) => {
             let ExcelJSLib = window.ExcelJS;
             let XLSX = window.XLSX;
 
-            for (let i = 0; i < 30 && !ExcelJSLib; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                ExcelJSLib = window.ExcelJS;
+            if (!ExcelJSLib && typeof window.ensureExcelJS === 'function') {
+                ExcelJSLib = await window.ensureExcelJS();
+            } else {
+                for (let i = 0; i < 30 && !ExcelJSLib; i++) {
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                    ExcelJSLib = window.ExcelJS;
+                }
             }
             if (!XLSX || !XLSX.utils) {
-                for (let i = 0; i < 30 && (!XLSX || !XLSX.utils); i++) {
-                    await new Promise((resolve) => setTimeout(resolve, 100));
-                    XLSX = window.XLSX;
+                if (typeof window.ensureXLSX === 'function') {
+                    XLSX = await window.ensureXLSX();
+                } else {
+                    for (let i = 0; i < 30 && (!XLSX || !XLSX.utils); i++) {
+                        await new Promise((resolve) => setTimeout(resolve, 100));
+                        XLSX = window.XLSX;
+                    }
                 }
             }
 

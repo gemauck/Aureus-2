@@ -700,12 +700,22 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                         hashFirst === 'expense-capture' ||
                         hashFirst === 'expense';
 
-                    // Now start loading lazy components
-                    // Increased batch size from 12 to 25 for much faster loading
-                    const batchSize = 25;
+                    // Smaller first batch so dashboard/shell is interactive sooner on slow links
+                    const initialBatchSize = 8;
+                    const laterBatchSize = 15;
                     let index = 0;
                     
+                    function scheduleNextBatch(fn, batchNumber) {
+                        const idleTimeout = batchNumber <= 1 ? 200 : 2000;
+                        if (typeof requestIdleCallback !== 'undefined') {
+                            requestIdleCallback(fn, { timeout: idleTimeout });
+                        } else {
+                            setTimeout(fn, batchNumber <= 1 ? 50 : 500);
+                        }
+                    }
+
                     function loadBatch() {
+                        const batchSize = index === 0 ? initialBatchSize : laterBatchSize;
                         const batch = componentFiles.slice(index, index + batchSize);
                         if (batch.length === 0) {
                             console.log(`✅ Lazy loading complete: ${loadedComponents} components loaded`);
@@ -806,15 +816,8 @@ console.log('🚀 lazy-load-components.js v20260525-poa-cache-bust loaded');
                             }
                             
                             index += batchSize;
-                            // Reduced delay between batches to 0ms for faster loading (was 25ms)
-                            const nextBatchDelay = 0;
-                            
-                            if (typeof requestIdleCallback !== 'undefined') {
-                                requestIdleCallback(loadBatch, { timeout: 50 });
-                            } else {
-                                // Use setTimeout with 0ms for immediate next batch
-                                setTimeout(loadBatch, nextBatchDelay);
-                            }
+                            const batchNumber = Math.ceil(index / laterBatchSize);
+                            scheduleNextBatch(loadBatch, batchNumber);
                         });
                     }
 

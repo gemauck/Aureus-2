@@ -121,7 +121,7 @@
     <!-- Build Version - Set from build-version.json -->
     <script>
         // Set build version for cache-busting (updated during build)
-        window.BUILD_VERSION = '1782726598598'; // Bumped to force reload and clear cache
+        window.BUILD_VERSION = '1782728403797'; // Bumped to force reload and clear cache
     </script>
     <!-- Stale HTML check: if server has a newer build, force reload (defer so it does not compete with first-paint resources) -->
     <script>
@@ -164,7 +164,7 @@
     <!-- VERSION: 20260511-meeting-notes-presence - Update when deploying -->
     <script>
         (function() {
-            var APP_VERSION = '1782726598598';
+            var APP_VERSION = '1782728403797';
             var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
             
             try {
@@ -741,9 +741,7 @@
     <!-- Preload critical React libraries for faster loading (local-first for offline support) -->
     <link rel="preload" href="/node_modules/react/umd/react.production.min.js" as="script">
     <link rel="preload" href="/node_modules/react-dom/umd/react-dom.production.min.js" as="script">
-    <!-- Excel libs load deferred; preloading starts the download in parallel with React -->
-    <link rel="preload" href="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" as="script" crossorigin>
-    <link rel="preload" href="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" as="script" crossorigin>
+    <!-- XLSX / ExcelJS load on demand via src/utils/excelLibsLoader.js (core bundle) — not on every page -->
     
     <!-- React - Must load before dependent scripts, but preload helps -->
     <script src="/node_modules/react/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded (local)'); }" onerror="this.onerror=null; this.src='https://unpkg.com/react@18/umd/react.production.min.js';"></script>
@@ -782,55 +780,8 @@
             };
         })();
     </script>
-    <!-- XLSX / ExcelJS: defer so they do not block parsing of the rest of the page (execute before core-bundle.js, same defer queue) -->
-    <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
-            onload="(function() {
-                     function tryAssign() {
-                       var x = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
-                       if (x) {
-                         window.XLSX = x;
-                         console.log('✅ XLSX library loaded from SheetJS CDN');
-                         return true;
-                       }
-                       return false;
-                     }
-                     if (!tryAssign()) {
-                       setTimeout(function() {
-                         if (!tryAssign()) {
-                           setTimeout(function() {
-                             if (!tryAssign()) {
-                               console.warn('⚠️ XLSX loaded but not properly initialized');
-                               console.error('❌ XLSX failed to initialize - Excel export will be unavailable');
-                             }
-                           }, 50);
-                         }
-                       }, 0);
-                     }
-                   })();" 
-            onerror="console.error('❌ XLSX CDN load failed from SheetJS - Excel export will be unavailable');"></script>
     
-    <script defer crossorigin src="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" 
-            onload="(function() {
-                     function tryAssign() {
-                       var E = typeof window.__erpResolveExcelJS === 'function' ? window.__erpResolveExcelJS() : null;
-                       if (E) {
-                         window.ExcelJS = E;
-                         console.log('✅ ExcelJS library loaded for data validation support');
-                         return true;
-                       }
-                       return false;
-                     }
-                     if (!tryAssign()) {
-                       setTimeout(function() {
-                         if (!tryAssign()) {
-                           console.warn('⚠️ ExcelJS loaded but not properly initialized');
-                         }
-                       }, 0);
-                     }
-                   })();" 
-            onerror="console.warn('⚠️ ExcelJS CDN load failed - data validation dropdowns may not work');"></script>
-    
-    <!-- Verify React loaded and expose globally (fallback); after DOMContentLoaded so deferred Excel scripts have run -->
+    <!-- Verify React loaded and expose globally (fallback) -->
     <script>
         function verifyReactAndExcelLibs() {
             if (typeof React !== 'undefined') {
@@ -848,31 +799,6 @@
                 console.log('✅ ReactDOM verified');
             } else {
                 console.error('❌ ReactDOM not loaded - check CDN connection');
-            }
-            function xlsxReady(x) {
-                return !!(x && (x.utils || typeof x.read === 'function'));
-            }
-            var xl = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
-            if (!xl) {
-                xl = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
-            }
-            if (xlsxReady(xl)) {
-                window.XLSX = xl;
-                console.log('✅ XLSX verified');
-            } else {
-                setTimeout(function() {
-                    var xl2 = typeof window.__erpResolveXLSX === 'function' ? window.__erpResolveXLSX() : null;
-                    if (!xl2) {
-                        xl2 = (typeof globalThis !== 'undefined' && globalThis.XLSX) || window.XLSX;
-                    }
-                    if (xlsxReady(xl2)) {
-                        window.XLSX = xl2;
-                        console.log('✅ XLSX loaded (delayed)');
-                    } else {
-                        console.error('❌ XLSX not loaded - check CDN connection');
-                        console.warn('⚠️ Excel export features will be unavailable until XLSX library loads');
-                    }
-                }, 2000);
             }
         }
         if (document.readyState === 'loading') {
@@ -1287,8 +1213,8 @@
     
     <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20260112-fix-lead-notes-persistence -->
-    <link rel="preload" href="/dist/core-bundle.js?v=1782726598598" as="script">
-    <script defer src="/dist/core-bundle.js?v=1782726598598"></script>
+    <link rel="preload" href="/dist/core-bundle.js?v=1782728403797" as="script">
+    <script defer src="/dist/core-bundle.js?v=1782728403797"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -1659,9 +1585,9 @@
     
     <!-- Lazy loader - CACHE BUST 20260124-weekly-fms-override -->
     <!-- Prefetch for faster lazy loading -->
-    <link rel="prefetch" href="/lazy-load-components.js?v=1782726598598" as="script">
+    <link rel="prefetch" href="/lazy-load-components.js?v=1782728403797" as="script">
     <link rel="prefetch" href="/dist/src/components/projects/ProjectDetail.js?v=1778959662824" as="script">
-    <script defer src="/lazy-load-components.js?v=1782726598598"></script>
+    <script defer src="/lazy-load-components.js?v=1782728403797"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

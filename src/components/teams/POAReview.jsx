@@ -528,10 +528,13 @@ const POAReview = () => {
             // Parse Excel using XLSX.js
             let XLSXLib = window.XLSX;
             if (!XLSXLib || !XLSXLib.utils) {
-                // Wait for XLSX to load
-                for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    XLSXLib = window.XLSX;
+                if (typeof window.ensureXLSX === 'function') {
+                    XLSXLib = await window.ensureXLSX();
+                } else {
+                    for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        XLSXLib = window.XLSX;
+                    }
                 }
             }
 

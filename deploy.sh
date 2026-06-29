@@ -152,6 +152,13 @@ if [ -z "${RELEASE_SUMMARY:-}" ] && [ -z "${DEPLOY_SUMMARY:-}" ]; then
 fi
 npm run build
 
+echo "-> Pre-compressing dist assets for nginx gzip_static..."
+if command -v gzip >/dev/null 2>&1 && [ -d "${APP_DIR}/dist" ]; then
+  find "${APP_DIR}/dist" -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' \) ! -name '*.gz' -print0 \
+    | while IFS= read -r -d '' f; do gzip -kf9 "$f"; done
+  echo "  ✓ dist .gz files refreshed"
+fi
+
 # Remove stale duplicate bundles (old JobCardFormPublic labels, etc.) — not referenced by index.html
 rm -f "${APP_DIR}/dist/core-bundle (1).js" "${APP_DIR}/dist/src/components/clients/core-bundle.js" 2>/dev/null || true
 

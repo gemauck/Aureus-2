@@ -2150,9 +2150,13 @@ try {
       // Prefer real .xlsx via XLSX so Excel opens without "format and extension don't match"
       let XLSXLib = window.XLSX;
       if (!XLSXLib || !XLSXLib.utils) {
-        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          XLSXLib = window.XLSX;
+        if (typeof window.ensureXLSX === 'function') {
+          XLSXLib = await window.ensureXLSX();
+        } else {
+          for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            XLSXLib = window.XLSX;
+          }
         }
       }
 
@@ -2237,16 +2241,24 @@ try {
     
     // Wait for libraries to load
     if (!ExcelJSLib) {
-      for (let i = 0; i < 20 && !ExcelJSLib; i++) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        ExcelJSLib = window.ExcelJS;
+      if (typeof window.ensureExcelJS === 'function') {
+        ExcelJSLib = await window.ensureExcelJS();
+      } else {
+        for (let i = 0; i < 20 && !ExcelJSLib; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          ExcelJSLib = window.ExcelJS;
+        }
       }
     }
     
     if (!XLSXLib || !XLSXLib.utils) {
-      for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        XLSXLib = window.XLSX;
+      if (typeof window.ensureXLSX === 'function') {
+        XLSXLib = await window.ensureXLSX();
+      } else {
+        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          XLSXLib = window.XLSX;
+        }
       }
     }
 
@@ -2969,11 +2981,14 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
       // Handle Excel file - wait for XLSX library
       let XLSXLib = window.XLSX;
       
-      // Wait for XLSX to load (it's loaded with defer)
       if (!XLSXLib || !XLSXLib.utils) {
-        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          XLSXLib = window.XLSX;
+        if (typeof window.ensureXLSX === 'function') {
+          XLSXLib = await window.ensureXLSX();
+        } else {
+          for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            XLSXLib = window.XLSX;
+          }
         }
       }
 
@@ -14724,9 +14739,15 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
         const baseName = `wac_detail_${safeSku}_${today}`;
 
         let XLSXLib = window.XLSX;
-        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
-          await new Promise((r) => setTimeout(r, 100));
-          XLSXLib = window.XLSX;
+        if (!XLSXLib || !XLSXLib.utils) {
+          if (typeof window.ensureXLSX === 'function') {
+            XLSXLib = await window.ensureXLSX();
+          } else {
+            for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+              await new Promise((r) => setTimeout(r, 100));
+              XLSXLib = window.XLSX;
+            }
+          }
         }
 
         if (XLSXLib?.utils) {
