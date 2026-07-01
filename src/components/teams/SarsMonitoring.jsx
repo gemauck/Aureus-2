@@ -1,6 +1,34 @@
 // SARS Website Monitoring Component for Compliance Team
 const { useState, useEffect } = React;
 
+/** API routes use ok(res, payload) → { data: payload } */
+function unwrapSarsApi(json) {
+    return json?.data ?? json ?? {};
+}
+
+function sarsChangesFromPayload(payload) {
+    const data = unwrapSarsApi(payload);
+    const list = data.changes ?? data.data?.changes;
+    return Array.isArray(list) ? list : [];
+}
+
+function sarsStatsFromPayload(payload) {
+    const data = unwrapSarsApi(payload);
+    const stats = data.total !== undefined ? data : (data.data || {});
+    return {
+        total: stats.total || 0,
+        new: stats.new || 0,
+        unread: stats.unread || 0
+    };
+}
+
+function sarsLastRunFromPayload(payload) {
+    const data = unwrapSarsApi(payload);
+    if (data?.ranAt) return data;
+    if (data?.data?.ranAt) return data.data;
+    return data?.data ?? null;
+}
+
 const SarsMonitoring = () => {
     const [changes, setChanges] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -44,7 +72,7 @@ const SarsMonitoring = () => {
                 return;
             }
 
-            const params = new URLSearchParams();
+            const params = new URLSearchParams({ limit: '200' });
             if (filter.isNew !== null) params.append('isNew', filter.isNew);
             if (filter.isRead !== null) params.append('isRead', filter.isRead);
             if (filter.category) params.append('category', filter.category);
@@ -65,12 +93,7 @@ const SarsMonitoring = () => {
                 return;
             }
 
-            const data = await response.json().catch(() => ({}));
-            if (data.success && data.data?.changes) {
-                setChanges(data.data.changes);
-            } else {
-                setChanges([]);
-            }
+            setChanges(sarsChangesFromPayload(await response.json().catch(() => ({}))));
         } catch (error) {
             console.error('Error loading SARS changes:', error);
             setChanges([]);
@@ -93,14 +116,7 @@ const SarsMonitoring = () => {
             });
 
             if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data) {
-                    setStats({
-                        total: data.data.total || 0,
-                        new: data.data.new || 0,
-                        unread: data.data.unread || 0
-                    });
-                }
+                setStats(sarsStatsFromPayload(await response.json()));
             }
         } catch (error) {
             console.error('Error loading stats:', error);
@@ -116,8 +132,8 @@ const SarsMonitoring = () => {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
             });
             if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data) setLastRun(data.data);
+                const lastRunData = sarsLastRunFromPayload(await response.json());
+                if (lastRunData?.ranAt) setLastRun(lastRunData);
             }
         } catch (e) {
             console.error('Error loading last run:', e);
@@ -151,13 +167,20 @@ const SarsMonitoring = () => {
                 return;
             }
 
-            const data = await response.json().catch(() => ({}));
-            if (data.success) {
-                if (data.lastRun) setLastRun(data.lastRun);
-                alert(`Check completed! Found ${data.results?.newChanges || 0} new changes.${data.results?.newChanges > 0 ? ' A summary email has been sent to the Compliance team.' : ''}`);
-                await Promise.all([loadChanges(), loadStats()]);
+            const data = unwrapSarsApi(await response.json().catch(() => ({})));
+            const checkOk = data.success !== false && (data.results || data.message);
+            if (checkOk) {
+                const lastRunData = data.lastRun ?? sarsLastRunFromPayload({ data: data.data });
+                if (lastRunData?.ranAt) setLastRun(lastRunData);
+                const newCount = data.results?.newChanges || 0;
+                const errorCount = data.results?.errors || 0;
+                const partialNote = errorCount > 0
+                    ? ` (${errorCount} section${errorCount === 1 ? '' : 's'} could not be fetched.)`
+                    : '';
+                alert(`Check completed! Found ${newCount} new change${newCount === 1 ? '' : 's'}.${newCount > 0 ? ' A summary email has been sent to the Compliance team.' : ''}${partialNote}`);
+                await Promise.all([loadChanges(), loadStats(), loadLastRun()]);
             } else {
-                alert('Error checking SARS website: ' + (data.message || 'Unknown error'));
+                alert('Error checking SARS website: ' + (data.message || data.error?.message || 'Unknown error'));
             }
         } catch (error) {
             console.error('Error checking SARS website:', error);

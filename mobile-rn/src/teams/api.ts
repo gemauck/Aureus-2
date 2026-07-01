@@ -233,18 +233,20 @@ export const teamsApi = {
     token: string,
     filters?: { isNew?: boolean; isRead?: boolean; category?: string; priority?: string }
   ) {
-    const q = new URLSearchParams({ action: 'list' })
+    const q = new URLSearchParams({ action: 'list', limit: '200' })
     if (filters?.isNew !== undefined) q.set('isNew', String(filters.isNew))
     if (filters?.isRead !== undefined) q.set('isRead', String(filters.isRead))
     if (filters?.category) q.set('category', filters.category)
     if (filters?.priority) q.set('priority', filters.priority)
-    return request<{ changes: SarsChange[] }>(`/api/sars-monitoring/check?${q}`, { token }).then(
-      (d) => d.changes || []
+    return request<{ changes: SarsChange[]; data?: { changes?: SarsChange[] } }>(`/api/sars-monitoring/check?${q}`, { token }).then(
+      (d) => d.changes || d.data?.changes || []
     )
   },
 
   getSarsStats(token: string) {
-    return request<SarsStats>('/api/sars-monitoring/check?action=stats', { token })
+    return request<SarsStats & { data?: SarsStats }>('/api/sars-monitoring/check?action=stats', { token }).then(
+      (d) => (d.total !== undefined ? d : d.data || {})
+    )
   },
 
   triggerSarsCheck(token: string) {

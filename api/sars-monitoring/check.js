@@ -215,7 +215,6 @@ async function handler(req, res) {
       } catch (err) {
         console.error('SARS monitoring check error:', err.message)
         return ok(res, {
-          success: true,
           message: 'SARS check temporarily unavailable (database may not be ready).',
           results: { checked: 0, newChanges: 0, errors: 1, changes: [] },
           lastRun: null
@@ -229,7 +228,6 @@ async function handler(req, res) {
         })
       } catch (_) {}
       return ok(res, {
-        success: true,
         message: 'SARS website check completed',
         results: {
           checked: results.checked.length,
@@ -247,10 +245,7 @@ async function handler(req, res) {
           take: 1
         })
       } catch (_) {}
-      return ok(res, {
-        success: true,
-        data: lastRun ? { ranAt: lastRun.ranAt, success: lastRun.success, newCount: lastRun.newCount, errorMessage: lastRun.errorMessage } : null
-      })
+      return ok(res, lastRun ? { ranAt: lastRun.ranAt, success: lastRun.success, newCount: lastRun.newCount, errorMessage: lastRun.errorMessage } : null)
     } else if (action === 'list') {
       const { limit = 50, isNew, isRead, category, priority } = req.query
       const where = {}
@@ -268,10 +263,10 @@ async function handler(req, res) {
           ],
           take
         })
-        return ok(res, { success: true, data: { changes } })
+        return ok(res, { changes })
       } catch (err) {
         console.error('SARS monitoring list error:', err.message)
-        return ok(res, { success: true, data: { changes: [] } })
+        return ok(res, { changes: [] })
       }
     } else if (action === 'mark-read') {
       const { id } = req.body
@@ -281,7 +276,7 @@ async function handler(req, res) {
           where: { id },
           data: { isRead: true }
         })
-        return ok(res, { success: true, data: { change } })
+        return ok(res, { change })
       } catch (err) {
         console.error('SARS monitoring mark-read error:', err.message)
         return res.status(503).json({ error: 'SARS monitoring temporarily unavailable' })
@@ -295,16 +290,10 @@ async function handler(req, res) {
           prisma.sarsWebsiteChange.groupBy({ by: ['category'], _count: true }),
           prisma.sarsWebsiteChange.groupBy({ by: ['priority'], _count: true })
         ])
-        return ok(res, {
-          success: true,
-          data: { total, new: newCount, unread: unreadCount, byCategory, byPriority }
-        })
+        return ok(res, { total, new: newCount, unread: unreadCount, byCategory, byPriority })
       } catch (err) {
         console.error('SARS monitoring stats error:', err.message)
-        return ok(res, {
-          success: true,
-          data: { total: 0, new: 0, unread: 0, byCategory: [], byPriority: [] }
-        })
+        return ok(res, { total: 0, new: 0, unread: 0, byCategory: [], byPriority: [] })
       }
     }
 
