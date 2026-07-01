@@ -671,10 +671,10 @@ function ProjectCorrespondenceSection({ project, activeSection }) {
             });
             setShowManual(false);
             setManual(emptyManualForm());
-            await Promise.all([
-                loadThreadDetail(selectedThreadId, { silent: true }),
-                loadThreads({ silent: true })
-            ]);
+            setSelectedThreadId(null);
+            setThreadDetail(null);
+            setExpandedEntryId(null);
+            await loadThreads({ silent: true });
         } catch (e) {
             alert(e?.message || 'Failed to save entry');
         } finally {
