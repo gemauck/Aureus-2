@@ -29,10 +29,27 @@ function sarsLastRunFromPayload(payload) {
     return data?.data ?? null;
 }
 
+function parseSarsMetadata(change) {
+    if (!change?.metadata) return {};
+    try {
+        return typeof change.metadata === 'string' ? JSON.parse(change.metadata) : change.metadata;
+    } catch (_) {
+        return {};
+    }
+}
+
+function formatSarsDate(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 const SarsMonitoring = () => {
     const [changes, setChanges] = useState([]);
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
+    const [expandedIds, setExpandedIds] = useState({});
     const [stats, setStats] = useState({
         total: 0,
         new: 0,
@@ -242,6 +259,10 @@ const SarsMonitoring = () => {
         }
     };
 
+    const toggleOverview = (id) => {
+        setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+    };
+
     return (
         <div className="space-y-3">
             {/* Header */}
@@ -359,7 +380,14 @@ const SarsMonitoring = () => {
                     </div>
                 ) : changes.length > 0 ? (
                     <div className="space-y-2">
-                        {changes.map(change => (
+                        {changes.map(change => {
+                            const meta = parseSarsMetadata(change);
+                            const isExpanded = Boolean(expandedIds[change.id]);
+                            const overviewText = (change.description || '').trim()
+                                || (change.pageTitle && change.pageTitle !== change.title ? change.pageTitle : '')
+                                || 'No summary was captured for this item. Open the SARS page for full details.';
+
+                            return (
                             <div
                                 key={change.id}
                                 className={`border-l-4 rounded-lg p-3 transition ${
@@ -368,8 +396,8 @@ const SarsMonitoring = () => {
                                         : isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-300'
                                 }`}
                             >
-                                <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             {!change.isRead && (
                                                 <span className={`px-1.5 py-0.5 text-[10px] rounded font-medium ${isDark ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white'}`}>
@@ -383,47 +411,92 @@ const SarsMonitoring = () => {
                                                 {change.category}
                                             </span>
                                         </div>
-                                        <h4 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                        <h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                             {change.title}
                                         </h4>
-                                        {change.description && (
-                                            <p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
-                                                {change.description}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleOverview(change.id)}
+                                            className={`px-2 py-1 text-xs rounded transition flex items-center gap-1 ${
+                                                isExpanded
+                                                    ? isDark ? 'bg-slate-600 text-slate-100' : 'bg-gray-300 text-gray-800'
+                                                    : isDark ? 'bg-slate-600/80 text-slate-200 hover:bg-slate-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                            aria-expanded={isExpanded}
+                                        >
+                                            Overview
+                                            <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px]`}></i>
+                                        </button>
+                                        {!change.isRead && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMarkAsRead(change.id)}
+                                                className={`px-2 py-1 text-xs rounded transition ${
+                                                    isDark
+                                                        ? 'bg-slate-600 text-slate-200 hover:bg-slate-500'
+                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                }`}
+                                                title="Mark as read"
+                                            >
+                                                <i className="fas fa-check"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {isExpanded && (
+                                    <div className={`mb-3 rounded-lg border p-3 text-xs space-y-2 ${
+                                        isDark ? 'bg-slate-800/80 border-slate-600' : 'bg-white border-gray-200'
+                                    }`}>
+                                        <div>
+                                            <p className={`font-semibold mb-1 ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>Summary</p>
+                                            <p className={`leading-relaxed ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
+                                                {overviewText}
+                                            </p>
+                                        </div>
+                                        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 pt-1 border-t ${
+                                            isDark ? 'border-slate-600 text-slate-400' : 'border-gray-200 text-gray-500'
+                                        }`}>
+                                            {meta.sourceLabel && (
+                                                <p><span className="font-medium">Source section:</span> {meta.sourceLabel}</p>
+                                            )}
+                                            <p><span className="font-medium">Change type:</span> {change.changeType || 'new'}</p>
+                                            <p><span className="font-medium">Published:</span> {formatSarsDate(change.publishedAt)}</p>
+                                            <p><span className="font-medium">Detected:</span> {formatSarsDate(change.createdAt)}</p>
+                                            <p><span className="font-medium">Status:</span> {change.isRead ? 'Read' : 'Unread'}{change.isNew ? ' · flagged new' : ''}</p>
+                                            {meta.checkedAt && (
+                                                <p><span className="font-medium">Last checked:</span> {formatSarsDate(meta.checkedAt)}</p>
+                                            )}
+                                        </div>
+                                        {meta.sourceUrl && (
+                                            <p className={`truncate ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+                                                <span className="font-medium">Monitored from:</span>{' '}
+                                                <a
+                                                    href={meta.sourceUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className={isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}
+                                                >
+                                                    {meta.sourceLabel || 'Source page'}
+                                                </a>
                                             </p>
                                         )}
                                     </div>
-                                    {!change.isRead && (
-                                        <button
-                                            onClick={() => handleMarkAsRead(change.id)}
-                                            className={`ml-2 px-2 py-1 text-xs rounded transition ${
-                                                isDark
-                                                    ? 'bg-slate-600 text-slate-200 hover:bg-slate-500'
-                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                            }`}
-                                            title="Mark as read"
-                                        >
-                                            <i className="fas fa-check"></i>
-                                        </button>
-                                    )}
-                                </div>
+                                )}
+
                                 <div className="flex items-center justify-between text-xs">
                                     <div className={`flex items-center gap-3 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                         {change.publishedAt && (
                                             <span>
                                                 <i className="fas fa-calendar mr-1"></i>
-                                                {new Date(change.publishedAt).toLocaleDateString('en-ZA', {
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                    year: 'numeric'
-                                                })}
+                                                {formatSarsDate(change.publishedAt)}
                                             </span>
                                         )}
                                         <span>
                                             <i className="fas fa-clock mr-1"></i>
-                                            {new Date(change.createdAt).toLocaleDateString('en-ZA', {
-                                                month: 'short',
-                                                day: 'numeric'
-                                            })}
+                                            Detected {formatSarsDate(change.createdAt)}
                                         </span>
                                     </div>
                                     {change.url && (
@@ -442,7 +515,8 @@ const SarsMonitoring = () => {
                                     )}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="text-center py-12">

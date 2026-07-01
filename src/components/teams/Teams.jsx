@@ -44,6 +44,16 @@ function loadTeamsDistScript(componentBaseName) {
     return p;
 }
 
+const SARS_MONITORING_TEAM_IDS = new Set(['compliance', 'finance', 'commercial']);
+
+function teamHasSarsMonitoring(team) {
+    if (!team) return false;
+    const id = String(team.id || '').toLowerCase();
+    if (SARS_MONITORING_TEAM_IDS.has(id)) return true;
+    const name = String(team.name || '').toLowerCase();
+    return SARS_MONITORING_TEAM_IDS.has(name);
+}
+
 const Teams = () => {
     // Teams state - fetched from API
     const [teams, setTeams] = useState([]);
@@ -1015,7 +1025,7 @@ const Teams = () => {
                                     )}
                                 </>
                             )}
-                            {(selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (
+                            {teamHasSarsMonitoring(selectedTeam) && (
                                 <button
                                     onClick={() => setActiveTab('sars-monitoring')}
                                     className={`px-3 py-2 text-sm font-medium transition-all duration-200 shrink-0 rounded-lg ${
@@ -1159,7 +1169,7 @@ const Teams = () => {
                             }
                             return <Hub team={selectedTeam} isDark={isDark} searchTerm={searchTerm} />;
                         })()}
-                        {activeTab === 'sars-monitoring' && (selectedTeam?.id === 'compliance' || (selectedTeam?.name && selectedTeam.name.toLowerCase() === 'compliance')) && (() => {
+                        {activeTab === 'sars-monitoring' && teamHasSarsMonitoring(selectedTeam) && (() => {
                             const SarsMonitoringComponent = window.SarsMonitoring;
                             if (!SarsMonitoringComponent) {
                                 return (

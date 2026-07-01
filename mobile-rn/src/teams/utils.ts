@@ -22,6 +22,12 @@ export const MEETING_DEPARTMENTS = [
   { id: 'hr', name: 'HR' }
 ] as const
 
+const SARS_MONITORING_TEAM_IDS = new Set(['compliance', 'finance', 'commercial'])
+
+export function teamHasSarsMonitoring(teamId: string) {
+  return SARS_MONITORING_TEAM_IDS.has(String(teamId || '').toLowerCase())
+}
+
 const TEAM_COLOR_MAP: Record<string, string> = {
   blue: '#3b82f6',
   green: '#22c55e',
@@ -79,7 +85,7 @@ export function getTeamTabs(teamId: string, user: User | null | undefined): Team
   if (teamId === 'data-analytics') {
     tabs.push('poa-review', 'dfrr-check')
   }
-  if (teamId === 'compliance') tabs.push('sars-monitoring')
+  if (teamHasSarsMonitoring(teamId)) tabs.push('sars-monitoring')
   if (isAdminUser(user)) tabs.push('members')
   return tabs
 }
