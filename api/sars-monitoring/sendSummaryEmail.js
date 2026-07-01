@@ -1,6 +1,7 @@
 /**
- * Send a summary email to Compliance team members when new SARS changes are found.
- * Uses SARS_MONITORING_TEAM_ID (default 'compliance') to resolve recipients.
+ * Send a summary email to Compliance team members (+ configured extras) when new SARS changes are found.
+ * Uses SARS_MONITORING_TEAM_ID (default 'compliance') to resolve primary recipients.
+ * Also includes SARS_MONITORING_EXTRA_USER_IDS or, by default, Michelle Peel and Reinhardt Scholtz.
  * Skips sending on first run (no prior successful run) to avoid flooding with historical items.
  */
 import { prisma } from '../_lib/prisma.js'
@@ -8,6 +9,55 @@ import { sendEmail } from '../_lib/email.js'
 import { getTeamMemberUserIds } from '../_lib/notifyTeamDiscussion.js'
 
 const COMPLIANCE_TEAM_ID = process.env.SARS_MONITORING_TEAM_ID || 'compliance'
+
+function extraUserIdsFromEnv() {
+  const raw = process.env.SARS_MONITORING_EXTRA_USER_IDS
+  if (!raw || !String(raw).trim()) return null
+  return [...new Set(String(raw).split(',').map((s) => s.trim()).filter(Boolean))]
+}
+
+/** @returns {Promise<string[]>} */
+async function resolveExtraRecipientUserIds() {
+  const fromEnv = extraUserIdsFromEnv()
+  if (fromEnv) {
+    if (fromEnv.length === 0) return []
+    const users = await prisma.user.findMany({
+      where: { id: { in: fromEnv } },
+      select: { id: true }
+    })
+    if (users.length < fromEnv.length) {
+      const found = new Set(users.map((u) => u.id))
+      const missing = fromEnv.filter((id) => !found.has(id))
+      console.warn('SARS summary email: unknown SARS_MONITORING_EXTRA_USER_IDS:', missing.join(', '))
+    }
+    return users.map((u) => u.id)
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        {
+          AND: [
+            { name: { contains: 'Michelle', mode: 'insensitive' } },
+            { name: { contains: 'Peel', mode: 'insensitive' } }
+          ]
+        },
+        {
+          AND: [
+            { name: { contains: 'Reinhardt', mode: 'insensitive' } },
+            { name: { contains: 'Scholtz', mode: 'insensitive' } }
+          ]
+        }
+      ]
+    },
+    select: { id: true, name: true, email: true }
+  })
+  return [...new Set(users.map((u) => u.id))]
+}
+
+function isValidEmail(email) {
+  return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())
+}
 
 /**
  * @param {Array<{ id: string, title: string, url?: string, priority?: string, category?: string, publishedAt?: Date }>} newChanges
@@ -30,18 +80,28 @@ export async function sendSarsSummaryEmail(newChanges, opts = {}) {
   }
 
   const memberIds = await getTeamMemberUserIds(COMPLIANCE_TEAM_ID)
-  if (memberIds.length === 0) {
-    console.log('SARS summary email: no Compliance team members found for team id', COMPLIANCE_TEAM_ID)
+  const extraIds = await resolveExtraRecipientUserIds()
+  const allUserIds = [...new Set([...memberIds, ...extraIds])]
+  if (allUserIds.length === 0) {
+    console.log('SARS summary email: no recipients (Compliance team or extras)')
     return
   }
 
   const users = await prisma.user.findMany({
-    where: { id: { in: memberIds } },
+    where: { id: { in: allUserIds } },
     select: { email: true, name: true }
   })
-  const emails = users.map((u) => u.email).filter((e) => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).trim()))
-  if (emails.length === 0) {
-    console.log('SARS summary email: no valid emails for Compliance team members')
+  const emails = [...new Set(users.map((u) => u.email).filter(isValidEmail).map((e) => String(e).trim()))]
+  const extraRaw = process.env.SARS_MONITORING_EXTRA_EMAILS
+  if (extraRaw && String(extraRaw).trim()) {
+    for (const e of String(extraRaw).split(',')) {
+      const trimmed = e.trim()
+      if (isValidEmail(trimmed)) emails.push(trimmed)
+    }
+  }
+  const uniqueEmails = [...new Set(emails)]
+  if (uniqueEmails.length === 0) {
+    console.log('SARS summary email: no valid emails for recipients')
     return
   }
 
@@ -93,12 +153,12 @@ export async function sendSarsSummaryEmail(newChanges, opts = {}) {
 
   try {
     await sendEmail({
-      to: emails,
+      to: uniqueEmails,
       subject,
       html,
       text
     })
-    console.log('SARS summary email sent to', emails.length, 'recipient(s)')
+    console.log('SARS summary email sent to', uniqueEmails.length, 'recipient(s)')
   } catch (err) {
     console.error('SARS summary email failed:', err.message)
     throw err

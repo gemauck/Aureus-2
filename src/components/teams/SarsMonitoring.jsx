@@ -38,6 +38,23 @@ function parseSarsMetadata(change) {
     }
 }
 
+function overviewTextForChange(change, fetchedSummary) {
+    const meta = parseSarsMetadata(change);
+    const candidates = [
+        fetchedSummary,
+        meta.contentSummary,
+        change.description,
+        change.pageTitle && change.pageTitle !== change.title ? change.pageTitle : ''
+    ];
+    for (const c of candidates) {
+        const t = String(c || '').trim();
+        if (!t) continue;
+        if (/south african revenue service/i.test(t) && t.length < 100 && !t.includes('—')) continue;
+        return t;
+    }
+    return '';
+}
+
 function formatSarsDate(value) {
     if (!value) return '—';
     const d = new Date(value);
@@ -50,6 +67,8 @@ const SarsMonitoring = () => {
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
     const [expandedIds, setExpandedIds] = useState({});
+    const [contentSummaries, setContentSummaries] = useState({});
+    const [summaryLoadingIds, setSummaryLoadingIds] = useState({});
     const [stats, setStats] = useState({
         total: 0,
         new: 0,
@@ -259,8 +278,44 @@ const SarsMonitoring = () => {
         }
     };
 
-    const toggleOverview = (id) => {
-        setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+    const toggleOverview = (change) => {
+        const id = change.id;
+        const willExpand = !expandedIds[id];
+        setExpandedIds((prev) => ({ ...prev, [id]: willExpand }));
+        if (willExpand && !contentSummaries[id] && !overviewTextForChange(change)) {
+            void loadContentSummary(change);
+        }
+    };
+
+    const loadContentSummary = async (change) => {
+        const id = change.id;
+        if (summaryLoadingIds[id]) return;
+        const existing = overviewTextForChange(change, contentSummaries[id]);
+        if (existing && existing.length >= 80) return;
+
+        setSummaryLoadingIds((prev) => ({ ...prev, [id]: true }));
+        try {
+            const token = localStorage.getItem('abcotronics_token') || localStorage.getItem('token');
+            if (!token) return;
+
+            const response = await fetch(`/api/sars-monitoring/check?action=summary&id=${encodeURIComponent(id)}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) return;
+            const data = unwrapSarsApi(await response.json().catch(() => ({})));
+            const summary = String(data.summary || '').trim();
+            if (summary) {
+                setContentSummaries((prev) => ({ ...prev, [id]: summary }));
+            }
+        } catch (error) {
+            console.error('Error loading SARS content summary:', error);
+        } finally {
+            setSummaryLoadingIds((prev) => ({ ...prev, [id]: false }));
+        }
     };
 
     return (
@@ -383,9 +438,8 @@ const SarsMonitoring = () => {
                         {changes.map(change => {
                             const meta = parseSarsMetadata(change);
                             const isExpanded = Boolean(expandedIds[change.id]);
-                            const overviewText = (change.description || '').trim()
-                                || (change.pageTitle && change.pageTitle !== change.title ? change.pageTitle : '')
-                                || 'No summary was captured for this item. Open the SARS page for full details.';
+                            const summaryLoading = Boolean(summaryLoadingIds[change.id]);
+                            const overviewText = overviewTextForChange(change, contentSummaries[change.id]);
 
                             return (
                             <div
@@ -418,7 +472,7 @@ const SarsMonitoring = () => {
                                     <div className="flex items-center gap-1 shrink-0">
                                         <button
                                             type="button"
-                                            onClick={() => toggleOverview(change.id)}
+                                            onClick={() => toggleOverview(change)}
                                             className={`px-2 py-1 text-xs rounded transition flex items-center gap-1 ${
                                                 isExpanded
                                                     ? isDark ? 'bg-slate-600 text-slate-100' : 'bg-gray-300 text-gray-800'
@@ -452,9 +506,20 @@ const SarsMonitoring = () => {
                                     }`}>
                                         <div>
                                             <p className={`font-semibold mb-1 ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>Summary</p>
-                                            <p className={`leading-relaxed ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
-                                                {overviewText}
-                                            </p>
+                                            {summaryLoading ? (
+                                                <p className={`flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                    <i className="fas fa-spinner fa-spin text-[10px]"></i>
+                                                    Loading summary from SARS…
+                                                </p>
+                                            ) : overviewText ? (
+                                                <p className={`leading-relaxed ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
+                                                    {overviewText}
+                                                </p>
+                                            ) : (
+                                                <p className={`leading-relaxed italic ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                    No summary could be extracted. Use “View on SARS” for the full notice or guide.
+                                                </p>
+                                            )}
                                         </div>
                                         <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 pt-1 border-t ${
                                             isDark ? 'border-slate-600 text-slate-400' : 'border-gray-200 text-gray-500'

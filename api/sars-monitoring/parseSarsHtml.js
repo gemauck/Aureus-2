@@ -160,3 +160,63 @@ export function extractAnnouncements(html, url) {
 
   return announcements
 }
+
+const BOILERPLATE_RE =
+  /south african revenue service|what'?s new at sars|skip to content|cookie|search for:/i
+
+function cleanSummaryText(text) {
+  const t = stripTags(text).replace(/\s+/g, ' ').trim()
+  if (!t || t.length < 24) return ''
+  if (BOILERPLATE_RE.test(t) && t.length < 120) return ''
+  return t.slice(0, 900)
+}
+
+/** True when stored description is useful (not empty listing-page noise). */
+export function isSubstantiveSarsDescription(description, pageTitle, title) {
+  const desc = cleanSummaryText(description || '')
+  if (!desc) return false
+  const page = stripTags(pageTitle || '').toLowerCase()
+  const ttl = stripTags(title || '').toLowerCase()
+  if (desc.toLowerCase() === page || desc.toLowerCase() === ttl) return false
+  if (/south african revenue service/i.test(desc) && desc.length < 100) return false
+  return true
+}
+
+/**
+ * Extract a short plain-text summary from a SARS detail page HTML.
+ * @param {string} html
+ * @returns {string}
+ */
+export function extractPageSummary(html) {
+  if (!html) return ''
+
+  const og = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)
+  const ogText = cleanSummaryText(og?.[1] || '')
+  if (ogText.length >= 40) return ogText
+
+  const metaDesc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+  const metaText = cleanSummaryText(metaDesc?.[1] || '')
+  if (metaText.length >= 40) return metaText
+
+  const contentMatch =
+    html.match(/<div[^>]+class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i) ||
+    html.match(/<article[^>]*>([\s\S]*?)<\/article>/i) ||
+    html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+
+  if (contentMatch) {
+    const block = contentMatch[1]
+    const parts = []
+    for (const pm of block.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) {
+      const t = cleanSummaryText(pm[1])
+      if (!t || t.length < 30) continue
+      if (/^share this/i.test(t)) continue
+      parts.push(t)
+      if (parts.join(' ').length >= 500) break
+    }
+    if (parts.length) return parts.join(' ').slice(0, 900)
+  }
+
+  return ogText || metaText || ''
+}

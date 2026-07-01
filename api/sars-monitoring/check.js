@@ -8,7 +8,7 @@ import { withLogging } from '../_lib/logger.js'
 import { sendSarsSummaryEmail } from './sendSummaryEmail.js'
 import { tryAcquireSarsDailyLease } from './dailyLease.js'
 import { getSarsSections } from './sarsSections.js'
-import { extractAnnouncements } from './parseSarsHtml.js'
+import { extractAnnouncements, extractPageSummary, isSubstantiveSarsDescription } from './parseSarsHtml.js'
 
 // Function to fetch and parse SARS website content
 async function fetchSarsPage(url) {
@@ -294,6 +294,60 @@ async function handler(req, res) {
       } catch (err) {
         console.error('SARS monitoring stats error:', err.message)
         return ok(res, { total: 0, new: 0, unread: 0, byCategory: [], byPriority: [] })
+      }
+    } else if (action === 'summary') {
+      const { id } = req.query
+      if (!id) return res.status(400).json({ error: 'Change ID is required' })
+      try {
+        const change = await prisma.sarsWebsiteChange.findUnique({ where: { id: String(id) } })
+        if (!change) return res.status(404).json({ error: 'Change not found' })
+
+        let meta = {}
+        try {
+          meta = change.metadata ? JSON.parse(change.metadata) : {}
+        } catch (_) {
+          meta = {}
+        }
+
+        if (meta.contentSummary) {
+          return ok(res, { summary: meta.contentSummary, cached: true })
+        }
+
+        if (isSubstantiveSarsDescription(change.description, change.pageTitle, change.title)) {
+          return ok(res, { summary: String(change.description).trim(), cached: true, source: 'description' })
+        }
+
+        const url = String(change.url || '').trim()
+        if (!url || !/^https?:\/\/(www\.)?sars\.gov\.za/i.test(url)) {
+          return ok(res, {
+            summary: change.description?.trim() || change.title || '',
+            cached: false,
+            unavailable: true
+          })
+        }
+
+        const html = await fetchSarsPage(url)
+        const summary = extractPageSummary(html)
+        if (summary) {
+          meta.contentSummary = summary
+          meta.contentSummaryFetchedAt = new Date().toISOString()
+          await prisma.sarsWebsiteChange.update({
+            where: { id: change.id },
+            data: {
+              metadata: JSON.stringify(meta),
+              description: change.description?.trim() ? change.description : summary
+            }
+          })
+        }
+
+        return ok(res, {
+          summary: summary || change.description?.trim() || change.title || '',
+          cached: false,
+          fetched: Boolean(summary)
+        })
+      } catch (err) {
+        console.error('SARS monitoring summary error:', err.message)
+        return ok(res, { summary: '', error: 'Could not load summary from SARS website' })
       }
     }
 
