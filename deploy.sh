@@ -351,6 +351,16 @@ if [ -f prisma/scripts/add-quickbooks-receipt-sync.sql ]; then
   fi
 fi
 
+if [ -f prisma/scripts/add-project-correspondence.sql ]; then
+  echo
+  echo "-> Applying migration (project correspondence tables)..."
+  if command -v psql >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then
+    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -f prisma/scripts/add-project-correspondence.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  else
+    npx prisma db execute --file prisma/scripts/add-project-correspondence.sql 2>/dev/null && echo "  Done." || echo "  (skipped or already applied)"
+  fi
+fi
+
 if [ -f migrations/add-notification-email-messages.sql ]; then
   echo
   echo "-> Applying migration (NotificationSetting.emailMessages for Messenger)..."

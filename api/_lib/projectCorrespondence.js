@@ -357,8 +357,8 @@ export function parseCorrespondenceEntry(row) {
   return parsed
 }
 
-export async function ensureCorrespondenceTables() {
-  try {
+export async function ensureCorrespondenceTables({ force = false } = {}) {
+  const run = async () => {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "ProjectCorrespondenceThread" (
         id TEXT PRIMARY KEY,
@@ -461,42 +461,51 @@ export async function ensureCorrespondenceTables() {
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectCorrespondenceEntry_threadId_idx" ON "ProjectCorrespondenceEntry" ("threadId")`)
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectCorrespondenceEntry_projectId_idx" ON "ProjectCorrespondenceEntry" ("projectId")`)
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProjectCorrespondenceEntry_messageId_idx" ON "ProjectCorrespondenceEntry" ("messageId")`)
+  }
+
+  try {
+    await run()
+    return { ok: true }
   } catch (e) {
-    console.warn('⚠️ Could not ensure correspondence tables:', e?.message)
+    console.error('❌ Could not ensure correspondence tables:', e?.message)
+    if (force) throw e
+    return { ok: false, error: e?.message }
   }
 }
 
 export async function assertProjectCorrespondenceEnabled(projectId) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: {
-      id: true,
-      name: true,
-      hasCorrespondenceProcess: true,
-      correspondenceInboundEmail: true,
-      correspondenceInboxSlug: true
+  return withCorrespondenceSchema(async () => {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        name: true,
+        hasCorrespondenceProcess: true,
+        correspondenceInboundEmail: true,
+        correspondenceInboxSlug: true
+      }
+    })
+    if (!project) return { ok: false, error: 'Project not found', status: 404 }
+    if (!project.hasCorrespondenceProcess) {
+      return { ok: false, error: 'Correspondence module is not enabled for this project', status: 403 }
+    }
+    let inboxEmail = await ensureProjectCorrespondenceInboundEmail(projectId)
+    if (!inboxEmail) {
+      inboxEmail = (project.correspondenceInboundEmail || '').trim().toLowerCase()
+    }
+    const refreshed = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { correspondenceInboundEmail: true, correspondenceInboxSlug: true }
+    })
+    return {
+      ok: true,
+      project: {
+        ...project,
+        correspondenceInboundEmail: refreshed?.correspondenceInboundEmail || inboxEmail,
+        correspondenceInboxSlug: refreshed?.correspondenceInboxSlug ?? project.correspondenceInboxSlug ?? null
+      }
     }
   })
-  if (!project) return { ok: false, error: 'Project not found', status: 404 }
-  if (!project.hasCorrespondenceProcess) {
-    return { ok: false, error: 'Correspondence module is not enabled for this project', status: 403 }
-  }
-  let inboxEmail = await ensureProjectCorrespondenceInboundEmail(projectId)
-  if (!inboxEmail) {
-    inboxEmail = (project.correspondenceInboundEmail || '').trim().toLowerCase()
-  }
-  const refreshed = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { correspondenceInboundEmail: true, correspondenceInboxSlug: true }
-  })
-  return {
-    ok: true,
-    project: {
-      ...project,
-      correspondenceInboundEmail: refreshed?.correspondenceInboundEmail || inboxEmail,
-      correspondenceInboxSlug: refreshed?.correspondenceInboxSlug ?? project.correspondenceInboxSlug ?? null
-    }
-  }
 }
 
 export async function findProjectByCorrespondenceInbox(recipientEmails) {
@@ -526,4 +535,33 @@ export async function touchThreadActivity(threadId, at = new Date()) {
 export function normalizeMessageId(value) {
   if (!value || typeof value !== 'string') return ''
   return value.replace(/[<>]/g, '').trim().toLowerCase()
+}
+
+/** True when Prisma failed because correspondence tables/columns are missing on the DB. */
+export function isCorrespondenceSchemaError(err) {
+  const code = err?.code
+  const msg = String(err?.message || '').toLowerCase()
+  return (
+    code === 'P2021' ||
+    code === 'P2022' ||
+    code === 'P2010' ||
+    msg.includes('projectcorrespondence') ||
+    msg.includes('hascorrespondenceprocess') ||
+    msg.includes('correspondenceinboundemail') ||
+    msg.includes('correspondenceinboxslug') ||
+    (msg.includes('column') && msg.includes('does not exist')) ||
+    (msg.includes('relation') && msg.includes('does not exist'))
+  )
+}
+
+/** Run correspondence DDL; retry Prisma operation once after schema repair. */
+export async function withCorrespondenceSchema(fn) {
+  try {
+    return await fn()
+  } catch (err) {
+    if (!isCorrespondenceSchemaError(err)) throw err
+    console.warn('correspondence schema drift — repairing:', err?.message)
+    await ensureCorrespondenceTables({ force: true })
+    return await fn()
+  }
 }

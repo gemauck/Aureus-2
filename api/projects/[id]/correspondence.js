@@ -18,7 +18,8 @@ import {
   getCorrespondenceInboundDomain,
   isValidEmail,
   parseCorrespondenceThread,
-  setProjectCorrespondenceInboxSlug
+  setProjectCorrespondenceInboxSlug,
+  withCorrespondenceSchema
 } from '../../_lib/projectCorrespondence.js'
 
 function inboxSettingsPayload(project, inboxEmail) {
@@ -37,7 +38,10 @@ async function handler(req, res) {
   if (!projectId) return badRequest(res, 'Project ID required')
 
   try {
-    await ensureCorrespondenceTables()
+    const ensured = await ensureCorrespondenceTables()
+    if (!ensured.ok) {
+      return serverError(res, 'Correspondence database schema is not ready', ensured.error)
+    }
 
     if (req.method === 'PATCH' || req.method === 'PUT') {
       const gate = await assertProjectCorrespondenceEnabled(projectId)
@@ -86,36 +90,40 @@ async function handler(req, res) {
       gate.project?.correspondenceInboundEmail ||
       (await ensureProjectCorrespondenceInboundEmail(projectId))
 
-    const threads = await prisma.projectCorrespondenceThread.findMany({
-      where: { projectId },
-      orderBy: { lastActivityAt: 'desc' },
-      include: {
-        createdBy: { select: { id: true, name: true, email: true } },
-        entries: {
-          orderBy: { occurredAt: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            kind: true,
-            direction: true,
-            correspondenceType: true,
-            subject: true,
-            bodyText: true,
-            occurredAt: true,
-            createdAt: true
-          }
-        },
-        _count: { select: { entries: true } }
-      }
-    })
+    const threads = await withCorrespondenceSchema(() =>
+      prisma.projectCorrespondenceThread.findMany({
+        where: { projectId },
+        orderBy: { lastActivityAt: 'desc' },
+        include: {
+          createdBy: { select: { id: true, name: true, email: true } },
+          entries: {
+            orderBy: { occurredAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              kind: true,
+              direction: true,
+              correspondenceType: true,
+              subject: true,
+              bodyText: true,
+              occurredAt: true,
+              createdAt: true
+            }
+          },
+          _count: { select: { entries: true } }
+        }
+      })
+    )
 
     const emailThreadIds = new Set(
       (
-        await prisma.projectCorrespondenceEntry.findMany({
-          where: { projectId, kind: { in: ['sent', 'received'] } },
-          select: { threadId: true },
-          distinct: ['threadId']
-        })
+        await withCorrespondenceSchema(() =>
+          prisma.projectCorrespondenceEntry.findMany({
+            where: { projectId, kind: { in: ['sent', 'received'] } },
+            select: { threadId: true },
+            distinct: ['threadId']
+          })
+        )
       ).map((r) => r.threadId)
     )
 
