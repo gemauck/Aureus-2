@@ -21,6 +21,11 @@ import { fileURLToPath } from 'url'
 import { prisma } from '../_lib/prisma.js'
 import { ok, badRequest, serverError } from '../_lib/response.js'
 import { createNotificationForUser } from '../notifications.js'
+import {
+  collectInboundRecipientEmails,
+  shouldRouteInboundToProjectCorrespondence
+} from '../_lib/projectCorrespondence.js'
+import { processProjectCorrespondenceReceivedEmail } from './project-correspondence-reply.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const UPLOAD_FOLDER = 'doc-collection-comments'
@@ -1173,6 +1178,16 @@ async function processReceivedEmail(emailId, apiKey, data, options = {}) {
     console.log('document-request-reply: processing', { emailId })
     const email = await fetchReceivedEmail(emailId, apiKey)
     console.log('document-request-reply: fetched email', { subject: (email.subject || '').toString().slice(0, 100) })
+
+    const recipientEmails = collectInboundRecipientEmails(email, data)
+    if (await shouldRouteInboundToProjectCorrespondence(recipientEmails)) {
+      console.log('document-request-reply: routing to project correspondence', {
+        emailId,
+        recipientEmails
+      })
+      return await processProjectCorrespondenceReceivedEmail(emailId, apiKey, data)
+    }
+
     const rawUrl = email.raw && (email.raw.download_url || email.raw.downloadUrl)
     const allCandidates = await getAllMessageIdCandidates(email, rawUrl, apiKey)
     if (allCandidates.length === 0) {

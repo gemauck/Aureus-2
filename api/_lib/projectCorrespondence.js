@@ -508,6 +508,33 @@ export async function assertProjectCorrespondenceEnabled(projectId) {
   })
 }
 
+/** True when address uses project correspondence inbox naming (name_doc_proj@domain or legacy +corr-proj-). */
+export function isProjectCorrespondenceInboxAddress(email) {
+  const e = String(email || '').trim().toLowerCase()
+  if (!isValidEmail(e)) return false
+  const at = e.indexOf('@')
+  if (at <= 0) return false
+  const local = e.slice(0, at)
+  return local.endsWith(PROJECT_INBOX_EMAIL_SUFFIX) || /\+corr-proj-/i.test(local)
+}
+
+export function collectInboundRecipientEmails(...sources) {
+  const out = new Set()
+  for (const src of sources) {
+    for (const e of extractRecipientEmailsFromInbound(src)) {
+      out.add(e)
+    }
+  }
+  return [...out]
+}
+
+export async function shouldRouteInboundToProjectCorrespondence(recipientEmails) {
+  const emails = Array.isArray(recipientEmails) ? recipientEmails : []
+  if (emails.some(isProjectCorrespondenceInboxAddress)) return true
+  const project = await findProjectByCorrespondenceInbox(emails)
+  return !!project
+}
+
 export async function findProjectByCorrespondenceInbox(recipientEmails) {
   const emails = Array.isArray(recipientEmails) ? recipientEmails : []
   if (emails.length === 0) return null

@@ -1,14 +1,17 @@
 /**
  * POST /api/inbound/project-correspondence-reply
  * Resend email.received webhook: route replies to project correspondence threads.
+ *
+ * Production Resend webhooks usually point at document-request-reply only; that handler
+ * delegates here when the message is To/Cc on a *_doc_proj@ inbox address.
  */
 import crypto from 'crypto'
 import { prisma } from '../_lib/prisma.js'
 import { ok, serverError } from '../_lib/response.js'
 import { createNotificationForUser } from '../notifications.js'
 import {
+  collectInboundRecipientEmails,
   ensureCorrespondenceTables,
-  extractRecipientEmailsFromInbound,
   findProjectByCorrespondenceInbox,
   generateCorrespondenceRequestNumber,
   normalizeMessageId,
@@ -170,7 +173,7 @@ async function recordUnmatched(emailId, fromAddress, subject, candidates, reason
   } catch (_) {}
 }
 
-async function processReceivedEmail(emailId, apiKey, webhookPayload = null) {
+export async function processProjectCorrespondenceReceivedEmail(emailId, apiKey, webhookPayload = null) {
   await ensureCorrespondenceTables()
 
   const existing = await prisma.projectCorrespondenceEntry.findFirst({
@@ -190,7 +193,7 @@ async function processReceivedEmail(emailId, apiKey, webhookPayload = null) {
   const fromEmail = extractFromEmail(email)
   const subject = (email.subject || '').toString()
   const bodyText = emailBodyText(email)
-  const recipientEmails = extractRecipientEmailsFromInbound(email)
+  const recipientEmails = collectInboundRecipientEmails(email, webhookPayload)
   const toEmails = normalizeEmailList(email.to)
   const ccEmails = [
     ...normalizeEmailList(email.cc),
@@ -384,7 +387,7 @@ export async function handler(req, res) {
 
     res.status(200).json({ received: true, processing: 'async' })
     setImmediate(() => {
-      processReceivedEmail(emailId, apiKey, data).catch((e) => {
+      processProjectCorrespondenceReceivedEmail(emailId, apiKey, data).catch((e) => {
         console.error('project-correspondence-reply: background error', e)
       })
     })
