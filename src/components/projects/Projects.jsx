@@ -2891,6 +2891,12 @@ const Projects = () => {
                 if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                 return false;
             })(),
+            hasCorrespondenceProcess: (() => {
+                const value = fullProject.hasCorrespondenceProcess;
+                if (value === true || value === 'true' || value === 1) return true;
+                if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                return false;
+            })(),
             weeklyFMSReviewSections: (fullProject.weeklyFMSReviewSections != null && typeof fullProject.weeklyFMSReviewSections === 'object') ? fullProject.weeklyFMSReviewSections : {}
         });
 
@@ -3012,6 +3018,7 @@ const Projects = () => {
                         hasMonthlyFMSReviewProcess: !!(full.hasMonthlyFMSReviewProcess === true || full.hasMonthlyFMSReviewProcess === 'true' || full.hasMonthlyFMSReviewProcess === 1),
                         hasMonthlyDataReviewProcess: !!(full.hasMonthlyDataReviewProcess === true || full.hasMonthlyDataReviewProcess === 'true' || full.hasMonthlyDataReviewProcess === 1),
                         hasComplianceReviewProcess: !!(full.hasComplianceReviewProcess === true || full.hasComplianceReviewProcess === 'true' || full.hasComplianceReviewProcess === 1),
+                        hasCorrespondenceProcess: !!(full.hasCorrespondenceProcess === true || full.hasCorrespondenceProcess === 'true' || full.hasCorrespondenceProcess === 1),
                         weeklyFMSReviewSections: (full.weeklyFMSReviewSections != null && typeof full.weeklyFMSReviewSections === 'object') ? full.weeklyFMSReviewSections : {}
                     };
                     setViewingProject(prev => prev && String(prev.id) === String(full.id) ? normalizedFull : prev);
@@ -3090,7 +3097,7 @@ const Projects = () => {
                             effective = { ...prev, ...patch };
                         }
                     }
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections', 'onlineDriveLinks', 'googleDriveLink', 'projectContacts'];
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'hasCorrespondenceProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections', 'onlineDriveLinks', 'googleDriveLink', 'projectContacts'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = effective[field];
@@ -3162,7 +3169,7 @@ const Projects = () => {
                     // If it's the same project ID, check if data actually changed
                     if (prev && prev.id === normalizedProject.id) {
                         // Compare important fields (include module flags so Time/Monthly tabs persist when re-opening)
-                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents', 'projectContacts'];
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'hasTimeProcess', 'hasMonthlyFMSReviewProcess', 'hasCorrespondenceProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents', 'projectContacts'];
                         const hasChanges = importantFields.some(field => {
                             const prevValue = prev[field];
                             const newValue = normalizedProject[field];

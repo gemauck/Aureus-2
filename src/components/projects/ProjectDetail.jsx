@@ -1212,6 +1212,62 @@ function initializeProjectDetail() {
             return projectIdEqual && hasProcessEqual && activeSectionEqual && onBackEqual && crEqual;
         });
     })();
+
+    const CorrespondenceProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
+
+        const CorrespondenceProcessSectionInner = ({
+            project,
+            hasCorrespondenceProcess,
+            activeSection
+        }) => {
+            const [ready, setReady] = useStateSection(() => !!window.ProjectCorrespondenceSection);
+            const [loading, setLoading] = useStateSection(false);
+
+            useEffectSection(() => {
+                if (activeSection !== 'correspondence' || !hasCorrespondenceProcess) return;
+                const version = window.APP_VERSION || String(Date.now());
+                const versionKey = `correspondence-${version}`;
+                if (window.__correspondenceSectionVersion === versionKey && window.ProjectCorrespondenceSection) {
+                    setReady(true);
+                    return;
+                }
+                document.querySelectorAll('script[src*="ProjectCorrespondenceSection"]').forEach((node) => node.remove());
+                delete window.ProjectCorrespondenceSection;
+                setLoading(true);
+                const script = document.createElement('script');
+                script.src = `/dist/src/components/projects/ProjectCorrespondenceSection.js?v=${versionKey}`;
+                script.onload = () => {
+                    window.__correspondenceSectionVersion = versionKey;
+                    setReady(!!window.ProjectCorrespondenceSection);
+                    setLoading(false);
+                };
+                script.onerror = () => setLoading(false);
+                document.body.appendChild(script);
+            }, [activeSection, hasCorrespondenceProcess]);
+
+            if (!hasCorrespondenceProcess || activeSection !== 'correspondence') return null;
+            if (!ready || !window.ProjectCorrespondenceSection) {
+                return (
+                    <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 p-8 text-center text-sm text-gray-500">
+                        {loading ? 'Loading correspondence…' : 'Correspondence module is loading…'}
+                    </div>
+                );
+            }
+            return window.React.createElement(window.ProjectCorrespondenceSection, {
+                project,
+                activeSection
+            });
+        };
+
+        return memo(CorrespondenceProcessSectionInner, (prevProps, nextProps) => {
+            return (
+                prevProps.project?.id === nextProps.project?.id &&
+                prevProps.hasCorrespondenceProcess === nextProps.hasCorrespondenceProcess &&
+                prevProps.activeSection === nextProps.activeSection
+            );
+        });
+    })();
     
     // Extract MonthlyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
     const MonthlyFMSReviewProcessSection = (() => {
@@ -3070,7 +3126,7 @@ function initializeProjectDetail() {
         
         const tabFromUrl = params ? (() => {
             const t = params.get('tab');
-            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity', 'notes'].includes(t) ? t : null;
+            return t && ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'correspondence', 'activity', 'notes'].includes(t) ? t : null;
         })() : null;
         const noteIdDeep = params ? (params.get('noteId') || params.get('highlightNoteId')) : null;
         if (tabFromUrl === 'notes') return 'notes';
@@ -3886,6 +3942,7 @@ function initializeProjectDetail() {
     // This runs synchronously in useEffect to ensure tasks are available instantly
     const previousProjectIdRef = useRef(project?.id);
     const needPersistTimeFromUrlRef = useRef(false);
+    const needPersistCorrespondenceFromUrlRef = useRef(false);
     const needPersistMonthlyFMSFromUrlRef = useRef(false);
     const hasMonthlyFMSReviewProcessChangedRef = useRef(false); // declared early so URL-sync effect can set it
     const setHasMonthlyFMSReviewProcessRef = useRef(() => {}); // set later so URL-sync/switchTab can invoke it
@@ -4362,12 +4419,17 @@ function initializeProjectDetail() {
         }
         if (!params && search) params = new URLSearchParams(search);
         const tabFromUrl = params?.get('tab');
-        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'activity', 'notes'];
+        const validTabs = ['overview', 'tasks', 'time', 'documentCollection', 'monthlyFMSReview', 'weeklyFMSReview', 'monthlyDataReview', 'complianceReview', 'correspondence', 'activity', 'notes'];
         if (tabFromUrl && validTabs.includes(tabFromUrl)) {
             if (tabFromUrl === 'time' && !normalizeHasTimeProcess(project.hasTimeProcess)) {
                 hasTimeProcessChangedRef.current = true;
                 setHasTimeProcess(true);
                 needPersistTimeFromUrlRef.current = true;
+            }
+            if (tabFromUrl === 'correspondence' && !normalizeHasCorrespondenceProcess(project.hasCorrespondenceProcess)) {
+                hasCorrespondenceProcessChangedRef.current = true;
+                setHasCorrespondenceProcess(true);
+                needPersistCorrespondenceFromUrlRef.current = true;
             }
             const projectHasMonthly = project.hasMonthlyFMSReviewProcess === true || project.hasMonthlyFMSReviewProcess === 'true' || project.hasMonthlyFMSReviewProcess === 1 || (typeof project.hasMonthlyFMSReviewProcess === 'string' && String(project.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
             if (tabFromUrl === 'monthlyFMSReview' && !projectHasMonthly) {
@@ -4376,7 +4438,7 @@ function initializeProjectDetail() {
             }
             setActiveSection(tabFromUrl);
         }
-    }, [project?.id, project?.hasTimeProcess, project?.hasMonthlyFMSReviewProcess]);
+    }, [project?.id, project?.hasTimeProcess, project?.hasMonthlyFMSReviewProcess, project?.hasCorrespondenceProcess]);
 
     // Listen for switchProjectTab event to handle programmatic tab switching.
     // When tab is 'time' but project doesn't have hasTimeProcess, enable locally and flag for persist (done in effect after persistProjectData).
@@ -4388,6 +4450,11 @@ function initializeProjectDetail() {
                 hasTimeProcessChangedRef.current = true;
                 setHasTimeProcess(true);
                 needPersistTimeFromUrlRef.current = true;
+            }
+            if (tab === 'correspondence' && !normalizeHasCorrespondenceProcess(project?.hasCorrespondenceProcess)) {
+                hasCorrespondenceProcessChangedRef.current = true;
+                setHasCorrespondenceProcess(true);
+                needPersistCorrespondenceFromUrlRef.current = true;
             }
             const projectHasMonthly = project?.hasMonthlyFMSReviewProcess === true || project?.hasMonthlyFMSReviewProcess === 'true' || project?.hasMonthlyFMSReviewProcess === 1 || (typeof project?.hasMonthlyFMSReviewProcess === 'string' && String(project?.hasMonthlyFMSReviewProcess).toLowerCase() === 'true');
             if (tab === 'monthlyFMSReview' && !projectHasMonthly) {
@@ -4635,6 +4702,29 @@ function initializeProjectDetail() {
         const normalizedValue = normalizeHasComplianceReviewProcess(project.hasComplianceReviewProcess);
         setHasComplianceReviewProcess(normalizedValue);
         hasComplianceReviewProcessChangedRef.current = false;
+    }, [project.id]);
+
+    const normalizeHasCorrespondenceProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    const [hasCorrespondenceProcess, setHasCorrespondenceProcess] = useState(() =>
+        normalizeHasCorrespondenceProcess(project.hasCorrespondenceProcess)
+    );
+    const hasCorrespondenceProcessChangedRef = useRef(false);
+    useEffect(() => {
+        const normalizedValue = normalizeHasCorrespondenceProcess(project.hasCorrespondenceProcess);
+        if (normalizedValue !== hasCorrespondenceProcess && !hasCorrespondenceProcessChangedRef.current) {
+            setHasCorrespondenceProcess(normalizedValue);
+        } else if (hasCorrespondenceProcessChangedRef.current) {
+            // keep local state until persist completes
+        }
+    }, [project.hasCorrespondenceProcess, project.id, hasCorrespondenceProcess]);
+    useEffect(() => {
+        const normalizedValue = normalizeHasCorrespondenceProcess(project.hasCorrespondenceProcess);
+        setHasCorrespondenceProcess(normalizedValue);
+        hasCorrespondenceProcessChangedRef.current = false;
     }, [project.id]);
 
     // Track if Time module is enabled (new projects: false; add via + Module)
@@ -5532,12 +5622,14 @@ function initializeProjectDetail() {
         nextHasMonthlyFMSReviewProcess,
         nextHasMonthlyDataReviewProcess,
         nextHasComplianceReviewProcess,
+        nextHasCorrespondenceProcess,
         excludeHasTimeProcess = false,
         excludeHasDocumentCollectionProcess = false,
         excludeHasWeeklyFMSReviewProcess = false,
         excludeHasMonthlyFMSReviewProcess = false,
         excludeHasMonthlyDataReviewProcess = false,
         excludeHasComplianceReviewProcess = false,
+        excludeHasCorrespondenceProcess = false,
         excludeDocumentSections = true,  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
         excludeWeeklyFMSReviewSections = true,  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
         excludeMonthlyFMSReviewSections = true  // Default to true: don't overwrite monthlyFMSReviewSections managed by MonthlyFMSReviewTracker
@@ -5553,6 +5645,7 @@ function initializeProjectDetail() {
         const hasMonthlyFMSReviewProcessToSave = nextHasMonthlyFMSReviewProcess !== undefined ? nextHasMonthlyFMSReviewProcess : hasMonthlyFMSReviewProcess;
         const hasMonthlyDataReviewProcessToSave = nextHasMonthlyDataReviewProcess !== undefined ? nextHasMonthlyDataReviewProcess : hasMonthlyDataReviewProcess;
         const hasComplianceReviewProcessToSave = nextHasComplianceReviewProcess !== undefined ? nextHasComplianceReviewProcess : hasComplianceReviewProcess;
+        const hasCorrespondenceProcessToSave = nextHasCorrespondenceProcess !== undefined ? nextHasCorrespondenceProcess : hasCorrespondenceProcess;
         
         try {
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -5600,6 +5693,9 @@ function initializeProjectDetail() {
             // Only include hasComplianceReviewProcess if not excluded
             if (!excludeHasComplianceReviewProcess) {
                 updatePayload.hasComplianceReviewProcess = hasComplianceReviewProcessToSave;
+            }
+            if (!excludeHasCorrespondenceProcess) {
+                updatePayload.hasCorrespondenceProcess = hasCorrespondenceProcessToSave;
             }
             
             // tasksList JSON writes removed - tasks are now stored in Task table
@@ -5688,7 +5784,8 @@ function initializeProjectDetail() {
         hasWeeklyFMSReviewProcess,
         hasMonthlyFMSReviewProcess,
         hasMonthlyDataReviewProcess,
-        hasComplianceReviewProcess
+        hasComplianceReviewProcess,
+        hasCorrespondenceProcess
     ]);
     
     // When URL or switchProjectTab enabled Time but we couldn't call persist yet (TDZ), persist here.
@@ -5703,6 +5800,18 @@ function initializeProjectDetail() {
             })
             .finally(() => { hasTimeProcessChangedRef.current = false; });
     }, [hasTimeProcess, project?.id, persistProjectData]);
+
+    useEffect(() => {
+        if (!needPersistCorrespondenceFromUrlRef.current || !project?.id) return;
+        needPersistCorrespondenceFromUrlRef.current = false;
+        persistProjectData({ nextHasCorrespondenceProcess: true })
+            .then(() => {
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    window.updateViewingProject({ ...project, hasCorrespondenceProcess: true });
+                }
+            })
+            .finally(() => { hasCorrespondenceProcessChangedRef.current = false; });
+    }, [hasCorrespondenceProcess, project?.id, persistProjectData]);
 
     // When URL or switchProjectTab enabled Monthly FMS but we couldn't call persist yet, persist here (same as Time).
     useEffect(() => {
@@ -8155,6 +8264,28 @@ function initializeProjectDetail() {
         }
     };
 
+    const handleAddCorrespondenceProcess = async () => {
+        hasCorrespondenceProcessChangedRef.current = true;
+        setHasCorrespondenceProcess(true);
+        switchSection('correspondence');
+        setShowDocumentProcessDropdown(false);
+        try {
+            if (window.DatabaseAPI?.updateProject && project?.id) {
+                try {
+                    await window.DatabaseAPI.updateProject(project.id, { hasCorrespondenceProcess: true });
+                } catch (directErr) {
+                    console.warn('Correspondence tab: direct update failed, trying full persist:', directErr?.message);
+                }
+            }
+            await persistProjectData({ nextHasCorrespondenceProcess: true });
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                window.updateViewingProject({ ...project, hasCorrespondenceProcess: true });
+            }
+        } finally {
+            hasCorrespondenceProcessChangedRef.current = false;
+        }
+    };
+
     const handleAddDocumentCollectionProcess = async () => {
         
         try {
@@ -9645,6 +9776,7 @@ function initializeProjectDetail() {
         if (hasMonthlyFMSReviewProcess) items.push({ id: 'monthlyFMSReview', label: 'Monthly FMS Review' });
         if (hasMonthlyDataReviewProcess) items.push({ id: 'monthlyDataReview', label: 'Monthly Data Review' });
         if (hasComplianceReviewProcess) items.push({ id: 'complianceReview', label: 'Compliance Review' });
+        if (hasCorrespondenceProcess) items.push({ id: 'correspondence', label: 'Correspondence' });
         items.push({ id: 'notes', label: 'Notes' });
         items.push({ id: 'activity', label: 'Activity' });
         return items;
@@ -9654,7 +9786,8 @@ function initializeProjectDetail() {
         hasWeeklyFMSReviewProcess,
         hasMonthlyFMSReviewProcess,
         hasMonthlyDataReviewProcess,
-        hasComplianceReviewProcess
+        hasComplianceReviewProcess,
+        hasCorrespondenceProcess
     ]);
 
     const projectSectionTabIcon = (id) => {
@@ -9667,6 +9800,7 @@ function initializeProjectDetail() {
             monthlyFMSReview: 'fa-calendar-alt',
             monthlyDataReview: 'fa-clipboard-check',
             complianceReview: 'fa-clipboard-list',
+            correspondence: 'fa-envelope',
             notes: 'fa-sticky-note',
             activity: 'fa-history'
         };
@@ -9679,7 +9813,8 @@ function initializeProjectDetail() {
             'Weekly FMS Review': 'Weekly',
             'Monthly FMS Review': 'Monthly',
             'Monthly Data Review': 'Data',
-            'Compliance Review': 'Compliance'
+            'Compliance Review': 'Compliance',
+            'Correspondence': 'Mail'
         };
         return short[label] || label;
     };
@@ -9870,6 +10005,19 @@ function initializeProjectDetail() {
                                             <div>
                                                 <div className="font-medium">Compliance Review</div>
                                                 <div className="text-[10px] text-gray-500">Checklist for compliance review</div>
+                                            </div>
+                                        </button>
+                                    )}
+                                    {!hasCorrespondenceProcess && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddCorrespondenceProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-envelope text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Correspondence</div>
+                                                <div className="text-[10px] text-gray-500">Log and email client communications</div>
                                             </div>
                                         </button>
                                     )}
@@ -10523,6 +10671,15 @@ function initializeProjectDetail() {
                     hasComplianceReviewProcess={hasComplianceReviewProcess}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
+                />
+            )}
+
+            {hasCorrespondenceProcess && (
+                <CorrespondenceProcessSection
+                    key={`correspondence-${project?.id || 'default'}`}
+                    project={project}
+                    hasCorrespondenceProcess={hasCorrespondenceProcess}
+                    activeSection={activeSection}
                 />
             )}
 

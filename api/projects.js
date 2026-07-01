@@ -1956,6 +1956,7 @@ async function handler(req, res) {
               hasMonthlyFMSReviewProcess: true, // Include so Monthly FMS tab persists after refresh when opening from list
               hasMonthlyDataReviewProcess: true, // Include so Monthly Data Review tab persists after refresh when opening from list
               hasComplianceReviewProcess: true, // Include so Compliance Review tab persists after refresh when opening from list
+              hasCorrespondenceProcess: true,
               includeInProgressTracker: true, // Progress Tracker list filter
               ...(includeTaskCount ? {
                 _count: {
@@ -2003,6 +2004,7 @@ async function handler(req, res) {
                 hasMonthlyFMSReviewProcess: true,
                 hasMonthlyDataReviewProcess: true,
                 hasComplianceReviewProcess: true,
+                hasCorrespondenceProcess: true,
                 includeInProgressTracker: true,
                 ...(includeTaskCount ? {
                   _count: {
@@ -2549,6 +2551,12 @@ async function handler(req, res) {
           updateData.hasComplianceReviewProcess = typeof body.hasComplianceReviewProcess === 'boolean'
             ? body.hasComplianceReviewProcess
             : Boolean(body.hasComplianceReviewProcess === true || body.hasComplianceReviewProcess === 'true' || body.hasComplianceReviewProcess === 1);
+        }
+
+        if (body.hasCorrespondenceProcess !== undefined && body.hasCorrespondenceProcess !== null) {
+          updateData.hasCorrespondenceProcess = typeof body.hasCorrespondenceProcess === 'boolean'
+            ? body.hasCorrespondenceProcess
+            : Boolean(body.hasCorrespondenceProcess === true || body.hasCorrespondenceProcess === 'true' || body.hasCorrespondenceProcess === 1);
         }
 
         if (body.includeInProgressTracker !== undefined && body.includeInProgressTracker !== null) {

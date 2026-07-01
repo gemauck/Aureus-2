@@ -555,6 +555,27 @@ app.all('/api/inbound/document-request-reply', express.text({ type: '*/*', limit
   }
 })
 
+app.all('/api/inbound/project-correspondence-reply', express.text({ type: '*/*', limit: '50mb' }), async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'inbound', 'project-correspondence-reply.js'))
+    if (!handler) {
+      console.error('❌ Project correspondence reply webhook handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in project-correspondence-reply webhook:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process webhook',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Document request reply debug (diagnostic: recent sent + comments)
 app.get('/api/inbound/document-request-reply-debug', async (req, res, next) => {
   try {
@@ -3402,7 +3423,7 @@ function setHttp2SafeStaticHeaders(res, path) {
 // Serve /uploads/* from rootDir/uploads FIRST - explicit route so attachment links
 // open the file in a new tab, never the SPA (fixes "revert to dashboard" when clicking attachments)
 const uploadsDir = path.join(rootDir, 'uploads')
-const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'dispense-exception-prep-inputs', 'dispense-exception-prep-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes', 'receipt-capture']
+const uploadSubdirs = ['doc-collection-comments', 'monthly-fms-comments', 'weekly-fms-comments', 'document-sorter-uploads', 'document-sorter-output', 'poa-review-outputs', 'poa-review-inputs', 'poa-review-temp', 'fuel-refund-audit-inputs', 'fuel-refund-audit-outputs', 'dispense-exception-prep-inputs', 'dispense-exception-prep-outputs', 'sparrow-to-gilbarco-inputs', 'sparrow-to-gilbarco-outputs', 'discussion-replies', 'notes', 'receipt-capture', 'project-correspondence']
 for (const d of uploadSubdirs) {
   try { fs.mkdirSync(path.join(uploadsDir, d), { recursive: true }) } catch (_) { /* ignore */ }
 }

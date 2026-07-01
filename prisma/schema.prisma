@@ -79,6 +79,8 @@ model User {
   userNotes                 UserNote[]                   @relation("UserNoteOwner")
   sharedNotes               UserNoteShare[]              @relation("UserNoteSharedWith")
   projectNotesAuthored      ProjectNote[]                 @relation("ProjectNoteAuthor")
+  projectCorrespondenceThreadsCreated ProjectCorrespondenceThread[] @relation("ProjectCorrespondenceThreadCreator")
+  projectCorrespondenceEntriesAuthored ProjectCorrespondenceEntry[] @relation("ProjectCorrespondenceEntryAuthor")
   createdTickets            Ticket[]                     @relation("TicketCreator")
   assignedTickets           Ticket[]                     @relation("TicketAssignee")
   taskComments              TaskComment[]                @relation("TaskCommentAuthor")
@@ -567,6 +569,9 @@ model Project {
   hasComplianceReviewProcess   Boolean                  @default(false)
   complianceReviewChecklist    String                   @default("[]")
   complianceReviewSections     String                   @default("{}")
+  hasCorrespondenceProcess     Boolean                  @default(false)
+  correspondenceInboundEmail   String?
+  correspondenceInboxSlug      String?
   ownerId                      String?
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt
@@ -590,10 +595,93 @@ model Project {
   projectActivityLogs           ProjectActivityLog[]
   userNotes                     UserNote[]
   projectNotes                  ProjectNote[]
+  correspondenceThreads         ProjectCorrespondenceThread[]
+  correspondenceEntries         ProjectCorrespondenceEntry[]
 
   @@index([clientId])
   @@index([status])
   @@index([ownerId])
+  @@index([createdAt])
+}
+
+model ProjectCorrespondenceThread {
+  id                String   @id @default(cuid())
+  projectId         String
+  subject           String   @default("")
+  requestNumber     String?
+  correspondenceType String  @default("other")
+  status            String   @default("open")
+  counterparty      String?
+  externalReference String?
+  summary           String?  @db.Text
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastActivityAt    DateTime @default(now())
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User?    @relation("ProjectCorrespondenceThreadCreator", fields: [createdById], references: [id])
+  entries        ProjectCorrespondenceEntry[]
+
+  @@index([projectId])
+  @@index([requestNumber])
+  @@index([lastActivityAt])
+}
+
+model ProjectCorrespondenceEntry {
+  id                  String   @id @default(cuid())
+  projectId           String
+  threadId            String
+  kind                String   @default("manual") // manual | sent | received
+  direction           String   @default("internal") // outbound | inbound | internal
+  correspondenceType  String   @default("other")
+  subject             String   @default("")
+  bodyText            String   @default("") @db.Text
+  bodyHtml            String?  @db.Text
+  occurredAt          DateTime @default(now())
+  authorId            String?
+  fromEmail           String?
+  toEmails            String   @default("[]")
+  ccEmails            String   @default("[]")
+  contactName         String?
+  contactOrganization String?
+  contactPhone        String?
+  externalReference   String?
+  actionRequired      String?  @db.Text
+  followUpDate        DateTime?
+  location            String?
+  durationMinutes     Int?
+  outcome             String?  @db.Text
+  confidentiality     String   @default("standard")
+  messageId           String?
+  deliveryStatus      String   @default("sent")
+  deliveredAt         DateTime?
+  bouncedAt           DateTime?
+  bounceReason        String?  @db.Text
+  lastEventAt         DateTime?
+  attachments         String   @default("[]")
+  emailArchivePath    String?
+  rawEmailPath        String?
+  createdAt           DateTime @default(now())
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  thread         ProjectCorrespondenceThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author         User?    @relation("ProjectCorrespondenceEntryAuthor", fields: [authorId], references: [id])
+
+  @@index([threadId])
+  @@index([projectId])
+  @@index([messageId])
+  @@index([kind])
+  @@index([occurredAt])
+}
+
+model ProjectCorrespondenceInboundUnmatched {
+  id             String   @id @default(cuid())
+  emailId        String   @unique
+  fromAddress    String?  @db.Text
+  subject        String?  @db.Text
+  candidatesJson String?  @db.Text
+  reason         String?  @default("no_match")
+  createdAt      DateTime @default(now())
+
   @@index([createdAt])
 }
 

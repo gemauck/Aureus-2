@@ -85,6 +85,9 @@ async function loadProjectWithRelations(projectId) {
         hasMonthlyFMSReviewProcess: true,
         hasMonthlyDataReviewProcess: true,
         hasComplianceReviewProcess: true,
+        hasCorrespondenceProcess: true,
+        correspondenceInboundEmail: true,
+        correspondenceInboxSlug: true,
         ownerId: true,
         createdAt: true,
         updatedAt: true,
@@ -116,6 +119,7 @@ async function loadProjectWithRelations(projectId) {
         hasMonthlyFMSReviewProcess: false,
         hasMonthlyDataReviewProcess: false,
         hasComplianceReviewProcess: false,
+        hasCorrespondenceProcess: false,
         monthlyDataReviewChecklist: '[]',
         monthlyDataReviewSections: '{}',
         complianceReviewChecklist: '[]',
@@ -525,6 +529,7 @@ async function handler(req, res) {
                   hasMonthlyFMSReviewProcess: true,
                   hasMonthlyDataReviewProcess: true,
                   hasComplianceReviewProcess: true,
+                  hasCorrespondenceProcess: true,
                   ownerId: true,
                   createdAt: true,
                   updatedAt: true,
@@ -557,6 +562,7 @@ async function handler(req, res) {
             const projectSummary = {
               ...projectRow,
               hasComplianceReviewProcess: projectRow.hasComplianceReviewProcess ?? false,
+              hasCorrespondenceProcess: projectRow.hasCorrespondenceProcess ?? false,
               complianceReviewChecklist: projectRow.complianceReviewChecklist ?? '[]',
               complianceReviewSections: projectRow.complianceReviewSections ?? '{}',
               tasks: tasksRows || [],
@@ -1127,6 +1133,7 @@ async function handler(req, res) {
         if (transformedProject.hasMonthlyFMSReviewProcess === undefined) transformedProject.hasMonthlyFMSReviewProcess = false;
         if (transformedProject.hasMonthlyDataReviewProcess === undefined) transformedProject.hasMonthlyDataReviewProcess = false;
         if (transformedProject.hasComplianceReviewProcess === undefined) transformedProject.hasComplianceReviewProcess = false;
+        if (transformedProject.hasCorrespondenceProcess === undefined) transformedProject.hasCorrespondenceProcess = false;
         if (transformedProject.monthlyDataReviewChecklist === undefined) transformedProject.monthlyDataReviewChecklist = '[]';
         if (transformedProject.monthlyDataReviewSections === undefined) transformedProject.monthlyDataReviewSections = '{}';
         if (transformedProject.complianceReviewChecklist === undefined) transformedProject.complianceReviewChecklist = '[]';
@@ -1169,6 +1176,9 @@ async function handler(req, res) {
         ['monthlyDataReviewChecklist', "TEXT DEFAULT '[]'"],
         ['monthlyDataReviewSections', "TEXT DEFAULT '{}'"],
         ['hasComplianceReviewProcess', 'BOOLEAN DEFAULT false'],
+        ['hasCorrespondenceProcess', 'BOOLEAN DEFAULT false'],
+        ['correspondenceInboundEmail', 'TEXT'],
+        ['correspondenceInboxSlug', 'TEXT'],
         ['complianceReviewChecklist', "TEXT DEFAULT '[]'"],
         ['complianceReviewSections', "TEXT DEFAULT '{}'"],
         ['googleDriveLink', "TEXT DEFAULT ''"],
@@ -1502,6 +1512,17 @@ async function handler(req, res) {
         updateData.hasComplianceReviewProcess = typeof body.hasComplianceReviewProcess === 'boolean'
           ? body.hasComplianceReviewProcess
           : Boolean(body.hasComplianceReviewProcess === true || body.hasComplianceReviewProcess === 'true' || body.hasComplianceReviewProcess === 1);
+      }
+
+      if (body.hasCorrespondenceProcess !== undefined && body.hasCorrespondenceProcess !== null) {
+        updateData.hasCorrespondenceProcess = typeof body.hasCorrespondenceProcess === 'boolean'
+          ? body.hasCorrespondenceProcess
+          : Boolean(body.hasCorrespondenceProcess === true || body.hasCorrespondenceProcess === 'true' || body.hasCorrespondenceProcess === 1);
+      }
+
+      if (body.correspondenceInboundEmail !== undefined && body.correspondenceInboundEmail !== null) {
+        const trimmed = String(body.correspondenceInboundEmail).trim().toLowerCase()
+        updateData.correspondenceInboundEmail = trimmed || null
       }
 
       // Handle complianceReviewChecklist separately if provided - JSON string
