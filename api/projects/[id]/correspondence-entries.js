@@ -1,7 +1,7 @@
 /**
  * POST /api/projects/:id/correspondence-entries — add manual entry
  * PATCH /api/projects/:id/correspondence-entries?entryId=... — edit manual entry
- * DELETE /api/projects/:id/correspondence-entries?entryId=... — delete manual entry
+ * DELETE /api/projects/:id/correspondence-entries?entryId=... — delete an entry (manual, sent, or received)
  */
 import { authRequired } from '../../_lib/authRequired.js'
 import { prisma } from '../../_lib/prisma.js'
@@ -151,11 +151,28 @@ async function handler(req, res) {
         where: { id: entryId, projectId }
       })
       if (!existing) return notFound(res, 'Entry not found')
-      if (existing.kind !== 'manual') {
-        return badRequest(res, 'Only manual entries can be deleted')
-      }
+
+      const thread = await prisma.projectCorrespondenceThread.findFirst({
+        where: { id: existing.threadId, projectId },
+        select: { id: true, subject: true }
+      })
 
       await prisma.projectCorrespondenceEntry.delete({ where: { id: entryId } })
+
+      if (existing.threadId) {
+        await touchThreadActivity(existing.threadId)
+      }
+
+      const { userId: uid, userName: uName } = getActivityUserFromRequest(req)
+      await logProjectActivity(prisma, {
+        projectId,
+        userId: uid,
+        userName: uName,
+        type: 'correspondence_entry_deleted',
+        description: `Correspondence entry deleted from "${thread?.subject || 'matter'}"`,
+        metadata: { threadId: existing.threadId, entryId, kind: existing.kind }
+      })
+
       return ok(res, { deleted: true, entryId })
     }
 

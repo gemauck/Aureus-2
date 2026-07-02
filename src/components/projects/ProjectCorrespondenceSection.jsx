@@ -334,7 +334,7 @@ function ThreadsTable({ threads, types, statuses, selectedThreadId, onSelect }) 
     );
 }
 
-function EntriesTable({ entries, types, expandedEntryId, onToggleEntry, onReply }) {
+function EntriesTable({ entries, types, expandedEntryId, onToggleEntry, onReply, onDelete }) {
     if (!entries.length) return null;
     const colCount = 10;
     return (
@@ -394,11 +394,21 @@ function EntriesTable({ entries, types, expandedEntryId, onToggleEntry, onReply 
                                         {entry.kind === 'received' && entry.fromEmail ? (
                                             <button
                                                 type="button"
-                                                className="text-[10px] text-gray-600 hover:text-sky-600"
+                                                className="text-[10px] text-gray-600 hover:text-sky-600 mr-2"
                                                 onClick={() => onReply(entry)}
                                                 title="Reply"
                                             >
                                                 <i className="fas fa-reply"></i>
+                                            </button>
+                                        ) : null}
+                                        {onDelete ? (
+                                            <button
+                                                type="button"
+                                                className="text-[10px] text-gray-600 hover:text-red-600"
+                                                onClick={() => onDelete(entry)}
+                                                title="Delete"
+                                            >
+                                                <i className="fas fa-trash"></i>
                                             </button>
                                         ) : null}
                                     </td>
@@ -432,7 +442,7 @@ function normalizeInboxSlugClient(value) {
 function previewInboxFromSlug(slug, domain) {
     const normalized = normalizeInboxSlugClient(slug);
     if (!normalized || !domain) return '';
-    return `${normalized}_doc_proj@${domain}`;
+    return `${normalized}_mailtrack@${domain}`;
 }
 
 function ProjectCorrespondenceSection({ project, activeSection }) {
@@ -732,6 +742,25 @@ function ProjectCorrespondenceSection({ project, activeSection }) {
         setShowCompose(true);
     };
 
+    const handleDeleteEntry = async (entry) => {
+        if (!entry?.id || !selectedThreadId) return;
+        const label = entry.subject ? `"${entry.subject}"` : 'this entry';
+        if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+        try {
+            await window.DatabaseAPI.makeRequest(
+                `${apiBase('correspondence-entries')}?entryId=${encodeURIComponent(entry.id)}`,
+                { method: 'DELETE' }
+            );
+            if (expandedEntryId === entry.id) setExpandedEntryId(null);
+            await Promise.all([
+                loadThreadDetail(selectedThreadId, { silent: true }),
+                loadThreads({ silent: true })
+            ]);
+        } catch (e) {
+            alert(e?.message || 'Failed to delete entry');
+        }
+    };
+
     const uploadFiles = async (files, applyAttachment) => {
         if (!files?.length || !projectId || !applyAttachment) return;
         for (const file of files) {
@@ -780,7 +809,7 @@ function ProjectCorrespondenceSection({ project, activeSection }) {
                                     <i className="fas fa-inbox mr-1"></i>Project correspondence inbox
                                 </div>
                                 <p className="text-[11px] text-sky-800/80 dark:text-sky-300/80 mt-0.5">
-                                    Name this inbox (becomes <strong>name_doc_proj@…</strong>), then CC the address below on project emails.
+                                    Name this inbox (becomes <strong>name_mailtrack@…</strong>), then CC the address below on project emails.
                                 </p>
                             </div>
                             <div className="flex gap-2 shrink-0">
@@ -914,6 +943,7 @@ function ProjectCorrespondenceSection({ project, activeSection }) {
                                 expandedEntryId={expandedEntryId}
                                 onToggleEntry={(id) => setExpandedEntryId((prev) => (prev === id ? null : id))}
                                 onReply={openReplyCompose}
+                                onDelete={handleDeleteEntry}
                             />
                         )}
                     </div>

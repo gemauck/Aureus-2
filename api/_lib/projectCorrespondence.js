@@ -69,7 +69,9 @@ function getInboundBaseEmail() {
   )
 }
 
-export const PROJECT_INBOX_EMAIL_SUFFIX = '_doc_proj'
+export const PROJECT_INBOX_EMAIL_SUFFIX = '_mailtrack'
+// Older addresses used this suffix; still recognized for routing and auto-migrated.
+export const LEGACY_PROJECT_INBOX_EMAIL_SUFFIX = '_doc_proj'
 
 export function normalizeInboxSlug(value) {
   const slug = String(value || '')
@@ -121,7 +123,25 @@ export function getCorrespondenceInboundEmail(requestNumber) {
 }
 
 function isLegacyProjectInboxEmail(email) {
-  return typeof email === 'string' && /\+corr-proj-/i.test(email)
+  if (typeof email !== 'string') return false
+  if (/\+corr-proj-/i.test(email)) return true
+  const at = email.indexOf('@')
+  if (at <= 0) return false
+  return email.slice(0, at).toLowerCase().endsWith(LEGACY_PROJECT_INBOX_EMAIL_SUFFIX)
+}
+
+/** Extract the inbox slug from a legacy address (name_doc_proj@ or …+corr-proj-name@). */
+function slugFromLegacyProjectInboxEmail(email) {
+  if (typeof email !== 'string') return ''
+  const plusMatch = email.match(/\+corr-proj-([^@]+)@/i)
+  if (plusMatch?.[1]) return normalizeInboxSlug(plusMatch[1])
+  const at = email.indexOf('@')
+  if (at <= 0) return ''
+  const local = email.slice(0, at).toLowerCase()
+  if (local.endsWith(LEGACY_PROJECT_INBOX_EMAIL_SUFFIX)) {
+    return normalizeInboxSlug(local.slice(0, -LEGACY_PROJECT_INBOX_EMAIL_SUFFIX.length))
+  }
+  return ''
 }
 
 export async function ensureProjectCorrespondenceInboundEmail(projectId) {
@@ -140,8 +160,7 @@ export async function ensureProjectCorrespondenceInboundEmail(projectId) {
   let slug = normalizeInboxSlug(project.correspondenceInboxSlug)
 
   if (!slug && existing && isLegacyProjectInboxEmail(existing)) {
-    const legacyMatch = existing.match(/\+corr-proj-([^@]+)@/i)
-    if (legacyMatch?.[1]) slug = normalizeInboxSlug(legacyMatch[1])
+    slug = slugFromLegacyProjectInboxEmail(existing)
   }
 
   const canonical = buildProjectCorrespondenceEmailFromSlug(slug || null, projectId)
@@ -508,14 +527,18 @@ export async function assertProjectCorrespondenceEnabled(projectId) {
   })
 }
 
-/** True when address uses project correspondence inbox naming (name_doc_proj@domain or legacy +corr-proj-). */
+/** True when address uses project correspondence inbox naming (name_mailtrack@domain, legacy name_doc_proj@ or +corr-proj-). */
 export function isProjectCorrespondenceInboxAddress(email) {
   const e = String(email || '').trim().toLowerCase()
   if (!isValidEmail(e)) return false
   const at = e.indexOf('@')
   if (at <= 0) return false
   const local = e.slice(0, at)
-  return local.endsWith(PROJECT_INBOX_EMAIL_SUFFIX) || /\+corr-proj-/i.test(local)
+  return (
+    local.endsWith(PROJECT_INBOX_EMAIL_SUFFIX) ||
+    local.endsWith(LEGACY_PROJECT_INBOX_EMAIL_SUFFIX) ||
+    /\+corr-proj-/i.test(local)
+  )
 }
 
 export function collectInboundRecipientEmails(...sources) {

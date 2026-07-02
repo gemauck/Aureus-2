@@ -3,7 +3,7 @@
  * Resend email.received webhook: route replies to project correspondence threads.
  *
  * Production Resend webhooks usually point at document-request-reply only; that handler
- * delegates here when the message is To/Cc on a *_doc_proj@ inbox address.
+ * delegates here when the message is To/Cc on a *_mailtrack@ inbox address (legacy *_doc_proj@ also matched).
  */
 import crypto from 'crypto'
 import { prisma } from '../_lib/prisma.js'
